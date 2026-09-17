@@ -189,7 +189,11 @@ def test_grounded_fallback_carries_cards_so_the_next_turn_keeps_the_reference():
 
     assert ctx.reply is not None
     assert "Rhea Organics Soft" in ctx.reply.text
-    assert [p["id"] for p in (ctx.reply.products or [])] == ["p-cheap"]
+    # `product_id`, nu `id`: cheia pe care o citesc ȘI randorul web (`_card`), ȘI starea
+    # (`_displayed_product_refs`). Testul cerea înainte `id`, adică forma BRUTĂ de retrieval —
+    # exact asimetria din cauza căreia cardurile plecau la widget cu identitate NULL, fiindcă
+    # starea are fallback pe `id` și randorul nu. Vezi `agent/brain_rich.card_refs`.
+    assert [p["product_id"] for p in (ctx.reply.products or [])] == ["p-cheap"]
 
 
 def test_refusal_without_facts_carries_no_cards():

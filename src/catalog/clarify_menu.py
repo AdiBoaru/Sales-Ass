@@ -99,6 +99,13 @@ CHIP_PRODUCERS: dict[str, str] = {
         "închis construit din catalogul real (NX-295). Singurul producător cu poartă explicită, "
         "fiindcă e singurul unde textul chip-ului e scris de un model."
     ),
+    "src/agent/brain.py::_set_brain_reply": (
+        "ANCORAT STRUCTURAL, și mai tare decât triajul: chip-urile NU sunt filtrate după ce le "
+        "scrie cineva, ci SUNT chiar frazele meniului închis (`_clarify_chips` cheamă "
+        "`ground_suggestions` cu lista goală, deci rămâne doar completarea din meniu). Planul "
+        "creierului unic n-are câmp de sugestii, deci niciun model nu poate rosti un chip pe "
+        "această cale. Meniu indisponibil ⇒ zero chips, nu chips neverificate."
+    ),
     # ── ancorate prin CONSTRUCȚIE: textul vine din date reale ───────────────────────────────
     "src/worker/stages/faq.py::faq_stage": (
         "Chips-urile SUNT întrebările FAQ candidate, citite din `faqs`. Nu pot numi ceva ce "

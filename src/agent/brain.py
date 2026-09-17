@@ -44,7 +44,9 @@ from src.agent.answer_plan_runtime import (
     validate_revised_draft,
 )
 from src.agent.brain_models import BrainInput, UserParts
+from src.agent.brain_rich import card_refs, rich_from_plan
 from src.agent.conversation_quality import evaluate_reply
+from src.agent.deterministic import _comparison_facets
 from src.agent.evidence_bundle import EvidenceBundle, build_evidence_bundle
 from src.agent.fallbacks import grounded_fallback_reply
 from src.agent.grounding_guard import GroundedAnswer, ground_answer
@@ -53,13 +55,14 @@ from src.agent.query_spec import Constraint, RuntimeQuerySpec
 from src.agent.tool_definitions import tool_schemas
 from src.agent.tool_executor import ToolRun, _safe_tool_args
 from src.agent.voice import VOICE_RULES
+from src.analytics.demand import clean_ids
 from src.catalog.freshness import facts_sla_s
 from src.config import get_settings
 from src.conversation.needs import NeedVocabulary, corroborated_by, norm_key, normalize_need
 from src.conversation.state_reducer import StateUpdateProposal
 from src.conversation.state_v2 import active_needs
 from src.domain import vocab_examples
-from src.models import RetrievalResult, Route, TurnContext
+from src.models import Offer, RetrievalResult, Route, TurnContext
 from src.observability import turn_latency
 from src.retrieval.port import deadline_from_turn, query_count_bucket
 from src.retrieval.selector import build_port, select_provider
@@ -67,6 +70,7 @@ from src.runtime import deadline as turn_deadline
 from src.runtime import turn_budget
 from src.safety.policy import SafetyPolicy
 from src.web.localization import DISPLAYABLE_NEEDS, format_need
+from src.worker import compose
 from src.worker.context import build_brain_input
 
 if TYPE_CHECKING:
@@ -256,6 +260,136 @@ def _plan_products(plan: AnswerPlanV2, retrieved: list[dict[str, Any]]) -> list[
     ]
 
 
+async def _clarify_chips(ctx: TurnContext, deps: Any) -> tuple[str, ...]:
+    """Chips-urile turului, din MENIUL ÎNCHIS al catalogului (NX-295) — nu din output-ul modelului.
+
+    Pe v1 chips-urile erau frazele scrise de modelul rich, iar NX-295 a arătat de ce asta e o
+    promisiune apăsabilă fără acoperire: un magazin de COSMETICE oferea «Pentru consola, cablu USB
+    de date». Planul creierului unic n-are câmp de sugestii, și e bine că n-are — meniul se compune
+    din catalogul REAL, deci fiecare frază se rezolvă înapoi prin `resolve_any`, pe o cheie cu
+    produse. Un chip nu e o părere, e un mesaj pe care clientul îl retrimite.
+
+    `ground_suggestions` primește lista GOALĂ deliberat: fără sugestii de filtrat, tot ce rămâne e
+    COMPLETAREA din meniu, adică exact opțiunile oferibile. Refolosim funcția în loc să citim
+    `menu.phrases()` direct fiindcă ea deține deja plafonul și dedupe-ul; două locuri care aleg
+    câte chips-uri încap ar diverge la primul cap schimbat.
+
+    Meniu indisponibil (flag stins, DB jos, vocabular gol) ⇒ zero chips, adică exact starea de
+    dinainte de această felie. Fail-open: o clipeală de DB n-are voie să devină comportament nou.
+    """
+    from src.catalog.clarify_menu import ground_suggestions, menu_for_turn  # noqa: PLC0415
+
+    menu = await menu_for_turn(ctx, deps)
+    if not menu.usable:
+        return ()
+    kept, _ = ground_suggestions((), menu)
+    return kept
+
+
+def _attach_checkout_offer(ctx: TurnContext, run: ToolRun) -> None:
+    """NX-137, pe calea creierului unic: linkul de checkout creat în ACEST tur ajunge garantat la
+    client, ca CTA neutru de canal.
+
+    Pe v1 asta se cheamă din `finalize` pe ambele ramuri. Brain-ul nu o chema deloc, deci un tur
+    care crea linkul (`checkout_link_created` în DB) putea ieși fără buton: validatorul verifică
+    doar că linkurile SCRISE sunt din `generated_links`, niciodată că cel CREAT a fost scris. Un
+    link creat și nerostit e exact bug-ul pe care NX-137 l-a reparat o dată. Floor-ul din
+    `set_offer` nu dublează un URL pe care proza îl conține deja.
+    """
+    url = getattr(run, "checkout_url", None)
+    if not url or ctx.reply is None:
+        return
+    from src.agent.finalize import _checkout_label  # noqa: PLC0415 — evită ciclul
+
+    ctx.set_offer(Offer(kind="open_url", label=_checkout_label(ctx.language), url=url))
+    ctx.emit("checkout_offer_attached")
+
+
+async def _set_brain_reply(
+    ctx: TurnContext, deps: Any, plan: AnswerPlanV2, run: ToolRun, text: str
+) -> None:
+    """Punctul UNIC prin care planul devine reply: comparație, recomandare bogată sau proză.
+
+    Ordinea ramurilor e a lui v1 (`finalize.render`) și nu e arbitrară: comparația PRECEDE calea
+    bogată, altfel un „compară primele două" ar RE-RECOMANDA în loc să compare.
+
+    Reply-urile brain sunt specifice contextului (obligații/nevoi/istoric) → necacheabile în v1.
+
+    `text` pleacă neatins ca floor (`messages.body`, canale fără randare bogată), NU aplatizarea
+    `compose.flatten`: pe v1 intro-ul era un framing scurt peste o enumerare făcută de cod, dar aici
+    proza creierului E deja răspunsul complet, cu produsele numite în ea. Aplatizată peste ea,
+    enumerarea ar spune totul de două ori.
+
+    ORDER nu ajunge aici: `agent_stage` cheamă creierul unic doar pe `not is_order`.
+    """
+    settings = get_settings()
+    chips = await _clarify_chips(ctx, deps) if settings.brain_chips_enabled else ()
+
+    if settings.brain_rich_reply_enabled:
+        # ── COMPARAȚIE ────────────────────────────────────────────────────────────────────────
+        # `run.compared` e populat de `compare_products` pe ACELAȘI `ToolRun` ca pe v1 — brain-ul
+        # doar nu-l citea, deci o comparație cerută modelului (nu prinsă de poarta deterministă
+        # dinaintea buclei) ieșea ca proză, fără tabel. Tabelul e DETERMINIST: fiecare celulă e un
+        # fapt din retrieval, zero text de model.
+        #
+        # Ce NU facem, deliberat: `compose_comparison` (narativul v1). El REscrie leadul cu un al
+        # doilea apel de model, iar aici proza creierului există deja și a trecut toate porțile —
+        # un al doilea writer semantic e exact ce interzice D1. Tabelul rămâne al datelor, leadul
+        # rămâne al creierului.
+        if run.compared:
+            comparison = compose.build_comparison(
+                run.compared, ctx.language, _comparison_facets(ctx)
+            )
+            if comparison is not None:
+                comparison.intro = text
+                ctx.set_comparison_reply(
+                    comparison,
+                    text=text,
+                    products=compose.comparison_cards(comparison),
+                    chips=list(chips) or None,
+                )
+                ctx.emit("agent_compared", n=len(comparison.columns))
+                _attach_checkout_offer(ctx, run)
+                return
+
+        # ── RECOMANDARE BOGATĂ ────────────────────────────────────────────────────────────────
+        rich = rich_from_plan(ctx, plan, run.retrieved, text=text, suggestions=chips)
+        if rich is not None:
+            ctx.set_rich_reply(rich, text=text, products=compose.card_products(rich.items))
+            # Paritate de OBSERVABILITATE cu v1 (`finalize`): fără el, aprinderea creierului unic
+            # golea tăcut `agent_recommended`, adică exact seria pe care se citește ce recomandă
+            # botul și ce se cere (NX-163/164). Doar id-uri, ca acolo.
+            ctx.emit(
+                "agent_recommended",
+                n=len(rich.items),
+                rich=True,
+                product_ids=clean_ids(it.product_id for it in rich.items),
+            )
+            _attach_checkout_offer(ctx, run)
+            return
+
+    # ── PROZĂ ─────────────────────────────────────────────────────────────────────────────────
+    # Fără carduri (clarificare pură, refuz onest) sau cu felia stinsă. `card_refs` și nu rândurile
+    # brute nici aici — kill-switch-ul e pentru FORMA bogată, nu pentru dreptul de a trimite carduri
+    # fără `product_id`.
+    cards = card_refs(_plan_products(plan, run.retrieved))
+    ctx.set_reply(text, products=cards or None, cacheable=False)
+    if cards:
+        # Ca pe ramura de proză a lui v1 (`finalize`): fără `rich=True`, dar cu aceleași ref-uri.
+        # Seria „ce recomandă botul" (NX-163/164) nu are voie să depindă de ce ramură a servit.
+        ctx.emit(
+            "agent_recommended",
+            n=len(cards),
+            product_ids=clean_ids(c["product_id"] for c in cards),
+        )
+    # Chips și pe ramura săracă: pe v1, un no-result de sales primea căi de continuare
+    # (`_attach_no_result_alternatives`). Aici vin din meniul catalogului, deci sunt servabile, nu
+    # copy generic — dar rolul e același: un răspuns fără rezultate nu e o fundătură.
+    if chips and ctx.reply is not None:
+        ctx.reply.suggestions = list(chips)
+    _attach_checkout_offer(ctx, run)
+
+
 async def _generate_plan(
     ctx: TurnContext,
     deps: PipelineDeps,
@@ -300,7 +434,10 @@ def _serve_exhausted(ctx: TurnContext, run: ToolRun) -> None:
         # trei nume care nu explica de ce apar celelalte trei. Două plafoane independente peste
         # aceeași listă nu pot rămâne de acord, așa că acum există unul singur.
         text, named = grounded
-        ctx.set_reply(text, products=named, cacheable=False)
+        # `card_refs`, nu rândurile brute: retrievalul scrie `id`, randorul web citește
+        # `product_id`, deci cardurile de fallback plecau la widget cu identitate NULL.
+        # Starea scăpa (`_displayed_product_refs` are fallback pe `id`), sârma nu.
+        ctx.set_reply(text, products=card_refs(named) or None, cacheable=False)
         return
     ctx.set_reply(safe_fallback(ctx.language), cacheable=False)
 
@@ -1227,8 +1364,7 @@ async def run_main_brain(
     _attach_grounding(ctx, run, plan, execute, ask_clarification=ask_clarification)
 
     ctx.emit("main_brain_call", phase="final", outcome="ok", **versions)
-    # Reply-urile brain sunt specifice contextului (obligații/nevoi/istoric) → necacheabile în v1.
-    ctx.set_reply(text, products=_plan_products(plan, run.retrieved) or None, cacheable=False)
+    await _set_brain_reply(ctx, deps, plan, run, text)
     if ask_clarification:
         _persist_clarification(ctx, plan)
 

@@ -559,6 +559,51 @@ POTRIVIRE. Semnalul de cerere neîmplinită nu se stinge: `unmet_query reason=te
 `demand_report`. Kill-switch `SEARCH_FILTERS_ONLY_FALLBACK_ENABLED=false` → tăcerea de dinainte,
 byte-identic. Detalii: [`tasks/stage1/NX-293.md`](tasks/stage1/NX-293.md).
 
+**Fix 2026-09-17 — aprinderea creierului unic golise cardurile, iar identitatea lor era `null`.**
+Raportat ca „recomandările nu mai arată ca înainte". `finalize.py` (v1) chema `set_rich_reply`;
+`brain.py` cheamă `set_reply`, iar `set_rich_reply` avea doi apelanți, amândoi pe calea v1. Deci
+`channels/web/render.py` cădea de pe ramura `rich` pe ramura `products`, care nu poartă `reason`,
+`rating`, `review_count`, `badge`/`badge_tone`, `list_price`, `currency`, `details` și nici chips.
+Nimic din aval n-o putea prinde, din același motiv ca la NX-293: validatorul (stagiul 8) și
+`grounding_guard` sunt porți de ADEVĂR, nu de FORMĂ — cardurile erau reale, doar goale. Al doilea
+defect, în aceeași ramură: `_card` citește `product_id`, retrievalul scrie `id`, deci cardurile
+plecau la widget cu identitate **`null`** — coșul, acțiunile NX-236 și „spune-mi mai multe" n-aveau
+pe ce se lega. Starea a scăpat din întâmplare (`_displayed_product_refs` are fallback pe `id`),
+sârma nu.
+Reparația NU e un al doilea apel de model (ar reintroduce relay-ul interzis de D1): planul are deja
+motivul per produs (`recommendations[].reason`, validat ca orice claim prin `to_v1()` și trecut prin
+`grounding_guard`), iar hidratarea faptelor rămâne `compose.assemble` — ACELAȘI cod ca pe v1, deci
+paritatea e prin construcție, ca la `CurrentLiveRetrievalAdapter` (NX-238). Proza creierului devine
+`intro` NEATINSĂ: a trecut deja porți strict mai tari decât `scrub_intro`, care ar arunca ÎNTREG un
+răspuns corect ce numește un preț (șase carduri pe ecran și zero text). Chips-urile vin din meniul
+ÎNCHIS (NX-295) cu lista goală la intrare, deci sunt chiar frazele oferibile — niciun model nu le
+rostește; producătorul e declarat în `CHIP_PRODUCERS`, ca poarta mecanică să-l vadă.
+Un defect vecin, găsit de golden pe drum: un tur de ÎNTREBARE („aveți fondul în nuanța ivory?") are
+obligația `answer`, nu `recommend`, deci `recommendations` e gol pe bună dreptate — iar cardul
+devenea bogat cu secțiunea de motiv GOALĂ, adică mai rău decât unul simplu (arată ca o recomandare
+căreia i-a căzut argumentul). Motivul cade acum pe `best_for` din catalog (NX-169), exact
+echivalentul pe care harnessul îl acceptă ca motiv; luat ca atare, fără frază în jur (P11).
+Auditul de paritate cu `finalize.render` a scos încă TREI goluri, toate de aceeași clasă („brain-ul
+nu citea un câmp pe care ToolRun îl avea deja"): (a) **comparația** — `run.compared` e populat de
+`compare_products` pe ACELAȘI `ToolRun`, dar nimeni nu-l consuma, deci un „compară-le" care nu era
+prins de poarta deterministă dinaintea buclei ieșea ca proză cu carduri, adică RE-recomandare;
+ramura e acum prima, ca în v1, cu tabelul DETERMINIST (`build_comparison`) și leadul creierului —
+narativul `compose_comparison` NU se cheamă, ar fi un al doilea writer (D1); (b) **CTA-ul de
+checkout** — `_attach_checkout_offer` nu se chema deloc, iar validatorul verifică doar că linkurile
+SCRISE sunt reale, niciodată că cel CREAT a fost scris: NX-137 reintrodus tăcut; (c) **chips-urile pe
+ramura fără carduri** — un no-result rămânea fundătură, unde v1 atașa căi de continuare.
+Al patrulea a fost introdus de fix-ul însuși și prins tot de audit: pasând `intro=None` în `j`,
+`_order_by_first_mention` nu mai reordona nimic, deci cardurile se aranjau după ranking în timp ce
+proza numea produsele în ordinea ei — exact contradicția măsurată pe trafic în 2026-08-26. Textul
+intră acum în `j` PENTRU ORDINE, iar valoarea scrubuită se aruncă.
+**Rămâne NEACOPERIT, declarat:** `education` (paragraful „cum alegi", pe v1 scris de modelul rich)
+n-are corespondent în plan și rămâne gol — a-l genera ar cere exact al doilea writer pe care
+arhitectura îl interzice.
+Kill-switch `BRAIN_RICH_REPLY_ENABLED=false` → ramura săracă de dinainte; `BRAIN_CHIPS_ENABLED=false`
+→ zero chips. Normalizarea `id → product_id` rămâne pe AMBELE ramuri: flagul e pentru FORMA bogată,
+nu pentru dreptul de a trimite carduri mute. Cod: [`src/agent/brain_rich.py`](src/agent/brain_rich.py)
++ `brain._set_brain_reply`; probă: `pytest tests/test_brain_rich_reply.py -q`.
+
 ---
 
 ## Arhitectura — pipeline liniar (12 stagii)
@@ -1202,6 +1247,8 @@ nativx-assistant/
 │   │   ├── search_entities.py   ← CANDIDATUL (enforce hard constraints); FĂRĂ `@register`, inert
 │   │   └── selector.py          ← poarta de promovare: GO semnat + amprentă + bucket stabil
 │   ├── agent/
+│   │   ├── brain_rich.py        ← plan → `RichReply` prin `compose.assemble` (paritate de FORMĂ
+│   │   │                          cu v1, fără al doilea apel de model) + `card_refs` (id→product_id)
 │   │   ├── evidence_bundle.py   ← NX-240: faptele turului (known/unknown/stale + sursă), înghețate
 │   │   ├── grounding_guard.py   ← NX-240: poarta de adevăr plan→fapte (respinge vs omite)
 │   │   ├── voice.py             ← vocea răspunsului: `VOICE_RULES` (în toate prompturile de
