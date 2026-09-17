@@ -110,6 +110,13 @@ CHIP_PRODUCERS: dict[str, str] = {
         "model să ajungă la client fără o mutare în spate. Cu felia stinsă rămâne comportamentul "
         "de dinainte (`_clarify_chips`: chip-urile SUNT frazele meniului închis)."
     ),
+    "src/agent/finalize.py::_apply_move_chips": (
+        "ANCORAT STRUCTURAL, prin MUTĂRI (NX-296), pe calea v1 — aceeași sursă ca pe creierul "
+        "unic: meniul ÎNCHIS plus cardurile turului. Diferența e că aici modelul n-are câmp de "
+        "reformulare, deci fiecare mutare iese cu ȘABLONUL tenantului: nu trece niciun text de "
+        "model. Sub `CHIP_MOVES_V1_ENABLED` stins, chips-urile rămân cele de la `compose.assemble` "
+        "(intrarea NEANCORATĂ de mai jos), deci gaura nu e închisă, e OCOLITĂ sub flag."
+    ),
     # ── ancorate prin CONSTRUCȚIE: textul vine din date reale ───────────────────────────────
     "src/worker/stages/faq.py::faq_stage": (
         "Chips-urile SUNT întrebările FAQ candidate, citite din `faqs`. Nu pot numi ceva ce "
@@ -152,7 +159,11 @@ CHIP_PRODUCERS: dict[str, str] = {
     "src/worker/compose.py::assemble": (
         "NEANCORAT — gaura cunoscută, singura din listă. Calea bogată ia `j['suggestions']` direct "
         "din modelul de vânzare și doar le normalizează (trim/dedupe/cap), fără nicio verificare "
-        "că numesc ceva servabil. `ground_suggestions` NU e poarta potrivită aici: meniul închis e "
+        "că numesc ceva servabil. NX-297 felia 5 o OCOLEȘTE, nu o închide: cu "
+        "`CHIP_MOVES_V1_ENABLED` aprins, `finalize._apply_move_chips` suprascrie rezultatul de "
+        "aici cu mutări; cu flagul stins, textul modelului ajunge la client ca înainte. Deci "
+        "intrarea rămâne, și rămâne NEANCORATĂ: un producător ocolit pe un drum nu e reparat. "
+        "`ground_suggestions` NU e poarta potrivită aici: meniul închis e "
         "construit pentru CLARIFICARE, pe când astea sunt follow-up-uri despre produse deja "
         "afișate, iar aplicarea lui oarbă ar fi exact greșeala pe care NX-295 a MĂSURAT-O (poarta "
         "naivă păstra chip-ul fals și arunca pe cel adevărat). Ancorarea corectă cere întâi un "
