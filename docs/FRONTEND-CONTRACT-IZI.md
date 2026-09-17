@@ -41,6 +41,57 @@ trebuie să citească defensiv (`card.badge && ...`), nu să presupună prezenț
 > nu ca match exact. Contract identic (doar text de `content`) — FE nu are nimic de schimbat; e util
 > de știut că uneori cardurile sunt „cele mai apropiate", nu „exact ce ai cerut".
 
+### Transportul ASINCRON (accept 202 + SSE) — aceeași formă, altă livrare
+
+Un tur real durează ~35s. Sincron, browserul ține o conexiune deschisă atât, nu primește niciun
+semn de viață, iar dacă procesul care rulează turul moare la mijloc, turul e pierdut. Acceptul
+durabil rezolvă toate trei — **fără să schimbe forma de mai sus**.
+
+**Serverul anunță, clientul nu ghicește.** `GET /web/bootstrap` întoarce, când transportul e
+pornit:
+
+```jsonc
+"async_turns": {
+  "view_contract": "web-chat.v1",   // forma rezultatului — exact contractul din acest document
+  "sse": true,                       // SSE disponibil (polling rămâne oricum fallback)
+  "poll_after_ms": 1000,             // cadența de polling, decisă de server
+  "progress": {                      // etichetele fazelor, LOCALIZATE de server
+    "accepted": "Am primit mesajul",
+    "working": "Pregătesc răspunsul",
+    "validating": "Verific răspunsul"
+  }
+}
+```
+
+Cheia **lipsește** ⇒ transportul e stins ⇒ frontendul rămâne pe `POST /web/chat`, neschimbat. Asta
+e și procedura de rollback: se stinge un flag pe server, iar clientul cade înapoi la următoarea
+sesiune — fără rebuild și fără redeploy de frontend.
+
+**Fluxul:** `POST /web/v2/turns` (body `web-turn.v2`: `{schema_version, client_turn_id, input:
+{type:"text", text}}`) → **202** cu statusul turului → `GET /web/v2/turns/{id}` (polling) și/sau
+`GET /web/v2/turns/{id}/events` (SSE, evenimente `status` și `result`) → **200** cu rezultatul
+terminal. `GET` e AUTORITATEA; SSE e doar optimizare, deci o conexiune căzută nu pierde nimic.
+`client_turn_id` trebuie să fie un **UUID real** (e cheia de idempotency, coloană `uuid`): același
+UUID retrimis întoarce ACELAȘI răspuns, fără al doilea apel de model.
+
+**Rezultatul terminal** e obiectul din §1 plus un plic:
+
+```jsonc
+{
+  "schema_version": "web-chat.v1",
+  "conversation": { "id": "…", "revision": 3 },
+  "turn": { "id": "…", "client_turn_id": "…", "status": "completed" },  // completed|failed|cancelled
+  "error": { "code": "deadline_exceeded", "message": "…", "retryable": true },  // doar pe eșec
+  "content": "…", "products": [ … ], "suggestions": [ … ], "offer": { … }, "comparison": { … }
+}
+```
+
+Câmpurile de conținut sunt **identice** cu cele servite de `/web/chat` — un test din backend le
+compară cheie cu cheie, deci nu pot diverge. Pe `failed`/`cancelled`, `content` e deja un text
+randabil (niciun terminal mut), iar `error.retryable` spune dacă are rost să reîncerci același
+mesaj. Statusurile ne-terminale (`accepted`/`working`/`validating`) sosesc pe **202**, cu
+`web-turn-status.v2` — folosește-le pentru indicatorul de progres, cu etichetele din `progress`.
+
 ### Input — login passthrough (NX-129)
 
 Pe lângă `token`/`visitor_id`/`sig`, requesturile (`/web/bootstrap`, `/web/messages`, `/web/chat`)

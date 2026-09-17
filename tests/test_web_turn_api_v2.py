@@ -344,7 +344,7 @@ async def test_accept_existing_terminal_replays_projection(monkeypatch):
     )
     assert res.status_code == 200
     view = json.loads(res.body)
-    assert view == tev.terminal_view(row, "ro")  # replay = proiecția aceluiași rând, exact
+    assert view == tev.terminal_payload(row, "ro")  # replay = proiecția aceluiași rând, exact
 
 
 async def test_accept_idempotency_conflict_409(monkeypatch):
@@ -421,7 +421,32 @@ async def test_get_returns_200_terminal_projection(monkeypatch):
         row.id, token="tok", visitor_id="web_1", sig="s", request=_Req()
     )
     assert res.status_code == 200
-    assert json.loads(res.body) == tev.terminal_view(row, "ro")
+    assert json.loads(res.body) == tev.terminal_payload(row, "ro")
+
+
+async def test_get_serves_the_view_contract_the_server_selected(monkeypatch):
+    """Transportul și VEDEREA sunt două axe. Ruta nu-și alege singură contractul și nu îl
+    negociază cu clientul: îl citește din config, iar corpul spune ce e (`schema_version`)."""
+    row = _row(status="completed", response_json=COMPLETED_PAYLOAD, completed_at=NOW)
+    _wire_v2(monkeypatch, session_row=row)
+
+    async def get_body():
+        res = await wa.web_turn_status_v2(
+            row.id, token="tok", visitor_id="web_1", sig="s", request=_Req()
+        )
+        return json.loads(res.body)
+
+    # Implicit: payload-ul persistat, exact ce randează widgetul de azi.
+    monkeypatch.setattr(get_settings(), "web_turn_view_contract", "web-chat.v1")
+    v1 = await get_body()
+    assert v1["schema_version"] == "web-chat.v1"
+    assert v1["content"] == COMPLETED_PAYLOAD["content"]
+
+    # Selectat explicit: envelope-ul de blocuri. Rămâne servibil, nu e cod mort.
+    monkeypatch.setattr(get_settings(), "web_turn_view_contract", "web-view.v2")
+    v2 = await get_body()
+    assert v2["schema_version"] == "web-view.v2"
+    assert "messages" in v2
 
 
 async def test_get_unknown_or_foreign_turn_is_404(monkeypatch):

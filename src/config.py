@@ -8,7 +8,7 @@ direct prin cod — totul prin `settings`.
 import os
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import AliasChoices, Field, model_validator
 from pydantic.fields import FieldInfo
@@ -1236,6 +1236,20 @@ class Settings(BaseSettings):
         default=False, validation_alias="WEB_TURN_RECOVERY_ENABLED"
     )
     web_turn_sse_enabled: bool = Field(default=False, validation_alias="WEB_TURN_SSE_ENABLED")
+    # VEDEREA pe care o servesc rutele asincrone la terminal. Axă INDEPENDENTĂ de transport, și
+    # codul o spunea deja: cererea e `web-turn.v2`, statusul `web-turn-status.v2`, vederea are
+    # versiunea ei. NX-233 le livrase cuplate, ceea ce făcea ca „vreau accept 202 + SSE" să coste
+    # o rescriere de widget. Sunt două lucruri, deci sunt două setări.
+    #   • `web-chat.v1` (IMPLICIT) — exact payload-ul persistat de executor (`render_web`), adică
+    #     ce randează widgetul de azi: chips, `offer`, comparație, `details`, variante. Zero port
+    #     de design, zero regresie de conținut.
+    #   • `web-view.v2` — envelope-ul de blocuri (NX-228/236/240). Rămâne selectabil ca să nu fie
+    #     cod mort, dar nu mai e implicit: nu e vederea produsului.
+    # SERVER-OWNED: niciun parametru de client, nicio negociere. Corpul e auto-descriptiv
+    # (`schema_version`), deci frontendul ȘTIE ce a primit, nu ghicește.
+    web_turn_view_contract: Literal["web-chat.v1", "web-view.v2"] = Field(
+        default="web-chat.v1", validation_alias="WEB_TURN_VIEW_CONTRACT"
+    )
     # Bugetul TOTAL al unui turn, fixat la accept (`deadline_at`). NU se prelungește la reclaim;
     # NX-241 îl strânge pe măsurători. Peste el → terminal onest `deadline_exceeded` (P6).
     web_turn_deadline_s: int = Field(default=120, validation_alias="WEB_TURN_DEADLINE_S")
