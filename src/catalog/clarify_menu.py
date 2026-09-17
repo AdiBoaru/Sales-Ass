@@ -76,11 +76,13 @@ __all__ = [
     "MenuOption",
     "build_menu",
     "catalog_evidence",
+    "contains_run",
     "clear_clarify_menu_cache",
     "ground_suggestions",
     "is_catalog_miss",
     "menu_dimensions",
     "menu_for_turn",
+    "words_of",
 ]
 
 #: Fiecare loc din `src/` care poate emite un chip către client, cu sursa lui de ancorare.
@@ -583,13 +585,13 @@ def build_menu(
     )
 
 
-def _words_of(text: str) -> list[str]:
+def words_of(text: str) -> list[str]:
     """Cuvintele unui text, pliate (fără diacritice) și fără punctuație. Ordinea se PĂSTREAZĂ:
     potrivirea cere cuvinte consecutive, nu o mulțime."""
     return [w for w in re.split(r"[^0-9a-z]+", fold(text)) if w]
 
 
-def _contains_run(haystack: list[str], needle: list[str]) -> bool:
+def contains_run(haystack: list[str], needle: list[str]) -> bool:
     """Apare `needle` ca secvență consecutivă de cuvinte în `haystack`?"""
     n = len(needle)
     if not n or n > len(haystack):
@@ -620,15 +622,15 @@ def ground_suggestions(
         cleaned = tuple(dict.fromkeys(s.strip() for s in suggestions if s and s.strip()))
         return cleaned[:limit], ()
 
-    needles = [_words_of(p) for p in menu.phrases()]
+    needles = [words_of(p) for p in menu.phrases()]
     kept: list[str] = []
     dropped: list[str] = []
     for raw in suggestions:
         if not isinstance(raw, str) or not raw.strip():
             continue
         text = " ".join(raw.split()).strip()
-        haystack = _words_of(text)
-        if any(n and _contains_run(haystack, n) for n in needles):
+        haystack = words_of(text)
+        if any(n and contains_run(haystack, n) for n in needles):
             if text not in kept:
                 kept.append(text)
         else:

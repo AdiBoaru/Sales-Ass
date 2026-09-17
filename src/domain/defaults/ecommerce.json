@@ -1,5 +1,15 @@
 {
   "_note": "NX-114 seed ecommerce generic — fără taxonomie de concern; whitelist minim agnostic (profile._WHITELIST_DEFAULT).",
+  "_chip_templates_note": "NX-296: copy-ul chips-urilor, per mutare si per locale. Un chip e MESAJUL pe care clientul il retrimite la apasare, deci se scrie la persoana I, in vocea lui. {slot} se completeaza de server din catalog (fraza de meniu, nume scurt de produs, prag de pret), niciodata de model. Mutare fara sablon = mutare care nu se ofera (P11: limba e configuratie, nu constanta in cod). Moneda face parte din sablon fiindca e a tenantului.",
+  "chip_templates": {
+    "refine_facet": {"ro": "Caut ceva pentru {slot}", "en": "Show me something for {slot}"},
+    "pivot_shelf": {"ro": "Arata-mi ce ai la {slot}", "en": "Show me what you have in {slot}"},
+    "price_band": {"ro": "Vreau ceva sub {slot} lei", "en": "Something under {slot}"},
+    "detail": {"ro": "Spune-mi mai multe despre {slot}", "en": "Tell me more about {slot}"},
+    "reviews": {"ro": "Ce spun recenziile despre {slot}", "en": "What do reviews say about {slot}"},
+    "compare": {"ro": "Compara {slot} cu {slot_b}", "en": "Compare {slot} with {slot_b}"},
+    "link": {"ro": "Trimite-mi linkul la {slot}", "en": "Send me the link for {slot}"}
+  },
   "currency": "RON",
   "_detail_sections_note": "Secțiunile de fișă (product_sections.kind) pe care le vede modelul la detaliu, în ordine, cu plafon de caractere. Primele sunt tipurile fișei autorate (summary/fit/anti_fit/…), ultimele cele ale catalogului demo (features/benefits/scenarios). Un tenant cu alte tipuri le declară în settings.domain_pack.detail_sections.",
   "detail_sections": [

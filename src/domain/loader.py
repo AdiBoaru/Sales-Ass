@@ -140,6 +140,20 @@ def _norm_str_map(raw: Any) -> dict[str, str]:
     return {k: v for k, v in raw.items() if isinstance(k, str) and isinstance(v, str)}
 
 
+def _norm_chip_templates(raw: Any) -> dict[str, dict[str, str]]:
+    """NX-296: `kind` → locale → șablon. Gunoiul se ignoră per intrare (fail-safe, P6): un
+    șablon stricat pentru o mutare nu are voie să șteargă chips-urile celorlalte."""
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, dict[str, str]] = {}
+    for kind, per_locale in raw.items():
+        if isinstance(kind, str) and isinstance(per_locale, dict):
+            values = _norm_str_map(per_locale)
+            if values:
+                out[kind] = values
+    return out
+
+
 def _norm_detail_sections(raw: Any) -> tuple[SectionSpec, ...]:
     """Listă de `{kind, max_chars?}` → tuple[SectionSpec]. Intrare fără `kind` string, cu
     `max_chars` ne-întreg sau ≤ 0 → sărită (fail-safe per intrare, ca la fațete). Un `kind`
@@ -233,6 +247,7 @@ def load_domain_pack(business: BusinessConfig) -> DomainPack | None:
         ),
         facets=build_facets(merged.get("facets")),  # NX-186: registru tipizat (fail-closed)
         response_style=_norm_str_map(merged.get("response_style")),  # NX-159 felia 3
+        chip_templates=_norm_chip_templates(merged.get("chip_templates")),  # NX-296
         # NX-205: contractul de completitudine per categorie (fail-closed per intrare).
         required_attributes=build_category_requirements(merged.get("required_attributes")),
         # NX-262: semantica muchiilor din `product_relations` (fail-closed per intrare — o intrare
