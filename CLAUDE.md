@@ -1304,8 +1304,10 @@ nativx-assistant/
 
 **Proiect Supabase: `NativexSales`** (ref `pidqzxymjhzlmoesfsba`, **eu-west-2**, **Postgres 17.6**,
 plan free, **Data API STINS** → `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` nu se folosesc; singurele
-secrete sunt connection stringurile). Cele 41 de migrări (003→045, cu 030/031 arse) sunt înregistrate
-în `schema_migrations`, deci poarta de boot NX-123 nu cere re-rularea lor.
+secrete sunt connection stringurile). Cele **47 de migrări (003→051, cu 030/031 arse)** sunt
+înregistrate în `schema_migrations` — ultima aplicată e **051** (NX-289, ștergerea canalelor
+înghețate), verificat pe DB pe 2026-09-17 — deci poarta de boot NX-123 nu cere re-rularea lor.
+Producția rulează pe `schema: requires 51, tolerates 52` (`/health/startup`).
 
 **business_id**: `99fe1292-f9ed-469e-8183-f994ea5b59c0`
 **Slug**: `sole-ro` (name „SOLE") · **Vertical**: `ecommerce` · locale `ro`, `Europe/Bucharest`
@@ -1320,21 +1322,30 @@ secrete sunt connection stringurile). Cele 41 de migrări (003→045, cu 030/031
 `public_token=pub_b738dd1aa2ff2e0535b491792cc789d9` (`data-token` în widget). Recreabil idempotent
 cu `python scripts/seed_web_channel.py --business sole-ro`.
 
-**Ce e PLIN și ce e GOL, remăsurat 2026-09-07** (cifrele de mai jos au fost verificate pe DB; lista
+**Ce e PLIN și ce e GOL, remăsurat 2026-09-17** (cifrele de mai jos au fost verificate pe DB; lista
 veche declara zero pe patru dintre ele și era depășită — vezi principiul din
-`scripts/mvp_audit.py`: starea reală se citește, nu se ține minte):
+`scripts/mvp_audit.py`: starea reală se citește, nu se ține minte. Remăsurarea din 17 sep a găsit
+încă DOUĂ intrări depășite, deși lista purta deja avertismentul ăsta: rezumatele de recenzii și
+embeddingurile de FAQ fuseseră produse între timp, iar nota rămăsese pe zero. Un tabel de stare cu
+dată în titlu îmbătrânește tăcut — recitește-l, nu-l cita):
 `product_embeddings` = **2.758/2.758** (`text-embedding-3-small`, scrise 2026-09-02) ⇒ **RRF-ul ARE
 al doilea braț**; `product_derived_signals` = **22.434**; `attributes->'concerns'` = **2.506**, deci
 filtrul de `concerns`, fațetele și boost-ul din rerank au pe ce opera; `product_relations` =
 **37.082** ⇒ graful NU mai e inert, iar cele 391 de produse epuizate au substitut (NX-195).
+**`product_review_summaries` = 2.557** (era 0 până pe 2026-09-16): producătorul determinist NX-279
+a fost RULAT (`scripts/derive_review_summaries.py`: teme din `domain_pack.review_themes`, numărate
+ca recenzii distincte, zero model; cere migrarea 050, pachetul re-aplicat și `--apply`; vechiul
+`summarize_reviews.py` INVENTA rezumatele și rescria `products.rating`, e arhivat cu gardă).
+Rândurile sunt SERVITE pe calea live: `db/queries/catalog.py` face `left join
+product_review_summaries` și proiectează `top_pros`/`review_summary` atât pe listă, cât și pe
+detaliu — deci `top_pros` NU mai iese NULL. Le mai citesc `evidence_bundle` (NX-240) și
+`db/queries/carts.py` (NX-237), ambele pe flag stins.
+**`faqs.embedding` = 20/20** (era 0): lookup-ul de FAQ la nivel de business are în sfârșit pe ce
+opera. Cât DEVIAZĂ efectiv e altă întrebare, măsurată separat — vezi principiul 4 din
+`docs/PROJECT_STATUS.md` și nota că stratul „gratuit" servea 1 din 15.
 Rămân GOALE, cu consecință: `product_card_blurbs` = 0 (corect: codul refuză să cadă pe numele
-produsului); `product_review_summaries` = 0 (183.003 recenzii reale, nerezumate → `top_pros` iese
-NULL pe orice card) — dar are acum PRODUCĂTOR determinist (NX-279,
-`scripts/derive_review_summaries.py`: teme din `domain_pack.review_themes`, numărate ca recenzii
-distincte, zero model; cere migrarea 050, pachetul re-aplicat și `--apply`; vechiul
-`summarize_reviews.py` INVENTA rezumatele și rescria `products.rating`, e arhivat cu gardă);
-`intent_aliases` = 0; `faqs.embedding` = 0 pe toate cele 20 (deci lookup-ul de
-FAQ la nivel de business tot nu servește nimic); **`product_category_map` = 0** (măsurat
+produsului); `intent_aliases` (approved) = 0, deci stratul de alias nu deviază NIMIC;
+`semantic_cache` = 3 rânduri, adică practic mort; **`product_category_map` = 0** (măsurat
 2026-09-16) — deci catalogul e o **PARTIȚIE strictă**: acoperirea pe rafturi e 2.758/2.758, suma
 pe rafturi e exact 2.758 (zero suprapuneri), iar apartenența vine EXCLUSIV din
 `primary_category_id`. Consecința nu e cosmetică: rafturile de PUBLIC (`Barbati`, `Copii`) taie
