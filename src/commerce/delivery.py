@@ -20,6 +20,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
+from src.catalog.folding import fold_text
 from src.commerce.config import ShippingConfig
 
 # zile de reaprovizionare adăugate peste termenul normal, când produsul e epuizat dar are dată de
@@ -193,5 +194,5 @@ def has_time_sensitive_text(text: str | None) -> bool:
     """
     if not text:
         return False
-    t = text.lower()
-    return "urmatoarele" in t.replace("ă", "a") and ("ore" in t or "minute" in t)
+    t = fold_text(text)
+    return "urmatoarele" in t and ("ore" in t or "minute" in t)

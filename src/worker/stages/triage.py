@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import logging
 import re
-import unicodedata
 from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, ValidationError
@@ -24,6 +23,7 @@ from pydantic import BaseModel, ValidationError
 from src.agent.fallbacks import _is_short_ack
 from src.agent.query_rewrite import build_query_spec, safe_vocabulary
 from src.catalog.clarify_menu import ClarifyMenu, ground_suggestions, menu_for_turn
+from src.catalog.folding import fold_text
 from src.config import get_settings
 from src.conversation.state_reducer import StateUpdateProposal
 from src.conversation.state_v2 import active_needs
@@ -160,10 +160,8 @@ _FACTUAL_BAIT_RE = re.compile(
 
 def _factual_bait(text: str) -> bool:
     """True dacă mesajul cere/atinge un fapt de business (reducere/preț/stoc/politică). Normalizează
-    diacriticele (NFKD) → „preț"→„pret", „garanție"→„garantie" prind tiparul ASCII."""
-    decomposed = unicodedata.normalize("NFKD", (text or "").lower())
-    norm = "".join(c for c in decomposed if not unicodedata.combining(c))
-    return _FACTUAL_BAIT_RE.search(norm) is not None
+    diacriticele → „preț"→„pret", „garanție"→„garantie" prind tiparul ASCII."""
+    return _FACTUAL_BAIT_RE.search(fold_text(text or "")) is not None
 
 
 def _safety_sensitive(ctx: TurnContext) -> bool:

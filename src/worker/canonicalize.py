@@ -14,8 +14,9 @@ folosește, dar dacă e safe poate fi injectat cu `raw_key` formatat prezentabil
 from __future__ import annotations
 
 import re
-import unicodedata
 from typing import TYPE_CHECKING
+
+from src.catalog.folding import fold_text
 
 if TYPE_CHECKING:
     from src.domain.pack import DomainPack
@@ -121,8 +122,7 @@ def canonicalize_clarify_field(raw_field: str | None, pack: DomainPack | None = 
     if canonical:
         return canonical
 
-    text = unicodedata.normalize("NFKD", (raw_field or "").lower())
-    text = "".join(char for char in text if not unicodedata.combining(char))
+    text = fold_text(raw_field or "")
     if re.search(r"\b(categori|tip(?:ul)? de produs|ce produs|product type|what product)", text):
         return "category"
     if re.search(r"\b(pentru cine|destinatar|recipient|iubit|iubita|cadou pentru)", text):

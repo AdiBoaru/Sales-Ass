@@ -21,11 +21,11 @@ from __future__ import annotations
 
 import logging
 import re
-import unicodedata
 from base64 import b64encode
 from typing import TYPE_CHECKING
 
 from src.agent.llm import VISION_NOT_PRODUCT
+from src.catalog.folding import fold_text
 from src.config import INBOUND_BODY_MAX, get_settings
 from src.db.queries.contacts import block_contact
 from src.models import TurnContext
@@ -103,9 +103,8 @@ RISK_PATTERNS: dict[str, list[str]] = {
 
 
 def _norm(text: str) -> str:
-    """Lowercase + fără diacritice (NFKD) → match robust pe „să"/„SA"/„sa"."""
-    decomposed = unicodedata.normalize("NFKD", text.lower())
-    return "".join(c for c in decomposed if not unicodedata.combining(c))
+    """Lowercase + fără diacritice → match robust pe „să"/„SA"/„sa"."""
+    return fold_text(text)
 
 
 def detect_risk(text: str | None) -> str | None:

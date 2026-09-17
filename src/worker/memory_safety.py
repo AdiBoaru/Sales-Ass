@@ -20,6 +20,8 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+from src.catalog.folding import strip_diacritics
+
 # Telefon E.164-ish (aceeași formă ca profile._PHONE_RE / summarizer). PII (P12).
 _PHONE_RE = re.compile(r"\+?\d[\d\s\-]{6,}\d")
 _EMAIL_RE = re.compile(r"[^\s@]+@[^\s@]+\.[^\s@]+")
@@ -87,9 +89,14 @@ class SafetyVerdict:
 
 
 def _strip_diacritics(text: str) -> str:
-    """Normalizare best-effort a diacriticelor RO pentru match pe termeni (ă→a, î→i, ș→s, ț→t)."""
-    table = str.maketrans("ăâîșşțţĂÂÎȘŞȚŢ", "aaissttAAISSTT")
-    return text.translate(table)
+    """Pliere pentru match pe termeni de siguranță, cu registrul PĂSTRAT.
+
+    Era o a treia scriere a aceleiași formule, cu tabel de translare pe cele șapte caractere
+    românești — deci un termen scris cu orice alt diacritic scăpa scanării. Primitiva pliază orice,
+    iar pentru o scanare de siguranță direcția asta e cea corectă: mai multe potriviri, nu mai
+    puține.
+    """
+    return strip_diacritics(text)
 
 
 def _value_text(value: Any) -> str:

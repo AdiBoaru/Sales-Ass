@@ -364,6 +364,11 @@ def slugify(text: str, *, max_len: int = 90) -> str:
 
     Diacriticele se pliază (`ă`→`a`), deci un nume rescris cu diacritice la sursă produce
     ACELAȘI slug. Fără asta, o corectură de ortografie la SOLE ar crea un produs duplicat.
+
+    PLIERE DISTINCTĂ, declarată în `folding.DISTINCT_FOLDINGS`: aici rezultatul e un identificator
+    de URL, nu cheia de potrivire cu `search_tsv`, deci NU folosește `folding.fold`. Trebuie să fie
+    mai agresivă decât `ro_unaccent` — `é` are nevoie să devină `e`, iar `ro_unaccent` l-ar lăsa
+    neatins și ar produce un slug non-ASCII.
     """
     folded = unicodedata.normalize("NFKD", text.lower())
     ascii_only = "".join(c for c in folded if not unicodedata.combining(c))

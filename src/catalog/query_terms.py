@@ -30,10 +30,11 @@ from __future__ import annotations
 import re
 from itertools import combinations
 
-# Aceeași normalizare ca `ro_unaccent` (033), replicată aici ca funcție PURĂ de Python: dacă cele
-# două capete diferă, potrivirea nu se produce — vezi comentariul migrării. Include formele cu
-# sedilă (ş/ţ), care apar în text tastat din surse vechi.
-_RO_FOLD = str.maketrans("ăâîșțşţ", "aaistst")
+from src.catalog.folding import fold as _fold
+
+# Plierea de diacritice are UN singur producător (`src/catalog/folding.py`) — vezi docstring-ul de
+# acolo pentru de ce. `fold` se re-exportă aici fiindcă ăsta e numele public prin care o importă
+# restul codului; nu se REDEFINEȘTE.
 
 # Cuvinte FUNCȚIONALE, per locale. Regula de includere e strictă: un cuvânt intră aici doar dacă
 # nu poate numi niciodată un produs, un brand sau o nevoie. „crema", „ulei", „par" NU au ce căuta
@@ -106,9 +107,10 @@ def comparators(locale: str | None) -> tuple[tuple[str, str], ...]:
     return _COMPARATORS[key]
 
 
-def fold(text: str) -> str:
-    """`lower` + fără diacritice RO — oglinda Python a lui `ro_unaccent(text)` din 033."""
-    return text.lower().translate(_RO_FOLD)
+#: Re-export: `fold` trăiește în `src/catalog/folding.py`, unicul producător al plierii. Importat
+#: aici ca să rămână numele public prin care îl consumă `deterministic`, `clarify_menu`,
+#: `domain.constraints` și calea lexicală.
+fold = _fold
 
 
 def stopwords(locale: str | None) -> frozenset[str]:

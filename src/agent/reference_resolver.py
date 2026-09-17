@@ -34,9 +34,10 @@ Modulul e PUR: primește referințe, întoarce o decizie tipizată. Nu citește 
 from __future__ import annotations
 
 import re
-import unicodedata
 from dataclasses import dataclass
 from typing import Literal, Protocol
+
+from src.catalog.folding import fold_text
 
 ReferenceSource = Literal["action", "named", "ordinal", "page", "selected", "single", "none"]
 ReferenceOutcome = Literal["resolved", "ambiguous", "stale", "none"]
@@ -145,10 +146,13 @@ class ReferenceRequest:
 
 
 def normalize_for_match(text: str) -> str:
-    """Lowercase + fără diacritice (NFKD). Aceeași normalizare pe ambele capete ale comparației —
-    altfel „Ser Petală" nu s-ar potrivi niciodată cu „ser petala"."""
-    decomposed = unicodedata.normalize("NFKD", text.lower())
-    return "".join(c for c in decomposed if not unicodedata.combining(c))
+    """Lowercase + fără diacritice. Aceeași normalizare pe ambele capete ale comparației — altfel
+    „Ser Petală" nu s-ar potrivi niciodată cu „ser petala".
+
+    „Aceeași" se sprijină pe unicul producător (`folding.fold_text`), nu pe faptul că două funcții
+    au fost scrise la fel într-o zi.
+    """
+    return fold_text(text)
 
 
 def match_ordinal(query: str, count: int) -> int | None:

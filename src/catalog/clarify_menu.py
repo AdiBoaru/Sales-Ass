@@ -36,6 +36,21 @@ Contractul modulului, în trei invariante:
 `catalog_miss` e o afirmație mai tare și are propriul prag de dovadă: **niciun** cuvânt al
 cererii nu seamănă cu limba catalogului. Regula e structurală (nicio listă de cuvinte românești,
 P11) și a fost aleasă pe măsurătoare, nu pe intuiție — vezi `is_catalog_miss`.
+
+## Cine mai poate emite un chip (`CHIP_PRODUCERS`)
+
+Modulul ăsta a reparat UN producător, cel al triajului. Citind codul cu ochiul păreau să mai fie
+patru; poarta mecanică scrisă în `tests/test_single_producer_guard.py` a găsit **doisprezece**.
+
+Unsprezece dintre ei sunt ancorați — dar **prin construcție, nu structural**: textul chip-ului e ori
+copy fix din cod, ori vine din date deja citite (fraze FAQ din DB, produse tocmai afișate, coloanele
+unei comparații calculate). Adică se întâmplă să nu poată minți. „Se întâmplă" nu e un invariant:
+al treisprezecelea producător nu are nimic care să-l oprească, iar cel de pe calea bogată
+(`compose.assemble`) chiar nu e ancorat.
+
+De aceea sunt ENUMERAȚI mai jos, fiecare cu SURSA din care i se poate verifica afirmația, iar poarta
+verifică mecanic (AST) că nu apare unul nedeclarat și, simetric, că niciunul declarat n-a rămas în
+urma codului. Registrul nu face chip-urile adevărate: face vizibil cine le produce.
 """
 
 from __future__ import annotations
@@ -56,6 +71,7 @@ from src.catalog.vocabulary import (
 )
 
 __all__ = [
+    "CHIP_PRODUCERS",
     "ClarifyMenu",
     "MenuOption",
     "build_menu",
@@ -66,6 +82,73 @@ __all__ = [
     "menu_dimensions",
     "menu_for_turn",
 ]
+
+#: Fiecare loc din `src/` care poate emite un chip către client, cu sursa lui de ancorare.
+#:
+#: Cheia e `"<cale relativă din repo>::<nume funcție>"`. Poarta mecanică cere ca orice scriere de
+#: `Reply.suggestions` (sau `suggestions=`/`chips=` la construcția unui `Reply`) să fie declarată
+#: aici. Valoarea nu e o bifă: e sursa din care se poate verifica afirmația.
+#:
+#: Registrul NU face chip-urile adevărate. Face vizibil cine le produce — fiindcă azi patru dintre
+#: cinci sunt ancorate ACCIDENTAL (se întâmplă să cheme date reale), iar un al cincilea producător
+#: nu are nimic care să-l oprească.
+CHIP_PRODUCERS: dict[str, str] = {
+    # ── poartă EXPLICITĂ ────────────────────────────────────────────────────────────────────
+    "src/worker/stages/triage.py::triage_stage": (
+        "ANCORAT STRUCTURAL: sugestiile lui nano trec prin `ground_suggestions` contra meniului "
+        "închis construit din catalogul real (NX-295). Singurul producător cu poartă explicită, "
+        "fiindcă e singurul unde textul chip-ului e scris de un model."
+    ),
+    # ── ancorate prin CONSTRUCȚIE: textul vine din date reale ───────────────────────────────
+    "src/worker/stages/faq.py::faq_stage": (
+        "Chips-urile SUNT întrebările FAQ candidate, citite din `faqs`. Nu pot numi ceva ce "
+        "magazinul nu are, fiindcă textul lor e chiar rândul din DB."
+    ),
+    "src/agent/deterministic.py::_handle_review_intent": (
+        "`_review_choice_chips(refs)` numește produse tocmai AFIȘATE (setul afișat + produsul "
+        "paginii, NX-234). Ancora e o referință la ce s-a arătat, nu o promisiune nouă."
+    ),
+    "src/agent/deterministic.py::_handle_detail_intent": (
+        "`_detail_choice_chips(refs)`, aceeași sursă ca la recenzii: produsele deja afișate."
+    ),
+    "src/agent/deterministic.py::serve_comparison": (
+        "`_compare_chips(comparison.columns)` — axele unei comparații deja calculate din produse "
+        "reale. Chip-ul numește o coloană care există, fiindcă tabelul e deja construit."
+    ),
+    "src/agent/finalize.py::render": (
+        "`_compare_chips(comparison.columns)`, aceeași sursă ca `serve_comparison`."
+    ),
+    # ── ancorate prin CONSTRUCȚIE: copy localizat, fără nicio afirmație de catalog ───────────
+    "src/agent/deterministic.py::serve_reviews": (
+        "`_review_next_steps(language)` — copy FIX din cod («Vezi detaliile»), nu numește niciun "
+        "produs sau raft, deci nu are ce promite greșit."
+    ),
+    "src/agent/deterministic.py::serve_details": (
+        "Trei chip-uri de copy fix (`review_chip`/`link_chip`/`compare_chip`), despre produsul "
+        "deja în context. Fără nume de catalog în text."
+    ),
+    "src/agent/finalize.py::_attach_no_result_alternatives": (
+        "`_thin_path_chips(language)` — copy fix, pe drumul «n-am găsit». Tocmai aici un chip cu "
+        "afirmație de catalog ar fi cel mai toxic: ai spune «n-am găsit» și ai oferi un raft."
+    ),
+    "src/agent/planner.py::resolve_cheaper_followup": ("`_thin_path_chips(language)`, copy fix."),
+    "src/worker/stages/greeting.py::greeting_stage": (
+        "Sugestiile de salut vin din categoriile DECLARATE de tenant (`settings.welcome."
+        "categories`) plus nevoile din pachet; fără ele se cade pe generice care nu numesc niciun "
+        "produs («Vreau o recomandare»). Nu e citire de catalog: salutul e fast path."
+    ),
+    # ── NEANCORAT ───────────────────────────────────────────────────────────────────────────
+    "src/worker/compose.py::assemble": (
+        "NEANCORAT — gaura cunoscută, singura din listă. Calea bogată ia `j['suggestions']` direct "
+        "din modelul de vânzare și doar le normalizează (trim/dedupe/cap), fără nicio verificare "
+        "că numesc ceva servabil. `ground_suggestions` NU e poarta potrivită aici: meniul închis e "
+        "construit pentru CLARIFICARE, pe când astea sunt follow-up-uri despre produse deja "
+        "afișate, iar aplicarea lui oarbă ar fi exact greșeala pe care NX-295 a MĂSURAT-O (poarta "
+        "naivă păstra chip-ul fals și arunca pe cel adevărat). Ancorarea corectă cere întâi un "
+        "corpus de chips bogate REALE pe care să se măsoare pragul — o poartă ghicită aici ar "
+        "arunca follow-up-uri legitime, ceea ce e mai scump decât gaura."
+    ),
+}
 
 # Câte opțiuni intră în meniul dat modelului. Meniul e un ajutor, nu un catalog: peste vreo zece
 # intrări promptul crește fără ca alegerea să se îmbunătățească.

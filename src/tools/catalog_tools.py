@@ -13,7 +13,6 @@ import hashlib
 import json
 import re
 import time
-import unicodedata
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -21,6 +20,7 @@ from typing import TYPE_CHECKING, Any
 from pydantic import BaseModel, Field
 
 from src.analytics.demand import product_ids_from_dicts
+from src.catalog.folding import fold_text
 from src.catalog.render_text import cut_at_sentence, display_name
 from src.catalog.vocabulary import (
     CATEGORY_DIMENSION,
@@ -138,9 +138,12 @@ class CompareArgs(BaseModel):
 
 
 def _normname(s: str) -> str:
-    """Lowercase + fără diacritice → match robust de nume produs (A1)."""
-    d = unicodedata.normalize("NFKD", (s or "").lower())
-    return "".join(c for c in d if not unicodedata.combining(c))
+    """Lowercase + fără diacritice → match robust de nume produs (A1).
+
+    `fold_text`, nu `fold`: ambele capete sunt stringuri Python (numele rostit de model față de
+    numele venit din retrieval), nu o confruntare cu `search_tsv`.
+    """
+    return fold_text(s or "")
 
 
 def _named_product_found(name: str, products: list[dict[str, Any]]) -> bool:

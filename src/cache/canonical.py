@@ -15,7 +15,8 @@ Vezi docs/semantic-cache-design.md §2.
 
 import hashlib
 import re
-import unicodedata
+
+from src.catalog.folding import fold_text
 
 # Bypass realtime: comandă / date personale (răspuns specific userului, niciodată cache).
 _REALTIME = (
@@ -94,9 +95,8 @@ _WS_RE = re.compile(r"\s+")
 
 
 def _norm(text: str) -> str:
-    """lowercase + fără diacritice (NFKD)."""
-    decomposed = unicodedata.normalize("NFKD", text.lower())
-    return "".join(c for c in decomposed if not unicodedata.combining(c))
+    """lowercase + fără diacritice, din unicul producător."""
+    return fold_text(text)
 
 
 def canonicalize(text: str) -> tuple[str, str]:

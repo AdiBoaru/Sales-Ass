@@ -24,10 +24,10 @@ purta altă obligație). Control plane-ul verifică oricum obligațiile; contrac
 
 from __future__ import annotations
 
-import unicodedata
 from itertools import zip_longest
 from typing import TYPE_CHECKING
 
+from src.catalog.folding import fold_text
 from src.config import get_settings
 from src.domain import vocab_examples
 from src.models import BusinessConfig, TurnContext
@@ -117,8 +117,7 @@ FAST_PATH_COVERS: tuple[str, ...] = ("greeting",)
 
 def _norm(text: str) -> str:
     """Lowercase + fără diacritice + doar litere/spații, colapsate. „Bună ziua!" → „buna ziua"."""
-    decomposed = unicodedata.normalize("NFKD", text.lower())
-    stripped = "".join(c for c in decomposed if not unicodedata.combining(c))
+    stripped = fold_text(text)
     letters = "".join(c if (c.isalpha() or c.isspace()) else " " for c in stripped)
     return " ".join(letters.split())
 

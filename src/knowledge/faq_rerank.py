@@ -20,14 +20,18 @@ Pur, fără DB/LLM: primește candidații (deja retrievați) + query canonic. Te
 from __future__ import annotations
 
 import re
-import unicodedata
 from dataclasses import dataclass, field
+
+from src.catalog.folding import fold_text
 
 
 def _norm(s: str) -> str:
-    """lower + fără diacritice — paritate cu `cache.canonical.canonicalize` și cu embeddingul."""
-    d = unicodedata.normalize("NFKD", (s or "").lower())
-    return "".join(c for c in d if not unicodedata.combining(c))
+    """lower + fără diacritice — paritate cu `cache.canonical.canonicalize` și cu embeddingul.
+
+    Paritatea e structurală: amândouă cheamă `folding.fold_text`. Înainte era o a doua copie a
+    aceleiași formule, iar „paritate" era o afirmație pe care nimic nu o verifica.
+    """
+    return fold_text(s or "")
 
 
 # Markeri CANONICI de excepție/restricție (fără diacritice). O întrebare de FAQ care îi conține e o
