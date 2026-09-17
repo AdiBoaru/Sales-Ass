@@ -9,6 +9,7 @@ import re
 from typing import Any
 
 from src.domain import vocab_examples
+from src.observability import turn_latency
 
 _SCHEMAS: dict[str, dict[str, Any]] = {
     "search_products": {
@@ -555,6 +556,25 @@ _TENANT_ENUMS: dict[str, dict[str, str]] = {
 _DROP_PARAM_IF_NO_VALUES: dict[tuple[str, str], str] = {("routine_plan", "moment"): "moments"}
 
 
+def tenant_enum_values(pack: Any) -> dict[str, tuple[str, ...]]:
+    """Valorile de enum ale TENANTULUI, citite din pachet — UN singur loc (P3).
+
+    Erau citite doar în `brain.py`, cu trei `getattr` scrise acolo. Cât timp creierul unic era
+    singurul care oferea `routine_plan`/`related_products`, asta era suficient; când NX-297 le-a
+    pus în toolsetul v1, apelantul nou n-avea de unde ști ce trebuie pasat și le-a lăsat goale —
+    adică exact clasa „o verificare legată de o COPIE a adevărului, nu de adevărul însuși".
+
+    Cheile sunt EXACT numele parametrilor lui `tool_schemas`, ca apelantul să nu le poată încurca:
+    `tool_schemas(names, examples, **tenant_enum_values(pack))`."""
+    registry = getattr(pack, "relation_kinds", None)
+    steps = getattr(pack, "routine_steps", None)
+    return {
+        "relation_kinds": tuple(getattr(registry, "specs", {}) or ()),
+        "families": tuple(getattr(steps, "families", {}) or ()),
+        "moments": tuple(getattr(steps, "time_markers", {}) or ()),
+    }
+
+
 def tool_schemas(
     names: list[str],
     examples: vocab_examples.VocabExamples = vocab_examples.EMPTY_EXAMPLES,
@@ -573,14 +593,28 @@ def tool_schemas(
         # Momentele intră în DESCRIERE, nu în enum — vezi comentariul de la parametrul `moment`.
         "{MOMENT_VALUES}": vocab_examples.clause(tuple(sorted(moments))),
     }
-    out = [_fill(_SCHEMAS[n], filled) for n in names if n in _SCHEMAS]
     values = {"relation_kinds": relation_kinds, "families": families, "moments": moments}
-    return [_with_tenant_enums(s, values) for s in out]
+    out: list[dict[str, Any]] = []
+    for name in names:
+        if name not in _SCHEMAS:
+            continue
+        schema = _with_tenant_enums(_fill(_SCHEMAS[name], filled), values)
+        if schema is None:
+            # Unealta nu poate fi CHEMATĂ: enumul ei de tenant e gol, deci niciun argument valid nu
+            # există. A o oferi oricum e cea mai proastă dintre variante — furnizorul refuză schema
+            # cu 400, iar 4xx e TERMINAL în `_with_retry` și înghițit de `agent_stage`, deci moare
+            # tot drumul de vânzare și numai el (triajul rămâne sănătos deasupra: exact incidentul
+            # din 2026-08-24). Direcția corectă de degradare e invers: turul pierde o unealtă, nu
+            # răspunsul (P6). Numărat, ca să nu fie tăcut.
+            turn_latency.degrade("tool_dropped_empty_tenant_enum")
+            continue
+        out.append(schema)
+    return out
 
 
 def _with_tenant_enums(
     schema: dict[str, Any], values: dict[str, tuple[str, ...]]
-) -> dict[str, Any]:
+) -> dict[str, Any] | None:
     """Completează enumurile care vin din pachetul TENANTULUI (vezi `_TENANT_ENUMS`).
 
     De ce enum și nu string liber: `strict: true` cere valori închise, iar un `relation`/`family`
@@ -594,7 +628,13 @@ def _with_tenant_enums(
 
     Separat de enumuri, parametrii din `_DROP_PARAM_IF_NO_VALUES` DISPAR când tenantul n-are valori
     pentru ei. Cele două mecanisme nu se suprapun: unul închide mulțimea de valori a unui parametru
-    indispensabil, celălalt scoate un parametru de rafinament care n-are ce întreba."""
+    indispensabil, celălalt scoate un parametru de rafinament care n-are ce întreba.
+
+    Întoarce `None` când un enum INDISPENSABIL ar ieși gol — adică „unealta asta nu se oferă".
+    Regula era DECLARATĂ aici de la NX-292 („fără familii nu se oferă tool-ul deloc"), dar trăia
+    doar în `turn_profile.select`, adică într-un singur apelant. NX-297 a adăugat al doilea
+    (`_SALES_TOOLS`), care n-o cunoștea, și atunci o regulă respectată prin disciplină a devenit o
+    schemă invalidă pe fiecare tur. Acum e impusă în locul prin care trec TOȚI apelanții."""
     fn = schema.get("function") or {}
     name = str(fn.get("name") or "")
     spec = _TENANT_ENUMS.get(name)
@@ -612,8 +652,12 @@ def _with_tenant_enums(
             if required is not None:
                 required = [r for r in required if r != param]
     for param, key in (spec or {}).items():
-        if param in props:
-            props[param] = {**props[param], "enum": sorted(set(values.get(key) or ()))}
+        if param not in props:
+            continue
+        allowed = sorted(set(values.get(key) or ()))
+        if not allowed:
+            return None
+        props[param] = {**props[param], "enum": allowed}
     params = {**params_in, "properties": props}
     if required is not None:
         params["required"] = required

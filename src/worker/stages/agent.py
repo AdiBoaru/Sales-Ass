@@ -48,7 +48,7 @@ from src.agent.planner import (
     resolve_cheaper_followup,
 )
 from src.agent.prompt_builder import PromptInputs
-from src.agent.tool_definitions import tool_schemas
+from src.agent.tool_definitions import tenant_enum_values, tool_schemas
 from src.agent.tool_executor import (
     ToolRun,
     _safe_tool_args,  # noqa: F401 — re-export (teste)
@@ -535,9 +535,12 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         tool_names = list(dict.fromkeys(tool_names + enabled_tools(ctx.business, "order")))
     # NX-273: descrierile parametrilor primesc exemplele TENANTULUI. Sunt instrucțiuni pentru
     # model, nu documentație — vezi `tool_definitions`.
-    tools = tool_schemas(
-        tool_names, vocab_examples.from_pack(getattr(ctx.business, "domain_pack", None))
-    )
+    #
+    # ENUMURILE tenantului trec pe aceeași cale: `routine_plan`/`related_products` (intrate în
+    # toolsetul v1 la NX-297) au parametri cu valori ÎNCHISE, care vin din pachet. Fără ele, schema
+    # pleca la furnizor cu `enum: []` — refuzată, 4xx terminal, tot drumul de vânzare mut.
+    pack = getattr(ctx.business, "domain_pack", None)
+    tools = tool_schemas(tool_names, vocab_examples.from_pack(pack), **tenant_enum_values(pack))
     # Faza D (NX-143): tool executor cu stare explicită. Acumulatorii (produse/linkuri/sume/…) sunt
     # câmpuri ale lui `run`, nu `nonlocal`; `run.execute` e callback-ul buclei; citim `run.X` după.
     run = ToolRun(ctx, deps)
