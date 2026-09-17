@@ -6,7 +6,10 @@ din `deterministic.py` (care avea un singur producător: sloturile triajului).
 
 from types import SimpleNamespace
 
+import pytest
+
 from src.agent.deterministic import _turn_has_new_constraints
+from src.config import get_settings
 from src.conversation.observed_constraints import from_search_args
 from src.domain.constraints import build_units
 from src.models import BusinessConfig, Contact, InboundMessage, Route, RouteDecision, TurnContext
@@ -121,6 +124,56 @@ def test_an_opaque_action_has_no_text_to_read():
 
 def _run_with(args: list[dict]) -> SimpleNamespace:
     return SimpleNamespace(search_args=args)
+
+
+@pytest.fixture(autouse=True)
+def _flag_on(monkeypatch):
+    """Felia are flagul ei (`OBSERVED_CONSTRAINTS_ENABLED`), deci secțiunea asta îl aprinde.
+
+    Autouse doar de aici în jos ar cere alt fișier; cum funcția pură și poarta ancorată nu citesc
+    settings, aprinderea lor e un no-op. Testul de kill-switch îl stinge înapoi explicit."""
+    monkeypatch.setattr(get_settings(), "observed_constraints_enabled", True)
+
+
+def test_kill_switch_leaves_the_stack_exactly_as_it_was(monkeypatch):
+    """OFF = byte-identic. Perechea obligatorie: o sursă nouă care scrie în aceeași stivă nu are
+    voie să pornească fără ca cineva s-o aprindă — `brand` nu se relaxează niciodată în căutare,
+    deci o valoare lipită acolo filtrează tăcut turele următoare."""
+    from src.worker.stages.agent import _learn_constraints
+
+    monkeypatch.setattr(get_settings(), "observed_constraints_enabled", False)
+    ctx = _ctx("caut ceva de la Kundal sub 100 lei")
+    _learn_constraints(ctx, _run_with([{"price_max": 100, "brand": "Kundal"}]), ctx.message.body)
+    assert ctx.state.search_constraints == {}
+    assert ctx.state_proposals == []
+    assert not any(e.type == "constraint_source" for e in ctx.events)
+
+
+def test_the_learned_constraint_survives_the_v2_state_writer(monkeypatch):
+    """Sub `CONVERSATION_STATE_V2_WRITE_ENABLED` docul persistat se re-derivă la commit din
+    PROPUNERI, din starea proaspăt citită — nu din `ctx.state`. O felie care scrie doar dicționarul
+    e inertă exact pe profilul care rulează azi, și tace în loc să pice.
+
+    Testul merge până la docul chiar persistat, nu până la propunere: între ele stă reducerul, care
+    are dreptul să respingă."""
+    from src.worker.processor import _build_new_state
+    from src.worker.stages.agent import _learn_constraints
+
+    s = get_settings()
+    monkeypatch.setattr(s, "conversation_state_v2_enabled", True)
+    monkeypatch.setattr(s, "conversation_state_v2_write_enabled", True)
+
+    ctx = _ctx("caut o crema sub 100 lei")
+    _learn_constraints(ctx, _run_with([{"price_max": 100}]), ctx.message.body)
+    ctx.set_reply("ok")
+    doc = _build_new_state({}, ctx, is_rich=False, has_products=False)
+
+    needs = {n["key"]: n for n in doc.get("needs") or []}
+    assert "budget_max" in needs, f"pragul nu s-a persistat: {doc}"
+    assert needs["budget_max"]["normalized_value"] == 100
+    # Sursa e ce contează la fel de mult ca valoarea: `corroborated_by` a confirmat că pragul a fost
+    # ROSTIT, deci nevoia are voie să fie `hard`. O valoare inferată n-ar fi ajuns aici deloc.
+    assert needs["budget_max"]["source"] == "user_explicit"
 
 
 def test_the_stack_remembers_what_the_agent_searched_with():

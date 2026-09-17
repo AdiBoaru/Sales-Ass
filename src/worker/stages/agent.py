@@ -217,7 +217,6 @@ def _filter_proposals(ctx: TurnContext, route: RouteDecision) -> list[StateUpdat
     declarația într-un slot validat de cod (`_normalize_slots`). `model_inferred` rămâne pentru ce
     modelul PRESUPUNE fără ca cineva să fi spus (un rezumat care „deduce" o preferință) — și doar
     acolo interdicția de a promova la `hard` are un sens real (D7)."""
-    filters = route.filters if isinstance(route.filters, dict) else {}
     proposals: list[StateUpdateProposal] = []
     if route.category_key:
         # PRIMUL: nevoile propuse mai jos se leagă de categoria curentă (`scope`), iar o schimbare
@@ -230,6 +229,19 @@ def _filter_proposals(ctx: TurnContext, route: RouteDecision) -> list[StateUpdat
                 turn_id=ctx.turn_id,
             )
         )
+    proposals.extend(_need_proposals(ctx, route.filters))
+    return proposals
+
+
+def _need_proposals(ctx: TurnContext, values: Any) -> list[StateUpdateProposal]:
+    """Stiva v1 (dict de sloturi) → propuneri `set_need`. UN singur loc pentru traducere.
+
+    Are doi apelanți cu aceeași formă de intrare și aceeași justificare pentru `user_explicit`:
+    sloturile triajului (`_normalize_slots` validează transcrierea lui nano) și constrângerile
+    OBSERVATE din argumentele agentului (`corroborated_by` confirmă că valoarea a fost chiar
+    ROSTITĂ, NX-251/297). În ambele, codul e cel care stabilește sursa, nu modelul (D7)."""
+    filters = values if isinstance(values, dict) else {}
+    proposals: list[StateUpdateProposal] = []
     for key in _V2_SCALAR_KEYS:
         value = filters.get(key)
         if value not in (None, ""):
@@ -439,8 +451,14 @@ def _learn_constraints(ctx: TurnContext, run: ToolRun, message: str) -> None:
     „înainte de buclă, din sloturile triajului" în „după buclă, din argumentele uneltelor".
 
     Se aplică peste stiva DEJA merged a turului, deci un tur fără căutări o lasă neatinsă.
+
+    Se scrie în AMBELE forme de stare, fiindcă sunt două mecanisme de persistare, nu două copii ale
+    aceluiași: pe v1 stiva E dicționarul de pe `ctx.state`, iar pe v2 (`..._write_enabled`) docul
+    persistat se re-derivă la commit din PROPUNERI, din starea proaspăt citită — deci o mutație pe
+    `ctx.state` n-ar ajunge niciodată în el. Scrisă doar în prima formă, felia asta era inertă exact
+    pe profilul care rulează azi, adică se pierdea tăcut chiar lucrul pe care e pusă să-l apere.
     """
-    if not run.search_args:
+    if not get_settings().observed_constraints_enabled or not run.search_args:
         return
     observed, stats = observed_constraints.from_search_args(run.search_args, message)
     if not observed:
@@ -449,6 +467,7 @@ def _learn_constraints(ctx: TurnContext, run: ToolRun, message: str) -> None:
         return
     merged, _ = merge_constraints(ctx.state.search_constraints, observed, None)
     ctx.state.search_constraints = merged
+    ctx.state_proposals.extend(_need_proposals(ctx, observed))
     ctx.emit(
         "constraint_source",
         kept=stats["kept"],

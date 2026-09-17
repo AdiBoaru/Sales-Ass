@@ -1070,6 +1070,18 @@ class Settings(BaseSettings):
     # pe ture în care ar fi trebuit să caute), o stingi fără să dai înapoi felia 1. OFF = unealta
     # nu se OFERĂ deloc — nici în schema trimisă modelului, deci zero tokeni.
     clarify_tool_enabled: bool = Field(default=False, validation_alias="CLARIFY_TOOL_ENABLED")
+    # NX-297 felia 3: stiva de constrângeri învață din ce a CĂUTAT agentul (argumentele lui
+    # `search_products`, filtrate prin `corroborated_by`), nu din sloturile re-extrase de nano.
+    #
+    # Flag PROPRIU, deși cardul îl declarase „se activează cu felia 1". Nu e simetrie de dragul
+    # simetriei: cât timp triajul mai rulează, stiva are DEJA o sursă, iar a doua scrie în același
+    # loc — inclusiv `brand`, singura cheie care nu se relaxează niciodată în căutare. O sursă în
+    # plus, pornită fără ca cineva s-o aprindă, se vede pe trafic ca „botul filtrează pe un brand
+    # despre care clientul a întrebat acum trei ture" (clasa măsurată la NX-133).
+    # OFF = byte-identic: stiva rămâne pe sloturile triajului.
+    observed_constraints_enabled: bool = Field(
+        default=False, validation_alias="OBSERVED_CONSTRAINTS_ENABLED"
+    )
     # NX-297 felia 5: chips-urile v1 devin MUTĂRI cu dovadă (NX-296), în locul frazelor scrise
     # liber de modelul rich — producătorul pe care `CHIP_PRODUCERS` îl declară NEANCORAT. Pe v1
     # modelul nu are câmp de reformulare, deci textul e ȘABLONUL tenantului: fail-OPEN pe mutare,
