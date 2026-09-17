@@ -148,3 +148,60 @@ async def test_enforce_marks_reply_non_cacheable_end_to_end(cacheable):
     )
     enforce(ctx)
     assert ctx.reply.cacheable is False
+
+
+# --- NX-297: un tur care a CĂUTAT și n-a găsit nu e un răspuns static ---------------------------
+
+
+async def test_cache_write_skipped_when_the_turn_searched_and_found_nothing(monkeypatch):
+    """Clasa `cache_poisoning`, pe drumul de vânzare.
+
+    `classify_volatility` judecă DOAR textul întrebării. „ser cu vitamina C pentru ten uscat" n-are
+    cuvânt de buget și nicio deixă, deci iese `static` — iar un răspuns FĂRĂ produse s-ar fi scris
+    în cache-ul partajat, pe zile. Turul următor cu exact același text ar primi hit, fără niciun
+    apel de model, și ar rămâne fără carduri.
+
+    Poarta n-avea cum să se declanșeze cât timp `clarify` era servit de nano (reply necacheabil).
+    Ștergerea triajului (NX-297) a mutat aceleași ture pe agent și a deschis-o. Prins de gate-ul
+    E2E NX-247, nu dedus: `min_three_product_cards` cu 0 carduri și contoare `{moderate: 1,
+    tool_loop: 0}` — un tur servit din cache, care nu chemase niciun model.
+    """
+    from src.models import RetrievalResult
+    from src.worker import aftercare
+
+    wrote = []
+    monkeypatch.setattr(aftercare, "upsert_entry", lambda *a, **k: wrote.append(a))
+    ctx = _ctx("ser cu vitamina C pentru ten uscat")
+    ctx.retrieval = RetrievalResult(products=[], source="tools")  # a căutat
+    ctx.reply = Reply(text="Spune-mi ce tip de produs cauți și îți arăt opțiuni.", cacheable=True)
+
+    await aftercare._cache_writeback(None, object(), "biz-1", "ro", ctx.message.body, ctx)
+
+    assert wrote == []
+    skipped = [e for e in ctx.events if e.type == "cache_write_skipped"]
+    assert skipped and skipped[0].properties["reason"] == "searched_without_products"
+
+
+async def test_a_turn_that_never_searched_is_still_cacheable(monkeypatch):
+    """Perechea obligatorie: poarta nu are voie să omoare cache-ul de FAQ.
+
+    Un răspuns de politică („cât durează livrarea") nu trece prin retrieval, deci `ctx.retrieval`
+    rămâne None — exact cazul pentru care stratul gratuit există. O poartă scrisă pe „fără produse"
+    l-ar fi stins pe tot, iar deflecția ar fi scăzut fără ca nimeni să lege asta de cardul ăsta."""
+    from src.worker import aftercare
+
+    wrote = []
+    monkeypatch.setattr(aftercare, "upsert_entry", lambda *a, **k: wrote.append(a))
+    ctx = _ctx("cat dureaza livrarea")
+    assert ctx.retrieval is None  # nimeni n-a căutat
+    ctx.reply = Reply(
+        text="Livrăm în toată țara, iar comanda pleacă în aceeași zi.", cacheable=True
+    )
+
+    await aftercare._cache_writeback(None, object(), "biz-1", "ro", ctx.message.body, ctx)
+
+    assert not any(
+        e.type == "cache_write_skipped"
+        and e.properties.get("reason") == "searched_without_products"
+        for e in ctx.events
+    )
