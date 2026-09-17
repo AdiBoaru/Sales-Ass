@@ -634,6 +634,14 @@ class Settings(BaseSettings):
     # widget vedea 4 și nu avea de unde ști că al cincilea e permis, iar o creștere la 6 s-ar fi
     # pierdut TĂCUT în randor. Acum cifra e una singură și toți trei o citesc.
     chip_slots: int = Field(default=5, ge=1, le=8, validation_alias="CHIP_SLOTS")
+    # NX-298: câte produse cerem uneltei și câte carduri arătăm. ACEEAȘI clasă de defect ca la
+    # `chip_slots`, măsurată pe un tur real („vreau ceva sa scap de cosuri" → UN card): cifra
+    # trăia în PATRU locuri care nu se cunoșteau — promptul de vânzare spunea „2-3 produse",
+    # promptul rich „până la 4, ideal 4", codul tăia la `compose._MAX_RICH_ITEMS = 4`, iar schema
+    # uneltei declara 1-6. Patru proprietari, niciunul nu-l vede pe celălalt, deci câștigă cea mai
+    # MICĂ: modelul a cerut `limit=3` fiindcă promptul de vânzare i-a spus 2-3. Acum cifra e una
+    # singură și toate patru o citesc — iar creșterea ei nu se mai pierde tăcut în alt strat.
+    card_slots: int = Field(default=6, ge=1, le=8, validation_alias="CARD_SLOTS")
     # NX-296: chips-urile ca MUTĂRI cu dovadă, nu ca text de validat. Serverul compune mutările
     # din catalog (meniul NX-295 + cardurile turului), modelul le poate ÎMBRACA natural, iar poarta
     # e per mutare: textul trebuie să păstreze ancora, altfel cade pe șablonul serverului. OFF =
@@ -965,6 +973,15 @@ class Settings(BaseSettings):
     # OFF → tăcerea de dinainte, byte-identic.
     search_filters_only_fallback_enabled: bool = Field(
         default=True, validation_alias="SEARCH_FILTERS_ONLY_FALLBACK_ENABLED"
+    )
+    # NX-298: dacă potrivirile de text nu umplu pagina cerută, iar
+    # cererea poartă un filtru de SUBIECT (raft/fațetă/brand/variantă — `_has_subject_filter`),
+    # sloturile rămase se completează din setul filtrului. Nu ÎNLOCUIEȘTE potrivirile de text: ele
+    # rămân primele, în ordinea lor; completarea vine după, marcată `lexical_step=filters_only`,
+    # deci modelul o prezintă ca „asta am pe raft", nu ca „uite ce ai cerut". Rezultatul e prin
+    # construcție o submulțime a ceea ce filtrele dure permit. OFF → pagina rămâne scurtă.
+    search_fill_from_subject_filter_enabled: bool = Field(
+        default=True, validation_alias="SEARCH_FILL_FROM_SUBJECT_FILTER_ENABLED"
     )
     # NX-167 (B): la o cerere CLARĂ de categorie (triajul a dat `category`) în care search a fost
     # nevoit s-o relaxeze (`category_dropped`), NU afișa carduri din altă ramură — întoarce gol +
@@ -1872,4 +1889,22 @@ def chip_slots(settings: object | None = None) -> int:
     value = getattr(source, "chip_slots", None)
     if value is None:
         value = Settings.model_fields["chip_slots"].default
+    return int(value)
+
+
+def card_slots(settings: object | None = None) -> int:
+    """Câte produse cerem uneltei și câte carduri arătăm. PROPRIETAR UNIC: `Settings.card_slots`.
+
+    Aceeași formă ca `chip_slots`, din același motiv mecanic (stub-urile din teste declară doar
+    câmpurile care le interesează), și cu același fallback: DEFAULT-UL DECLARAT ÎN MODEL, nu o a
+    doua cifră scrisă de mână.
+
+    Cititorii: promptul buclei de vânzare, promptul rich, descrierea parametrului `limit` din
+    schema uneltei și tăierea cardurilor din `compose.assemble`. Cine adaugă al cincilea o citește
+    de aici.
+    """
+    source = settings if settings is not None else get_settings()
+    value = getattr(source, "card_slots", None)
+    if value is None:
+        value = Settings.model_fields["card_slots"].default
     return int(value)

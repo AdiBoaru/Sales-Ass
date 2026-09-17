@@ -12,6 +12,7 @@ from src.agent.prompt_builder import (
     build_reco_system,
     build_rich_system,
 )
+from src.config import card_slots
 
 
 def _inp(**kw):
@@ -146,7 +147,11 @@ def test_rich_segmentation_and_constraint_echo():
     r = build_rich_system(_inp())
     assert "SEGMENTARE" in r and "AXĂ DIFERITĂ" in r  # motivele = arbore de decizie (P1)
     assert "rămâne în bugetul tău" in r  # ecoul constrângerii în pick (P4)
-    assert "PÂNĂ LA 4 produse" in r  # decizia Adi: capul rămâne 4 (aliniat cu _MAX_RICH_ITEMS)
+    # NX-298: capul e 6 (decizia Adi, 2026-09-17), dar testul nu pinuiește cifra, ci PROPRIETARUL
+    # ei. Un literal aici ar fi a cincea copie a aceluiași număr, adică exact defectul reparat:
+    # cine schimbă `CARD_SLOTS` ar vedea testul roșu și ar fi împins să scrie cifra a doua oară.
+    assert f"PÂNĂ LA {card_slots()} produse" in r
+    assert "{CARD_SLOTS}" not in r  # marcatorul s-a substituit, nu a plecat literal spre model
 
 
 def test_rich_detail_mode_forbids_list_skeleton():

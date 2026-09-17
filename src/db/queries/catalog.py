@@ -204,7 +204,11 @@ def _has_subject_filter(
 
 
 def _lexical_steps(
-    v2: bool, terms: list[str], *, has_subject_filter: bool = False
+    v2: bool,
+    terms: list[str],
+    *,
+    has_subject_filter: bool = False,
+    only_filters_step: bool = False,
 ) -> tuple[str, ...]:
     """Treptele pe care le are rost să le încerce ACEASTĂ interogare.
 
@@ -225,6 +229,11 @@ def _lexical_steps(
         if has_subject_filter and get_settings().search_filters_only_fallback_enabled
         else ()
     )
+    # NX-298: „doar coada" e o cerere explicită a apelantului, dar nu poate FABRICA treapta —
+    # dacă poarta ei (filtru de subiect + kill-switch) nu e îndeplinită, coada e goală și se
+    # întoarce gol. Un apelant nu are voie să obțină prin parametru ce politica îi refuză.
+    if only_filters_step:
+        return tail
     # Fără niciun termen de conținut, treptele de text sunt toate același query gol
     # (`websearch_to_tsquery('simple', '')` nu prinde nimic). Păstrăm `strict` — ca să rămână
     # byte-identic drumul de azi când nu există coadă — și mergem direct la filtre.
@@ -752,6 +761,7 @@ async def search_products_lexical(
     in_stock_only: bool = False,
     locale: str | None = None,
     allow_filters_only: bool = False,
+    only_filters_step: bool = False,
     pool: int = 50,
 ) -> list[dict[str, Any]]:
     """Lexical REAL (NX-113a) — înlocuiește `p.name ILIKE '%q%'`. ACELEAȘI filtre dure ca
@@ -788,6 +798,12 @@ async def search_products_lexical(
     steps = _lexical_steps(
         v2,
         terms,
+        # NX-298: apelantul poate cere DOAR treapta terminală, fără să treacă prin cele de text.
+        # Nu e o scurtătură de performanță: e cazul în care el ȘTIE deja ce a produs textul
+        # (tocmai a rulat scara) și vrea restul setului pe care filtrul îl numește, ordonat după
+        # aceleași cuvinte. Fără parametru, singura cale ar fi fost un apel cu text GOL, care ar
+        # fi aruncat exact semnalul de ordonare.
+        only_filters_step=only_filters_step,
         has_subject_filter=allow_filters_only
         and _has_subject_filter(
             category=category,
@@ -870,11 +886,26 @@ async def _lexical_fetch(
 
     rank_expr: str | None
     if step == _LEXICAL_FILTERS_ONLY:
-        # NICIUN predicat de text, deci nici expresie de rang: n-ar avea ce măsura. Ordinea vine
-        # din `_order_clause`, adică rating shrinkuit apoi preț, cu `p.id` ca tie-break — cel mai
-        # onest semnal disponibil când textul nu contribuie cu nimic, și determinist (golden/cache).
+        # NICIUN predicat de text — asta e definiția treptei. Dar NX-298: absența predicatului nu
+        # înseamnă absența semnalului. Măsurat pe catalogul SOLE, la «vreau ceva sa scap de
+        # cosuri» setul filtrului (518 produse cu `concerns=acne`) ordonat pe rating dădea pe
+        # primele locuri un aparat sonic de curățare și un tonic, în timp ce plasturii anti-acnee
+        # — singurele produse al căror TEXT vorbește chiar despre coșuri — nu intrau în pagină.
+        # Cuvintele clientului rămân deci ORDONATOR, după ce au încetat să fie POARTĂ: cine le
+        # conține urcă, cine nu, rămâne în set. Semantica e SAU pe termeni singulari
+        # (`relaxed_query_any`): pe o treaptă care nu mai filtrează, un `ȘI` ar face rangul zero
+        # pentru aproape tot setul, adică exact ordinea pe care o reparăm.
         # `not v2` nu poate ajunge aici: `_lexical_steps` întoarce atunci doar `strict`.
-        rank_expr = None
+        if v2 and terms:
+            q_ph = placeholder(relaxed_query_any(terms))
+            rank_expr = (
+                f"ts_rank_cd(p.search_tsv, websearch_to_tsquery('simple', ro_unaccent({q_ph})))"
+            )
+        else:
+            # Fără termeni n-ar avea ce măsura: ordinea vine din `_order_clause`, adică rating
+            # shrinkuit apoi preț, cu `p.id` ca tie-break — cel mai onest semnal disponibil când
+            # textul nu contribuie cu nimic, și determinist (golden/cache).
+            rank_expr = None
     elif not v2:
         q_ph = placeholder(query_text)  # un singur placeholder, reutilizat în match + rank
         # Comportamentul de dinainte de 046, păstrat sub kill-switch. NX-178: AMBELE capete trec
@@ -933,7 +964,16 @@ async def _lexical_fetch(
         conds.append(cs)
 
     if sort_mode == "relevance" and rank_expr is not None:
-        order = f" order by ({rank_expr}) desc, p.id"
+        if step == _LEXICAL_FILTERS_ONLY:
+            # NX-298: rangul de text departajează doar VÂRFUL. Sub el, sute de produse au rang
+            # zero (nu conțin niciun cuvânt al clientului), iar `p.id` ca tie-break le-ar ordona
+            # arbitrar — adică pagina ar depinde de ordinea de import. Sub rang rămâne ordinea
+            # `filters_only` pură: rating shrinkuit, apoi preț.
+            order = (
+                f" order by ({rank_expr}) desc, {_SHRUNK_RATING} desc, {_EFFECTIVE_PRICE} asc, p.id"
+            )
+        else:
+            order = f" order by ({rank_expr}) desc, p.id"
     else:
         order = _order_clause(sort_mode)  # price/rating explicit → sort pe subsetul lexical filtrat
 

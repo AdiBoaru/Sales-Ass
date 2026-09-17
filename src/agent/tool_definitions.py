@@ -8,6 +8,7 @@ Prefix STATIC (ordine fixă) → prompt caching OpenAI pe tokenii de schemă. `s
 import re
 from typing import Any
 
+from src.config import card_slots
 from src.domain import vocab_examples
 from src.observability import turn_latency
 
@@ -64,7 +65,11 @@ _SCHEMAS: dict[str, dict[str, Any]] = {
                     },
                     "limit": {
                         "type": "integer",
-                        "description": "Câte produse (1-6).",
+                        "description": (
+                            "Câte produse (1-{CARD_SLOTS}). Când clientul descrie o nevoie sau o "
+                            "categorie, deci când are de ales, cere {CARD_SLOTS}. Când cere un "
+                            "produs anume sau pune o întrebare punctuală, 1-2."
+                        ),
                     },
                     "sort_mode": {
                         "type": "string",
@@ -482,7 +487,15 @@ TOOL_NAMES: tuple[str, ...] = tuple(_SCHEMAS)
 # parametru nu e documentație, e o INSTRUCȚIUNE: un model care citește „ex. «ten gras»" învață ce
 # fel de valori se așteaptă acolo. Scrise de mână, făceau sistemul mai bun pe clientul de azi și
 # mai prost pe următorul, fără niciun semnal.
-_EXAMPLE_MARKERS = ("{NEED_EXAMPLES}", "{FEATURE_EXAMPLES}", "{MOMENT_VALUES}")
+_EXAMPLE_MARKERS = (
+    "{NEED_EXAMPLES}",
+    "{FEATURE_EXAMPLES}",
+    "{MOMENT_VALUES}",
+    # NX-298: `{CARD_SLOTS}` nu vine din pachetul tenantului, ci de la proprietarul cifrei
+    # (`Settings.card_slots`) — dar trece prin ACEEAȘI poartă, fiindcă defectul pe care poarta îl
+    # prinde e același: un marcator nedeclarat pleacă LITERAL în descrierea citită de model.
+    "{CARD_SLOTS}",
+)
 
 
 def _assert_markers_declared() -> None:
@@ -592,6 +605,10 @@ def tool_schemas(
         "{FEATURE_EXAMPLES}": vocab_examples.clause(examples.features),
         # Momentele intră în DESCRIERE, nu în enum — vezi comentariul de la parametrul `moment`.
         "{MOMENT_VALUES}": vocab_examples.clause(tuple(sorted(moments))),
+        # NX-298: câte produse are voie să ceară modelul. Aceeași cifră pe care o citesc promptul
+        # de vânzare, promptul rich și tăierea cardurilor — schema nu mai poate declara alt plafon
+        # decât cel pe care îl aplică în fapt codul.
+        "{CARD_SLOTS}": str(card_slots()),
     }
     values = {"relation_kinds": relation_kinds, "families": families, "moments": moments}
     out: list[dict[str, Any]] = []

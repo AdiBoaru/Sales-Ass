@@ -920,3 +920,29 @@ def test_produsul_omis_de_model_nu_dispare_din_secventa(monkeypatch) -> None:
 
     assert [it.product_id for it in rich.items] == ["C", "T", "H"]
     assert any(e[0] == "routine_card_set_adjusted" for e in ctx.events)
+
+
+# --- NX-298: câte carduri arătăm are UN proprietar ----------------------------
+
+
+def test_numarul_de_carduri_vine_din_setari_nu_dintr_o_constanta(monkeypatch):
+    """Tăierea din cod citește `Settings.card_slots`, ca promptul și schema uneltei.
+
+    Regresia pe care o prinde: înainte cifra era scrisă de mână în patru locuri care nu se
+    cunoșteau (prompt de vânzare „2-3", prompt rich „până la 4", `compose._MAX_RICH_ITEMS = 4`,
+    schema uneltei „1-6"), iar cea mai mică câștiga. Măsurat pe un tur real, clientul a primit UN
+    card acolo unde catalogul avea 518 produse potrivite.
+    """
+    from src.config import card_slots, get_settings
+
+    retrieved = [
+        {"id": f"p{i}", "name": f"Produs {i}", "price": 10.0 + i, "url": f"u{i}"} for i in range(8)
+    ]
+    j = {
+        "intro": "Uite ce am gasit.",
+        "items": [{"product_id": f"p{i}", "fit_clause": "Bun pentru uz zilnic."} for i in range(8)],
+    }
+    assert len(compose.assemble(_ctx(), j, retrieved).items) == card_slots()
+
+    monkeypatch.setattr(get_settings(), "card_slots", 3)
+    assert len(compose.assemble(_ctx(), j, retrieved).items) == 3

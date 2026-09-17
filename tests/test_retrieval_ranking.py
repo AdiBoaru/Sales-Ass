@@ -310,10 +310,14 @@ async def test_filters_only_serveste_raftul_cand_formularea_nu_prinde_nimic():
     assert len(conn.sqls) == 3  # strict → fuzzy → filters_only («barbati» = un singur termen)
     assert out, "raftul are produse, deci turul nu are voie să iasă gol (P6)"
     final = conn.sqls[-1]
-    # Treapta finală nu mai cere NIMIC de la text.
-    assert "websearch_to_tsquery" not in final
-    assert "word_similarity" not in final
-    assert "ro_unaccent(p.name) %" not in final
+    # Treapta finală nu mai cere NIMIC de la text — invariantul se enunță pe WHERE, fiindcă acolo
+    # trăiește diferența dintre „îngustează" și „ordonează". NX-298 a mutat cuvintele clientului
+    # în ORDER BY pe treapta asta (un termen poate fi redundant ca poartă și informativ ca
+    # ordonator), deci un assert pe tot SQL-ul ar interzice tocmai ce vrem să facem.
+    where = final.split(" order by")[0]
+    assert "websearch_to_tsquery" not in where
+    assert "word_similarity" not in where
+    assert "ro_unaccent(p.name) %" not in where
     # ...dar filtrul de subiect rămâne întreg: rezultatul e prin construcție DE PE raftul cerut.
     assert "from categories reqc" in final
     assert ["barbati"] in conn.all_params[-1]
@@ -370,9 +374,34 @@ async def test_filters_only_nu_se_declanseaza_pe_calificative():
         assert "websearch_to_tsquery" in sql or "word_similarity" in sql
 
 
-async def test_filters_only_ordoneaza_neutru_si_determinist(flag_on):
-    """Fără text nu există rang de text. Ordinea e rating shrinkuit → preț → `p.id`: cel mai onest
-    semnal rămas, și stabil (golden/cache depind de asta)."""
+async def test_filters_only_ordoneaza_neutru_cand_nu_exista_text(flag_on):
+    """Fără niciun termen nu există rang de text. Ordinea e rating shrinkuit → preț → `p.id`: cel
+    mai onest semnal rămas, și stabil (golden/cache depind de asta)."""
+    # `strict` cu tsquery gol nu prinde nimic, apoi urmează treapta de filtre
+    # (vezi `_lexical_steps`).
+    conn = _CaptureConn([[], [{"id": "p1"}]])
+    await catalog.search_products_lexical(
+        conn,
+        "b",
+        "  ",  # doar spațiu: zero termeni de conținut
+        locale="ro",
+        category="barbati",
+        allow_filters_only=True,
+        pool=50,
+    )
+    order = conn.sqls[-1].split("order by")[-1]
+    assert "ts_rank_cd" not in order and "word_similarity" not in order
+    assert "p.id" in order  # tie-break determinist
+
+
+async def test_filters_only_ordoneaza_dupa_cuvintele_clientului_cand_exista(flag_on):
+    """NX-298: pe treapta terminală textul nu mai FILTREAZĂ, dar încă ORDONEAZĂ.
+
+    Măsurat pe catalogul real: setul filtrului ordonat doar pe rating punea pe primele locuri
+    produse care n-au nimic de-a face cu formularea, în timp ce produsele al căror text vorbește
+    chiar despre ce a cerut clientul nu intrau în pagină. Ordinea rămâne determinist completă
+    (rang → rating → preț → `p.id`), fiindcă sub rang sute de produse au scor zero și `p.id` singur
+    le-ar ordona după hazardul importului."""
     conn = _CaptureConn([[], [], [{"id": "p1"}]])
     await catalog.search_products_lexical(
         conn,
@@ -383,9 +412,12 @@ async def test_filters_only_ordoneaza_neutru_si_determinist(flag_on):
         allow_filters_only=True,
         pool=50,
     )
-    order = conn.sqls[-1].split("order by")[-1]
-    assert "ts_rank_cd" not in order and "word_similarity" not in order
-    assert "p.id" in order  # tie-break determinist
+    final = conn.sqls[-1]
+    where, order = final.split(" order by")[0], final.split(" order by")[-1]
+    assert "ts_rank_cd" in order  # cuvintele clientului rămân ORDONATOR
+    assert "websearch_to_tsquery" not in where  # și NU redevin poartă
+    assert order.index("ts_rank_cd") < order.index("p.id")
+    assert "p.id" in order
 
 
 async def test_filters_only_respecta_sortul_explicit_al_clientului(flag_on):
@@ -758,3 +790,50 @@ async def test_lexical_un_singur_termen_sare_treapta_relaxata():
     assert len(conn.sqls) == 2
     assert "sampon" in conn.all_params[0]
     assert "word_similarity(" in conn.sqls[1]
+
+
+# --- NX-298: pagina se completează din filtrul de SUBIECT ---------------------
+#
+# Defectul, măsurat pe un tur real (`conversation_traces`, 2026-09-17): la «vreau ceva sa scap de
+# cosuri», nevoia s-a rezolvat `concerns=acne` cu dovadă 518 produse, iar clientul a primit UN
+# card. Textul găsise cinci produse din 518 — magazinul scrie „acnee", clientul scrie „coșuri" —
+# iar cinci e destul cât să oprească scara și prea puțin cât să fie un răspuns. Treapta
+# `filters_only` din NX-293 nu ajută: ea se atinge DOAR când textul n-a găsit NIMIC.
+
+
+async def test_only_filters_step_cere_direct_treapta_terminala():
+    """Apelantul care tocmai a rulat scara poate cere restul setului fără să reia treptele de text.
+
+    Fără parametru, singura cale ar fi fost un apel cu text GOL — care ar fi aruncat exact
+    semnalul de ordonare pe care treapta terminală îl folosește."""
+    conn = _CaptureConn([[{"id": "p1"}]])
+    out = await catalog.search_products_lexical(
+        conn,
+        "b",
+        "ce produse de barbati ai",
+        locale="ro",
+        category="barbati",
+        allow_filters_only=True,
+        only_filters_step=True,
+        pool=50,
+    )
+    assert len(conn.sqls) == 1  # o singură interogare: coada, direct
+    assert [p.get("lexical_step") for p in out] == ["filters_only"]
+    assert "websearch_to_tsquery" not in conn.sqls[0].split(" order by")[0]
+
+
+async def test_only_filters_step_nu_poate_fabrica_treapta_pe_care_politica_o_refuza():
+    """Un parametru de apelant nu are voie să obțină ce poarta îi refuză. Fără filtru de SUBIECT,
+    treapta nu există, deci cererea explicită întoarce gol, nu catalogul ordonat pe rating."""
+    conn = _CaptureConn([[{"id": "p1"}]])
+    out = await catalog.search_products_lexical(
+        conn,
+        "b",
+        "ce produse de barbati ai",
+        locale="ro",
+        price_max=100.0,  # calificativ, nu subiect
+        allow_filters_only=True,
+        only_filters_step=True,
+        pool=50,
+    )
+    assert conn.sqls == [] and out == []

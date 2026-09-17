@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 
 from src.agent.voice import VOICE_RULES
+from src.config import card_slots
 from src.domain import vocab_examples
 
 # Status comandă — NEUTRU pe vertical (nu vinde, doar raportează) → constantă, nu generat.
@@ -82,8 +83,16 @@ Reguli:
   Într-un CADOU, „pentru o fată / pentru ea / pentru mama" = DESTINATARUL (o persoană): caută
   cadouri pentru ea, NU produse „pentru față"/ten. Regulă generală: la cuvânt ambiguu, alege
   citirea consecventă cu contextul conversației.
-- Recomandă 2-3 produse, în limba clientului, prietenos și concis. Pentru fiecare: numele,
-  prețul EXACT (lei) și ratingul (★) din rezultate, apoi de ce se potrivește pe nevoie.
+- CÂTE produse ceri și arăți depinde de CEREREA lui, nu de o cifră fixă. Când descrie o nevoie sau
+  o categorie, deci când are de ales, cere `limit={CARD_SLOTS}` și arată tot atâtea: clientul
+  compară, nu citește un verdict. Când întreabă despre un produs ANUME, când compară două sau când
+  vrea un răspuns punctual, 1-2 ajung. NU completa cu produse nepotrivite ca să ajungi la
+  {CARD_SLOTS}: mai puține, toate potrivite, e mai bine.
+- Pentru fiecare produs: numele, prețul EXACT (lei) și ratingul (★) din rezultate, apoi de ce se
+  potrivește pe nevoie.
+- Când rezultatele conțin TIPURI diferite de produs, acoperă-le pe cele care ajută cererea, nu mai
+  multe variante ale aceluiași tip, și spune în prima frază ce tipuri ai pus pe masă și pentru ce
+  e fiecare. Aia e diferența dintre un raft și o recomandare.
 - Scrie NATURAL, ca un om din magazin, NU-ți anunța procesul („Analizez catalogul",
   „compar opțiunile", „îți explic exact de ce") și fără umplutură-șablon („nu doar ce…",
   „ca să poți alege ce ți se potrivește"). Direct la ce e util, fără autoprezentări.
@@ -174,9 +183,12 @@ REGULI DURE:
   sau aceeași expresie pe două carduri. Dacă două produse se disting practic doar prin preț, spune
   asta explicit („varianta mai accesibilă"), nu inventa o diferență.
 
-- Recomandă cele mai relevante PÂNĂ LA 4 produse din listă (ideal 4 dacă ai destule potrivite), în
-  limba clientului. NU completa cu produse nepotrivite doar ca să ajungi la 4, mai bine mai puține,
-  toate potrivite.
+- Recomandă cele mai relevante PÂNĂ LA {CARD_SLOTS} produse din listă (ideal {CARD_SLOTS} dacă ai
+  destule potrivite), în limba clientului. NU completa cu produse nepotrivite doar ca să ajungi la
+  {CARD_SLOTS}, mai bine mai puține, toate potrivite.
+  TIPURI: dacă lista conține tipuri diferite de produs, acoperă-le pe cele care ajută cererea, nu
+  {CARD_SLOTS} variații ale aceluiași tip. În `intro` spune ce tipuri ai pus pe masă și pentru ce
+  e fiecare, cu cuvintele lor din listă. Asta e partea pe care clientul n-o poate face singur.
 
 - `pick` = produsul PRIMAR recomandat (același pe care îl numești în `education`) + justificare în
   cuvinte (fără cifre, fără „cel mai bun").
@@ -359,9 +371,16 @@ def build_agent_system(inp: PromptInputs) -> str:
     """System prompt pt bucla de tool-calling (înlocuiește `_TOOL_SYSTEM`). STATIC per
     (business, locale, currency): NU conține mesajul/produsele clientului (alea stau în USER)."""
     # NX-114: moneda din DomainPack înlocuiește „lei" hardcodat (byte-identic pt RON).
-    block = _TOOLS_BLOCK.replace(
-        "prețul EXACT (lei)", f"prețul EXACT ({_currency_label(inp.currency)})"
-    ).replace("{NEED_EXAMPLES}", vocab_examples.clause(inp.need_examples))
+    block = (
+        _TOOLS_BLOCK.replace(
+            "prețul EXACT (lei)", f"prețul EXACT ({_currency_label(inp.currency)})"
+        )
+        .replace("{NEED_EXAMPLES}", vocab_examples.clause(inp.need_examples))
+        # NX-298: cifra vine de la PROPRIETARUL ei (`Settings.card_slots`), nu din proza
+        # promptului. Scrisă de mână aici, era cel mai mic dintre patru plafoane care nu se
+        # cunoșteau — iar cel mai mic câștigă mereu.
+        .replace("{CARD_SLOTS}", str(card_slots()))
+    )
     base = f"{_store_header(inp)}\n{block}\n{_SAFETY_RULES}\n{VOICE_RULES}"
     # NX-159 felia 3 / NX-165: ghidul de STIL în system-ul buclei → ajunge la textul PRIMAR,
     # nu doar la retry. Gol → byte-identic. Rich îl primește și el (vezi `build_rich_system`).
@@ -419,7 +438,8 @@ def build_rich_system(inp: PromptInputs, *, routine: bool = False) -> str:
         f"{_store_header(inp)}\n"
         "Primești nevoia clientului și o listă de produse REALE "
         "(id, preț, rating, avantaje din recenzii).\n"
-        f"{_RICH_RULES}\n{_SAFETY_RULES}\n{VOICE_RULES}"
+        f"{_RICH_RULES.replace('{CARD_SLOTS}', str(card_slots()))}\n"
+        f"{_SAFETY_RULES}\n{VOICE_RULES}"
     )
     if routine:
         base = f"{base}\n{_ROUTINE_RICH_RULES}"
