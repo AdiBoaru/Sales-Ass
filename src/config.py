@@ -1065,6 +1065,11 @@ class Settings(BaseSettings):
     agent_only_writer_enabled: bool = Field(
         default=False, validation_alias="AGENT_ONLY_WRITER_ENABLED"
     )
+    # NX-297 felia 2: `clarify_options` — opțiunile REALE ale catalogului, ca UNEALTĂ a agentului.
+    # Flag propriu, nu `agent_only_writer_enabled`: dacă unealta se poartă prost (modelul o cheamă
+    # pe ture în care ar fi trebuit să caute), o stingi fără să dai înapoi felia 1. OFF = unealta
+    # nu se OFERĂ deloc — nici în schema trimisă modelului, deci zero tokeni.
+    clarify_tool_enabled: bool = Field(default=False, validation_alias="CLARIFY_TOOL_ENABLED")
     # NX-114: DomainPack (config per-vertical din DB+seed). Kill-switch FAIL-SAFE: OFF →
     # BusinessConfig.domain_pack=None, consumatorii cad pe constantele lor de cod (byte-identic).
     domain_pack_enabled: bool = Field(default=True, validation_alias="DOMAIN_PACK_ENABLED")

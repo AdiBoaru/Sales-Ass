@@ -231,6 +231,34 @@ _SCHEMAS: dict[str, dict[str, Any]] = {
             },
         },
     },
+    # NX-297 felia 2: opțiunile REALE pe care le poate onora magazinul, înaintea unei întrebări de
+    # clarificare. Descrierea spune CÂND; regulile de formulare călătoresc în `llm_view`, adică se
+    # plătesc doar pe turul care chiar întreabă (vezi `src/tools/clarify_tools.py`).
+    "clarify_options": {
+        "type": "function",
+        "function": {
+            "name": "clarify_options",
+            "description": (
+                "Opțiunile REALE din catalogul magazinului, pentru o întrebare de clarificare. "
+                "Întoarce rafturile și caracteristicile care există CHIAR în catalog, plus dacă "
+                "ce cere clientul nu se găsește deloc. Fără argumente. "
+                "CHEAM-O când cererea numește doar o categorie sau un tip LARG, fără niciun "
+                "calificator util: nici nevoie, nici buget, nici caz de folosire, nici ocazie, "
+                "nici destinatar. "
+                "NU o chema când cererea are măcar un calificator (o nevoie, un buget, un tip "
+                "anume, un brand) — atunci caută și arată produse, apoi rafinează. "
+                "NU o chema nici când clientul a pomenit sarcină, alăptare, o afecțiune sau "
+                "alergii: acolo se caută, ca produsele contraindicate să fie filtrate."
+            ),
+            "strict": True,
+            "parameters": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {},
+                "required": [],
+            },
+        },
+    },
     "reorder": {
         "type": "function",
         "function": {
