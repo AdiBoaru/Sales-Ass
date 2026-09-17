@@ -158,18 +158,36 @@ def test_every_declared_move_kind_has_copy_in_every_default_pack() -> None:
             assert "ro" in per_locale, (vertical, kind)
 
 
-def test_a_move_whose_anchor_would_be_truncated_is_not_offered() -> None:
-    """Găsit rulând felia, nu dedus: «Compara Serum Hidratant LumaDe… cu Crema Bogata NordSkin»
-    arăta plauzibil, dar numele trunchiat e exact partea pe care apăsarea trebuie s-o rezolve.
-    Regula e aceeași pe care i-o aplicăm modelului — ar fi fost incoerent să respingem
-    reformularea LUI pentru asta și să lăsăm șablonul NOSTRU s-o facă în tăcere."""
-    long_name = "Crema " + "foarte lunga " * 8
-    moves = cm.from_cards([{"product_id": "A", "name": long_name, "price": 10.0}])
+def test_long_name_shortens_the_anchor_to_whole_words() -> None:
+    """Găsit rulând proba pe catalogul SOLE: numele scurt REAL are ~33 de caractere, iar
+    «Spune-mi mai multe despre {slot}» are 25 — deci `fit_template` tăia numele, ancora nu se mai
+    regăsea în text, și mutarea se arunca. Efectul măsurat: pe un tur factual nu mai rămânea
+    NICIO cale de adâncire, exact clasa cea mai utilă acolo.
+
+    Ancora se scurtează pe cuvinte întregi și păstrează minimum două, fiindcă un prefix de două
+    cuvinte dintr-un nume afișat e suficient ca `reference_resolver` să-l regăsească — pe când
+    «RIEMANN P20 Urban Shi…» nu e nici nume, nici prefix."""
+    name = "RIEMANN P20 Urban Shield SPF 50+ Sensitive"
+    moves = cm.renderable(
+        cm.from_cards([{"product_id": "A", "name": name, "price": 10.0}]), PACK, "ro"
+    )
+    detail = next(m for m in moves if m.kind == "detail")
+    assert detail.anchor != name
+    assert name.startswith(detail.anchor), "ancora e un PREFIX, nu o tăietură la caracter"
+    assert len(detail.anchor.split()) >= 2
+    rendered = cm.render_move(detail, PACK, "ro")
+    assert rendered and len(rendered) <= MAX_CHIP_LEN
+    assert detail.anchor in rendered
+
+
+def test_a_move_that_cannot_fit_two_words_is_not_offered() -> None:
+    """Sub două cuvinte rămâne brandul, iar catalogul are «Petala Nourish», «Petala Rich»."""
+    moves = cm.from_cards(
+        [{"product_id": "A", "name": "Supercalifragilistic Extraordinarium", "price": 10.0}]
+    )
     assert moves, "mutările se construiesc; filtrul e la exprimare"
-    for move in moves:
-        rendered = cm.render_move(move, PACK, "ro")
-        assert rendered is None or len(rendered) <= MAX_CHIP_LEN, move.kind
-    assert cm.renderable(moves, PACK, "ro") == []
+    compare_like = [m for m in cm.renderable(moves, PACK, "ro") if m.kind == "compare"]
+    assert compare_like == []
 
 
 def test_short_names_still_render_within_the_contract() -> None:
@@ -226,12 +244,24 @@ def test_selection_is_deterministic() -> None:
     ]
 
 
-def test_one_kind_cannot_fill_every_slot() -> None:
-    candidates = cm.from_menu(
+def test_one_kind_yields_to_diversity_but_still_fills_the_turn() -> None:
+    """Plafonul pe fel e o PREFERINȚĂ, nu o limită de adevăr.
+
+    Tratat ca limită dură, înfometa exact turul care are cea mai mare nevoie de sugestii: pe
+    catalogul SOLE, la PRIMUL tur (fără raft discutat) meniul nu poate oferi fațete — o fațetă
+    neancorată pe raft e o promisiune falsă (NX-295) — deci singurul fel disponibil e
+    `pivot_shelf`, și ieșeau 2 chips din 5 tocmai când clientul are cel mai puțin context."""
+    only_one_kind = cm.from_menu(
         _menu(*[(f"nevoia {i}", "concerns", f"k{i}", 100 - i) for i in range(6)])
     )
-    picked = cm.select(candidates, slots=5, role_order=cm.roles_for(["clarify"]))
-    assert len([m for m in picked if m.kind == "refine_facet"]) <= cm._MAX_PER_KIND
+    picked = cm.select(only_one_kind, slots=5, role_order=cm.roles_for(["clarify"]))
+    assert len(picked) == 5, "fără alt fel disponibil, turul se umple cu ce există"
+
+    # Cu alte feluri prezente, diversitatea câștigă: overflow-ul intră DUPĂ ce fiecare rol a ales.
+    mixed = only_one_kind + cm.from_menu(_menu(("Machiaj", "category", "machiaj", 10)))
+    picked = cm.select(mixed, slots=5, role_order=cm.roles_for(["clarify"]))
+    assert any(m.kind == "pivot_shelf" for m in picked)
+    assert picked[1].kind == "pivot_shelf", "un al doilea raft nu ia locul primei căi laterale"
 
 
 # --- promptul ----------------------------------------------------------------------------------

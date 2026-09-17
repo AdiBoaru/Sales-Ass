@@ -195,15 +195,77 @@ def render_move(move: ChipMove, pack: object, locale: str) -> str | None:
     return text
 
 
+#: Câte cuvinte din numele unui produs mai pot identifica UNIC produsul. Aceeași valoare și
+#: același motiv ca `compose._MIN_NAME_WORDS`: sub două rămâne doar brandul, iar catalogul are
+#: «Petala Nourish», «Petala Rich», «Petala Matte».
+_MIN_ANCHOR_WORDS = 2
+
+
+def _intact(text: str, values: Iterable[str]) -> bool:
+    """Apar TOATE valorile de slot întregi în textul randat?"""
+    haystack = words_of(text)
+    return all(contains_run(haystack, words_of(v)) for v in values if v)
+
+
+def _fit_anchor(move: ChipMove, pack: object, locale: str) -> ChipMove | None:
+    """Mutarea cu SLOTURILE scurtate cât să încapă întregi în chip, sau `None` dacă nu se poate.
+
+    Găsit rulând proba pe catalogul SOLE: numele scurt al unui produs real are ~33 de caractere
+    («RIEMANN P20 Urban Shield SPF 50+»), iar «Spune-mi mai multe despre {slot}» are 25. Suma
+    trece de 56, deci `fit_template` tăia numele, ancora nu se mai regăsea în text, și mutarea era
+    aruncată. Efectul măsurat: pe un tur factual NU rămânea nicio continuare de tip „adâncire" —
+    exact clasa cea mai utilă acolo.
+
+    Scurtarea e pe CUVINTE ÎNTREGI, nu pe caractere, și păstrează minimum două: un prefix de două
+    cuvinte din numele unui produs afișat e suficient ca `reference_resolver` să-l regăsească
+    (aceeași regulă ca `compose._mention_index`), pe când «RIEMANN P20 Urban Shi…» nu e nici nume,
+    nici prefix. Dacă nici două cuvinte nu încap, mutarea nu se oferă.
+
+    Se scurtează TOATE sloturile, nu doar ancora, și asta a ieșit tot din probă: la comparație
+    ancora (primul nume) supraviețuia, iar al doilea produs pleca trunchiat — «Compara BEAUTY OF
+    JOSEON Relief Sun cu PURITO Daily Sof…». Verificarea doar pe ancoră spunea „e bine" despre un
+    chip în care jumătate din promisiune era ilizibilă. Se taie mereu cel mai LUNG slot.
+    """
+    values = dict(move.slots)
+    for _ in range(64):  # mărginit: fiecare trecere scoate un cuvânt dintr-un slot
+        candidate = ChipMove(
+            kind=move.kind,
+            move_id=move.move_id,
+            anchor=values.get("slot", move.anchor),
+            slots=tuple(sorted(values.items())),
+            evidence=move.evidence,
+        )
+        text = render_move(candidate, pack, locale)
+        if text is not None and _intact(text, values.values()):
+            return candidate
+        trimmable = {k: v for k, v in values.items() if len(v.split()) > _MIN_ANCHOR_WORDS}
+        if not trimmable:
+            return None
+        key = max(trimmable, key=lambda k: (len(values[k]), k))
+        values[key] = " ".join(values[key].split()[:-1])
+    return None
+
+
 def renderable(moves: Iterable[ChipMove], pack: object, locale: str) -> list[ChipMove]:
-    """Doar mutările pe care le putem EXPRIMA (șablon prezent, ancoră întreagă în text).
+    """Doar mutările pe care le putem EXPRIMA, cu ancora ajustată la ce va apărea EFECTIV în text.
 
     Se aplică ÎNAINTE de selecție, nu după, iar diferența e un slot pierdut: filtrată la randare,
     o mutare aleasă și apoi aruncată lăsa patru chips acolo unde catalogul avea cinci de oferit.
-    Măsurat pe ieșirea reală a feliei — o comparație între două nume lungi nu încape în plafon,
-    deci nu are ce căuta nici în prompt, nici în selecție.
+
+    Întoarce mutări posibil MODIFICATE (ancoră scurtată), nu doar filtrate, fiindcă ancora e ce
+    judecă poarta: dacă textul emis conține un prefix, poarta trebuie să ceară acel prefix, nu
+    numele întreg pe care nimeni nu-l va scrie.
     """
-    return [m for m in moves if render_move(m, pack, locale) is not None]
+    out: list[ChipMove] = []
+    for move in moves:
+        text = render_move(move, pack, locale)
+        if text is not None and _intact(text, dict(move.slots).values()):
+            out.append(move)
+            continue
+        fitted = _fit_anchor(move, pack, locale)
+        if fitted is not None:
+            out.append(fitted)
+    return out
 
 
 # --- construcția mutărilor: fiecare familie din datele pe care turul le are deja ---------------
@@ -359,12 +421,15 @@ def select(
     """
     seen = {str(m) for m in offered_before}
     by_kind: dict[str, list[ChipMove]] = {}
+    overflow: list[ChipMove] = []
     for move in sorted(candidates, key=lambda m: (-m.evidence, m.move_id)):
         if move.move_id in seen or move.role not in role_order:
             continue
         pool = by_kind.setdefault(move.kind, [])
         if len(pool) < _MAX_PER_KIND:
             pool.append(move)
+        else:
+            overflow.append(move)
 
     # Round-robin și ÎN INTERIORUL rolului, nu doar între roluri. Fără el, mutările se ordonau pe
     # `(-evidence, move_id)`, iar la dovadă egală câștiga alfabetul: pe un tur cu trei carduri
@@ -392,6 +457,21 @@ def select(
             if rank < len(pool) and len(picked) < slots:
                 picked.append(pool[rank])
         rank += 1
+
+    # Al doilea tur: umple ce a rămas cu ce a fost tăiat de `_MAX_PER_KIND`.
+    #
+    # Plafonul pe fel exprimă o PREFERINȚĂ pentru diversitate, nu o limită de adevăr — iar tratat
+    # ca limită dură înfometa exact turul care are cea mai mare nevoie de sugestii. Măsurat pe
+    # catalogul SOLE: la PRIMUL tur, fără raft discutat, meniul nu poate oferi fațete (NX-295: o
+    # fațetă neancorată pe raft e o promisiune falsă), deci singurul fel disponibil e `pivot_shelf`
+    # — și ieșeau 2 chips din 5, tocmai când clientul are cel mai puțin context.
+    #
+    # Rămâne o preferință fiindcă overflow-ul intră DUPĂ ce fiecare rol și-a spus cuvântul: un al
+    # doilea raft nu poate lua locul unei căi de adâncire care există.
+    for move in overflow:
+        if len(picked) >= slots:
+            break
+        picked.append(move)
     return picked
 
 
