@@ -25,6 +25,7 @@ import pytest
 from src.config import get_settings
 from src.db.queries.web_turns import ClaimResult, ExecutionRefs, WebTurnRow
 from src.models import Reply
+from src.web import turn_events as tev
 from src.web import turn_executor as te
 from src.web import turn_service as ts
 from src.worker.admission import reset_admission
@@ -204,6 +205,41 @@ async def test_happy_path_completes_and_runs_aftercare_after_terminal(monkeypatc
     assert any(
         e.type == "web_turn_executed" and e.properties["outcome"] == "completed" for e in w.events
     )
+
+
+async def test_persisted_view_projects_back_as_the_widget_contract(monkeypatch):
+    """Bucla închisă: ce SCRIE executorul e ce CITEȘTE clientul.
+
+    Testele de mai sus verifică capătul de scriere, iar `test_web_turn_view_v1.py` capătul de
+    citire — dar niciunul nu le leagă. Aici se leagă: view-ul chiar persistat de `_commit` devine
+    `response_json`-ul unui rând terminal, iar proiecția servită de GET/SSE trebuie să fie exact
+    contractul pe care widgetul îl randează azi. O schimbare la oricare capăt sparge testul ăsta.
+    """
+    row = _row()
+    w = _Wired(monkeypatch, row, claim=_claim())
+    ex = te.WebTurnExecutor(_NoRedis(), owner="w-A")
+    assert (await ex.process_turn(te.AcceptedTurn(row.business_id, row.id))).outcome == "completed"
+
+    persisted = w.completed[0]["view"]
+    terminal = _row(
+        id=row.id,
+        status="completed",
+        response_json=persisted,
+        completed_at=datetime.now(UTC),
+    )
+    served = tev.terminal_payload(terminal, "ro")
+
+    assert served["schema_version"] == ts.RESPONSE_CONTRACT_SYNC_V1
+    assert served["turn"] == {
+        "id": row.id,
+        "client_turn_id": terminal.client_turn_id,
+        "status": "completed",
+    }
+    # Conținutul e EXACT payload-ul persistat — nimic adăugat, nimic pierdut.
+    for key, value in persisted.items():
+        if value:
+            assert served[key] == value
+    assert "error" not in served
 
 
 async def test_claim_lost_means_someone_else_owns_it(monkeypatch):

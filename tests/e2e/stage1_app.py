@@ -94,6 +94,14 @@ PROFILE_V2_TRANSPORT: dict[str, str] = {
     "WEB_TURN_EXECUTOR_ENABLED": "true",
     "WEB_TURN_RECOVERY_ENABLED": "true",
     "WEB_TURN_SSE_ENABLED": "true",
+    # PIN DELIBERAT. Vederea implicită a serverului e acum `web-chat.v1` (transportul și contractul
+    # de vedere sunt două axe — vezi `src/web/turn_view_v1.py`), iar producția o servește pe aceea.
+    # Invarianții de aici (`terminal_view_renderable`, `min_three_product_cards`,
+    # `comparison_block_present`, `display_strings_only` …) sunt scriși pe BLOCURI, deci fără pin-ul
+    # ăsta gate-ul ar începe să pice pe un contract pe care nu l-a certificat niciodată. Pinul
+    # păstrează măsurătoarea NX-247 exact cum a fost ratificată; mutarea matricei pe contractul v1
+    # e o decizie proprie, cu cardul ei — nu un efect colateral al unei schimbări de default.
+    "WEB_TURN_VIEW_CONTRACT": "web-view.v2",
     # Sesiuni v2 (cu TTL + legare de origin): fără ele, expirarea și reînnoirea din R10 n-ar avea
     # ce testa, iar gate-ul ar certifica o configurație mai slabă decât cea de release.
     "WEB_SESSION_V2_ENABLED": "true",

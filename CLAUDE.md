@@ -604,6 +604,37 @@ Kill-switch `BRAIN_RICH_REPLY_ENABLED=false` → ramura săracă de dinainte; `B
 nu pentru dreptul de a trimite carduri mute. Cod: [`src/agent/brain_rich.py`](src/agent/brain_rich.py)
 + `brain._set_brain_reply`; probă: `pytest tests/test_brain_rich_reply.py -q`.
 
+**NX-233 pe v1 — transportul asincron se desprinde de vederea v2 (flag OFF).**
+Un tur real pe producție ia ~35s. Sincron, browserul ține o conexiune HTTP deschisă atât (lângă
+timeoutul oricărui proxy), nu confirmă nimic, iar dacă procesul moare la mijloc turul e PIERDUT
+deși serverul chiar muncise. NX-233 rezolvase toate cele trei, dar livrase transportul CUPLAT cu o
+vedere nouă (`web-view.v2`, blocuri), deci „vreau accept 202" costa o rescriere de widget — și
+măsurat, o regresie: chips-urile de recomandare, CTA-ul de checkout (`offer`) și comparația
+(`heading`/`subtitle`/`closing`) n-aveau destinație în proiecția v2, iar randorul de blocuri n-a
+primit redesignul din 2026-08-28. Sunt însă DOUĂ axe, iar codul o spunea deja fără să o
+folosească: cererea e `web-turn.v2`, statusul `web-turn-status.v2`, vederea are versiunea ei.
+Acum vederea e o SETARE (`WEB_TURN_VIEW_CONTRACT`, implicit `web-chat.v1`), iar
+`terminal_payload` e singurul loc care o alege — GET, SSE și replay-ul de la accept trec toate pe
+acolo, deci trei răspunsuri la același rând nu pot diverge.
+[`src/web/turn_view_v1.py`](src/web/turn_view_v1.py) servește EXACT payload-ul persistat de
+executor (`render_web`), cu plic de tur și cheile interne filtrate pe **allowlist** (`actions`,
+`grounded_v2` sunt dovezi server-side; o blocklist ar scurge cheia adăugată mâine). Invarianta e
+mecanică, nu declarată: `tests/test_web_turn_view_v1.py` compară cheie cu cheie conținutul
+asincron cu payload-ul sincron — un câmp în plus inventat de vedere e la fel de grav ca unul
+pierdut. Cele trei goluri dispar de la sine: pe contractul v1 chips, `offer` și comparația sunt
+câmpuri NATIVE, nu au nevoie de un kind de acțiune ca să existe. Golul `variants` (NX-166) e
+măsurat ca fiind nul: **0 din 2.758** produse SOLE au ≥2 variante.
+Comutarea are UN owner — serverul își anunță capabilitatea la `GET /web/bootstrap`
+(`async_turns`: contract + SSE + cadență + copy-ul localizat al fazelor), iar frontendul nu alege
+la build: anunț absent ⇒ `/web/chat`, anunț dispărut între bootstrap și accept ⇒ cade pe sincron
+fără să piardă mesajul. Deci rollbackul e stingerea unui flag, nu un redeploy de widget.
+Efect secundar onest: indicatorul de „thinking" al widgetului își simula etapele cu timere locale
+(o afirmație a browserului despre server); acum primește fazele REALE (`accepted` → `working` →
+`validating`). Gate-ul E2E NX-247 rămâne PIN-uit pe `web-view.v2` (invarianții lui sunt scriși pe
+blocuri): mutarea matricei pe contractul v1 e o decizie proprie, nu efectul colateral al unui
+default schimbat. FE: `src/chat/contract/webChatV1.js` (decoder strict pe PLIC, permisiv pe corp —
+contractul v1 e aditiv prin proiectare) + `test/chat-async-v1.test.js`.
+
 ---
 
 ## Arhitectura — pipeline liniar (12 stagii)

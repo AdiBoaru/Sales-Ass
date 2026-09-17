@@ -9,11 +9,13 @@ Trei responsabilități, toate pure pe date (fără DB aici):
   • STATUS — `TurnStatusView` + payload-ul 202 (POST accept / GET pe un turn ne-terminal):
     statusul de sârmă (proiecția NX-232: `running` nu iese niciodată), `status_url`,
     `events_url` și `poll_after_ms` server-owned.
-  • TERMINAL — `terminal_view()`: payload-ul PERSISTAT (contract `web-chat.v1`, scris de
-    `render_web` în tranzacția de commit) → envelope `web-view.v2` (NX-228), validat cu
-    `parse_view` ÎNAINTE de a fi servit. Reducerile/prețurile se calculează AICI (server-owned),
-    exact regula pe care v1 o lăsa în browser. Chips-urile v1 NU se proiectează: un `submit`
-    v2 cere token opac semnat (NX-236) — până atunci, mai bine absent decât un token fals.
+  • TERMINAL — `terminal_payload()` alege VEDEREA, iar transportul nu o cunoaște (două axe:
+    cererea e `web-turn.v2`, statusul `web-turn-status.v2`, vederea are versiunea ei). Implicit
+    `web-chat.v1` (`turn_view_v1.py`): payload-ul persistat, servit ca atare — adică fix ce
+    randează widgetul de azi. Alternativa, selectabilă din config: `terminal_view()` de mai jos,
+    envelope-ul `web-view.v2` (NX-228), validat cu `parse_view` ÎNAINTE de a fi servit, cu
+    reducerile/prețurile calculate AICI (server-owned) și chips-urile v1 NEproiectate — un
+    `submit` v2 cere token opac semnat (NX-236), iar un token fals ar fi mai rău decât absența.
   • SSE — frame-uri cu `id:` MONOTONIC pe lifecycle (accepted=0 → working=1 → validating=2 →
     terminal=3): `Last-Event-ID` reia exact de unde a rămas, fără status inventat și fără
     rezultat dublu. Doar schimbări reale de status + rezultatul terminal deja comis — zero
@@ -52,6 +54,7 @@ from src.web.turn_service import (
     VALIDATING_PHASE,
     project_wire_status,
 )
+from src.web.turn_view_v1 import v1_terminal_view
 
 log = logging.getLogger(__name__)
 
@@ -124,6 +127,16 @@ _COPY: dict[str, dict[str, Any]] = {
 
 def _copy(language: str | None) -> dict[str, Any]:
     return _COPY.get((language or "ro")[:2]) or _COPY["ro"]
+
+
+def progress_copy(language: str | None) -> dict[str, str]:
+    """Etichetele fazelor de lifecycle, localizate — copy SERVER-OWNED, publicat la bootstrap.
+
+    Cheile sunt exact statusurile de sârmă ale unui turn ne-terminal (`accepted`/`working`/
+    `validating`), deci clientul face un lookup, nu o traducere. Copie defensivă: tabela e
+    constantă de modul și nu are voie să iasă pe sârmă ca referință partajată.
+    """
+    return dict(_copy(language)["progress"])
 
 
 # ── Status pe sârmă ─────────────────────────────────────────────────────────────────────────
@@ -577,6 +590,21 @@ def terminal_view(row: WebTurnRow, language: str) -> dict[str, Any]:
         return _projection_fallback(row, language)
 
 
+def terminal_payload(row: WebTurnRow, language: str) -> dict[str, Any]:
+    """SINGURUL loc care alege vederea unui terminal — GET, SSE și replay-ul de la accept trec
+    toate pe aici, ca trei răspunsuri la același rând să nu poată diverge.
+
+    Transportul (accept 202 → executor → SSE/poll) e o axă; VEDEREA e alta. Implicit servim
+    `web-chat.v1` — exact payload-ul persistat de executor, adică ce randează widgetul de azi.
+    `web-view.v2` rămâne selectabil din config, dar nu mai e implicit. Alegerea e SERVER-OWNED
+    (`WEB_TURN_VIEW_CONTRACT`), iar corpul e auto-descriptiv prin `schema_version`: clientul
+    citește ce a primit, nu deduce din ce a cerut.
+    """
+    if get_settings().web_turn_view_contract == "web-chat.v1":
+        return v1_terminal_view(row, language)
+    return terminal_view(row, language)
+
+
 def _projection_fallback(row: WebTurnRow, language: str) -> dict[str, Any]:
     copy = _copy(language)
     text = copy["announcements"]["failed"]
@@ -613,7 +641,7 @@ def status_event(row: WebTurnRow, phase: str | None = None) -> tuple[int, str]:
 def result_event(row: WebTurnRow, language: str) -> tuple[int, str]:
     """Rezultatul TERMINAL deja comis (exact ce ar servi și GET — proiecția aceluiași rând)."""
     ordinal = STATUS_ORDINAL[project_wire_status(row.status)]
-    return ordinal, sse_frame("result", ordinal, terminal_view(row, language))
+    return ordinal, sse_frame("result", ordinal, terminal_payload(row, language))
 
 
 # ── Phase (observabilitate efemeră, Redis best-effort) ──────────────────────────────────────
