@@ -582,7 +582,13 @@ exista din NX-297 felia 5, stins acolo unde se vede), iar voucherul devine badge
 `filters_only` → `strict`, iar cele 6 produse trec de la șampon + ulei de corp + cremă de corp la
 **plasturi anti-acnee, spumă de curățare cu BHA și creme cu retinal/niacinamidă**, adică sortimentul
 iZi. Raftul ROSTIT rămâne neatins. Kill-switch-uri: `SEARCH_RELAX_BY_PROVENANCE_ENABLED`,
-`ANSWER_SHAPE_ENABLED`, `CHIP_MOVES_V1_ENABLED`, `CARD_COUPON_ENABLED`. Card:
+`ANSWER_SHAPE_ENABLED`, `CHIP_MOVES_V1_ENABLED`, `CARD_COUPON_ENABLED`.
+**Pragul voucherului a fost corectat DUPĂ livrare, pe măsurătoare:** la 5% badge-ul apărea pe
+**76,9%** din catalog cu aceeași valoare (un singur cod, `WELCOME15`, iar 90,6% dintre produse au
+exact -15%) și fura „Top Favorit" de la **994 din 1.363** de produse eligibile. Un voucher de bun
+venit e o promoție de MAGAZIN, nu o proprietate a produsului, deci badge-ul era `noise_badges`
+reintrodus pe partea de AFIȘARE. Pragul e acum **25** (prăpastie măsurată: 15% → 76,9%,
+16% → 7,2%), unde rămân doar cele ~198 de produse cu reduceri reale de 48-50%. Card:
 [`tasks/stage1/NX-299.md`](tasks/stage1/NX-299.md); probă:
 `PYTHONPATH=. python scripts/nx299_shape_probe.py`.
 

@@ -180,3 +180,123 @@ def test_numbered_list_is_not_renumbered_by_the_splitter():
     assert compose.scrub_intro("1. Curatare, 2. tonifiere, 4. ceva inventat", set()) is None
     ok = compose.scrub_intro("1. Curatare, 2. tonifiere", {"1", "2"})
     assert ok == "1. Curatare, 2. tonifiere"
+
+
+# --- wiring: rezerva în `assemble` + raportul runner-ului ------------------------------------
+# Găurile astea au fost descoperite la auditul de după livrare: ambele CĂI funcționau, dar niciun
+# test nu le atingea. Un contract de formă fără teste pe wiring e exact defectul pe care îl repară
+# cardul, mutat cu un nivel mai sus.
+
+
+def _pack():
+    return SimpleNamespace(
+        answer_shape_templates={
+            "framing": {"ro": "Ți-am ales {types}."},
+            "list_glue": {"ro": " și "},
+        },
+        comparison_facets=(),
+        badge_rules=None,
+    )
+
+
+def _ctx():
+    from src.models import BusinessConfig, Contact, InboundMessage, TurnContext
+
+    ctx = TurnContext(
+        turn_id="t",
+        business=BusinessConfig(id="b", slug="s", name="S"),
+        contact=Contact(id="c", business_id="b"),
+        message=InboundMessage(provider_msg_id="m", body="vreau ceva de acnee"),
+        conversation_id="conv",
+    )
+    ctx.language = "ro"
+    ctx.business.domain_pack = _pack()
+    return ctx
+
+
+_RETRIEVED = [
+    {
+        "id": "p1",
+        "name": "Plasturi A",
+        "price": 60.0,
+        "availability": "in_stock",
+        "url": "u1",
+        "attributes": {"product_type": "plasturi"},
+    },
+    {
+        "id": "p2",
+        "name": "Crema B",
+        "price": 90.0,
+        "availability": "in_stock",
+        "url": "u2",
+        "attributes": {"product_type": "crema de fata"},
+    },
+]
+_J = {
+    "items": [
+        {"product_id": "p1", "fit_clause": "bun"},
+        {"product_id": "p2", "fit_clause": "bun"},
+    ],
+    "pick": None,
+    "education": None,
+    "suggestions": [],
+}
+
+
+def test_assemble_falls_back_to_server_framing_when_the_intro_dies():
+    """Cazul turului `42744330`, dar pe calea completă: superlativul omoară intro-ul, iar clientul
+    primește totuși o încadrare, construită din clasele REAL servite."""
+    from src.worker import compose
+
+    j = {**_J, "intro": "Acestea sunt cele mai potrivite produse."}
+    rich = compose.assemble(_ctx(), j, _RETRIEVED)
+    assert rich.intro == "Ți-am ales plasturi și crema de fata."
+
+
+def test_assemble_never_overwrites_a_good_model_intro():
+    """Rezerva e pentru slotul GOL, nu o înlocuire. Altfel proza contextuală a modelului ar fi
+    schimbată cu un șablon la fiecare tur."""
+    from src.worker import compose
+
+    j = {**_J, "intro": "Gelul curata sebumul, iar crema hidrateaza."}
+    rich = compose.assemble(_ctx(), j, _RETRIEVED)
+    assert rich.intro == "Gelul curata sebumul, iar crema hidrateaza."
+
+
+def test_assemble_framing_fallback_has_a_kill_switch(monkeypatch):
+    from src.config import get_settings
+    from src.worker import compose
+
+    monkeypatch.setattr(get_settings(), "answer_shape_enabled", False)
+    j = {**_J, "intro": "Acestea sunt cele mai potrivite produse."}
+    assert compose.assemble(_ctx(), j, _RETRIEVED).intro is None  # byte-identic cu înainte
+
+
+def test_runner_report_names_the_slot_that_did_not_come_out():
+    """Raportul e singura cale prin care un tur „bogat dar gol" se deosebește de unul bun.
+    `response_shape` (NX-159) ar raporta AMBELE ca succes: are produse, are chips, e rich."""
+    from src.agent import response_quality
+    from src.worker import compose
+
+    ctx = _ctx()
+    rich = compose.assemble(ctx, {**_J, "intro": "Gelul curata, crema hidrateaza."}, _RETRIEVED)
+    ctx.retrieval = SimpleNamespace(products=_RETRIEVED, relevance=None)
+    ctx.reply = SimpleNamespace(rich=rich, text="", products=None, comparison=None)
+
+    report = response_quality.answer_shape_report(ctx)
+    assert report is not None
+    assert report["n_types"] == 2
+    assert shape.SLOT_FRAMING in report["required"]
+    # `education` e gol în `_J`, deci încheierea lipsește — și raportul spune DE CE se cerea.
+    assert report["missing"] == [shape.SLOT_CLOSING]
+    assert report["reasons"][shape.SLOT_CLOSING] in shape.REASONS
+    assert report["complete"] is False
+
+
+def test_runner_report_is_silent_without_cards():
+    """Un tur fără carduri n-are formă de judecat, deci nu produce event (cardinalitate)."""
+    from src.agent import response_quality
+
+    ctx = _ctx()
+    ctx.reply = SimpleNamespace(rich=None, text="nu am gasit", products=None, comparison=None)
+    assert response_quality.answer_shape_report(ctx) is None

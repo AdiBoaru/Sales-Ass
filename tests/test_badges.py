@@ -131,7 +131,9 @@ def test_assemble_sets_badge_tone_and_details():
 # --- NX-299 felia 4: voucherul ------------------------------------------------
 
 
-def _coupon(price=100.0, coupon_price=85.0, code="WELCOME15"):
+def _coupon(price=100.0, coupon_price=50.0, code="WELCOME15"):
+    """Voucher de -50%: peste pragul implicit. Nu 85 (adică -15%) deliberat — aia e chiar valoarea
+    promoției de MAGAZIN pe care pragul e menit s-o taie (vezi testul de mai jos)."""
     return {"id": "x", "price": price, "coupon_price": coupon_price, "coupon_code": code}
 
 
@@ -142,17 +144,34 @@ def test_coupon_badge_carries_the_real_percentage():
     from src.worker.badges import badge_label, coupon_discount_pct, derive_badge_kind
 
     assert derive_badge_kind(_coupon()) == "coupon"
-    assert coupon_discount_pct(_coupon()) == 15
-    assert badge_label("coupon", "ro", _coupon()) == "Voucher -15%"
-    assert badge_label("coupon", "en", _coupon()) == "Coupon -15%"
+    assert coupon_discount_pct(_coupon()) == 50
+    assert badge_label("coupon", "ro", _coupon()) == "Voucher -50%"
+    assert badge_label("coupon", "en", _coupon()) == "Coupon -50%"
 
 
 def test_coupon_percentage_rounds_down():
-    """Promisiunea afișată trebuie să rămână adevărată dacă prețul se mișcă puțin. 100 → 84,5 e
-    15,5%, dar afișăm 15."""
+    """Promisiunea afișată trebuie să rămână adevărată dacă prețul se mișcă puțin. 100 → 49,5 e
+    50,5%, dar afișăm 50."""
     from src.worker.badges import coupon_discount_pct
 
-    assert coupon_discount_pct(_coupon(coupon_price=84.5)) == 15
+    assert coupon_discount_pct(_coupon(coupon_price=49.5)) == 50
+
+
+def test_a_shop_wide_welcome_voucher_is_not_a_product_signal():
+    """Corecția cea mai importantă a feliei, găsită pe măsurătoare DUPĂ prima livrare.
+
+    Pe catalogul pilot există UN singur cod (`WELCOME15`) pe 2.123 din 2.758 de produse, iar 90,6%
+    dintre ele au exact -15%. Cu pragul inițial de 5%, badge-ul apărea pe 76,9% din catalog cu
+    aceeași valoare — deci nu informa pe nimeni — și fura semnalul de reputație de la **994 din
+    1.363** de produse eligibile de «Top Favorit». Un voucher de bun venit e o promoție de MAGAZIN,
+    nu o proprietate a produsului."""
+    from src.worker.badges import coupon_discount_pct, derive_badge_kind
+
+    shop_wide = _coupon(coupon_price=85.0)  # -15%, promoția generală
+    assert coupon_discount_pct(shop_wide) is None
+    assert derive_badge_kind(shop_wide) is None
+    # …iar reputația supraviețuiește pe produsele bune, exact ce se pierdea înainte.
+    assert derive_badge_kind({**shop_wide, "rating": 4.9, "review_count": 500}) == "top"
 
 
 def test_coupon_without_a_real_discount_is_not_a_badge():
@@ -164,7 +183,7 @@ def test_coupon_without_a_real_discount_is_not_a_badge():
     assert coupon_discount_pct(_coupon(coupon_price=120.0)) is None
     assert coupon_discount_pct(_coupon(code=None)) is None
     assert coupon_discount_pct(_coupon(coupon_price=None)) is None
-    assert coupon_discount_pct(_coupon(coupon_price=98.0)) is None  # sub pragul de 5%
+    assert coupon_discount_pct(_coupon(coupon_price=98.0)) is None  # sub prag
     assert derive_badge_kind(_coupon(coupon_price=98.0)) is None
 
 
@@ -173,7 +192,7 @@ def test_price_you_already_have_beats_one_you_must_claim():
     bat o etichetă de reputație."""
     from src.worker.badges import derive_badge_kind
 
-    both = {**_coupon(), "list_price": 200.0}  # 50% deal + 15% cupon
+    both = {**_coupon(), "list_price": 200.0}  # 50% deal + 50% cupon
     assert derive_badge_kind(both) == "deal"
     with_top = {**_coupon(), "rating": 4.9, "review_count": 500}
     assert derive_badge_kind(with_top) == "coupon"

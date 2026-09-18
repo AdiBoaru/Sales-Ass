@@ -19,10 +19,22 @@ _DEFAULT_RULES: dict[str, float] = {
     "top_rating": 4.7,  # rating shrunk minim pt „Top Favorit"
     "top_reviews": 50,  # nr. recenzii minim (evită 5★-cu-1-recenzie → badge fals)
     "deal_discount_pct": 20.0,  # reducere % minimă (list_price vs price) pt „Super Preț"
-    # NX-299: reducerea % minimă a VOUCHERULUI (coupon_price vs price). Pragul e mai jos decât cel
-    # de `deal` fiindcă semnalul e diferit: „Super Preț" spune că produsul E ieftin, voucherul
-    # spune doar că mai poți scădea ceva la finalizare. Sub prag nu merită un badge.
-    "coupon_discount_pct": 5.0,
+    # NX-299: reducerea % minimă a VOUCHERULUI (coupon_price vs price). Pragul e SUS, nu jos, și
+    # asta a fost o corecție pe măsurătoare — prima versiune avea 5% și era o greșeală de design.
+    #
+    # Un voucher de BUN VENIT e o promoție de MAGAZIN, nu o proprietate a produsului. Pe catalogul
+    # pilot: un singur cod (`WELCOME15`) pe 2.123 din 2.758 de produse, iar **90,6% dintre ele au
+    # exact -15%**. La prag de 5%, badge-ul apărea pe 76,9% din catalog cu aceeași valoare, deci nu
+    # informa pe nimeni — și costa scump: **994 din 1.363 de produse eligibile de „Top Favorit"
+    # (73%) își pierdeau semnalul de reputație** în favoarea unei constante. Exact clasa pe care o
+    # documentăm deja la `noise_badges` („badge pe >90% din catalog nu ajunge la model"), doar că
+    # pe partea de AFIȘARE, unde nimic n-o filtra.
+    #
+    # Măsurat, pragul are o prăpastie curată: 15% → 76,9% din catalog, 16% → 7,2%. Cu 25 rămân
+    # doar cele ~198 de produse cu reduceri reale de 48-50%, unde voucherul chiar E o informație
+    # și chiar merită să bată reputația. Cifra e un DEFAULT agnostic, nu o constantă: tenantul o
+    # mută din `DomainPack.badge_rules`, ca orice alt prag de badge.
+    "coupon_discount_pct": 25.0,
 }
 
 # Etichete per-locale (UI). „top"/„deal" → textul afișat pe card.
