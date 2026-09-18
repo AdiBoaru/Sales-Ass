@@ -16,9 +16,9 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from src.agent import prompt_builder
+from src.agent import prompt_builder, turn_profile
 from src.agent.answer_plan_guard import enforce_answer_plan
-from src.agent.brain_models import UserParts
+from src.agent.brain_models import UserParts, extract_obligations
 from src.agent.deterministic import (
     _CHEAPER_RE,  # noqa: F401 — re-export (teste)
     _COMPARE_RE,  # noqa: F401 — re-export (teste)
@@ -85,6 +85,7 @@ from src.db.queries.catalog import (
 )
 from src.domain import vocab_examples
 from src.models import Route, RouteDecision, TurnContext
+from src.runtime.turn_budget import turn_class_for
 from src.safety.policy import SafetyPolicy, safety_state
 from src.tools import (  # noqa: F401 — importul înregistrează tool-urile
     catalog_tools,
@@ -361,6 +362,51 @@ def _lead_score_hint(ctx: TurnContext) -> str:
         "proactiv spre finalizare: când e firesc, oferă linkul de checkout sau adăugarea în coș, "
         "fără să forțezi.\n"
     )
+
+
+def _apply_turn_profile(
+    ctx: TurnContext, system: str, tools: list[dict[str, Any]]
+) -> tuple[str, list[dict[str, Any]]]:
+    """NX-304: direcția răspunsului, aleasă de COD, ajunge și pe calea v1, nu doar pe creierul unic.
+
+    Defectul era o LEGĂTURĂ lipsă, nu o unealtă lipsă. `routine_plan` intrase în toolsetul v1 la
+    NX-297 și datele există (pe SOLE: familii declarate în `DomainPack.routine_steps` și
+    `attributes.routine_step` pe 2.019 din 2.758 de produse), dar `turn_profile.select` era chemat
+    EXCLUSIV în `brain.py`. Producția rulează calea v1, deci `ROUTINE_ENABLED=true` nu putea schimba
+    nimic: modelul primea o unealtă despre care nimic nu-i spunea să o cheme, `ctx.routine` rămânea
+    `None`, `build_rich_system(routine=False)` cerea o listă, iar o cerere de rutină ieșea ca
+    recomandare rankată. Măsurat pe turul real `57fa9fbe` («vreau o rutina de cosuri»): patru
+    produse, niciun pas.
+
+    Aceleași două flag-uri și aceeași precedență ca în `brain.py`, ca să nu existe două politici
+    pentru aceeași decizie: `TURN_PROFILES_ENABLED` aprinde toate cele cinci profile (schimbă
+    sufixul pentru TOT traficul, deci se decide pe golden), `ROUTINE_ENABLED` aprinde exclusiv
+    profilul `routine`. Ambele stinse ⇒ byte-identic.
+
+    Sufixul se adaugă la FINALUL system-ului, deci prefixul static rămâne neatins și cache-ul de
+    prompt ține.
+    """
+    settings = get_settings()
+    profiles_on = bool(getattr(settings, "turn_profiles_enabled", False))
+    routine_on = bool(getattr(settings, "routine_enabled", False))
+    if not (profiles_on or routine_on):
+        return system, tools
+    pack = getattr(ctx.business, "domain_pack", None)
+    families = tenant_enum_values(pack)["families"]
+    obligations = extract_obligations(ctx.message.body or "")
+    candidate = turn_profile.select(
+        turn_class_for(obligations), obligations, has_routine=bool(families)
+    )
+    profile = candidate if profiles_on or candidate.name == "routine" else None
+    if profile is None:
+        return system, tools
+    ctx.emit("turn_profile", name=profile.name, path="v1")
+    have = {s.get("function", {}).get("name") for s in tools}
+    extra = [t for t in profile.extra_tools if t not in have]
+    if extra:
+        examples = vocab_examples.from_pack(pack)
+        tools = [*tools, *tool_schemas(extra, examples, **tenant_enum_values(pack))]
+    return f"{system}\n{profile.suffix}", tools
 
 
 # NX-122: whitelist de chei per tool pentru `tool_call` în analytics, ALINIATĂ la arg-urile
@@ -743,6 +789,10 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
                 # bugetul", pe un flag deja aprins în `.env`.
                 _learn_constraints(ctx, run, query)
                 return
+            # NX-304: profilul de tur se aplică DOAR aici, pe calea v1. Ramura creierului unic s-a
+            # întors deja mai sus și și-l aplică singură (`brain.py`), deci nu există tur pe care
+            # sufixul să se lipească de două ori.
+            system, tools = _apply_turn_profile(ctx, system, tools)
             final = await deps.llm.run_tool_loop(system, user, tools, run.execute)
             retrieved = run.retrieved  # produsele acumulate de tool executor în această buclă
     except Exception as e:  # noqa: BLE001 — bucla eșuată → lasă echo fallback
