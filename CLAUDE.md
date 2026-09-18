@@ -327,6 +327,32 @@ determinist (P6). Producția rămâne OFF până la GO-ul NX-246. Detalii:
 [`docs/NX-239-SINGLE-BRAIN.md`](docs/NX-239-SINGLE-BRAIN.md); drive:
 `python scripts/sim/single_brain_drive.py`.
 
+**NX-300 / NX-301 — jumătate din tur era invizibil, iar cardul purta fraza de reclamă.**
+Găsite analizând UN tur real (`3e582c6d`, «vreau ceva sa scap de cosuri»): 95.153 ms, din care
+`turn_latency` raporta 6.157 ms în faze. Pe tot traficul (53 de ture), acoperirea
+`phase_ms_total / e2e_ms` avea **p50 46,7%** și **cinci din cele zece faze nu apăreau NICIODATĂ**.
+Patru cauze distincte, derivate mecanic: trei apelanți de `_chat` fără span (între ei
+`complete_schema`, adică apelul de rich compose — 86,7 s din turul măsurat); span-ul `tools` pus pe
+ramura pe care producția n-o ia (`execute` iese devreme când `ledger` și `deadline` sunt `None`,
+adică exact profilul de prod); span-ul `load` rulând înainte ca runner-ul să împingă acumulatorul,
+iar commit/aftercare după ce l-a scos; și `queue`/`commit`/`aftercare` fără niciun producător în
+`src/`. Evenimentul se emite acum DUPĂ commit (`run_pipeline` întoarce `TurnRuntime`; emite doar
+cine a deschis acumulatorul), iar aftercare-ul are evenimentul LUI (`phase=post_turn`), ca al doilea
+`llm_usage` — a-l pune în bugetul turului ar umfla `e2e_ms` cu muncă pe care clientul n-o așteaptă.
+**Latența nu s-a atins**: cardul face timpul VIZIBIL. `reasoning_effort=high` pe apelul rich (2.048
+din 2.999 tokeni de output) și retry-urile de 30 s fără plafon per încercare rămân decizii separate.
+NX-301: `products.name` are pe catalogul real mediana **195** de caractere (nume + frază de
+marketing + gramaj), iar `display_name` **38**. Scurtarea exista din septembrie peste tot unde
+produsul e numit pentru MODEL; singurul consumator rămas pe numele întreg era CLIENTUL. Pe cele
+patru carduri ale turului real: **905 → 143 de caractere**. Gramajul, pe care scurtarea îl pierdea
+integral (0/2.758 în capul numelui), intră într-o cheie proprie `size`, recuperată determinist din
+coadă și ABSENTĂ pe cele 52,5% unde nu e recuperabilă. Poarta mecanică a găsit un membru pe care
+căutarea îl ratase (`_deterministic_reply`, textul de fallback citit de client) și a corectat un
+scop greșit (liniile de coș din `commerce_tools` sunt refs de stare + `llm_view`, nu sârmă).
+Carduri: [`tasks/stage1/NX-300.md`](tasks/stage1/NX-300.md) +
+[`tasks/stage1/NX-301.md`](tasks/stage1/NX-301.md); probe:
+`pytest tests/test_phase_coverage.py tests/test_display_name_on_cards.py -q`.
+
 **Fix 2026-09-16 (2) — creierul unic era pus să citeze dovezi pe care nu i le arăta nimeni.**
 Găsit pe prima conversație REALĂ de după aprinderea flagului (`sole-ro`, `conversation_traces` +
 `analytics_events`), nu pe fixture: clientul a scris „parca mi uscat parul dupa ce fac dus", apoi
