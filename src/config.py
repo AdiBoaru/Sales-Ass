@@ -995,6 +995,18 @@ class Settings(BaseSettings):
     search_relax_by_provenance_enabled: bool = Field(
         default=True, validation_alias="SEARCH_RELAX_BY_PROVENANCE_ENABLED"
     )
+    # NX-299 felia 2: FORMA răspunsului devine un contract cu condiții măsurabile
+    # (`src/agent/answer_shape.py`), nu o cerință scrisă în prompt și sperată. Aprins: slotul de
+    # încadrare capătă o rezervă deterministă construită din tipurile REAL servite, iar runner-ul
+    # raportează ce sloturi cerea turul și care au lipsit. OFF → nicio rezervă, niciun event, calea
+    # fierbinte byte-identică.
+    answer_shape_enabled: bool = Field(default=True, validation_alias="ANSWER_SHAPE_ENABLED")
+    # NX-299 felia 4: badge de VOUCHER pe card, derivat din `coupon_price` vs `price`. E singurul
+    # semnal comercial de tip iZi pe care catalogul real il sustine (`sale_price < price` =
+    # 0/2.758, dar 2.123 produse au cupon), iar coloanele existau de la import fara ca nimeni sa
+    # le citeasca. Kill-switch separat de `card_badges_enabled`: cuponul e o promisiune despre
+    # PRETUL FINAL, deci trebuie sa poata fi stins fara sa stingi si „Top Favorit".
+    card_coupon_enabled: bool = Field(default=True, validation_alias="CARD_COUPON_ENABLED")
     # NX-167 (B): la o cerere CLARĂ de categorie (triajul a dat `category`) în care search a fost
     # nevoit s-o relaxeze (`category_dropped`), NU afișa carduri din altă ramură — întoarce gol +
     # semnal de clarificare, în loc să prezinte off-category ca match. OFF → relaxarea de azi.
@@ -1085,7 +1097,19 @@ class Settings(BaseSettings):
     # liber de modelul rich — producătorul pe care `CHIP_PRODUCERS` îl declară NEANCORAT. Pe v1
     # modelul nu are câmp de reformulare, deci textul e ȘABLONUL tenantului: fail-OPEN pe mutare,
     # exact ca la NX-296 când modelul tace. OFF = chips-urile de azi, byte-identic.
-    chip_moves_v1_enabled: bool = Field(default=False, validation_alias="CHIP_MOVES_V1_ENABLED")
+    #
+    # NX-299 felia 3 îl APRINDE. Motivul e paritatea de formă cu iZi, măsurată pe turul
+    # `42744330`: toate cele patru chips-uri scrise liber de model erau despre cele două produse
+    # deja afișate (compară / cum folosesc / adaugă în coș), adică roluri `deepen` și `commit`.
+    # iZi oferă ÎNGUSTĂRI («doar plasturi invizibili», «mai ieftine», «ten sensibil») — rolurile
+    # `forward`/`lateral` din `MOVE_ROLES`, construite la NX-296 și niciodată aprinse acolo unde
+    # se vede. Un model care scrie liber nu are de unde ști ce îngustare poate serverul să
+    # onoreze, deci nu e o problemă de prompt.
+    #
+    # Prețul, declarat: pe v1 modelul nu are câmp de reformulare, deci textul e mereu șablonul
+    # tenantului, nu o frază contextuală. Schimbul e text mai puțin colorat în locul unor
+    # continuări pe care serverul chiar le poate executa. OFF = chips-urile de azi, byte-identic.
+    chip_moves_v1_enabled: bool = Field(default=True, validation_alias="CHIP_MOVES_V1_ENABLED")
     # NX-114: DomainPack (config per-vertical din DB+seed). Kill-switch FAIL-SAFE: OFF →
     # BusinessConfig.domain_pack=None, consumatorii cad pe constantele lor de cod (byte-identic).
     domain_pack_enabled: bool = Field(default=True, validation_alias="DOMAIN_PACK_ENABLED")

@@ -1,5 +1,10 @@
 {
   "_note": "NX-114 seed auto_service — schelet; whitelist profil din profile._WHITELIST['auto'].",
+  "_answer_shape_templates_note": "NX-299: copy-ul de FORMA, per locale. `framing` numeste CLASELE de produs pe care retrievalul le-a servit efectiv ({types} se completeaza de server din `product_type`, niciodata de model), iar `list_glue` e legatura dinaintea ultimului element al enumerarii. Fara sablon, incadrarea ramane a modelului (fail-open): un pachet incomplet nu are voie sa stearga o fraza scrisa corect. Fara liniuta de pauza si fara punct si virgula (P13).",
+  "answer_shape_templates": {
+    "framing": {"ro": "Ți-am ales {types}.", "en": "I picked out {types} for you."},
+    "list_glue": {"ro": " și ", "en": " and "}
+  },
   "_chip_templates_note": "NX-296: copy-ul chips-urilor, per mutare si per locale. Un chip e MESAJUL pe care clientul il retrimite la apasare, deci se scrie la persoana I, in vocea lui. {slot} se completeaza de server din catalog (fraza de meniu, nume scurt de produs, prag de pret), niciodata de model. Mutare fara sablon = mutare care nu se ofera (P11: limba e configuratie, nu constanta in cod). Moneda face parte din sablon fiindca e a tenantului.",
   "chip_templates": {
     "refine_facet": {"ro": "Caut ceva pentru {slot}", "en": "Show me something for {slot}"},

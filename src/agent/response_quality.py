@@ -98,3 +98,59 @@ def completeness_gaps(ctx: TurnContext) -> list[str]:
             gaps.append("asked_field")
 
     return gaps
+
+
+def answer_shape_report(ctx: TurnContext) -> dict[str, Any] | None:
+    """NX-299 — ce FORMĂ cerea turul și ce a ieșit. `None` = turul n-are carduri, deci n-are formă.
+
+    Există fiindcă eșecul de formă e azi invizibil. Turul `42744330` arată în telemetrie ca un
+    succes curat (`validator_ok`, `is_rich: true`, `has_products: true`, `has_suggestions: true`),
+    deși a servit două carduri dintr-un singur brand, fără frază de încadrare, la o cerere cu 518
+    candidați în catalog. `response_shape` numără booleeni, nu sloturi, deci nu putea spune
+    diferența dintre un răspuns bogat și unul care doar are câmpurile pline.
+
+    Un tur de recomandare care servește un singur tip, fără încadrare și fără încheiere, e o
+    degradare și trebuie să aibă nume și cod, ca `unmet_query` sau `rich_downgraded`. Fără
+    măsurătoarea asta nu putem ști dacă reparația a ținut, iar peste o lună regresia se strecoară
+    tăcut. Vocabularul e ÎNCHIS (`SLOTS`, `REASONS`), deci eticheta e mărginită (cardinalitate).
+
+    Pur, ca restul modulului: derivat din `ctx.reply` + `ctx.retrieval`, zero I/O.
+    """
+    from src.agent import answer_shape as shape_mod
+    from src.worker import compose
+
+    r = ctx.reply
+    rich = r.rich if r is not None else None
+    if rich is None or not rich.items:
+        return None
+
+    retrieval = getattr(ctx, "retrieval", None)
+    served = list(getattr(retrieval, "products", None) or [])
+    shown_ids = {it.product_id for it in rich.items if it.product_id}
+    # Tipurile se citesc de pe produsele CHIAR AFIȘATE, nu de pe tot pool-ul retrievat: pool-ul
+    # poate fi divers iar pagina monotonă, și exact aia e degradarea pe care o căutăm.
+    shown = [p for p in served if str(p.get("id") or p.get("product_id") or "") in shown_ids]
+    types = shape_mod.distinct_types(shown or served[: len(rich.items)])
+
+    pack = getattr(ctx.business, "domain_pack", None)
+    facets = tuple(getattr(pack, "comparison_facets", ()) or ()) if pack else ()
+    axes = compose.decision_axes(shown, facets, ctx.language) if shown else []
+
+    shape = shape_mod.shape_for(n_items=len(rich.items), product_types=types, n_axes=len(axes))
+    filled = {
+        shape_mod.SLOT_FRAMING: bool(rich.intro),
+        shape_mod.SLOT_FIT_LINE: all(bool(it.reason) for it in rich.items),
+        shape_mod.SLOT_CLOSING: bool(rich.education),
+    }
+    missing = shape_mod.missing_slots(shape, filled)
+    return {
+        "n_items": len(rich.items),
+        "n_types": len(types),
+        "n_axes": len(axes),
+        "required": list(shape.required),
+        "missing": list(missing),
+        # DE CE lipsește fiecare: „n-am cerut-o" și „am cerut-o și n-a ieșit" sunt întrebări
+        # diferite, iar numai a doua e un defect.
+        "reasons": {s: shape.reason_for(s) for s in missing},
+        "complete": not missing,
+    }

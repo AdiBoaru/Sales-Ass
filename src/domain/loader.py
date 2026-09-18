@@ -248,6 +248,9 @@ def load_domain_pack(business: BusinessConfig) -> DomainPack | None:
         facets=build_facets(merged.get("facets")),  # NX-186: registru tipizat (fail-closed)
         response_style=_norm_str_map(merged.get("response_style")),  # NX-159 felia 3
         chip_templates=_norm_chip_templates(merged.get("chip_templates")),  # NX-296
+        # NX-299: aceeași formă (cheie → locale → șablon), deci același normalizator. Un al
+        # doilea scris la fel ar fi diverge la prima corecție.
+        answer_shape_templates=_norm_chip_templates(merged.get("answer_shape_templates")),
         # NX-205: contractul de completitudine per categorie (fail-closed per intrare).
         required_attributes=build_category_requirements(merged.get("required_attributes")),
         # NX-262: semantica muchiilor din `product_relations` (fail-closed per intrare — o intrare

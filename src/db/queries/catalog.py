@@ -476,6 +476,12 @@ _SELECT = f"""
         -- afișează „de la X" fals pe o variantă mai mică. `price` rămâne efectivul curent.
         (case when {_SALE_ACTIVE} then p.price end)::float8
                                     as list_price,
+        -- NX-299 felia 4: voucherul. Singurul semnal comercial de tip iZi pe care catalogul REAL
+        -- il sustine: `sale_price < price` = 0/2.758, dar 2.123 produse au `coupon_code` +
+        -- `coupon_price`. Coloanele existau de la import, scrise de `catalog/sole_source.py`,
+        -- si nu le citea NIMENI din `src/`, deci pretul cu voucher nu ajungea nicaieri.
+        p.coupon_code               as coupon_code,
+        p.coupon_price::float8      as coupon_price,
         p.attributes->'concerns'    as concerns,
         p.attributes                as attributes,
         -- NX-240: moneda + momentul VERIFICĂRII. `currency` fiindcă o sumă fără unitate nu e o
@@ -1029,6 +1035,8 @@ _DETAIL_SELECT = f"""
         -- IZI-anchor: preț original (tăiat) DOAR la reducere reală (vezi _SELECT); altfel NULL.
         (case when {_SALE_ACTIVE} then p.price end)::float8
                                     as list_price,
+        p.coupon_code               as coupon_code,   -- NX-299 felia 4 (vezi _SELECT)
+        p.coupon_price::float8      as coupon_price,
         prs.summary                 as review_summary,
         prs.top_pros                as top_pros,
         prs.top_cons                as top_cons,
