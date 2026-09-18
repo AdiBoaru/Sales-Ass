@@ -642,6 +642,12 @@ class Settings(BaseSettings):
     # MICĂ: modelul a cerut `limit=3` fiindcă promptul de vânzare i-a spus 2-3. Acum cifra e una
     # singură și toate patru o citesc — iar creșterea ei nu se mai pierde tăcut în alt strat.
     card_slots: int = Field(default=6, ge=1, le=8, validation_alias="CARD_SLOTS")
+    # NX-303: câte produse de ACELAȘI tip încap pe o pagină. Aceeași clasă de defect ca
+    # `card_slots`: cifra avea doi proprietari care nu se cunoșteau — `diversify_pool` plafona la
+    # 2, iar promptul rich cerea „acoperă tipurile", adică UNUL per tip. Promptul câștiga, fiindcă
+    # el vorbește cu modelul. Măsurat pe un tur real: pool de 6 produse cu 3 tipuri ⇒ 3 carduri,
+    # dintr-o nevoie pe care catalogul o acoperă cu 518 produse și 18 clase.
+    max_per_type: int = Field(default=2, ge=1, le=8, validation_alias="MAX_PER_TYPE")
     # NX-296: chips-urile ca MUTĂRI cu dovadă, nu ca text de validat. Serverul compune mutările
     # din catalog (meniul NX-295 + cardurile turului), modelul le poate ÎMBRACA natural, iar poarta
     # e per mutare: textul trebuie să păstreze ancora, altfel cade pe șablonul serverului. OFF =
@@ -974,6 +980,19 @@ class Settings(BaseSettings):
     search_filters_only_fallback_enabled: bool = Field(
         default=True, validation_alias="SEARCH_FILTERS_ONLY_FALLBACK_ENABLED"
     )
+    # NX-303: când FIECARE cuvânt de conținut al frazei se rezolvă pe o cheie pe care filtrele o
+    # poartă deja, textul nu mai poate adăuga nicio restricție SEMANTICĂ — doar una arbitrară,
+    # după cine s-a nimerit să folosească vocabularul clientului. Măsurat pe catalogul SOLE:
+    # `concerns=acne` = 518 produse, dar „cosuri" apare în textul de căutare al 6, „acnee" în 165,
+    # „imperfectiuni" în 183. Cu ȘI-ul dintre text și filtru, clientul primea cele 6.
+    #
+    # Aprins, cererea sare direct pe treapta terminală (`filters_only`, NX-298), unde textul rămâne
+    # ORDONATOR: potrivirile literale stau tot primele, restul paginii vine din setul cerut. NU se
+    # scad termeni din text — varianta aia e măsurată și respinsă (vezi nota din `catalog_tools`).
+    # OFF → drumul de dinainte, byte-identic.
+    search_text_gate_when_redundant_enabled: bool = Field(
+        default=True, validation_alias="SEARCH_TEXT_GATE_WHEN_REDUNDANT_ENABLED"
+    )
     # NX-298: dacă potrivirile de text nu umplu pagina cerută, iar
     # cererea poartă un filtru de SUBIECT (raft/fațetă/brand/variantă — `_has_subject_filter`),
     # sloturile rămase se completează din setul filtrului. Nu ÎNLOCUIEȘTE potrivirile de text: ele
@@ -995,6 +1014,20 @@ class Settings(BaseSettings):
     search_relax_by_provenance_enabled: bool = Field(
         default=True, validation_alias="SEARCH_RELAX_BY_PROVENANCE_ENABLED"
     )
+    # NX-302: când apelul rich al căii v1 cade, cardurile se construiesc din CATALOG, nu se pierd.
+    #
+    # Toată bogăția răspunsului v1 (motiv per card, rating, badge, preț de listă, variante, chips)
+    # atârna de un singur `complete_schema`. Eșecul lui cobora turul pe `_deterministic_reply`:
+    # trei nume cu prețuri, patru carduri mute, zero continuare. Măsurat pe `sole-ro`
+    # (`conversation_traces`, 56 de ture): 14 din turele cu produse ajungeau la client cu
+    # `rich = null` — un sfert. Cauzele sunt trei și niciuna nu atinge FAPTELE: `APITimeoutError`
+    # pe un apel măsurat de NX-300 la 86,7 s contra unui plafon de 30 s/încercare, zero items după
+    # poarta de apartenență, sau refuzul modelului de a numi vreun produs.
+    #
+    # Ce se pierde onest cu flagul PORNIT: `intro` scris de model (când proza buclei nu e validă) și
+    # `education`. Ce NU se mai pierde: tot ce era deja fapt de catalog. OFF → comportamentul de
+    # dinainte, byte-identic.
+    rich_from_facts_enabled: bool = Field(default=True, validation_alias="RICH_FROM_FACTS_ENABLED")
     # NX-299 felia 2: FORMA răspunsului devine un contract cu condiții măsurabile
     # (`src/agent/answer_shape.py`), nu o cerință scrisă în prompt și sperată. Aprins: slotul de
     # încadrare capătă o rezervă deterministă construită din tipurile REAL servite, iar runner-ul
@@ -1943,4 +1976,18 @@ def card_slots(settings: object | None = None) -> int:
     value = getattr(source, "card_slots", None)
     if value is None:
         value = Settings.model_fields["card_slots"].default
+    return int(value)
+
+
+def max_per_type(settings: object | None = None) -> int:
+    """Câte produse de același TIP încap pe o pagină. PROPRIETAR UNIC: `Settings.max_per_type`.
+
+    Aceeași formă ca `card_slots`, din același motiv: cititorii sunt în module diferite
+    (`diversify_pool`, în `catalog_tools`, și promptul rich, în `prompt_builder`), iar o constantă
+    importată dintr-unul în celălalt ar lega generarea de prompt de tool-urile de catalog.
+    """
+    source = settings if settings is not None else get_settings()
+    value = getattr(source, "max_per_type", None)
+    if value is None:
+        value = Settings.model_fields["max_per_type"].default
     return int(value)
