@@ -148,6 +148,10 @@
       "reason": "sondă read-only care MĂSOARĂ fraze scrise ca de client pe tool-urile reale (docs/DB-QUERY-PROBE-2026-09-08.md); frazele sunt intrarea măsurătorii, nu logică."
     },
     {
+      "path": "scripts/nx299_shape_probe.py",
+      "reason": "sondă de MĂSURARE, ca nx298_recall_probe: rulează argumentele EXACTE ale turului real 42744330 din `conversation_traces` (NX-299), ca să arate ce servea scara înainte și după ordinea pe proveniență. Frazele sunt datele măsurătorii, nu comportament."
+    },
+    {
       "path": "scripts/nx298_recall_probe.py",
       "reason": "sondă de MĂSURARE: rulează pe tenantul pilot exact frazele reale de client din `conversation_traces` (NX-298). Frazele sunt datele măsurătorii, nu comportament; fără ele proba n-ar putea reproduce turul care a expus defectul."
     }

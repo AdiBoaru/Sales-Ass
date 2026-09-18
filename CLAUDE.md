@@ -539,11 +539,58 @@ text și marcate `lexical_step='filters_only'`. (3) Diversificarea echilibra bra
 `enforce_ready: false`), cu relaxare GRADUALĂ — dintr-odată, faza 2 lua înapoi exact ce sărise faza
 1, deci efectul cotei era zero. Măsurat: «crema pentru cosuri» 2 → **6** produse (potrivirile de
 text rămân primele), cota pe tip 3 → **4** tipuri pe pool real, NX-293 neatins. Kill-switch
-`SEARCH_FILL_FROM_SUBJECT_FILTER_ENABLED=false`. Rămâne declarat NEACOPERIT: `coupon_code` +
-`coupon_price` există pe **2.123/2.758** de produse și nu le citește nimeni din `src/` (voucherul
-iZi), `delivery_class` = 0/2.758 (livrarea nu e reprezentabilă), iar chips-urile ancorate rămân
-stinse pe v1 (`CHIP_MOVES_V1_ENABLED=false`). Card: [`tasks/stage1/NX-298.md`](tasks/stage1/NX-298.md);
-probă: `python -m scripts.nx298_recall_probe`.
+`SEARCH_FILL_FROM_SUBJECT_FILTER_ENABLED=false`. Rămâneau declarate NEACOPERITE voucherul și
+chips-urile ancorate pe v1; **NX-299 le-a livrat pe amândouă**, iar `delivery_class` = 0/2.758
+rămâne (livrarea nu e reprezentabilă, e gaură de DATE). Card:
+[`tasks/stage1/NX-298.md`](tasks/stage1/NX-298.md); probă: `python -m scripts.nx298_recall_probe`.
+
+**NX-299 — răspunsul are o FORMĂ, iar scara de relaxare învață PROVENIENȚA.**
+Pe turul REAL `42744330` (2026-09-17 20:39, «vreau ceva sa scap de cosuri», DUPĂ NX-298), modelul a
+cerut `category="dermato-cosmetice"` — subarbore de **6 produse** din 2.758, când `concerns=acne`
+avea **518** și catalogul are 18 plasturi, 60 de seruri, 50 de creme sub acea nevoie. Scara a aruncat
+fațeta ROSTITĂ de client («cosuri») pe treapta 1 și a păstrat raftul GHICIT până la treapta
+terminală, deci `filters_only` a servit raftul greșit. Nu e o ordine greșită între două tipuri de
+câmp, e o **dimensiune care lipsea**: `_relax_ladder` ordona după TIPUL câmpului și nu știa nimic
+despre cine a afirmat valoarea, deși proveniența există din NX-251 (`corroborated_by`) și e folosită
+în ACELAȘI fișier pentru constrângerile numerice. Acum treptele se ordonează (proveniență, tip), iar
+„categoria e dură" devine **„categoria ROSTITĂ e dură"**. `uttered_by_client` extinde coroborarea la
+istoricul CLIENTULUI, fiindcă aici asimetria se inversează față de NX-251: acolo un `False` producea
+o nevoie mai slabă, aici face valoarea relaxabilă. Două interacțiuni prinse de suită, nu presupuse:
+garda off-category ar fi SUPRIMAT tot setul pe treapta nou-deblocată (zero carduri în loc de două
+greșite), iar `corroborated_by` fiind potrivire LITERALĂ dă fals „ghicit" la «vreau makeup» cu
+`category=machiaj` — de aceea raftul ghicit e relaxabil DOAR când mai rămâne o fațetă, altfel
+interogarea ar rămâne fără subiect (eșecul respins la NX-298). În plus, mărimea rafturilor intră în
+prompt, rotunjită la 2 cifre semnificative (cifra era deja calculată și se arunca; rotunjirea ține
+prefixul de cache stabil la driftul de catalog).
+**Forma răspunsului devine un CONTRACT** (`src/agent/answer_shape.py`, PUR): promptul cerea deja
+forma iZi cuvânt cu cuvânt („În `intro` spune ce tipuri ai pus pe masă"; „SEGMENTARE (ca iZi)"), dar
+nimic nu verifica dacă slotul a ieșit — iar P13 spune de ce nu ține: *vocea e cod, nu speranță*.
+Trei sloturi cu CONDIȚII măsurabile pe setul SERVIT (nu pe obligațiile planului, care nu există pe
+calea vie): `framing` la ≥2 clase de produs, `closing` la ≥2 carduri și ≥1 axă de decizie,
+`fit_line` la orice card. Pe o întrebare punctuală nu se cere nimic în plus, deci contractul **nu e
+șablon** — aceeași regulă ca `roles_for` (NX-296), extinsă de la chips la tot răspunsul. Rezerva de
+încadrare urmează tiparul NX-296 (șablon în `DomainPack` per locale, construit din tipurile REAL
+servite, zero runde în plus, niciun al doilea writer). `scrub_intro` taie acum pe PROPOZIȚIE ca
+`scrub_education`: pe turul măsurat superlativul din prima frază ucidea și pe a doua, care era
+curată, iar clientul primea ZERO text. Poarta MEDICALĂ rămâne pe tot paragraful (o relaxare n-are
+voie să atingă o protecție P0). Defect găsit la rulare: separatorul rupea listele numerotate, deci
+«1. Curatare, 2. tonifiere, 4. ceva» devenea «1. Curatare, 2. ceva» — nu trunchiat, RENUMEROTAT.
+Eșecul de formă e acum vizibil (`answer_shape`: cerut vs servit vs motiv, vocabular ÎNCHIS); înainte
+turul arăta în telemetrie ca un succes curat. `CHIP_MOVES_V1_ENABLED` trece pe **ON** (mecanismul
+exista din NX-297 felia 5, stins acolo unde se vede), iar voucherul devine badge derivat din
+`coupon_price` vs `price`, cu procentul rotunjit în JOS. Măsurat pe turul real: treapta
+`filters_only` → `strict`, iar cele 6 produse trec de la șampon + ulei de corp + cremă de corp la
+**plasturi anti-acnee, spumă de curățare cu BHA și creme cu retinal/niacinamidă**, adică sortimentul
+iZi. Raftul ROSTIT rămâne neatins. Kill-switch-uri: `SEARCH_RELAX_BY_PROVENANCE_ENABLED`,
+`ANSWER_SHAPE_ENABLED`, `CHIP_MOVES_V1_ENABLED`, `CARD_COUPON_ENABLED`.
+**Pragul voucherului a fost corectat DUPĂ livrare, pe măsurătoare:** la 5% badge-ul apărea pe
+**76,9%** din catalog cu aceeași valoare (un singur cod, `WELCOME15`, iar 90,6% dintre produse au
+exact -15%) și fura „Top Favorit" de la **994 din 1.363** de produse eligibile. Un voucher de bun
+venit e o promoție de MAGAZIN, nu o proprietate a produsului, deci badge-ul era `noise_badges`
+reintrodus pe partea de AFIȘARE. Pragul e acum **25** (prăpastie măsurată: 15% → 76,9%,
+16% → 7,2%), unde rămân doar cele ~198 de produse cu reduceri reale de 48-50%. Card:
+[`tasks/stage1/NX-299.md`](tasks/stage1/NX-299.md); probă:
+`PYTHONPATH=. python scripts/nx299_shape_probe.py`.
 
 **Fix 2026-09-16 — botul oferea chips pentru produse pe care magazinul nu le vinde.**
 Găsit pe o conversație REALĂ (`conversation_traces`): la „vreau un cablu usb", un magazin de

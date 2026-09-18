@@ -442,6 +442,12 @@ def _emit_response_shape(ctx: TurnContext, stage: str) -> None:
         return
     try:
         ctx.emit("response_shape", **response_quality.reply_shape(ctx, stage))
+        # NX-299: forma CERUTĂ vs forma SERVITĂ. Separat de `response_shape`, care numără booleeni
+        # („are produse?") și de-aia raporta turul `42744330` ca pe un succes curat.
+        if get_settings().answer_shape_enabled:
+            report = response_quality.answer_shape_report(ctx)
+            if report is not None:
+                ctx.emit("answer_shape", **report)
         gaps = response_quality.completeness_gaps(ctx)
         if gaps:
             intent = ctx.route.route.value if ctx.route and ctx.route.route else None

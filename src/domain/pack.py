@@ -113,6 +113,12 @@ class DomainPack:
     # `ro` să pară că merge și ar tăcea pe orice alt tenant. Fără șablon pentru o mutare, mutarea
     # nu se oferă deloc.
     chip_templates: dict[str, dict[str, str]] = field(default_factory=dict)
+    # Șabloanele de FORMĂ (NX-299): `framing` (ce clase de produs sunt pe masă) + `list_glue`
+    # (legătura dinaintea ultimului element al unei enumerări), fiecare per locale. Același motiv
+    # ca la `chip_templates` — copy-ul e limbă, iar limba e configurație (P11). Diferă însă poarta:
+    # aici lipsa e fail-OPEN (fără șablon, încadrarea rămâne a modelului), fiindcă un pachet
+    # incomplet n-are voie să ȘTEARGĂ o frază pe care modelul a scris-o corect.
+    answer_shape_templates: dict[str, dict[str, str]] = field(default_factory=dict)
     # NX-205: câmpurile OBLIGATORII per categorie — contractul de completitudine al catalogului.
     # Frunza BATE rădăcina (override, NU cumul — vezi `CategoryRequirements.required_for`): o
     # categorie de ochi cere `key_benefit`, dar NU moștenește `finish`-ul rădăcinii `machiaj`.

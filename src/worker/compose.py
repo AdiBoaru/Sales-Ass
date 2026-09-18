@@ -20,6 +20,7 @@ import re
 from dataclasses import asdict
 from typing import TYPE_CHECKING, Any
 
+from src.agent import answer_shape
 from src.agent.fallbacks import _card_variants
 from src.agent.voice import naturalize
 from src.config import card_slots, chip_slots, get_settings
@@ -156,7 +157,20 @@ def _allowed_client_numbers(ctx: TurnContext) -> set[str]:
     return out
 
 
-def scrub_intro(s: str | None, allowed_numbers: set[str]) -> str | None:
+#: Granița de propoziție, cu ordinalele de listă EXCEPTATE. Un `(?<=[.!?])\s+` simplu rupe
+#: „1. Curățare, 2. Tonifiere" în bucăți („1.", „Curățare, 2.", „Tonifiere"), iar un scrub care
+#: judecă bucățile separat poate arunca una din mijloc și lipi restul: „1. Curatare, 2. tonifiere,
+#: 4. ceva" devine „1. Curatare, 2. ceva". Rezultatul nu e trunchiat, e RENUMEROTAT — un text care
+#: arată valid și spune altceva, adică exact felul de defect pe care nu-l prinde nimic din aval.
+#: Prins de suită la trecerea scrub-ului pe propoziții (NX-299); lookbehind de lățime fixă (2).
+_SENTENCE_SPLIT = re.compile(r"(?<![0-9].)(?<=[.!?])\s+")
+
+
+def _sentences(text: str) -> list[str]:
+    return _SENTENCE_SPLIT.split(text)
+
+
+def scrub_sentence(s: str | None, allowed_numbers: set[str]) -> str | None:
     """Ca `scrub_prose`, dar PERMITE cifrele pe care CLIENTUL le-a scris (bugetul lui) — intro-ul
     reia nevoia lui în cuvintele lui, deci un buget pe care el l-a dat NU e halucinație (repară
     „Ai ceva sub lei", R4). Cifre NEcunoscute (inventate), procente, claim-uri, superlative → DROP
@@ -171,6 +185,31 @@ def scrub_intro(s: str | None, allowed_numbers: set[str]) -> str | None:
         # NX-117: pct + claim + super (cifrele clientului permise). P0-safety: claim medical → DROP.
         return None
     return naturalize(t)  # VOCE: vezi `scrub_prose`
+
+
+def scrub_intro(s: str | None, allowed_numbers: set[str]) -> str | None:
+    """Încadrarea, scrubuită la nivel de PROPOZIȚIE (NX-299).
+
+    Până acum arunca PARAGRAFUL ÎNTREG la prima propoziție „murdară" — exact tratamentul pe care
+    `scrub_education` îl abandonase la G4, din același motiv. Măsurat pe turul `42744330`, modelul
+    scrisese încadrarea corectă („Pentru coșuri, cele mai potrivite sunt produsele ZEROID pentru
+    ten gras și imperfecțiuni. Gelul curăță sebumul și porii, iar tonerul adaugă exfoliere blândă
+    și hidratare.") și clientul n-a primit NIMIC: superlativul din prima propoziție a ucis și pe a
+    doua, care era curată și informativă. Fraza cea mai vizibilă a răspunsului avea regula cea mai
+    aspră, iar dispariția ei era tăcută.
+
+    **Poarta medicală rămâne pe TOT paragraful, deliberat.** Granularitatea e o relaxare, iar o
+    relaxare n-are voie să atingă o protecție P0: un claim terapeutic împărțit în două propoziții
+    („Tratează acneea. Chiar și formele severe.") ar trece pe bucăți dacă am judeca doar bucăți.
+    Deci cifrele și superlativele se judecă per propoziție, iar medicalul întâi pe întreg.
+    """
+    if not s:
+        return None
+    t = " ".join(s.split())
+    if not t or _unsafe_medical(t):
+        return None
+    kept = [safe for sent in _sentences(t) if (safe := scrub_sentence(sent, allowed_numbers))]
+    return " ".join(kept) or None
 
 
 def _safe_badge(label: str | None) -> str | None:
@@ -303,8 +342,10 @@ def scrub_education(
     if not t:
         return None
     kept: list[str] = []
-    for sent in re.split(r"(?<=[.!?])\s+", t):
-        safe = _drop_unfounded_stock(scrub_intro(sent, allowed_numbers), stock_present)
+    # Același separator ca la `scrub_intro`: `education` avea LATENT aceeași gaură de renumerotare,
+    # doar că proza de coaching o atingea mai rar decât o rutină numerotată.
+    for sent in _sentences(t):
+        safe = _drop_unfounded_stock(scrub_sentence(sent, allowed_numbers), stock_present)
         if safe:
             kept.append(safe)
     return " ".join(kept) or None
@@ -424,7 +465,8 @@ def assemble(ctx: TurnContext, j: dict[str, Any], retrieved: list[dict[str, Any]
     stock_present = _stock_available(retrieved)
     # IZI: badge DERIVAT (Top Favorit / Super Preț) din semnale reale, prin pragurile DomainPack.
     # Badge-ul pre-seedat curat (rar) are prioritate; gated de kill-switch (OFF → vechi).
-    badges_on = get_settings().card_badges_enabled
+    settings = get_settings()
+    badges_on = settings.card_badges_enabled
     pack = getattr(ctx.business, "domain_pack", None)
     badge_rules = pack.badge_rules if pack else None
     currency = getattr(pack, "currency", None)  # Full-eMAG: moneda pe card (din DomainPack)
@@ -493,7 +535,13 @@ def assemble(ctx: TurnContext, j: dict[str, Any], retrieved: list[dict[str, Any]
         # Full-eMAG: badge cu TON semantic (deal→danger, top→info) + `details` extins din ai_summary
         # (catalog, medical-guarded, cap 400). `seeded` (badge pre-curat) n-are kind → fără ton.
         seeded = _safe_badge(p.get("badge"))
-        kind = derive_badge_kind(p, badge_rules) if (badges_on and not seeded) else None
+        kind = (
+            derive_badge_kind(
+                p, badge_rules, coupon_enabled=getattr(settings, "card_coupon_enabled", False)
+            )
+            if (badges_on and not seeded)
+            else None
+        )
         # NX-292: pe un tur de rutină, eticheta pasului BATE badge-ul derivat. „Super Preț" pe al
         # treilea card dintr-o secvență nu ajută pe nimeni să potrivească proza cu produsul, iar
         # „Curățare" e singurul lucru care face cardul lizibil fără să reciteşti textul. Eticheta e
@@ -530,7 +578,7 @@ def assemble(ctx: TurnContext, j: dict[str, Any], retrieved: list[dict[str, Any]
             image=p.get("image"),
             rating=float(p["rating"]) if p.get("rating") is not None else None,
             review_count=int(rc) if rc else None,
-            badge=seeded or badge_label(kind, ctx.language),
+            badge=seeded or badge_label(kind, ctx.language, p),
             badge_tone=BADGE_TONE.get(kind) if kind else None,
             list_price=float(lp) if lp is not None and float(lp) > eff else None,
             currency=currency,
@@ -598,6 +646,25 @@ def assemble(ctx: TurnContext, j: dict[str, Any], retrieved: list[dict[str, Any]
     else:
         pick = _select_pick(j, facts, items, stock_present, deterministic)
         intro = _drop_unfounded_stock(scrub_intro(j.get("intro"), allowed_numbers), stock_present)
+        if intro is None and getattr(get_settings(), "answer_shape_enabled", False):
+            # NX-299 — slotul de ÎNCADRARE are o rezervă a serverului. Nu e un al doilea writer
+            # semantic și nu costă o rundă: nu afirmă nimic despre produse, doar NUMEȘTE clasele
+            # pe care retrievalul chiar le-a servit. Tiparul e al lui `render_move` (NX-296) —
+            # serverul are șablonul, modelul poate doar să scrie o variantă mai bună.
+            #
+            # Se aplică DOAR când intro-ul a ieșit gol. Poarta mai strictă din card („încadrarea
+            # modelului trebuie să NUMEASCĂ tipurile, altfel cade pe șablon") rămâne NEfăcută,
+            # deliberat: n-am măsurat cât de des o frază bună folosește alte cuvinte decât cheia
+            # canonică («creme» pentru `crema de fata`), iar o poartă strictă nemăsurată ar
+            # înlocui proză bună cu șablon. Se decide pe date, nu în trecere (D15).
+            shown = [facts[it.product_id] for it in items if it.product_id in facts]
+            intro = answer_shape.framing_text(
+                getattr(ctx.business, "domain_pack", None),
+                ctx.language,
+                answer_shape.distinct_types(shown),
+            )
+            if intro:
+                ctx.emit("answer_shape_filled", slot=answer_shape.SLOT_FRAMING)
 
     return RichReply(
         intro=intro,

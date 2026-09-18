@@ -1579,10 +1579,19 @@ măsurăm calitatea căutării fără să riscăm răspunsul.
 `TRIAGE_SYNC_SHADOW_ENABLED`, `TRIAGE_SHADOW_*`, `TRIAGE_FACTUAL_GUARD_ENABLED`,
 `CLOSURE_CHIPS_ENABLED`, `AGENT_ONLY_WRITER_ENABLED` și `COST_TRIAGE_USD`. Pipeline-ul are acum
 **10 stagii**, niciunul cu model înaintea agentului (poartă AST în `test_context_orchestration`).
-Ce a rămas sub flag: `clarify_tool_enabled` (OFF — `clarify_options` ca unealtă) și
-`chip_moves_v1_enabled` (OFF — chips ca mutări). `observed_constraints_enabled` a trecut pe **ON**:
-era a doua sursă a stivei de constrângeri, acum e singura, iar stinsă înseamnă „botul uită
-bugetul", nu „ca înainte".
+Ce a rămas sub flag: `clarify_tool_enabled` (OFF — `clarify_options` ca unealtă).
+`chip_moves_v1_enabled` a fost aprins de **NX-299**: mecanismul exista de aici, dar stins exact pe
+calea care se vede, deci chips-urile rămâneau textul liber al modelului (roluri `deepen`/`commit`
+pe produsele deja afișate) în locul îngustărilor pe care serverul le poate onora.
+`observed_constraints_enabled` a trecut pe **ON**: era a doua sursă a stivei de constrângeri, acum
+e singura, iar stinsă înseamnă „botul uită bugetul", nu „ca înainte".
+
+**NX-299 (forma răspunsului + proveniența în scara de relaxare)** — patru flaguri noi, toate ON cu
+kill-switch: `search_relax_by_provenance_enabled` (treptele se relaxează în ordinea proveniență →
+tip, deci un raft GHICIT de model cade înaintea unei nevoi ROSTITE de client),
+`answer_shape_enabled` (contractul de formă + evenimentul `answer_shape`), `chip_moves_v1_enabled`
+(mai sus) și `card_coupon_enabled` (badge de voucher derivat din `coupon_price` vs `price`).
+Stinse toate patru ⇒ comportamentul de dinainte, byte-identic.
 
 **Atenție la citire**: `web_enabled` e OFF în default-urile din cod și ON în `.env.prod`.
 Un flag OFF în `config.py` nu înseamnă OFF în producție — înseamnă „decizia se ia în env".
@@ -1738,18 +1747,20 @@ alias_enabled = true
 answer_plan_critic_enabled = false
 answer_plan_enabled = false
 answer_plan_max_quality = false
+answer_shape_enabled = true
 attr_query_enabled = true
 brain_chips_enabled = true
 brain_rich_reply_enabled = true
 cache_enabled = true
 card_badges_enabled = true
+card_coupon_enabled = true
 catalog_projection_v2_enabled = true
 catalog_reason_codes_enabled = true
 cheaper_intent_enabled = true
 cheapest_alternatives_enabled = true
 checkout_intent_fallback_enabled = true
 chip_moves_enabled = true
-chip_moves_v1_enabled = false
+chip_moves_v1_enabled = true
 clarification_policy_v2_enabled = false
 clarify_menu_enabled = true
 clarify_tool_enabled = false
@@ -1838,6 +1849,7 @@ search_diversify_enabled = true
 search_fill_from_subject_filter_enabled = true
 search_filters_only_fallback_enabled = true
 search_offcategory_guard_enabled = true
+search_relax_by_provenance_enabled = true
 search_semantic_enabled = false
 search_sessions_enabled = true
 search_shadow_enabled = false

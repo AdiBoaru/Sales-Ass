@@ -476,6 +476,12 @@ _SELECT = f"""
         -- afișează „de la X" fals pe o variantă mai mică. `price` rămâne efectivul curent.
         (case when {_SALE_ACTIVE} then p.price end)::float8
                                     as list_price,
+        -- NX-299 felia 4: voucherul. Singurul semnal comercial de tip iZi pe care catalogul REAL
+        -- il sustine: `sale_price < price` = 0/2.758, dar 2.123 produse au `coupon_code` +
+        -- `coupon_price`. Coloanele existau de la import, scrise de `catalog/sole_source.py`,
+        -- si nu le citea NIMENI din `src/`, deci pretul cu voucher nu ajungea nicaieri.
+        p.coupon_code               as coupon_code,
+        p.coupon_price::float8      as coupon_price,
         p.attributes->'concerns'    as concerns,
         p.attributes                as attributes,
         -- NX-240: moneda + momentul VERIFICĂRII. `currency` fiindcă o sumă fără unitate nu e o
@@ -1029,6 +1035,8 @@ _DETAIL_SELECT = f"""
         -- IZI-anchor: preț original (tăiat) DOAR la reducere reală (vezi _SELECT); altfel NULL.
         (case when {_SALE_ACTIVE} then p.price end)::float8
                                     as list_price,
+        p.coupon_code               as coupon_code,   -- NX-299 felia 4 (vezi _SELECT)
+        p.coupon_price::float8      as coupon_price,
         prs.summary                 as review_summary,
         prs.top_pros                as top_pros,
         prs.top_cons                as top_cons,
@@ -1728,8 +1736,8 @@ async def sibling_categories(
     return [r["name"] for r in rows]
 
 
-async def list_category_names(conn: asyncpg.Connection, business_id: str) -> list[str]:
-    """Numele categoriilor SERVABILE ale tenantului — pentru groundarea promptului agentului
+async def list_category_names(conn: asyncpg.Connection, business_id: str) -> list[tuple[str, int]]:
+    """Categoriile SERVABILE ale tenantului, cu MĂRIMEA lor — groundarea promptului agentului
     (NX-78, principiul 9). `order by name` → ordine deterministă (prefix de cache stabil).
     `conn` trebuie să fie deja tenant-scoped (tenant_conn).
 
@@ -1748,12 +1756,21 @@ async def list_category_names(conn: asyncpg.Connection, business_id: str) -> lis
     (`servable_count_sql`) costa 427 ms pe 45 de categorii — un index scan pe `products` per
     categorie (docs/DB-QUERY-PROBE-2026-09-08.md). Numărătoarea pe subarbore se face acum o
     singură dată, într-o trecere (`servable_subtree_counts_sql`), aceeași pe care o folosește
-    vocabularul."""
+    vocabularul.
+
+    NX-299: întoarce și MĂRIMEA, nu doar numele. Poarta `n > 0` a fost scrisă pentru punctul 1 de
+    mai sus (nu anunța ce nu poți servi) și rezolvă exact raftul GOL, dar tratează la fel un raft
+    de 6 și unul de 1.461. Măsurat pe turul `42744330`: modelul a cerut «Dermato cosmetice» (6
+    produse în tot subarborele) pentru o cerere de acnee, în timp ce «Ten» avea 1.461 — alegere
+    rezonabilă după NUME și dezastruoasă după CONȚINUT, fiindcă lista nu-i spunea nimic despre
+    mărime. Cifra e deja calculată de `servable_subtree_counts_sql`; până acum se arunca.
+    Rotunjirea (pentru stabilitatea prefixului de cache) e treaba apelantului, nu a query-ului."""
     rows = await conn.fetch(
-        f"select c.name from ({servable_subtree_counts_sql()}) c where c.n > 0 order by c.name",
+        f"select c.name, c.n from ({servable_subtree_counts_sql()}) c "
+        "where c.n > 0 order by c.name",
         business_id,
     )
-    return [r["name"] for r in rows]
+    return [(r["name"], int(r["n"])) for r in rows]
 
 
 async def list_routing_aliases(
