@@ -299,7 +299,9 @@ class PromptInputs:
     business_name: str
     vertical: str
     locale: str
-    categories: tuple[str, ...] = ()
+    #: NX-299: `(nume, mărime rotunjită)`. Mărimea e informația fără de care alegerea raftului e
+    #: oarbă — vezi `_shelf_size` și `list_category_names`. Tuple de tuple ⇒ rămâne hashabil.
+    categories: tuple[tuple[str, int], ...] = ()
     aliases: tuple[tuple[str, str], ...] = ()  # (phrase_norm, target) aprobate
     currency: str = "RON"  # NX-114: moneda din DomainPack; afișarea prețurilor în prompt
     # NX-159 felia 3: profilul de stil per business (DomainPack.response_style), ca tuple HASHABLE
@@ -318,7 +320,7 @@ class PromptInputs:
         business_name: str,
         vertical: str,
         locale: str,
-        categories: list[str],
+        categories: list[tuple[str, int]] | list[str],
         aliases: list[tuple[str, str]],
         currency: str = "RON",
         response_style: dict[str, str] | None = None,
@@ -330,7 +332,20 @@ class PromptInputs:
             business_name=business_name or "magazinul nostru",
             vertical=vertical or "ecommerce",
             locale=locale or "ro",
-            categories=tuple(sorted(c for c in categories if c)),
+            # Tolerant la ambele forme: `list[str]` (apelanți vechi, teste) capătă mărime 0, care
+            # `_store_header` o citește ca „necunoscută" și o omite — deci promptul lor rămâne
+            # byte-identic. Sortarea e pe NUME, nu pe mărime: alfabetic e stabil la orice drift de
+            # catalog, pe când o ordine după mărime s-ar rearanja la fiecare sincronizare și ar
+            # sparge prefixul de cache tocmai ca să câștige o saliență pe care cifra o dă deja.
+            categories=tuple(
+                sorted(
+                    (c, _shelf_size(n))
+                    for c, n in (
+                        item if isinstance(item, tuple) else (item, 0) for item in categories
+                    )
+                    if c
+                )
+            ),
             aliases=tuple(sorted((p, t) for p, t in aliases if p)),
             currency=currency or "RON",
             response_style=tuple(
@@ -352,6 +367,24 @@ def _currency_label(currency: str) -> str:
     return _CURRENCY_LABELS.get(cur, cur)
 
 
+def _shelf_size(n: int) -> int:
+    """Mărimea unui raft, rotunjită la 2 cifre semnificative.
+
+    Rotunjirea nu e cosmetică, e condiția ca cifra să poată intra în prompt: prefixul static e
+    cache-uit la furnizor (75-90% reducere pe input), iar o valoare exactă l-ar sparge la fiecare
+    sincronizare de catalog în care un singur produs intră sau iese. La 2 cifre, 1.461 și 1.478
+    sunt amândouă „1500", deci prefixul supraviețuiește driftului normal, iar diferența care
+    contează (6 față de 1500) rămâne perfect vizibilă. Sub 10 se păstrează exact, fiindcă acolo
+    cifra chiar e semnalul.
+    """
+    if n <= 0:
+        return 0
+    if n < 100:
+        return n
+    magnitude = 10 ** (len(str(n)) - 2)
+    return int(round(n / magnitude) * magnitude)
+
+
 def _store_header(inp: PromptInputs) -> str:
     """Antetul comun (vertical + categorii + hint de rutare) — generat din DB, zero hardcodat."""
     lines = [
@@ -359,7 +392,18 @@ def _store_header(inp: PromptInputs) -> str:
         f"un magazin online de {inp.vertical} din România."
     ]
     if inp.categories:
-        lines.append("Vinzi din aceste categorii: " + ", ".join(inp.categories) + ".")
+        # NX-299: numele SINGUR nu e o informație suficientă ca să alegi un raft. «Dermato
+        # cosmetice» sună exact ca raftul de acnee și are 6 produse; «Ten» are 1.461. Modelul a
+        # ales primul, iar filtrul dur a transformat alegerea într-un răspuns de două carduri
+        # dintr-un catalog care avea 518 candidați. Cifra e aproximativă prin proiectare
+        # (`_shelf_size`) și e declarată ca atare, ca să nu fie citită drept stoc sau inventar.
+        shown = ", ".join(f"{c} ({n})" if n else c for c, n in inp.categories)
+        lines.append(
+            "Vinzi din aceste categorii, cu numărul aproximativ de produse din fiecare: "
+            + shown
+            + ". Cifra spune cât poate servi raftul: nu alege un raft mic doar fiindcă numele "
+            "lui sună potrivit, dacă unul mare acoperă aceeași cerere."
+        )
     if inp.aliases:
         hints = "; ".join(f"„{p}” = {t}" if t else f"„{p}”" for p, t in inp.aliases)
         lines.append("Indicii de rutare (cum cer clienții anumite lucruri): " + hints + ".")

@@ -30,10 +30,13 @@ async def test_list_category_names_only_servable():
     """
     from src.db.queries.catalog import list_category_names
 
-    conn = FakeConn([{"name": "Creme"}, {"name": "Parfumuri"}])
+    conn = FakeConn([{"name": "Creme", "n": 1461}, {"name": "Parfumuri", "n": 6}])
     out = await list_category_names(conn, "biz-1")
 
-    assert out == ["Creme", "Parfumuri"]  # maparea r["name"]
+    # NX-299: numele ȘI mărimea. Cifra era deja calculată de query și se arunca, iar fără ea
+    # promptul trata la fel un raft de 6 și unul de 1.461 (turul `42744330`).
+    assert out == [("Creme", 1461), ("Parfumuri", 6)]
+    assert "c.n" in conn.sql  # mărimea chiar e proiectată, nu doar calculată în subquery
     assert "business_id = $1" in conn.sql  # izolare (P7)
     assert "count(distinct" in conn.sql and "> 0" in conn.sql  # doar categorii cu produse servabile
     assert "p.status = 'active'" in conn.sql  # definiția lui „servabil", partajată cu vocabularul

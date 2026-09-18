@@ -199,3 +199,42 @@ def test_build_defaults_tolerant():
     assert inp.vertical == "ecommerce" and inp.business_name and inp.locale == "ro"
     # nu crapă, produce un prompt valid generic
     assert "search_products" in build_agent_system(inp)
+
+
+# --- NX-299: mărimea raftului în antet ---------------------------------------
+
+
+def test_shelf_sizes_reach_the_prompt():
+    """Turul `42744330`: modelul a cerut «Dermato cosmetice» (6 produse) pentru o cerere de acnee,
+    în timp ce «Ten» avea 1.461. Lista de nume nu-i spunea nimic despre mărime, iar filtrul dur a
+    transformat alegerea într-un răspuns de două carduri dintr-un catalog cu 518 candidați."""
+    s = build_agent_system(_inp(categories=[("Ten", 1461), ("Dermato cosmetice", 6)]))
+    assert "Ten (1500)" in s
+    assert "Dermato cosmetice (6)" in s
+    assert "nu alege un raft mic" in s  # regula, nu doar datele
+
+
+def test_shelf_size_rounding_survives_catalog_drift():
+    """Prefixul static e cache-uit la furnizor, deci cifra trebuie să reziste la un produs
+    intrat sau ieșit. Exact ar sparge cache-ul la fiecare sincronizare."""
+    a = build_agent_system(_inp(categories=[("Ten", 1461)]))
+    b = build_agent_system(_inp(categories=[("Ten", 1478)]))
+    assert a == b  # byte-identic, deci cache-hit
+    # …dar diferența care contează rămâne vizibilă
+    c = build_agent_system(_inp(categories=[("Ten", 6)]))
+    assert c != a
+
+
+def test_small_shelves_keep_their_exact_size():
+    """Sub 100, cifra E semnalul: «6» și «10» cer decizii diferite, iar rotunjirea
+    le-ar confunda."""
+    s = build_agent_system(_inp(categories=[("Barbati", 3), ("Copii", 5), ("Electrica", 47)]))
+    assert "Barbati (3)" in s and "Copii (5)" in s and "Electrica (47)" in s
+
+
+def test_plain_name_list_stays_byte_identical():
+    """Apelanții vechi (și testele de mai sus) pasează `list[str]`. Fără toleranța asta, felia ar
+    fi schimbat tăcut promptul oricărei căi care n-a fost actualizată."""
+    s = build_agent_system(_inp(categories=["Creme", "Parfumuri"]))
+    assert "Creme, Parfumuri" in s
+    assert "(0)" not in s  # mărimea necunoscută se OMITE, nu se raportează ca zero

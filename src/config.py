@@ -983,6 +983,18 @@ class Settings(BaseSettings):
     search_fill_from_subject_filter_enabled: bool = Field(
         default=True, validation_alias="SEARCH_FILL_FROM_SUBJECT_FILTER_ENABLED"
     )
+    # NX-299: scara de relaxare ordonează treptele după PROVENIENȚĂ întâi, tip după. Fără ea,
+    # ordinea e fixată de tipul câmpului (fațete înaintea categoriei) și nu știe nimic despre cine
+    # a afirmat valoarea — deci relaxează ce a ROSTIT clientul înaintea a ce a GHICIT modelul.
+    # Măsurat pe turul `42744330`: la «vreau ceva sa scap de cosuri», categoria ghicită
+    # (`dermato-cosmetice`, 6 produse) a supraviețuit până la treapta terminală, iar fațeta rostită
+    # (`concerns=acne`, 518 produse) a căzut prima. Sursa de adevăr a provenienței e
+    # `corroborated_by`
+    # (NX-251), aceeași pe care acest fișier o folosește deja pentru constrângerile numerice.
+    # OFF → ordinea de dinainte, byte-identic.
+    search_relax_by_provenance_enabled: bool = Field(
+        default=True, validation_alias="SEARCH_RELAX_BY_PROVENANCE_ENABLED"
+    )
     # NX-167 (B): la o cerere CLARĂ de categorie (triajul a dat `category`) în care search a fost
     # nevoit s-o relaxeze (`category_dropped`), NU afișa carduri din altă ramură — întoarce gol +
     # semnal de clarificare, în loc să prezinte off-category ca match. OFF → relaxarea de azi.

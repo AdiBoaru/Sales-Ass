@@ -520,6 +520,28 @@ def _compare_view(products: list[dict[str, Any]], pack: Any = None, locale: str 
 # --- tool-uri ----------------------------------------------------------------
 
 
+def uttered_by_client(ctx: TurnContext, *values: object) -> bool:
+    """Vreuna dintre valori a fost ROSTITĂ de client — în turul ăsta sau într-unul recent?
+
+    Extinderea lui `corroborated_by` (NX-251) de la mesajul curent la istoric, cerută de o
+    ASIMETRIE de consecințe. La NX-251, un `False` producea o nevoie mai SLABĂ, deci „orice dubiu
+    întoarce False" era partea sigură. Aici consecința lui `False` e opusă: valoarea devine
+    relaxabilă, adică poate fi ARUNCATĂ din `WHERE`. Cu dubiul rezolvat tot spre `False`, secvența
+    «vreau sa vad produse de par» → «altceva ?» ar relaxa raftul pe al doilea tur, fiindcă al
+    doilea mesaj nu-l mai numește — și clientul ar primi tot catalogul.
+
+    Deci partea sigură se inversează: verificăm ce a scris clientul în ORICE mesaj din fereastra de
+    istoric (`ctx.history` e deja plafonat la 8 de context builder, P4), și numai mesajele LUI
+    (`direction == "inbound"`) — o parafrază a botului nu e o afirmație a clientului. Pură, fără
+    I/O, agnostică de limbă: nicio listă de cuvinte, doar coroborarea pe prefix din NX-251.
+    """
+    texts: list[str] = [str(getattr(ctx.message, "body", "") or "")]
+    for m in getattr(ctx, "history", None) or []:
+        if getattr(m, "direction", None) == "inbound" and getattr(m, "body", None):
+            texts.append(str(m.body))
+    return any(corroborated_by(text, value) for text in texts for value in values if value)
+
+
 def _relax_ladder(
     *,
     price_max: float | None,
@@ -528,6 +550,8 @@ def _relax_ladder(
     in_stock_only: bool,
     features: list[str] | None = None,
     constraints: Sequence[BoundConstraint] = (),
+    category_uttered: bool = True,
+    facets_uttered: bool = True,
 ) -> list[dict[str, Any]]:
     """Trepte de filtre dure, relaxate CUMULATIV ca să iasă ceva relevant înainte de listă goală
     (P6). Brand-ul NU se relaxează niciodată.
@@ -554,14 +578,41 @@ def _relax_ladder(
         "features": features,  # Tier 2b p2: relaxat ULTIMUL (hard requirement „cu niacinamidă")
         "constraints": tuple(constraints),
     }
+    settings = get_settings()
+    by_provenance = getattr(settings, "search_relax_by_provenance_enabled", False)
+    hard_category = getattr(settings, "search_category_hard_enabled", True)
+    # „Categoria e dură" a fost scrisă pentru «clientul a cerut raftul X, nu-i servi raftul Y» —
+    # corect, dar regula nu deosebea un raft CERUT de unul GHICIT. Cu proveniența la îndemână,
+    # duritatea se leagă de afirmație, nu de câmp: raftul rostit rămâne inviolabil, cel ghicit
+    # capătă o treaptă. Cu flagul stins, `category_uttered` rămâne `True` pe toți apelanții, deci
+    # condiția se reduce exact la cea de dinainte.
+    #
+    # …dar NUMAI dacă cererea mai are un SUBIECT după ea. `corroborated_by` e o potrivire
+    # literală: la «vreau makeup» cu `category="machiaj"` întoarce `False`, deși modelul a
+    # tradus corect, nu a ghicit. Sinonimul, cuvântul străin și forma flexionată produc toate
+    # același fals „ghicit" (P: model+context, nu liste de cuvinte). Consecința e acceptabilă cât
+    # timp rămâne CE a cerut clientul — fațeta îl poartă mai departe — și inacceptabilă când
+    # categoria e singurul subiect: acolo relaxarea ar lăsa interogarea fără niciun subiect, iar
+    # pagina ar deveni „cele mai bine notate produse", exact eșecul măsurat și respins la NX-298.
+    category_relaxable = bool(category) and (
+        not hard_category or (by_provenance and not category_uttered and bool(facet_filters))
+    )
+
+    # Treptele SOFT, în ordinea în care se renunță la ele. Ordinea e (proveniență, tip): mai întâi
+    # ce a ghicit modelul, apoi ce a rostit clientul. Fără felia asta, ordinea era fixată de tip —
+    # fațete înaintea categoriei — deci un raft ghicit supraviețuia unei nevoi rostite, iar treapta
+    # terminală `filters_only` servea raftul greșit în loc de fațeta corectă. `sorted` e STABIL,
+    # deci la proveniență egală rămâne ordinea istorică (fațete, apoi categorie) și nimic nu se
+    # mișcă pe turele în care clientul a numit ambele.
+    soft: list[tuple[bool, str]] = []
+    if facet_filters:
+        soft.append((facets_uttered if by_provenance else True, "facet_filters"))
+    if category_relaxable:
+        soft.append((category_uttered if by_provenance else True, "category"))
+    soft.sort(key=lambda item: item[0])
+
     steps: list[dict[str, Any]] = [base]
-    if get_settings().search_sort_mode_enabled:
-        # prețul + stocul rămân fixate; relaxăm softul
-        if facet_filters:
-            steps.append({**steps[-1], "facet_filters": None})
-        if category and not getattr(get_settings(), "search_category_hard_enabled", True):
-            steps.append({**steps[-1], "category": None})
-    else:
+    if not settings.search_sort_mode_enabled:
         priced = _without_price(constraints) != tuple(constraints)
         if price_max is not None or priced:
             steps.append(
@@ -571,10 +622,9 @@ def _relax_ladder(
                     "constraints": _without_price(steps[-1]["constraints"]),
                 }
             )
-        if facet_filters:
-            steps.append({**steps[-1], "facet_filters": None})
-        if category and not getattr(get_settings(), "search_category_hard_enabled", True):
-            steps.append({**steps[-1], "category": None})
+    # cu `search_sort_mode_enabled`: prețul + stocul rămân fixate; relaxăm doar softul
+    for _, field in soft:
+        steps.append({**steps[-1], field: None})
     if features:  # feature relaxat DUPĂ category (păstrat cât mai mult; P6 la epuizare)
         steps.append({**steps[-1], "features": None})
     return steps
@@ -1095,8 +1145,8 @@ async def search_products_tool(
         get_settings().search_sessions_enabled
     )  # kill-switch (OFF → fiecare căutare fresh)
     sess_filters = (ctx.state.active_search or {}).get("filters") or {}
+    inherited: list[str] = []
     if sessions_on and sess_filters:
-        inherited: list[str] = []
         if a.category is None and sess_filters.get("category"):
             a.category = sess_filters["category"]
             inherited.append("category")
@@ -1182,6 +1232,21 @@ async def search_products_tool(
             locale=ctx.language,
             category_key=a.category,
         )
+    # NX-299 — PROVENIENȚA constrângerilor soft, pentru ordinea de relaxare. Se corroborează
+    # ARGUMENTUL pe care l-a trimis modelul (`a.category`, `a.concerns`), nu cheia rezolvată:
+    # modelul TRANSCRIE ce a scris clientul, codul confirmă (NX-251). Pe turul măsurat, clientul
+    # a scris «cosuri», modelul a trimis `concerns=["coșuri"]` (coroborat) și cheia s-a rezolvat
+    # `acne` — cuvânt pe care clientul nu l-a rostit niciodată. Confruntarea cu cheia ar fi
+    # declarat fațeta drept ghicită, adică exact inversul adevărului.
+    #
+    # Cheile rezolvate se adaugă TOTUȘI pe categorie, fiindcă acolo cresc doar șansa unui `True`,
+    # iar `True` e partea conservatoare (nu relaxăm). Un filtru MOȘTENIT din sesiune (NX-119) e
+    # tratat ca rostit: a fost stabilit pe un tur anterior al aceluiași client, iar a-l relaxa aici
+    # ar arunca raftul pe care tocmai naviga.
+    by_provenance = getattr(get_settings(), "search_relax_by_provenance_enabled", False)
+    hard_category = getattr(get_settings(), "search_category_hard_enabled", True)
+    category_uttered = "category" in inherited or uttered_by_client(ctx, a.category, *category_keys)
+    facets_uttered = "concerns" in inherited or uttered_by_client(ctx, *(a.concerns or []))
     ladder = _relax_ladder(
         price_max=price_max_sql,
         facet_filters=facet_filters,
@@ -1189,7 +1254,23 @@ async def search_products_tool(
         in_stock_only=a.in_stock_only,
         features=norm_features,
         constraints=tc.bounds,
+        category_uttered=category_uttered,
+        facets_uttered=facets_uttered,
     )
+    if category_keys and not category_uttered:
+        # Raftul e o IPOTEZĂ a modelului, nu o cerere. Se emite indiferent dacă treapta apucă să
+        # ruleze: „am ghicit un raft" și „am ghicit un raft prost" sunt întrebări diferite, iar
+        # prima e numitorul celei de-a doua.
+        ctx.emit(
+            "category_inferred",
+            category_key=category_keys[0],
+            category_evidence=(resolutions.category.evidence if resolutions.category else 0),
+            facet_evidence=max(
+                (r.evidence for r in resolutions.emitted if r.dimension != CATEGORY_DIMENSION),
+                default=0,
+            ),
+            facets_uttered=facets_uttered,
+        )
 
     # Vector de query: O SINGURĂ DATĂ (P2), doar cu LLM + embeddings. Dacă `embed` pică → None →
     # degradare grațioasă la lexical-only (P6), fără tăcere.
@@ -1629,15 +1710,55 @@ async def search_products_tool(
     # indisponibil sau termen necunoscut → filtrul n-a existat niciodată). Confundându-le, o
     # degradare a catalogului s-ar transforma în suprimarea TUTUROR rezultatelor — adică fix
     # tăcerea pe care încercăm s-o eliminăm. Pentru al doilea caz punem o notă, mai jos.
-    category_dropped = bool(category_keys) and (
+    category_relaxed = bool(category_keys) and (
         winning_step is not None and winning_step.get("category") is None
     )
-    # …dar exact aici garda acoperea mulțimea VIDĂ, iar asta nu se vedea din cod: singurele
-    # trepte care pun `category: None` sunt gated pe `not search_category_hard_enabled`, iar
-    # flagul e `True` implicit. Deci cu categorie REZOLVATĂ nu se relaxează niciodată (al doilea
+    # NX-299 — `category_dropped` înseamnă „rezultatele vin de pe alt raft decât cel CERUT", iar
+    # asta presupune că s-a cerut unul. Când raftul a fost o IPOTEZĂ a modelului, relaxarea lui e
+    # chiar reparația: clientul n-a numit niciun raft, deci setul potrivit pe NEVOIA lui nu e
+    # off-category, e on-request. Fără distincția asta, felia 1 s-ar fi anulat singură în modul cel
+    # mai prost cu putință: treapta nou-deblocată ar fi făcut garda de mai jos să suprime TOT setul
+    # și să întoarcă zero carduri acolo unde înainte erau două greșite.
+    #
+    # Scutirea e însă îngustă DELIBERAT, la exact treapta pe care felia asta a creat-o: cu
+    # `search_category_hard_enabled` stins, categoria avea deja o treaptă de relaxare, indiferent de
+    # proveniență, iar acolo garda trebuie să se comporte byte-identic. Scris pe
+    # `not category_uttered` singur, fixul ar fi DEZARMAT garda pe calea veche — protecția
+    # off-category ar fi căzut tăcut pentru orice client care numește raftul cu alt cuvânt decât
+    # slug-ul lui („makeup" pentru «machiaj»), iar suita a prins-o.
+    hypothesis_relaxed = (
+        category_relaxed and by_provenance and hard_category and not category_uttered
+    )
+    category_dropped = category_relaxed and not hypothesis_relaxed
+    if hypothesis_relaxed:
+        ctx.emit(
+            "category_hypothesis_relaxed",
+            category_key=category_keys[0],
+            relax_depth=relax_depth,
+            pool_size=len(products),
+        )
+        # Aceeași regulă ca la `lexical_step` (NX-293): o degradare care ajunge la client trebuie
+        # să ajungă și la model. Fără nota asta, produsele de mai jos arată identic cu un set
+        # filtrat pe raftul cerut, iar modelul le-ar putea prezenta ca atare.
+        #
+        # Fără liniuță de pauză, deliberat (P13): nota intră în contextul modelului, iar un
+        # exemplu cu semnul interzis îl învață exact ce îi cerem să nu scrie.
+        view = (
+            f"Filtrul pe categoria «{a.category}» nu a întors nimic, iar clientul nu a "
+            f"cerut-o, a fost presupunerea ta. Produsele de mai jos sunt potrivite pe NEVOIA "
+            f"lui, nu pe acel raft. Nu le prezenta ca fiind din «{a.category}».\n"
+        ) + view
+    # …dar până la NX-299 garda acoperea aici mulțimea VIDĂ, iar asta nu se vedea din cod:
+    # singurele trepte care puneau `category: None` erau gated pe
+    # `not search_category_hard_enabled`,
+    # iar flagul e `True` implicit. Deci cu categorie REZOLVATĂ nu se relaxa niciodată (al doilea
     # conjunct fals), iar cu categorie NEREZOLVATĂ `category_keys` e gol (primul conjunct fals).
     # Măsurat pe tenantul SOLE: `offcategory_suppressed` = 0 declanșări, vreodată — inclusiv pe
     # turul care a servit farduri de obraz la o cerere de produse de păr.
+    #
+    # NX-299 a deblocat treapta, dar DOAR pentru raftul ghicit de model, iar `category_dropped` a
+    # rămas legat de raftul CERUT (vezi mai sus). Garda rămâne deci pe același caz ca înainte —
+    # clientul a numit un raft, noi servim de pe altul — și devine în sfârșit atingibilă.
     #
     # Al doilea caz e cel care doare, dar NU pe toată întinderea lui. Când filtrul de categorie
     # n-a rulat, întrebarea corectă e „ce a format atunci setul?":
