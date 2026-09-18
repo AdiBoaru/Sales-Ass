@@ -38,6 +38,7 @@ from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
 from src.agent.fallbacks import _card_variants
+from src.catalog.render_text import display_name, size_label
 from src.worker import compose
 
 if TYPE_CHECKING:
@@ -125,11 +126,16 @@ def card_refs(products: list[dict[str, Any]], n: int = 6) -> list[dict[str, Any]
             continue
         card: dict[str, Any] = {
             "product_id": str(pid),
-            "name": p["name"],
+            "name": display_name(p["name"]),
             "price": float(p["price"]),
             "url": p.get("url"),
             "image": p.get("image"),
         }
+        # NX-301: cheia lipsește când numele nu poartă gramajul (52,5% din catalogul real) —
+        # aceeași regulă ca `variants`/`badge`: nu inventăm `null`-uri pe sârmă.
+        size = size_label(p["name"])
+        if size:
+            card["size"] = size
         variants = _card_variants(p)
         if variants:
             card["variants"] = variants

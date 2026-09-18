@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from src.catalog.render_text import display_name, size_label
 from src.models import MAX_CHIP_LEN
 from src.web.localization import amount_text
 
@@ -303,7 +304,7 @@ def grounded_fallback_reply(
 def _deterministic_reply(products: list[dict[str, Any]]) -> str:
     lines = ["Îți recomand:"]
     for p in products[:DETERMINISTIC_REPLY_MAX]:
-        lines.append(f"• {p['name']}, {amount_text(p['price'], 'ro')} lei")
+        lines.append(f"• {display_name(p['name'])}, {amount_text(p['price'], 'ro')} lei")
     lines.append("Vrei detalii sau linkul la vreunul?")
     return "\n".join(lines)
 
@@ -353,11 +354,16 @@ def _card_products(products: list[dict[str, Any]], n: int = 4) -> list[dict[str,
     for p in products[:n]:
         card = {
             "product_id": p["id"],
-            "name": p["name"],
+            "name": display_name(p["name"]),
             "price": float(p["price"]),
             "url": p.get("url"),
             "image": p.get("image"),
         }
+        # NX-301: cheia lipsește când numele nu poartă gramajul (52,5% din catalogul real) —
+        # aceeași regulă ca `variants`/`badge`: nu inventăm `null`-uri pe sârmă.
+        size = size_label(p["name"])
+        if size:
+            card["size"] = size
         variants = _card_variants(p)
         if variants:
             card["variants"] = variants

@@ -33,6 +33,30 @@ def display_name(name: str | None) -> str:
     return head if len(head) >= _MIN_DISPLAY_LEN else full
 
 
+#: NX-301 — cantitatea de la coada numelui: CIFRE + unitate. Nu e o listă de cuvinte românești
+#: (P11): unitățile sunt notație, nu limbă, iar tiparul cere obligatoriu o cifră în față. Formele
+#: compuse reale din catalog („22 ml x 5 buc", „30 buc (310 gr)") intră prin coada permisivă.
+_QUANTITY = re.compile(
+    r"^\d+(?:[.,]\d+)?\s*(?:ml|l|g|gr|kg|mg|buc|bucati|bucăți|pcs|set)\b.*$",
+    re.IGNORECASE,
+)
+
+
+def size_label(name: str | None) -> str | None:
+    """Gramajul, dacă numele îl poartă la coadă („… - 125 ml" → `"125 ml"`), altfel `None`.
+
+    Perechea obligatorie a lui `display_name`: capul scurt NU conține cantitatea pe NICIUNUL din
+    cele 2.758 de produse ale primului catalog real, deci scurtarea titlului ar pierde-o integral.
+    Recuperabilă determinist pe **47,5%** — de aceea răspunsul e `None`, nu o ghicire: cheia
+    lipsește din card când n-o știm, exact ca restul câmpurilor opționale (nu inventăm `null`-uri).
+    """
+    full = (name or "").strip()
+    if " - " not in full:
+        return None
+    tail = full.rsplit(" - ", 1)[-1].strip()
+    return tail if _QUANTITY.match(tail) else None
+
+
 def cut_at_sentence(text: str | None, max_chars: int) -> str:
     """Normalizează spațiile și taie la cel mult `max_chars`, la ultima graniță de propoziție sau
     de element de listă din interiorul plafonului. Dacă nicio graniță nu cade în a doua jumătate a

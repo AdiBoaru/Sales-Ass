@@ -80,6 +80,7 @@ def _card(
     currency: Any = None,
     details: Any = None,
     variants: Any = None,
+    size: Any = None,
 ) -> dict[str, Any]:
     """Un card de produs pt widget. Câmpuri compacte (P8); cheile lipsesc dacă datele nu există
     (NU inventăm `null`-uri). Frontendul randează ce primește. `price` = prețul CURENT; `list_price`
@@ -88,7 +89,12 @@ def _card(
 
     Full-eMAG (contract FE extins, aditiv): `badges:[{label,tone}]` (păstrăm și `badge` string pt
     FE-ul de bază); `currency`; `details` (descriere extinsă „Spune-mi mai multe"). Absent → cheia
-    lipsește (degradare grațioasă). Vezi docs/FRONTEND-CONTRACT-IZI.md + fixturile FE."""
+    lipsește (degradare grațioasă). Vezi docs/FRONTEND-CONTRACT-IZI.md + fixturile FE.
+
+    NX-301: `name` poartă acum numele SCURT (`display_name`) — pe primul catalog real
+    `products.name` avea mediana 195 de caractere, fiindcă e nume + frază de reclamă. `size`
+    („125 ml") e ce se pierdea prin scurtare, recuperat determinist din coada numelui; lipsește
+    când n-am putut."""
     card: dict[str, Any] = {"product_id": product_id, "name": name, "price": price}
     if image:
         card["image_url"] = image
@@ -111,6 +117,8 @@ def _card(
         card["details"] = details
     if variants:
         card["variants"] = variants
+    if size:
+        card["size"] = size
     return card
 
 
@@ -200,6 +208,7 @@ def render_web(reply: Reply | None, language: str) -> dict[str, Any]:
                 currency=getattr(it, "currency", None),
                 details=getattr(it, "details", None),
                 variants=getattr(it, "variants", None),
+                size=getattr(it, "size", None),
             )
             for it in reply.rich.items
         ]
@@ -214,6 +223,7 @@ def render_web(reply: Reply | None, language: str) -> dict[str, Any]:
                 p.get("url"),
                 product_id=p.get("product_id"),
                 variants=p.get("variants"),
+                size=p.get("size"),
             )
             for p in reply.products
         ]

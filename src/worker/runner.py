@@ -77,7 +77,7 @@ class PipelineDeps:
 Stage = Callable[[TurnContext, PipelineDeps], Awaitable[None]]
 
 
-async def run_pipeline(ctx: TurnContext, deps: PipelineDeps, stages: list[Stage]) -> None:
+async def run_pipeline(ctx: TurnContext, deps: PipelineDeps, stages: list[Stage]) -> "TurnRuntime":
     """Rulează stagiile în ordine. Se oprește la primul care setează `reply`.
 
     Măsoară latența fiecărui stagiu și o pune în `ctx.events` (persistarea în
@@ -85,7 +85,11 @@ async def run_pipeline(ctx: TurnContext, deps: PipelineDeps, stages: list[Stage]
     turul). Tot aici se acumulează usage-ul LLM al turului (tokeni + cached + cost),
     defalcat pe STAGIU și pe MODEL, și se emite UN event `llm_usage` la final —
     stagiile nu știu că sunt măsurate (principiul 10); adaptorul raportează, runner-ul
-    agregă. `ctx.usage` (TurnUsage) e pus la dispoziția processor-ului (cost/mesaj)."""
+    agregă. `ctx.usage` (TurnUsage) e pus la dispoziția processor-ului (cost/mesaj).
+
+    NX-300: întoarce `TurnRuntime`, ca apelantul care a deschis acumulatorul de faze (processor,
+    faza 0) să poată emite `turn_latency` DUPĂ commit. Apelanții care rulează pipeline-ul de unul
+    singur pot ignora valoarea — atunci runner-ul a deschis acumulatorul și emite el, ca înainte."""
     acc, token = usage.push()
     runtime = _open_runtime(ctx)  # NX-241: deadline + buget + spans (no-op cu flagurile stinse)
     turn_started = perf_counter()
@@ -142,7 +146,11 @@ async def run_pipeline(ctx: TurnContext, deps: PipelineDeps, stages: list[Stage]
     finally:
         usage.pop(token)
         latency_ms = round((perf_counter() - turn_started) * 1000, 1)
-        _emit_turn_latency(ctx, runtime, latency_ms)
+        runtime.pipeline_ms = latency_ms
+        if runtime.owns_latency:
+            # Pipeline rulat de unul singur (golden harness, sim, teste de stagiu): nimeni nu vine
+            # după noi să emită, deci emitem aici, ca înainte.
+            _emit_turn_latency(ctx, runtime, latency_ms)
         _close_runtime(runtime)
         savings = (
             sum(savings_for(model, row["cached_tokens"]) for model, row in acc.by_model.items())
@@ -172,6 +180,7 @@ async def run_pipeline(ctx: TurnContext, deps: PipelineDeps, stages: list[Stage]
         # P0-budget: alertă per-tur (latență end-to-end SAU cost LLM peste buget) — pt ORICE tur
         # (inclusiv cache/free-layer), nu doar cele cu LLM. Observabilitate, nu schimbă turul (P6).
         _emit_turn_budget(ctx, latency_ms, acc.cost_usd, stage_latencies)
+    return runtime
 
 
 # ── NX-241: deadline + buget + faze ────────────────────────────────────────────────────────
@@ -200,6 +209,13 @@ class TurnRuntime:
     latency: turn_latency.TurnLatencyAccumulator | None = None
     _tokens: list[tuple[str, object]] = field(default_factory=list)
     owns_deadline: bool = False
+    #: NX-300: a deschis RUNNER-ul acumulatorul de faze? Dacă nu (processor-ul l-a deschis, ca să
+    #: prindă și `queue`/`load`/`commit`), evenimentul `turn_latency` îl emite ACELA, după commit —
+    #: altfel l-am emite la mijlocul turului și fazele de după n-ar avea unde să apară.
+    owns_latency: bool = False
+    #: Wall-clock-ul pipeline-ului. `_close_runtime` scoate tokenii din contextvars, dar obiectele
+    #: (`ledger`, `deadline`) rămân legate aici, deci evenimentul se poate emite și mai târziu.
+    pipeline_ms: float = 0.0
     #: A rulat poarta de AUTORITATE (`gates_stage`)? Cât timp nu a rulat, nu știm dacă botul are
     #: voie să vorbească (bot_active / contact blocat) — deci fallback-ul de deadline TACE.
     gates_done: bool = False
@@ -217,8 +233,15 @@ def _open_runtime(ctx: TurnContext) -> TurnRuntime:
     s = get_settings()
     rt = TurnRuntime()
     if getattr(s, "turn_latency_spans_enabled", True):
-        rt.latency, tok = turn_latency.push()
-        rt._tokens.append(("latency", tok))
+        # NX-300: acumulatorul poate fi DEJA deschis de processor (ca să prindă `queue`/`load`/
+        # `commit`, care cad în afara pipeline-ului). Nu-l suprascriem — ar fi un al doilea
+        # proprietar al aceluiași câmp (P3), exact contractul deadline-ului împins de executorul
+        # web. Cine l-a împins, ăla emite evenimentul: `owns_latency` decide.
+        rt.latency = turn_latency.current()
+        if rt.latency is None:
+            rt.latency, tok = turn_latency.push()
+            rt._tokens.append(("latency", tok))
+            rt.owns_latency = True
     if not getattr(s, "turn_deadline_enabled", False):
         return rt
     rt.deadline = deadline.current()
@@ -339,6 +362,12 @@ def _deadline_stop(ctx: TurnContext, rt: TurnRuntime, stage_name: str) -> bool:
     return True
 
 
+def emit_turn_latency(ctx: TurnContext, rt: "TurnRuntime", latency_ms: float) -> None:
+    """NX-300 — punctul PUBLIC de emitere, pentru apelantul care deține acumulatorul de faze
+    (processor, după commit). `run_pipeline` îl cheamă doar când l-a deschis el însuși."""
+    _emit_turn_latency(ctx, rt, latency_ms)
+
+
 def _emit_turn_latency(ctx: TurnContext, rt: TurnRuntime, latency_ms: float) -> None:
     """UN event per tur (ca `llm_usage` / `db_ops`): defalcarea pe faze + ce a consumat din buget.
     Pur observabilitate — o excepție aici nu are voie să atingă răspunsul (P6)."""
@@ -350,6 +379,11 @@ def _emit_turn_latency(ctx: TurnContext, rt: TurnRuntime, latency_ms: float) -> 
             "e2e_bucket": turn_latency.ms_bucket(latency_ms),
             **rt.latency.as_event_props(),
         }
+        # NX-300: cât din tur e ATRIBUIT unei faze. Raportul exista implicit (ai fi putut împărți
+        # două câmpuri), dar nimeni nu se uita la el — iar p50-ul lui era 46,7%, adică jumătate de
+        # tur nedeclarat. Publicat ca CIFRĂ, o scădere e o regresie de instrument, vizibilă.
+        if latency_ms > 0:
+            props["phase_coverage_pct"] = round(100.0 * rt.latency.total_ms / latency_ms, 1)
         # Query-urile se NUMĂRĂ din contabilitatea NX-231 (checkout-uri per operație), nu dintr-un
         # contor paralel: două surse de adevăr pentru „câte query-uri a făcut turul" ar diverge.
         db_acc = op_metrics.current()

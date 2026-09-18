@@ -108,7 +108,11 @@ frontendul NU îl generează și NU îl interpretează, doar îl trece mai depar
 ```jsonc
 {
   "product_id": "uuid",      // obligatoriu
-  "name": "string",          // obligatoriu
+  "name": "string",          // obligatoriu — ⚠ NX-301: numele SCURT al produsului (`display_name`),
+                             //   nu numele din catalog. Pe catalogul SOLE `products.name` are
+                             //   mediana 195 de caractere (nume + frază de marketing + gramaj);
+                             //   acum trimitem capul dinaintea primului „ - " (mediana 38).
+                             //   Titlul cardului se randează pe UN rând, fără trunchiere în CSS.
   "price": 58.99,            // obligatoriu — prețul CURENT (ce plătește clientul)
 
   "image_url": "https://…",  // opțional
@@ -131,6 +135,12 @@ frontendul NU îl generează și NU îl interpretează, doar îl trece mai depar
   "currency": "RON",         // opțional — moneda cardului (din DomainPack); FE mapează RON→„Lei".
   "details": "string",       // opțional — descriere EXTINSĂ („Spune-mi mai multe"), din ai_summary
                              //   (catalog, medical-guarded). Randează colapsat/expandabil, NU în card.
+
+  // ——— Gramaj (NX-301, aditiv) ———
+  "size": "125 ml",          // opțional — cantitatea, scoasă din coada numelui ÎNAINTE de scurtare.
+                             //   Randează-l discret lângă/sub titlu (nu în titlu: titlul e `name`).
+                             //   ABSENT când numele n-o purta într-o formă recuperabilă — măsurat,
+                             //   52,5% din catalogul SOLE. Nu afișa un placeholder pentru lipsă.
 
   // ——— Variante / nuanțe (NX-166, aditiv) ———
   "variants": [              // opțional — selector de variantă/nuanță/mărime, max ~16/card

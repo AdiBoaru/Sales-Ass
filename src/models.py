@@ -358,6 +358,10 @@ class RichItem:
     details: str | None = None
     # NX-166: selector de variante/nuanțe în cardul FE. Compact, aditiv; state-ul rămâne ref-uri.
     variants: list[dict[str, Any]] = field(default_factory=list)
+    # NX-301: gramajul („125 ml"), scos din coada numelui ÎNAINTE ca titlul să fie scurtat. `name`
+    # poartă acum capul scurt, iar cantitatea ar dispărea altfel de pe card. `None` = numele n-o
+    # purta într-o formă recuperabilă (52,5% din catalogul real) — cheia lipsește, nu se inventează.
+    size: str | None = None
 
 
 @dataclass

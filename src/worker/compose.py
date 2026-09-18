@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING, Any
 from src.agent import answer_shape
 from src.agent.fallbacks import _card_variants
 from src.agent.voice import naturalize
+from src.catalog.render_text import display_name, size_label
 from src.config import card_slots, chip_slots, get_settings
 from src.domain.normalize import normalize
 from src.models import (
@@ -551,7 +552,8 @@ def assemble(ctx: TurnContext, j: dict[str, Any], retrieved: list[dict[str, Any]
         if step_ref is not None:
             return RichItem(
                 product_id=pid,
-                name=p["name"],
+                name=display_name(p["name"]),
+                size=size_label(p["name"]),
                 price=eff,
                 reason=_drop_unfounded_stock(
                     _join_reason(scrub_prose(it.get("fit_clause")), anchor), stock_present
@@ -569,7 +571,8 @@ def assemble(ctx: TurnContext, j: dict[str, Any], retrieved: list[dict[str, Any]
             )
         return RichItem(
             product_id=pid,
-            name=p["name"],
+            name=display_name(p["name"]),
+            size=size_label(p["name"]),
             price=eff,
             reason=_drop_unfounded_stock(
                 _join_reason(scrub_prose(it.get("fit_clause")), anchor), stock_present
@@ -957,14 +960,14 @@ def _derived_notes(chosen: list[dict[str, Any]], language: str | None) -> list[s
             notes.append(L["close_price"].format(gap=amount_text(gap, language)))
         else:
             cheapest = min(priced, key=lambda p: float(p["price"]))
-            notes.append(L["cheapest"].format(name=cheapest["name"]))
+            notes.append(L["cheapest"].format(name=display_name(cheapest["name"])))
     delta = _rating_delta(chosen)
     if delta is not None and len(chosen) > 1:
         if delta < _MATERIAL_RATING_DELTA:
             notes.append(L["same_rating"])
         else:
             top = max(chosen, key=lambda p: float(p["rating"]))
-            notes.append(L["top_rated"].format(name=top["name"]))
+            notes.append(L["top_rated"].format(name=display_name(top["name"])))
     return notes
 
 
@@ -976,11 +979,11 @@ def _legacy_notes(chosen: list[dict[str, Any]], language: str | None) -> list[st
     priced = [p for p in chosen if p.get("price") is not None]
     if len(priced) > 1 and len({float(p["price"]) for p in priced}) > 1:
         cheapest = min(priced, key=lambda p: float(p["price"]))
-        notes.append(L["cheapest"].format(name=cheapest["name"]))
+        notes.append(L["cheapest"].format(name=display_name(cheapest["name"])))
     rated = [p for p in chosen if p.get("rating") is not None]
     if len(rated) > 1 and len({float(p["rating"]) for p in rated}) > 1:
         top = max(rated, key=lambda p: float(p["rating"]))
-        notes.append(L["top_rated"].format(name=top["name"]))
+        notes.append(L["top_rated"].format(name=display_name(top["name"])))
     return notes
 
 
@@ -1183,7 +1186,7 @@ def build_comparison(
         columns.append(
             ComparisonColumn(
                 product_id=str(p["id"]),
-                name=p["name"],
+                name=display_name(p["name"]),
                 price=eff,  # CURENT (efectiv)
                 list_price=float(lp) if on_sale else None,  # ORIGINAL tăiat (anchor)
                 image=p.get("image"),
