@@ -40,6 +40,7 @@ from src.db.queries.summaries import get_latest_summary, insert_conversation_sum
 from src.db.queries.traces import insert_trace
 from src.domain.loader import load_domain_pack
 from src.models import BusinessConfig, Event, TurnContext
+from src.observability import turn_latency
 from src.runtime import deadline
 from src.safety.policy import SafetyPolicy
 from src.worker.canonicalize import canonical_keys_for
@@ -565,6 +566,11 @@ async def run_aftercare(db: DbProvider, redis: Redis | None, work: AftercareWork
     Deadline-ul TURULUI nu se propagă aici: el e deja epuizat prin definiție (suntem după commit).
     """
     post_acc, post_token = usage.push()
+    # NX-300: acumulator de FAZE propriu, pe exact tiparul lui `usage` de deasupra. Aftercare-ul
+    # rulează după ce acumulatorul turului s-a închis, iar a-l măsura în ACELA ar fi greșit chiar
+    # dacă ar mai fi deschis: `e2e_ms` trebuie să rămână ce a așteptat clientul, nu ce am mai făcut
+    # noi după. Deci: al doilea `turn_latency`, `phase=post_turn`, ca al doilea `llm_usage`.
+    post_lat, lat_token = turn_latency.push()
     started = perf_counter()
     outcome = "ok"
     # ContextVar-ul de deadline al turului nu are ce căuta în aftercare: `push(None)` îl detașează,
@@ -574,24 +580,28 @@ async def run_aftercare(db: DbProvider, redis: Redis | None, work: AftercareWork
         # `getattr`: testele injectează settings-uri parțiale (SimpleNamespace) — un câmp nou nu are
         # voie să transforme o suită verde într-un aftercare „eșuat".
         budget_ms = getattr(get_settings(), "aftercare_deadline_ms", 20_000)
-        async with asyncio.timeout(budget_ms / 1000.0 if budget_ms > 0 else None):
-            # PRIMA: e persistare pură a ceea ce s-a întâmplat deja (zero LLM). Dacă bugetul
-            # se termină pe summarizer, captura de diagnoză nu trebuie să fie ce s-a pierdut.
-            await _persist_trace(db, work)
-            await _cache_writeback(
-                db, work.llm, work.business.id, work.language, work.ctx.message.body, work.ctx
-            )
-            await _summarize_if_needed(
-                db, redis, work.business.id, work.conversation_id, work.ctx, work.llm
-            )
-            await _extract_profile_and_score(
-                db,
-                redis,
-                work.ctx,
-                work.llm,
-                shadow_mode=work.shadow_mode,
-                source_message_id=work.inbound_msg_id,
-            )
+        # NX-300: faza `aftercare` — a treia din vocabular fără NICIUN producător. Aici e singurul
+        # loc unde poate exista: `run_aftercare` E blocul post-terminal. `span` e un context manager
+        # SINCRON, deci stă într-un `with` separat, nu în paranteza lui `async with`.
+        with turn_latency.span("aftercare"):
+            async with asyncio.timeout(budget_ms / 1000.0 if budget_ms > 0 else None):
+                # PRIMA: e persistare pură a ceea ce s-a întâmplat deja (zero LLM). Dacă bugetul
+                # se termină pe summarizer, captura de diagnoză nu trebuie să fie ce s-a pierdut.
+                await _persist_trace(db, work)
+                await _cache_writeback(
+                    db, work.llm, work.business.id, work.language, work.ctx.message.body, work.ctx
+                )
+                await _summarize_if_needed(
+                    db, redis, work.business.id, work.conversation_id, work.ctx, work.llm
+                )
+                await _extract_profile_and_score(
+                    db,
+                    redis,
+                    work.ctx,
+                    work.llm,
+                    shadow_mode=work.shadow_mode,
+                    source_message_id=work.inbound_msg_id,
+                )
     except TimeoutError:
         outcome = "timeout"
         log.warning("aftercare abandonat la deadline (rezultatul turului e deja livrat)")
@@ -601,6 +611,7 @@ async def run_aftercare(db: DbProvider, redis: Redis | None, work: AftercareWork
     finally:
         deadline.pop(deadline_token)
         usage.pop(post_token)
+        turn_latency.pop(lat_token)
         work.ctx.emit(
             "aftercare_lag_ms",
             elapsed_ms=round((perf_counter() - started) * 1000.0),
@@ -610,7 +621,16 @@ async def run_aftercare(db: DbProvider, redis: Redis | None, work: AftercareWork
     if post_acc.calls:
         await _record_aftercare_cost(redis, work, post_cost_usd)
         # NX-122: prin ctx.emit → turn_id atașat (corelează costul post-tur cu turul).
+        # NX-300: marcăm coada ÎNAINTE de a emite. Persistarea lua `events[-1]`, adică exact UN
+        # eveniment — un al doilea emis aici l-ar fi împins tăcut afară din scriere.
+        tail = len(work.ctx.events)
         work.ctx.emit("llm_usage", **_usage_event_props(post_acc, phase="post_turn"))
+        work.ctx.emit(
+            "turn_latency",
+            phase="post_turn",
+            e2e_ms=round((perf_counter() - started) * 1000.0),
+            **post_lat.as_event_props(),
+        )
         # best-effort: eșecul de CHECKOUT sau de insert NU rupe turul (review Codex #208) — pe web
         # sync ar da 500 după ce reply-ul a fost deja calculat/livrat.
         try:
@@ -620,7 +640,7 @@ async def run_aftercare(db: DbProvider, redis: Redis | None, work: AftercareWork
                     work.business.id,
                     work.conversation_id,
                     work.contact_id,
-                    [work.ctx.events[-1]],
+                    work.ctx.events[tail:],
                 )
         except Exception:  # noqa: BLE001 — persistarea llm_usage e best-effort
             log.exception("persistarea llm_usage post-tur a eșuat (turul continuă)")

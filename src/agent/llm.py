@@ -492,15 +492,19 @@ class LLMClient:
         fără plafonul de output al agentului, cu temperatura de fundal. Ridică la JSON invalid /
         eroare de API — caller-ul prinde și degradează."""
         mdl = model or self.model_agent
-        resp = await self._chat(
-            agent=False,
-            model=mdl,
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ],
-            response_format={"type": "json_object"},
-        )
+        # NX-300: un apel de model e o fază `model` oriunde ar rula. Aici rulează POST-tur, deci
+        # acumulatorul activ e al aftercare-ului (`run_aftercare`), nu al turului — separarea vine
+        # din CINE e împins în context, nu dintr-o etichetă de fază diferită. Exact ca `llm_usage`.
+        with turn_latency.span("model"):
+            resp = await self._chat(
+                agent=False,
+                model=mdl,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+                response_format={"type": "json_object"},
+            )
         usage.record_chat(resp, mdl)
         content = resp.choices[0].message.content or "{}"
         return json.loads(content)
@@ -515,15 +519,19 @@ class LLMClient:
         depinde de `strict:true` în tool-uri. Ridică la JSON invalid / eroare API — caller
         prinde și degradează pe calea de proză liberă."""
         mdl = model or self.model_agent
-        resp = await self._chat(
-            agent=True,
-            model=mdl,
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ],
-            response_format={"type": "json_schema", "json_schema": schema},
-        )
+        # NX-300: apelul ăsta compune răspunsul bogat al căii v1 (`finalize._rich`) și era SINGURUL
+        # apel de model de pe drumul sincron fără span. Pe turul `3e582c6d` a luat 86,7 s dintr-un
+        # tur de 95,2 s, iar `turn_latency` raporta 6,2 s în faze — 91% din tur, invizibil.
+        with turn_latency.span("model"):
+            resp = await self._chat(
+                agent=True,
+                model=mdl,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+                response_format={"type": "json_schema", "json_schema": schema},
+            )
         usage.record_chat(resp, mdl)
         content = resp.choices[0].message.content or "{}"
         return json.loads(content)
@@ -533,14 +541,15 @@ class LLMClient:
         (mini). Folosit de agent pentru a compune recomandarea. Ridică la eroare de
         API — caller-ul prinde și degradează."""
         mdl = model or self.model_agent
-        resp = await self._chat(
-            agent=True,
-            model=mdl,
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ],
-        )
+        with turn_latency.span("model"):  # NX-300: niciun apel de `_chat` fără fază (test AST)
+            resp = await self._chat(
+                agent=True,
+                model=mdl,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+            )
         usage.record_chat(resp, mdl)
         return (resp.choices[0].message.content or "").strip()
 

@@ -200,6 +200,9 @@ class ToolRun:
         d = deadline.current()
         if ledger is None and d is None:
             async with self._execution_lock:
+                # NX-300: faza `tools` se măsoară în `_execute_serialized`, punctul prin care trec
+                # AMBELE ramuri. Stătea mai jos, pe ramura cu buget — adică exact pe cea pe care
+                # producția (flaguri NX-241 stinse) n-o ia NICIODATĂ: 0 ture din 53 aveau faza.
                 return await self._execute_serialized(name, args)
 
         # Bilețelul se ia ÎNAINTE de orice `await` → în ordinea în care modelul a cerut tool-urile
@@ -225,8 +228,10 @@ class ToolRun:
                     return tool_budget.REFUSAL_DEADLINE
                 # NX-246: `hooks.tool_call` e un hook NEUTRU (contor + latență per tool), pus
                 # exact unde e deja măsurată faza — executorul e proprietarul instrumentării,
-                # tool-urile nu știu că sunt măsurate (P10).
-                with turn_latency.span("tools"), hooks.tool_call(name):
+                # tool-urile nu știu că sunt măsurate (P10). NX-300: faza însăși s-a mutat în
+                # `_execute_serialized`; aici rămâne doar hook-ul, ca să nu fie DOI proprietari
+                # ai aceleiași faze (P3) și să nu se numere de două ori pe ramura cu buget.
+                with hooks.tool_call(name):
                     return await self._execute_serialized(name, args, seq=seq)
         finally:
             if seq is not None:
@@ -243,7 +248,11 @@ class ToolRun:
         nu o mulțime."""
         ctx, deps = self.ctx, self.deps
         started = perf_counter()
-        result = await run_tool(ctx, deps, name, args)
+        # NX-300: AICI e faza `tools` — punctul comun al ambelor ramuri ale lui `execute`. Măsoară
+        # strict execuția tool-ului: `_await_ticket` de mai jos e așteptare de ORDONARE, iar a o
+        # număra ca timp de tool ar face ca două citiri paralele să pară de două ori mai scumpe.
+        with turn_latency.span("tools"):
+            result = await run_tool(ctx, deps, name, args)
         if seq is not None:
             await self._await_ticket(seq)
         latency_ms = round((perf_counter() - started) * 1000, 1)

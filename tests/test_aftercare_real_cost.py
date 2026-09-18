@@ -34,7 +34,12 @@ async def test_run_aftercare_records_real_accumulated_cost_once(monkeypatch):
     monkeypatch.setattr(aftercare, "_cache_writeback", fake_cache)
     monkeypatch.setattr(aftercare, "_summarize_if_needed", noop)
     monkeypatch.setattr(aftercare, "_extract_profile_and_score", noop)
-    monkeypatch.setattr(aftercare, "_persist_events", noop)
+    persisted: list[list] = []
+
+    async def spy_persist(conn, business_id, conversation_id, contact_id, events):
+        persisted.append([e.type for e in events])
+
+    monkeypatch.setattr(aftercare, "_persist_events", spy_persist)
     monkeypatch.setattr(aftercare, "cost_add_and_total", fake_add)
     monkeypatch.setattr(
         aftercare,
@@ -64,6 +69,17 @@ async def test_run_aftercare_records_real_accumulated_cost_once(monkeypatch):
 
     assert cost_usd > 0
     assert captured == [(redis, "business-1", cost_usd)]
-    # NX-241 adaugă `aftercare_lag_ms` (cât a durat munca de fundal + outcome). `llm_usage` rămâne
-    # ULTIMUL: aftercare persistă `events[-1]`, deci ordinea e parte din contract, nu o coincidență.
-    assert [event.type for event in ctx.events] == ["aftercare_lag_ms", "llm_usage"]
+    # NX-241 adaugă `aftercare_lag_ms` (cât a durat munca de fundal + outcome). NX-300 adaugă al
+    # doilea `turn_latency`, `phase=post_turn` — perechea lui `llm_usage`, pentru timp.
+    assert [event.type for event in ctx.events] == [
+        "aftercare_lag_ms",
+        "llm_usage",
+        "turn_latency",
+    ]
+    # NX-300: invariantul nu mai e ORDINEA, ci acoperirea. Persistarea lua `events[-1]`, deci
+    # ultimul emis îl împingea tăcut afară pe celălalt; acum se scrie toată coada, iar testul cere
+    # ca AMBELE evenimente post-tur să ajungă în analytics — nu ca unul să fie norocos.
+    assert persisted == [["llm_usage", "turn_latency"]]
+    post = next(e for e in ctx.events if e.type == "turn_latency")
+    assert post.properties["phase"] == "post_turn"  # nu poluează bugetul turului
+    assert "aftercare" in post.properties["phases"]  # faza care n-avea producător

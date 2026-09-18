@@ -24,6 +24,7 @@ Dispatcher-ul (separat) citește outbox, trimite la canal și leagă provider_ms
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass, replace
+from time import perf_counter
 from typing import Any
 from uuid import uuid4
 
@@ -57,6 +58,7 @@ from src.models import (
     TurnContext,
     TurnUsage,
 )
+from src.observability import turn_latency
 from src.privacy import RawInbound, RawText, SafeInbound, apply_boundary
 from src.web.action_models import ActionCommand
 from src.web.context import from_payload as page_context_from_payload
@@ -73,7 +75,13 @@ from src.worker.limits import (
     spend_over_cap,
 )
 from src.worker.reply_split import split_reply
-from src.worker.runner import DEFAULT_STAGES, PipelineDeps, Stage, run_pipeline
+from src.worker.runner import (
+    DEFAULT_STAGES,
+    PipelineDeps,
+    Stage,
+    emit_turn_latency,
+    run_pipeline,
+)
 from src.worker.turn_snapshot import build_turn_snapshot, snapshot_events, without_evidence
 from src.worker.turn_uow import (
     OutboundFragment,
@@ -537,6 +545,14 @@ async def handle_turn(
     # NX-231 (P10): contabilizarea checkout-urilor turului. Deschis ÎNAINTE de faza 1 → prinde și
     # `turn_load`; închis în `finally`, ca un tur care crapă să nu lase acumulatorul agățat.
     db_acc, db_token = op_metrics.push()
+    # NX-300 (P10): acumulatorul de FAZE are aceeași durată de viață ca cel de checkout-uri, din
+    # exact același motiv. Deschis în `run_pipeline`, rata `queue` (dinainte), `load` (faza 1) și
+    # `commit` (faza 3) — măsurat pe 53 de ture reale, faza `load` apărea de 0 ori, deși span-ul
+    # ei exista din NX-241: rula într-un acumulator care încă nu fusese împins.
+    lat_acc, lat_token = (
+        turn_latency.push() if getattr(_s, "turn_latency_spans_enabled", True) else (None, None)
+    )
+    turn_started = perf_counter()
     try:
         # === FAZA 1 — LOAD (un checkout scurt) ==============================================
         snap = await load_turn(
@@ -573,10 +589,13 @@ async def handle_turn(
             deliver=deliver,
             defer_aftercare=defer_aftercare,
             db_acc=db_acc,
+            turn_started=turn_started,
             commit_hook=commit_hook,
             stage_hook=stage_hook,
         )
     finally:
+        if lat_token is not None:
+            turn_latency.pop(lat_token)
         op_metrics.pop(db_token)
 
 
@@ -722,6 +741,24 @@ def _emit_db_metrics(ctx: TurnContext, db_acc: op_metrics.DbOpAccumulator) -> No
         ctx.emit("db_ops", **db_acc.as_event_props())
 
 
+def _emit_turn_latency_now(ctx: TurnContext, runtime, turn_started: float | None) -> None:
+    """NX-300 — `turn_latency` se emite AICI, după commit, nu la sfârșitul pipeline-ului.
+
+    Motivul e ordinea, nu estetica: `queue` și `load` se întâmplă ÎNAINTE de pipeline, iar
+    `commit` DUPĂ el. Emis din `run_pipeline`, evenimentul nu putea conține niciuna dintre ele —
+    măsurat pe 53 de ture reale, toate trei apăreau de 0 ori, deși două aveau deja span.
+
+    `e2e_ms` devine turul pe care clientul chiar l-a AȘTEPTAT (faza 0 → commit). Aftercare-ul
+    rămâne în afara lui, deliberat: e strict post-terminal și are evenimentul lui
+    (`turn_latency`, `phase=post_turn`), exact ca `llm_usage`.
+
+    Pur observabilitate: `run_pipeline` a închis deja tokenii din contextvars, dar `runtime`
+    păstrează referințele la ledger/deadline, deci props-urile de buget rămân întregi."""
+    if runtime is None or turn_started is None:
+        return
+    emit_turn_latency(ctx, runtime, round((perf_counter() - turn_started) * 1000, 1))
+
+
 async def _run_turn(  # noqa: PLR0913 — o fază, mulți parametri deja validați de apelant
     db: DbProvider,
     business: BusinessConfig,
@@ -741,6 +778,7 @@ async def _run_turn(  # noqa: PLR0913 — o fază, mulți parametri deja valida�
     deliver: bool,
     defer_aftercare: bool,
     db_acc: op_metrics.DbOpAccumulator,
+    turn_started: float | None = None,
     commit_hook: "CommitHook | None" = None,
     stage_hook: Callable[[str], None] | None = None,
 ) -> TurnResult:
@@ -815,6 +853,10 @@ async def _run_turn(  # noqa: PLR0913 — o fază, mulți parametri deja valida�
     # rămân contoare + log în `admission.py`. `tenant_bucket` = etichetă low-cardinality (P12).
     admission_wait_ms = event.get("admission_wait_ms")
     if admission_wait_ms:
+        # NX-300: faza `queue` exista in vocabular si n-avea NICIUN producator (0/53 ture).
+        # Cifra era deja masurata si publicata ca eveniment separat; aici intra si ca FAZA, ca
+        # `phase_ms_total` sa poata fi comparat onest cu `e2e_ms`.
+        turn_latency.record("queue", float(admission_wait_ms))
         ctx.emit(
             "admission_wait",
             wait_ms=round(float(admission_wait_ms), 1),
@@ -844,7 +886,7 @@ async def _run_turn(  # noqa: PLR0913 — o fază, mulți parametri deja valida�
     # Stagiile primesc DOAR providerul: fiecare operație își ia conexiunea și o dă înapoi. Între
     # ele (triaj nano, agent mini, tool loop, embed) poolul e liber (NX-231).
     deps = PipelineDeps(db=db, redis=redis, llm=llm, media=media, stage_hook=stage_hook)
-    await run_pipeline(ctx, deps, stages)
+    runtime = await run_pipeline(ctx, deps, stages)
     await persist_events(db, business.id, conversation_id, contact.id, ctx.events)
     # Evenimentele emise de aici încolo (metrici DB, conflict de stare, reply_split) apar DUPĂ
     # persistarea principală → coada listei se scrie separat, o singură dată, la final.
@@ -864,6 +906,7 @@ async def _run_turn(  # noqa: PLR0913 — o fază, mulți parametri deja valida�
         # NX-86: tur DONE (halt/no-reply) → finalizează claim-ul (altfel reaper-ul l-ar reprocesa).
         await complete_without_reply(db, business.id, provider_msg_id)
         _emit_db_metrics(ctx, db_acc)
+        _emit_turn_latency_now(ctx, runtime, turn_started)
         await persist_events(
             db, business.id, conversation_id, contact.id, ctx.events[events_persisted:]
         )
@@ -910,19 +953,22 @@ async def _run_turn(  # noqa: PLR0913 — o fază, mulți parametri deja valida�
         provider_msg_id=provider_msg_id,
         deliver=deliver,
     )
-    commit_result = await commit_turn(
-        db,
-        commit,
-        # NX-221: la conflict de versiune, deltele turului se re-aplică pe starea PROASPĂTĂ
-        # (last-writer-wins per cheie), nu pe snapshotul stale de la începutul turului.
-        rebuild_state=lambda fresh: _build_new_state(
-            fresh, ctx, is_rich=is_rich, has_products=has_products
-        ),
-        # NX-232: ledgerul web (sau orice scriere de margine) intră în ACEEAȘI tranzacție.
-        on_commit=(lambda conn: commit_hook(conn, ctx.reply, ctx.language, _commit_facts(ctx)))
-        if commit_hook is not None
-        else None,
-    )
+    # NX-300: faza `commit` — a doua fara producator. Tranzactia terminala e singura bucata de
+    # timp pe care clientul o ASTEAPTA si care cadea in afara pipeline-ului.
+    with turn_latency.span("commit"):
+        commit_result = await commit_turn(
+            db,
+            commit,
+            # NX-221: la conflict de versiune, deltele turului se re-aplică pe starea PROASPĂTĂ
+            # (last-writer-wins per cheie), nu pe snapshotul stale de la începutul turului.
+            rebuild_state=lambda fresh: _build_new_state(
+                fresh, ctx, is_rich=is_rich, has_products=has_products
+            ),
+            # NX-232: ledgerul web (sau orice scriere de margine) intră în ACEEAȘI tranzacție.
+            on_commit=(lambda conn: commit_hook(conn, ctx.reply, ctx.language, _commit_facts(ctx)))
+            if commit_hook is not None
+            else None,
+        )
     outbox_id = commit_result.first_outbox_id
     if commit_result.state_conflict == "retried":
         ctx.emit("state_conflict_retried")
@@ -933,6 +979,7 @@ async def _run_turn(  # noqa: PLR0913 — o fază, mulți parametri deja valida�
         # NX-122: prin ctx.emit → primește turn_id (parte din traiectoria aceluiași tur).
         ctx.emit("reply_split", parts=len(fragments))
     _emit_db_metrics(ctx, db_acc)
+    _emit_turn_latency_now(ctx, runtime, turn_started)
     # Persistăm coada de evenimente emise după persistarea principală (metrici DB +
     # state_conflict_* + reply_split) — o singură scriere, fără dubluri, în afara tranzacției de
     # commit (observabilitatea nu are voie să dea rollback pe răspuns).
