@@ -37,7 +37,7 @@ Totul e pur (fără I/O) în afară de `load_vocabulary`. Tenant-scoped peste to
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence, Set
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING
@@ -724,3 +724,47 @@ def _from_hits(hits: list[VocabEntry], term: str, dimension: str, matched_by: st
         count=top.count,
         matched_by=matched_by,
     )
+
+
+def text_is_redundant_as_gate(
+    vocab: CatalogVocabulary,
+    terms: Sequence[str],
+    applied_keys: Set[str],
+    *,
+    overlays: Mapping[str, Mapping[str, str]] | None = None,
+) -> bool:
+    """NX-303 — fiecare cuvânt de conținut al frazei e DEJA purtat de un filtru dur?
+
+    Dacă da, predicatul de text nu mai poate adăuga nicio restricție SEMANTICĂ peste filtre: poate
+    doar să taie arbitrar, după cine s-a nimerit să folosească vocabularul clientului. Măsurat pe
+    catalogul SOLE, la «vreau ceva sa scap de cosuri» cu `concerns=acne` (518 produse): cuvântul
+    „cosuri" apare în textul de căutare al **6** produse, „acnee" în 165, „imperfectiuni" în 183.
+    Magazinul scrie una, clientul scrie alta, iar ȘI-ul dintre text și filtru păstra cele 6.
+
+    Apelantul folosește verdictul ca să ceară direct treapta terminală (`only_filters_step`,
+    NX-298), unde textul coboară din POARTĂ în ORDONATOR. Deci nu se pierde nimic: cuvintele
+    clientului rămân întregi în `ORDER BY`, potrivirile literale rămân primele, iar restul paginii
+    vine din setul pe care filtrul îl numește. NU scădem termeni din text — varianta aia a fost
+    măsurată și respinsă (fraza rămâne fără ordonator; vezi nota NX-298 din `catalog_tools`).
+
+    Conservatoare prin construcție, fiindcă greșeala scumpă e într-o singură direcție (a servi
+    raftul când clientul chiar cerea altceva):
+
+    * fără termeni ⇒ `False`. Nu există „toți termenii sunt redundanți" peste mulțimea vidă, iar
+      un `all()` pe gol ar face ca ORICE frază fără cuvinte de conținut să sară poarta de text.
+    * un singur termen NEREZOLVAT ⇒ `False`. „crema" din «crema pentru cosuri» discriminează real
+      cât timp nu există un filtru de tip; fraza păstrează drumul de azi, neatins.
+    * `AMBIGUOUS` nu e dovadă de redundanță. „Știu, dar sunt mai multe variante" nu înseamnă „e
+      același lucru cu ce am deja în WHERE".
+
+    Pură: fără I/O, fără ceas, agnostică de limbă și de dimensiune (P11) — cheile vin din catalog.
+    """
+    if not terms:
+        return False
+    for term in terms:
+        r = resolve_any(vocab, term, overlays=overlays, dimensions=vocab.facet_names)
+        if r.status is not ResolutionStatus.KNOWN or not r.constraint_keys:
+            return False
+        if not set(r.constraint_keys) <= set(applied_keys):
+            return False
+    return True
