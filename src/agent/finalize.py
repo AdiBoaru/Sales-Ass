@@ -542,6 +542,42 @@ async def render(
             plan.generated_links,
             plan.grounded_prices,
         )
+        # NX-306: un set pe care modelul l-a REFUZAT, și pe care retrievalul îl dăduse deja ca
+        # pe un COMPROMIS, nu se servește — nici ca fapte, nici ca text.
+        #
+        # Turul real `78b347fa` (`sole-ro`, «cat cost una?» după ce botul oferise o mănușă de
+        # aplicare): căutarea a nimerit raftul greșit, modelul a scris ONEST „nu am găsit în
+        # catalog o mănușă, rezultatele sunt pensule de machiaj, nu sunt potrivite", iar codul a
+        # atașat oricum cele șase produse. Clientul a primit patru carduri de 1.300 lei sub un text
+        # care le nega. `validator_ok: true` pe tot turul, fiindcă produsele și prețurile ERAU
+        # reale: stagiul 8 și `grounding_guard` sunt porți de ADEVĂR, nu de POTRIVIRE.
+        #
+        # Poarta cere AMBELE semnale, și fiecare pentru alt motiv.
+        #
+        # `no-items-selected` e singura formă de refuz măsurată de model ÎNSUȘI: apelul structurat a
+        # REUȘIT, modelul a văzut setul și n-a numit niciun produs. Nu e ghicit dintr-un regex pe
+        # proză, deci nu introduce nicio listă de cuvinte românești pentru „nu am găsit" (P11).
+        #
+        # `relevance.relaxed` spune că setul a ieșit doar fiindcă scara de relaxare a RENUNȚAT la
+        # filtre. Singur, refuzul nu ajunge: suita a prins de ce. Pe follow-up-ul „ceva mai ieftin"
+        # (`test_cheaper_followup_e2e`), setul e ales DETERMINIST de `cheaper_intent`, iar modelul
+        # poate foarte bine să nu-l numească — acolo serverul știe mai bine decât modelul ce a cerut
+        # clientul, și a suprima ar însemna să ascundem exact răspunsul corect. Un set găsit STRICT
+        # și refuzat rămâne deci pe ecran; unul obținut prin renunțare la filtre și refuzat, nu.
+        #
+        # Pe refuz, setul servibil devine ce NUMEȘTE proza. De obicei nimic, și atunci nu se
+        # afișează nimic. Dacă modelul a numit totuși un produs în proză după ce nu-l numise în
+        # structură, ăla e chiar produsul despre care vorbește textul.
+        #
+        # Filtrul se aplică ÎNAINTE de `rich_from_facts`, deliberat. NX-302 recuperează FORMA bogată
+        # din catalog, deci fără poarta asta refuzul ar fi ieșit AGRAVAT: aceleași pensule, dar acum
+        # cu badge, rating și un motiv de sub card, adică un ecran care arată exact ca o recomandare
+        # convinsă, sub un text care o neagă.
+        servable = products
+        _relevance = getattr(getattr(ctx, "retrieval", None), "relevance", None)
+        if downgrade_reason == "no-items-selected" and getattr(_relevance, "relaxed", False):
+            servable = compose.named_products(reply, products)
+            ctx.emit("refused_set_withheld", retrieved=len(products), named=len(servable))
         # NX-302: degradarea e PARȚIALĂ, nu totală. Modelul rich lipsește, FAPTELE nu — deci
         # cardurile se construiesc din catalog (motiv din `best_for`, rating, badge, preț de listă,
         # variante, gramaj) și clientul primește contractul bogat, minus proza narată.
@@ -560,8 +596,8 @@ async def render(
         # prețuri nu e o încadrare, e chiar contradicția din turul măsurat. Slotul rămas gol îl
         # umple rezerva de încadrare a serverului (NX-299), deci clientul primește tot o frază.
         salvaged = (
-            rich_from_facts(ctx, products, intro=reply if result.ok else None)
-            if get_settings().rich_from_facts_enabled
+            rich_from_facts(ctx, servable, intro=reply if result.ok else None)
+            if get_settings().rich_from_facts_enabled and servable
             else None
         )
         if salvaged is not None and salvaged.items:
@@ -589,12 +625,27 @@ async def render(
         # turul măsurat `57fa9fbe` a ieșit din producție cu `cacheable: true` pe un răspuns născut
         # dintr-un timeout. Pe calea bogată problema nu există prin construcție: `set_rich_reply`
         # are `cacheable=False` implicit.
-        ctx.set_reply(reply, products=_card_products(products), cacheable=result.ok)
+        #
+        # NX-306: un tur din care setul a fost reținut NU e cacheabil, oricât de validă ar fi proza.
+        # „Nu am găsit o mănușă" scris în `semantic_cache` s-ar re-servi la fiecare întrebare
+        # similară, sărind agentul — exact otrăvirea pe care ramura de no-result o evită din 2026-06
+        # (`hit_count=9` pe demo). Aici textul e chiar un no-result, doar că a ajuns pe altă ramură.
+        ctx.set_reply(
+            reply,
+            products=_card_products(servable),
+            cacheable=result.ok and bool(servable),
+        )
         # NX-137: pe proză modelul POATE scrie linkul (validat prin generated_links), dar dacă
         # l-a omis, Offer-ul îl garantează (floor-ul din set_offer nu dublează un URL deja în text).
         _attach_checkout_offer(ctx, plan.checkout_url)
+        # NX-306: fără carduri, turul e o fundătură — exact starea în care clientul are cea mai
+        # mare nevoie de o cale de continuare. Ramurile de no-result atașează chips de mult
+        # (NX-159 felia 2); ramura asta nu le atașa niciodată, fiindcă „are produse" era judecat
+        # pe RETRIEVAL, nu pe ce ajunge la client.
+        if not servable:
+            _attach_no_result_alternatives(ctx)
         # NX-163: ce a recomandat botul, ca ref-uri (P8) — vezi enrich-ul rich de mai sus.
-        ctx.emit("agent_recommended", n=len(products), product_ids=product_ids_from_dicts(products))
+        ctx.emit("agent_recommended", n=len(servable), product_ids=product_ids_from_dicts(servable))
         return result
     elif final:
         # Fără produse, dar avem text: îl VALIDĂM (nu servire oarbă). Forma de recuperare diferă
