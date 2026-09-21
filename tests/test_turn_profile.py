@@ -76,13 +76,18 @@ def test_un_profil_adauga_dar_nu_scade_niciodata():
             assert tool in TOOL_REGISTRY, f"{profile.name} cere un tool inexistent: {tool}"
 
     # Reuniunea a tot ce adaugă profilele e MICĂ și declarată: dacă cineva adaugă un tool nou aici,
-    # testul cere să fie o decizie, nu o scăpare. `compare_products` e deja în nucleu (deci
-    # adăugarea lui e un no-op de dedupe), `related_products` vine cu felia 5, iar `routine_plan`
-    # cu NX-292 (compunerea unei secvențe, singura unealtă care poate produce dovada cerută de
-    # `routine_evidence_required`).
+    # testul cere să fie o decizie, nu o scăpare. `compare_products` și `get_product_details` sunt
+    # deja în nucleu (deci adăugarea lor e un no-op de dedupe), `related_products` vine cu felia 5,
+    # iar `routine_plan` cu NX-292 (compunerea unei secvențe, singura unealtă care poate produce
+    # dovada cerută de `routine_evidence_required`).
+    #
+    # NX-307 a adăugat `get_product_details` pe profilul `howto`. E în nucleu, deci nu schimbă
+    # toolsetul niciunui tur: declararea spune de ce are NEVOIE profilul, ca să nu dispară tăcut
+    # dacă cineva subțiază vreodată `_SALES_TOOLS` — exact argumentul scris la `compare`.
+    in_core_but_declared = {"compare_products", "get_product_details"}
     outside_core = {"related_products", "routine_plan"}
     extras = {t for p in PROFILES.values() for t in p.extra_tools}
-    assert extras <= {"compare_products", *outside_core}
+    assert extras <= {*in_core_but_declared, *outside_core}
     assert extras & core == extras - outside_core
 
 

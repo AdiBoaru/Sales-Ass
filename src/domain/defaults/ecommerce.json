@@ -22,10 +22,11 @@
     {"kind": "fit", "max_chars": 200},
     {"kind": "anti_fit", "max_chars": 200},
     {"kind": "key_ingredients", "max_chars": 160},
-    {"kind": "usage", "max_chars": 150},
+    {"kind": "usage", "max_chars": 400},
+    {"kind": "dosage", "max_chars": 160},
     {"kind": "warnings", "max_chars": 150},
     {"kind": "comparison", "max_chars": 180},
-    {"kind": "routine_integration", "max_chars": 150},
+    {"kind": "routine_integration", "max_chars": 200},
     {"kind": "features", "max_chars": 220},
     {"kind": "benefits", "max_chars": 220},
     {"kind": "scenarios", "max_chars": 220}

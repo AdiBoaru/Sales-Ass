@@ -927,6 +927,16 @@ class Settings(BaseSettings):
     # `routine_evidence_required` e aprinsă, dar unealta care poate produce dovada nu se oferă.
     # OFF = byte-identic (niciun sufix, nicio unealtă în plus).
     routine_enabled: bool = Field(default=False, validation_alias="ROUTINE_ENABLED")
+    # NX-307: instrucțiunile de folosire vin din CATALOG, nu din memoria modelului. Flag PROPRIU,
+    # din același motiv ca `routine_enabled`, și pentru aceeași clasă de tur: una în care răspunsul
+    # de azi e garantat degradat. Măsurat pe conversația reală `70da107c`, turele 2 și 3 („pai si
+    # cum folosesc ?") au rulat cu ZERO apeluri de tool, iar modelul a compus șapte pași din ce știa
+    # el, deși `product_sections.usage` există pe 2.746 din 2.758 de produse ale tenantului și
+    # conține chiar fraza care lipsea din răspuns („folosind mainile sau o manusa speciala").
+    # ON aprinde exclusiv profilul `howto`. OFF = byte-identic.
+    howto_from_catalog_enabled: bool = Field(
+        default=False, validation_alias="HOWTO_FROM_CATALOG_ENABLED"
+    )
     # IZI: badge de card DERIVAT din semnale reale (rating+recenzii → „Top Favorit"; reducere reală
     # → „Super Preț"), prin praguri din DomainPack.badge_rules (default-uri agnostice de vertical).
     # Determinist, NU inventat. OFF → doar badge-uri pre-seedate curate (comportament vechi).

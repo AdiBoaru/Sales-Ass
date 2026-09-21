@@ -378,18 +378,19 @@ def _apply_turn_profile(
     recomandare rankată. Măsurat pe turul real `57fa9fbe` («vreau o rutina de cosuri»): patru
     produse, niciun pas.
 
-    Aceleași două flag-uri și aceeași precedență ca în `brain.py`, ca să nu existe două politici
-    pentru aceeași decizie: `TURN_PROFILES_ENABLED` aprinde toate cele cinci profile (schimbă
-    sufixul pentru TOT traficul, deci se decide pe golden), `ROUTINE_ENABLED` aprinde exclusiv
-    profilul `routine`. Ambele stinse ⇒ byte-identic.
+    Aceeași poartă ca în `brain.py`, fiindcă e ACELAȘI cod: `TURN_PROFILES_ENABLED` aprinde toate
+    profilele (schimbă sufixul pentru TOT traficul, deci se decide pe golden), iar restul se aprind
+    individual prin `turn_profile.PER_PROFILE_FLAGS`. Nimic aprins ⇒ byte-identic. Până la NX-307
+    ambele căi purtau scris în cod `candidate.name == "routine"`, adică două liste care ar fi
+    divergat la al doilea profil cu flag propriu.
 
     Sufixul se adaugă la FINALUL system-ului, deci prefixul static rămâne neatins și cache-ul de
     prompt ține.
     """
     settings = get_settings()
     profiles_on = bool(getattr(settings, "turn_profiles_enabled", False))
-    routine_on = bool(getattr(settings, "routine_enabled", False))
-    if not (profiles_on or routine_on):
+    per_profile = turn_profile.enabled_names(settings)
+    if not (profiles_on or per_profile):
         return system, tools
     pack = getattr(ctx.business, "domain_pack", None)
     families = tenant_enum_values(pack)["families"]
@@ -397,7 +398,7 @@ def _apply_turn_profile(
     candidate = turn_profile.select(
         turn_class_for(obligations), obligations, has_routine=bool(families)
     )
-    profile = candidate if profiles_on or candidate.name == "routine" else None
+    profile = turn_profile.gate(candidate, all_on=profiles_on, enabled_names=per_profile)
     if profile is None:
         return system, tools
     ctx.emit("turn_profile", name=profile.name, path="v1")
