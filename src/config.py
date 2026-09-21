@@ -1014,6 +1014,27 @@ class Settings(BaseSettings):
     search_relax_by_provenance_enabled: bool = Field(
         default=True, validation_alias="SEARCH_RELAX_BY_PROVENANCE_ENABLED"
     )
+    # NX-305: un filtru de subiect pe care NIMENI nu l-a rostit trebuie să-și merite locul. Dacă
+    # toate filtrele de subiect sunt GHICITE de model și căutarea a trebuit totuși să degradeze ca
+    # să scoată ceva, se mai încearcă o dată aceeași interogare fără ele. Se adoptă rezultatul nou
+    # DOAR dacă aterizează pe o treaptă lexicală strict mai bună.
+    #
+    # Măsurat pe turul real `78b347fa` (`sole-ro`): la «cat cost una?» despre o mănușă de aplicare,
+    # modelul a trimis `category="accesorii"` (adică `Machiaj > Accesorii`, unde stau pensulele) și
+    # `concerns=["autobronzant","aplicare"]`, din care „autobronzant" s-a rezolvat pe `product_type`
+    # cu 7 produse. Cele două GHICITURI se contraziceau, intersecția era goală, iar scara a
+    # păstrat-o pe cea GROSIERĂ și a aruncat-o pe cea SPECIFICĂ: `relaxed_any`, seturi de pensule
+    # de 1.300 de lei.
+    # Aceeași interogare fără filtrele ghicite aterizează pe `strict` și scoate pe locul 1
+    # «B.tan I don't want tan on my hands», mănușă de aplicare autobronzant, 50 lei — produs pe
+    # ACELAȘI raft din care botul recomandase cu patru mesaje mai devreme.
+    #
+    # Poarta e îngustă prin construcție: cere ca NICIUN filtru de subiect să nu fie coroborat de
+    # client (`corroborated_by`, NX-251). Turele NX-298/NX-299 au fațeta rostită («cosuri»), deci
+    # nu se declanșează pe ele. OFF → drumul de dinainte, byte-identic.
+    search_guessed_filter_rescue_enabled: bool = Field(
+        default=True, validation_alias="SEARCH_GUESSED_FILTER_RESCUE_ENABLED"
+    )
     # NX-302: când apelul rich al căii v1 cade, cardurile se construiesc din CATALOG, nu se pierd.
     #
     # Toată bogăția răspunsului v1 (motiv per card, rating, badge, preț de listă, variante, chips)
