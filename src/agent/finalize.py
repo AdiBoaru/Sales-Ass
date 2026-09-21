@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from src.agent import prompt_builder
+from src.agent.brain_rich import rich_from_facts
 from src.agent.compare_narrative import compose_comparison
 from src.agent.deterministic import _comparison_facets
 from src.agent.fallbacks import (
@@ -465,6 +466,11 @@ async def render(
             return None
 
     if products:
+        # Motivul pentru care calea bogată a cedat, sau `None` dacă n-a fost încercată (ORDER).
+        # Trăiește aici, nu în blocul de mai jos, fiindcă îl citește și recuperarea de după
+        # `_finalize` (NX-302) — o variabilă definită într-o ramură și citită în alta e exact
+        # felul de legătură care se rupe tăcut la următoarea refactorizare.
+        downgrade_reason: str | None = None
         # Calea BOGATĂ (model iZi): recomandare structurată → compose. Doar pe SALES.
         # Orice eșec (apel structurat, zero items după membership) → fallback pe proză.
         if not is_order:
@@ -510,6 +516,7 @@ async def render(
                 reason = "all-items-dropped-by-membership"
             else:
                 reason = "no-items-selected"
+            downgrade_reason = reason
             ctx.emit("rich_downgraded", reason=reason)
             if getattr(ctx, "trace", None) is not None:
                 ctx.trace["rich_downgraded"] = reason  # NX-256: lângă `rich_raw`, în captura full
@@ -535,7 +542,54 @@ async def render(
             plan.generated_links,
             plan.grounded_prices,
         )
-        ctx.set_reply(reply, products=_card_products(products))
+        # NX-302: degradarea e PARȚIALĂ, nu totală. Modelul rich lipsește, FAPTELE nu — deci
+        # cardurile se construiesc din catalog (motiv din `best_for`, rating, badge, preț de listă,
+        # variante, gramaj) și clientul primește contractul bogat, minus proza narată.
+        #
+        # Măsurat pe traficul real al lui `sole-ro` (`conversation_traces`, 56 de ture): 14 din
+        # turele cu produse ajungeau la client cu `rich = null`, adică un sfert. Pe turul `57fa9fbe`
+        # («vreau o rutina de cosuri») cauza a fost `APITimeoutError` pe apelul pe care NX-300 îl
+        # măsurase la 86,7 s dintr-un tur de 95,2 s. Ce vedea clientul: patru carduri mute și trei
+        # nume cu prețuri sub ele.
+        #
+        # Vine DUPĂ `_finalize`, deliberat. Recuperarea asta e despre FORMA răspunsului; retry-ul de
+        # recompunere e despre ADEVĂRUL lui (un preț inventat se prinde și se rescrie). Sunt două
+        # preocupări, iar a le amesteca ar fi însemnat ca o îmbunătățire de formă să dezactiveze
+        # tăcut o poartă de adevăr. Proza validată devine `intro`; cea nevalidată (adică
+        # `_deterministic_reply`) NU — sub carduri care poartă aceleași prețuri, o listă de nume cu
+        # prețuri nu e o încadrare, e chiar contradicția din turul măsurat. Slotul rămas gol îl
+        # umple rezerva de încadrare a serverului (NX-299), deci clientul primește tot o frază.
+        salvaged = (
+            rich_from_facts(ctx, products, intro=reply if result.ok else None)
+            if get_settings().rich_from_facts_enabled
+            else None
+        )
+        if salvaged is not None and salvaged.items:
+            await _apply_move_chips(ctx, deps, salvaged)
+            ctx.set_rich_reply(
+                salvaged,
+                text=compose.flatten(salvaged, ctx.language),
+                products=compose.card_products(salvaged.items),
+            )
+            _attach_checkout_offer(ctx, plan.checkout_url)
+            ctx.emit(
+                "agent_recommended",
+                n=len(salvaged.items),
+                rich=True,
+                product_ids=clean_ids(it.product_id for it in salvaged.items),
+            )
+            ctx.emit("rich_from_facts", reason=downgrade_reason, prose=result.ok)
+            if getattr(ctx, "trace", None) is not None:
+                ctx.trace["rich_from_facts"] = {"reason": downgrade_reason, "prose": result.ok}
+            return result
+        # NX-302: `cacheable` urmează VALIDATORUL. Un text care a picat validarea e
+        # `_deterministic_reply`, adică un răspuns de avarie — scris în `semantic_cache`, el s-ar
+        # re-servi la fiecare query similar, sărind agentul. Ramura de no-result de mai jos se apăra
+        # de asta din 2026-06 (`cacheable=False`, „hit_count=9 pe demo"); ramura cu produse nu, iar
+        # turul măsurat `57fa9fbe` a ieșit din producție cu `cacheable: true` pe un răspuns născut
+        # dintr-un timeout. Pe calea bogată problema nu există prin construcție: `set_rich_reply`
+        # are `cacheable=False` implicit.
+        ctx.set_reply(reply, products=_card_products(products), cacheable=result.ok)
         # NX-137: pe proză modelul POATE scrie linkul (validat prin generated_links), dar dacă
         # l-a omis, Offer-ul îl garantează (floor-ul din set_offer nu dublează un URL deja în text).
         _attach_checkout_offer(ctx, plan.checkout_url)
