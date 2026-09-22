@@ -394,6 +394,43 @@ turul), deci stagiul 8 și `grounding_guard` le-au lăsat să treacă. Sunt por�
 `python -m scripts.nx305_guessed_filter_probe` +
 `pytest tests/test_guessed_filter_rescue.py tests/test_refused_set_withheld.py tests/test_howto_from_catalog.py -q`.
 
+**NX-311 — un timeout al NOSTRU era tratat ca o eroare a FURNIZORULUI, iar retry-ul o tripla.**
+Măsurat pe `sole-ro` (101 ture live, 30 de zile): e2e **p50 24,9s, p90 99,4s**. Turele lente poartă
+EXACT `llm_retry×2` și stau în banda 98-122s, adică semnătura aritmetică a lui `llm_timeout_s=30` ×
+(1 + `llm_retry_max=2`). Tipul excepției, scos din `conversation_traces.diagnostics.rich_error`:
+**6× `APITimeoutError`** — pe acele 6 ture toate cele trei încercări au murit, deci clientul a primit
+lista seacă **după 105 secunde**, adică a așteptat un minut și jumătate în plus pentru un răspuns mai
+PROST decât cel normal. Cauza nu e retry-ul, e BUGETUL: plafonul se punea O DATĂ, la construcția
+clientului, peste toate apelurile — dar apelurile nu sunt de același fel, iar codul o știe deja.
+`_sampling` decide DETERMINIST dacă o cerere raționează (pe bucla cu tool-uri e FORȚAT `none`, altfel
+`chat.completions` dă 400), deci sunt două populații cu distribuții care nu se ating: rundă de
+tool-calling **p50 2,9s / p90 4,5s**, compunerea răspunsului **p50 6,5s / p90 25,9s, cu 24,6% peste
+30s**. 30s e anti-hang onest pentru prima și taie prin coada celei de-a doua; iar fiindcă
+`APITimeoutError` e în `_TRANSIENT_ERRORS`, tăietura NOASTRĂ declanșa retry pe aceeași generare, cu
+același prompt, în fața aceluiași cronometru. Premisa era adevărată la NX-126 (iunie 2026,
+`gpt-5.4-mini`, fără raționament); s-a rupt pe 24 aug (`bbb77b3`), când defaultul a trecut pe
+`gpt-5.6-luna` ȘI pe `reasoning_effort=high`, deodată.
+**Varianta evidentă a fost încercată și RESPINSĂ pe măsurătoare:** „scoate `APITimeoutError` dintre
+tranzitorii" — din cele 18 ture cu retry, **12 au REUȘIT la o reîncercare**, deci fără retry alea 12
+devin răspunsuri degradate; aș fi reparat ceasul stricând rezultatul. Reparația: ceasul urmează
+BITUL care există deja (`Sampling.reasoning_on`), nu o taxonomie paralelă de „roluri" care poate
+diverge tăcut de cea care decide legalitatea cererii; `timeout` pleacă **per CERERE** (clientul e
+singleton, nu poate purta două ceasuri); bugetul aparține APELULUI, nu încercării
+(`llm_call_total_cap_s=90s`, ceas monoton — altfel 75s × 3 = 225s, adică p50 reparat cu coada
+stricată); iar `cap_ms` (NX-241) urmează ACELAȘI proprietar, fiindcă `llm_call_cap_ms=8_000` ar fi
+strangulat apelul de compunere **în ziua în care cineva aprinde `TURN_DEADLINE_ENABLED`** — același
+defect, dar descoperit într-un incident. Cenzura devine vizibilă: `llm_retry` numără la fel două
+situații care cer reparații OPUSE (de-aia a trăit o lună), deci cauza e acum distinctă
+(`llm_retry_timeout`/`_status`/`_connection`), iar `llm_call_over_30s` măsoară coada pe care peretele
+o ascundea (maximul observat era exact **30,1s** — nu coada distribuției, ci zidul). Pragul de 75s e
+declarat ca PRIMĂ calibrare, nu ca adevăr. `LLM_CALL_BUDGET_BY_ROLE_ENABLED=false` → byte-identic;
+implicit e **ON**, spre deosebire de convenție, fiindcă nu e o capabilitate de câștigat cu
+măsurători, ci un defect măsurat în care comportamentul de azi e strict mai prost pe fiecare axă.
+NU atinge `reasoning_effort` (ar tăia și baseline-ul de ~25s, dar atinge calitatea ⇒ cere golden,
+D15) și nu aprinde `TURN_DEADLINE_ENABLED`. Card: [`tasks/stage1/NX-311.md`](tasks/stage1/NX-311.md);
+probe: `pytest tests/test_llm_call_budget.py -q` +
+`PYTHONPATH=. python scripts/llm_call_budget_probe.py --business sole-ro`.
+
 **Fix 2026-09-16 (2) — creierul unic era pus să citeze dovezi pe care nu i le arăta nimeni.**
 Găsit pe prima conversație REALĂ de după aprinderea flagului (`sole-ro`, `conversation_traces` +
 `analytics_events`), nu pe fixture: clientul a scris „parca mi uscat parul dupa ce fac dus", apoi

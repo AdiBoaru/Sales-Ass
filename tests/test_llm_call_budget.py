@@ -113,7 +113,8 @@ def _fast(monkeypatch):
 
 @pytest.fixture
 def _degradations():
-    """Acumulatorul REAL de `turn_latency` — codurile se verifică pe drumul pe care chiar circulă."""
+    """Acumulatorul REAL de `turn_latency`: codurile se verifică pe drumul pe care chiar
+    circulă."""
     acc, token = turn_latency.push()
     yield acc
     turn_latency.pop(token)
@@ -179,8 +180,9 @@ async def test_plafonul_total_opreste_retryurile_inainte_sa_se_inmulteasca(monke
 
 
 async def test_incercarea_urmatoare_primeste_doar_ce_a_ramas(monkeypatch):
-    """Nu doar „mai încerc / nu mai încerc": a doua încercare capătă `min(capul ei, total − consumat)`
-    — altfel o singură încercare ar putea depăși singură plafonul total."""
+    """Nu doar „mai încerc / nu mai încerc": a doua încercare capătă
+    `min(capul ei, total − consumat)` — altfel o singură încercare ar putea depăși
+    singură plafonul total."""
     monkeypatch.setattr(llm, "get_settings", _settings)  # total 90s
     c, comp, clock = _client([_timeout_error(), _Resp()], takes_s=70.0)
     monkeypatch.setattr(llm, "perf_counter", lambda: clock["t"])
@@ -190,8 +192,9 @@ async def test_incercarea_urmatoare_primeste_doar_ce_a_ramas(monkeypatch):
 
 
 def test_timeoutul_nu_poate_ajunge_zero():
-    """`timeout=0` înseamnă „fără timeout" pentru httpx, adică fix opusul intenției. Un buget deja
-    consumat trebuie să dea un minim POZITIV, altfel defecțiunea s-ar vedea abia ca un apel agățat."""
+    """`timeout=0` înseamnă „fără timeout" pentru httpx, adică fix opusul intenției. Un
+    buget deja consumat trebuie să dea un minim POZITIV, altfel defecțiunea s-ar vedea
+    abia ca un apel agățat."""
     assert llm._min_positive(75.0, -5.0) > 0
     assert llm._min_positive(None, None) is None
     assert llm._min_positive(None, 12.0) == 12.0
@@ -203,8 +206,9 @@ def test_timeoutul_nu_poate_ajunge_zero():
 async def test_timeoutul_nostru_si_esecul_furnizorului_nu_mai_impart_un_contor(
     monkeypatch, _degradations
 ):
-    """`llm_retry` singur a ținut defectul ascuns o lună: numără la fel două situații care cer
-    reparații OPUSE. Un timeout al nostru se repară lărgind fereastra; un 429 se repară așteptând."""
+    """`llm_retry` singur a ținut defectul ascuns o lună: numără la fel două situații care
+    cer reparații OPUSE. Un timeout al nostru se repară lărgind fereastra; un 429 se repară
+    așteptând."""
     monkeypatch.setattr(llm, "get_settings", _settings)
     c, _, _ = _client([_timeout_error(), _Resp()])
     await c.complete("sys", "usr")
