@@ -1185,6 +1185,48 @@ class Settings(BaseSettings):
     # „reasoning" care resping `temperature` ne-default → OFF lasă apelurile fără sampling params.
     llm_timeout_s: float = Field(default=30.0, validation_alias="LLM_TIMEOUT_S")
     llm_retry_max: int = Field(default=2, validation_alias="LLM_RETRY_MAX")
+    # NX-311 — cât are voie să dureze un apel e o proprietate a APELULUI, nu o constantă globală.
+    #
+    # `llm_timeout_s` de mai sus e un plafon ANTI-HANG onest pentru un apel care nu raționează
+    # (măsurat pe `sole-ro`: rundă de tool-calling p50 2,9s, p90 4,5s). Pe apelul de compunere e
+    # altceva: acolo `reasoning_effort` e `high`, iar durata măsurată e p50 6,5s / p90 25,9s, cu
+    # 24,6% din apeluri PESTE 30s. Maximul observat era exact 30,1s — nu coada distribuției, ci
+    # peretele nostru. Datele erau cenzurate de propriul nostru ceas.
+    #
+    # Consecința, măsurată în producție: `APITimeoutError` e tratat ca eroare TRANZITORIE (alături
+    # de `APIConnectionError`), deci se reîncearcă — dar cererea ajunsese, furnizorul lucra, iar
+    # firul îl tăiasem noi. Repetarea pornește aceeași generare, cu același prompt și același
+    # effort, în fața aceluiași cronometru: nu e o recuperare, e o taxă triplă. 30s × (1+2) = banda
+    # de 98-122s pe 18 ture din 101, din care 6 au ajuns la client cu răspunsul degradat.
+    #
+    # Premisa era adevărată la NX-126 (iunie 2026, `gpt-5.4-mini`, fără raționament): un apel de
+    # 30s chiar era agățat. S-a rupt pe 24 aug (`bbb77b3`), când defaultul a trecut pe
+    # `gpt-5.6-luna` ȘI pe `reasoning_effort=high`, deodată.
+    #
+    # Pragul de aici e o PRIMĂ calibrare, nu un adevăr: cât de lungă e de fapt coada nu se știe
+    # încă, fiindcă n-am măsurat-o niciodată dincolo de perete. De-aia fixul emite și
+    # `llm_call_over_30s` — fără el am muta peretele fără să aflăm ce era în spatele lui, iar
+    # următoarea calibrare ar fi tot pe ghicite (D15).
+    llm_timeout_reasoning_s: float = Field(
+        default=75.0, validation_alias="LLM_TIMEOUT_REASONING_S", gt=0
+    )
+    # Plafonul TOTAL al unei bucle `_with_retry`, ceas MONOTON, local apelului. Fără el, un timeout
+    # per încercare de 75s × 3 ar însemna 225s: aș repara p50 stricând coada. Cu el, plafonul dur pe
+    # un apel rămâne 90s — exact cât azi. Se schimbă doar CE cumperi cu ei: azi trei generări tăiate
+    # la mijloc și un răspuns degradat, după fix o generare dusă până la capăt.
+    #
+    # NU e un al doilea `TurnDeadline` (P3): când deadline-ul de TUR e activ, el rămâne autoritatea
+    # și câștigă prin `min`. Ăsta e plafonul unui APEL, și există și cu flagul NX-241 stins.
+    llm_call_total_cap_s: float = Field(default=90.0, validation_alias="LLM_CALL_TOTAL_CAP_S", gt=0)
+    # Kill-switch. Implicit **ON**, spre deosebire de convenția proiectului, fiindcă nu introduce o
+    # capabilitate nouă care trebuie câștigată cu măsurători: repară un defect MĂSURAT, în care
+    # comportamentul de azi e strict mai prost pe fiecare axă (latență, calitatea răspunsului și
+    # cost — fiecare încercare tăiată se plătește integral). OFF ar însemna „defectul rămâne aprins
+    # până își aduce aminte cineva". Stins → niciun `timeout` pe sârmă, niciun plafon total,
+    # `cap_ms` neatins: traseul de azi, byte-identic.
+    llm_call_budget_by_role_enabled: bool = Field(
+        default=True, validation_alias="LLM_CALL_BUDGET_BY_ROLE_ENABLED"
+    )
     # NX-225: buget de TIMP pentru embed-ul de query din `search_products` (P4 — bugetul stă în cod,
     # nu în speranță). `llm_timeout_s` × retry = până la ~90s de așteptare pe un furnizor lent, deși
     # piciorul lexical răspunde în milisecunde: la depășire cădem pe lexical-only, ca la eroare
@@ -1590,6 +1632,15 @@ class Settings(BaseSettings):
     # Plafonul de timp al UNUI apel de model. Sub `llm_timeout_s` (30s): un singur apel n-are voie
     # să mănânce tot bugetul unui tur de 6s. Efectiv rămâne `min(cap, remaining − rezervă)`.
     llm_call_cap_ms: int = Field(default=8_000, validation_alias="LLM_CALL_CAP_MS", ge=100)
+    # NX-311 — perechea de mai sus, pentru apelurile care RAȚIONEAZĂ. Fără ea, cardul ar fi reparat
+    # defectul activ și ar fi lăsat aprins geamănul lui LATENT: `llm_call_cap_ms=8_000` se aplică
+    # oricărui apel de chat, deci apelul de compunere (p90 25,9s măsurat) ar fi fost strangulat la
+    # 8s **în ziua în care cineva aprinde `TURN_DEADLINE_ENABLED`** — exact aceeași clasă (plafon
+    # global peste apeluri de feluri diferite), doar că descoperită într-un incident, nu aici.
+    # Întrebarea „cât are voie apelul ăsta" are UN proprietar (`call_budget`), citit de ambele căi.
+    llm_call_cap_reasoning_ms: int = Field(
+        default=60_000, validation_alias="LLM_CALL_CAP_REASONING_MS", ge=100
+    )
     # Minimul util pentru a mai PORNI un retry: sub el, un apel pe care oricum îl vom anula costă
     # bani și latență fără nicio șansă de rezultat.
     llm_retry_min_budget_ms: int = Field(

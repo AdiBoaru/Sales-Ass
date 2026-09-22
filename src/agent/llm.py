@@ -17,7 +17,8 @@ from collections.abc import Awaitable, Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
-from typing import Any
+from time import perf_counter
+from typing import Any, NamedTuple
 
 import openai
 from openai import AsyncOpenAI
@@ -32,6 +33,90 @@ log = logging.getLogger(__name__)
 
 # Erori TRANZITORII fără status HTTP (timeout / conexiune) — retry-abile.
 _TRANSIENT_ERRORS = (openai.APITimeoutError, openai.APIConnectionError)
+
+# NX-311 — CAUZA unui retry, vocabular ÎNCHIS. `llm_retry` singur a ascuns defectul o lună: numără
+# la fel „furnizorul a picat" (repetarea are rost, cererea n-a ajuns) și „ne-am tăiat singuri"
+# (repetarea pornește aceeași generare în fața aceluiași cronometru). Cer reparații OPUSE, deci nu
+# pot împărți un contor. Ordinea de mai jos nu e cosmetică: în SDK `APITimeoutError` e SUBCLASĂ de
+# `APIConnectionError`, deci un `isinstance` pus invers ar eticheta orice timeout drept „conexiune".
+_RETRY_CAUSE_TIMEOUT = "llm_retry_timeout"
+_RETRY_CAUSE_CONNECTION = "llm_retry_connection"
+_RETRY_CAUSE_STATUS = "llm_retry_status"
+
+# Apel care depășește VECHIUL perete de 30s. Pragul e înghețat deliberat la valoarea de dinainte de
+# NX-311, nu legat de `llm_timeout_s`: rostul lui e să ridice CENZURA pe care ne-o puseserăm singuri
+# (maximul observat al apelului de compunere era exact 30,1s, fiindcă acolo tăiam). Legat de config,
+# seria ar deveni incomparabilă exact în momentul în care schimbi pragul, adică atunci când ai
+# nevoie de ea.
+_SLOW_CALL_AFTER_MS = 30_000
+_SLOW_CALL_CODE = "llm_call_over_30s"
+
+
+def _min_positive(*values: float | None) -> float | None:
+    """Cel mai mic plafon ACTIV, sau `None` dacă niciunul nu e. Valorile ≤ 0 (buget deja consumat)
+    devin un minim pozitiv, nu zero: un `timeout=0` înseamnă „fără timeout" pentru httpx, adică fix
+    opusul intenției — o defecțiune care s-ar vedea abia ca un apel agățat la infinit."""
+    active = [v for v in values if v is not None]
+    return max(min(active), 0.001) if active else None
+
+
+def _retry_cause(exc: Exception) -> str:
+    """Excepția → codul de cauză. Timeout ÎNAINTEA conexiunii (vezi nota de mai sus)."""
+    if isinstance(exc, openai.APITimeoutError | TimeoutError):
+        return _RETRY_CAUSE_TIMEOUT
+    if isinstance(exc, openai.APIConnectionError):
+        return _RETRY_CAUSE_CONNECTION
+    return _RETRY_CAUSE_STATUS
+
+
+class Sampling(NamedTuple):
+    """Ce pleacă pe sârmă + bitul pe baza căruia s-a decis. NX-311 îl scoate afară fiindcă `_chat`
+    are nevoie de el pentru ceas, iar a-l recalcula separat ar însemna două derivări ale aceleiași
+    întrebări, care pot diverge tăcut exact la schimbarea de model care a produs defectul."""
+
+    params: dict[str, Any]
+    reasoning_on: bool
+
+
+class CallBudget(NamedTuple):
+    """NX-311 — UN proprietar al întrebării „cât are voie apelul ăsta" (P3).
+
+    Există fiindcă apelurile de model nu sunt de același fel, iar codul o știe deja: `_sampling`
+    decide DETERMINIST dacă cererea raționează (pe bucla cu tool-uri raționamentul e FORȚAT `none`,
+    altfel furnizorul dă 400). Același bit decide și ceasul — nu se inventează o taxonomie paralelă
+    de „roluri", care ar putea diverge tăcut de cea care decide legalitatea cererii.
+
+    `cap_ms` e plafonul NX-241 (activ doar cu deadline-ul de tur aprins), `attempt_timeout_s` e
+    ceasul UNEI încercări, `total_cap_s` e plafonul întregii bucle de retry. Toate `None` = traseul
+    de dinainte de card, byte-identic.
+    """
+
+    attempt_timeout_s: float | None
+    total_cap_s: float | None
+    cap_ms: int | None
+    slow_after_ms: int | None
+
+
+def call_budget(settings: Any, *, reasoning_on: bool) -> CallBudget:
+    """Bugetul unui apel de chat. PUR (citește settings, nu atinge ceasul) → testabil direct."""
+    legacy_cap = getattr(settings, "llm_call_cap_ms", 8_000)
+    if not getattr(settings, "llm_call_budget_by_role_enabled", True):
+        return CallBudget(None, None, legacy_cap, None)
+    total = float(getattr(settings, "llm_call_total_cap_s", 90.0))
+    if reasoning_on:
+        return CallBudget(
+            float(getattr(settings, "llm_timeout_reasoning_s", 75.0)),
+            total,
+            int(getattr(settings, "llm_call_cap_reasoning_ms", 60_000)),
+            _SLOW_CALL_AFTER_MS,
+        )
+    return CallBudget(
+        float(getattr(settings, "llm_timeout_s", 30.0)),
+        total,
+        legacy_cap,
+        _SLOW_CALL_AFTER_MS,
+    )
+
 
 # NX-241 — plafonul de timp al apelurilor care NU sunt generare (clasificare/extracție). Sunt
 # rapide prin natura lor: un moderation care durează 8s nu mai are pentru cine să modereze, iar
@@ -53,7 +138,13 @@ def _retry_after_seconds(exc: Exception) -> float | None:
 
 
 async def _with_retry(
-    factory: Callable[[], Awaitable[Any]], *, max_retries: int, cap_ms: int | None = None
+    factory: Callable[[float | None], Awaitable[Any]],
+    *,
+    max_retries: int,
+    cap_ms: int | None = None,
+    attempt_timeout_s: float | None = None,
+    total_cap_s: float | None = None,
+    slow_after_ms: int | None = None,
 ) -> Any:
     """NX-126: retry bounded pe erori TRANZITORII (429 / 5xx / timeout / connection). Respectă
     `Retry-After` când există, altfel backoff exponențial cu jitter. 4xx terminale (400/401/403/404)
@@ -71,20 +162,40 @@ async def _with_retry(
         — un apel pe care oricum îl anulăm costă bani și latență fără nicio șansă de rezultat.
 
     Fără deadline activ (default), comportamentul e byte-identic cu NX-126.
+
+    NX-311 — al doilea plafon, care există ȘI cu deadline-ul de tur stins: `total_cap_s` mărginește
+    ÎNTREAGA buclă, pe un ceas MONOTON local. Fără el, un timeout pe încercare dimensionat onest
+    pentru un apel care raționează (75s) × 3 încercări ar însemna 225s — aș fi reparat p50 stricând
+    coada. Cu el, plafonul dur pe un apel rămâne 90s, exact cât azi; se schimbă doar CE cumperi cu
+    ei (o generare dusă până la capăt, nu trei tăiate la mijloc).
+
+    `attempt_timeout_s` se pasează FACTORY-ului, nu se aplică aici cu `asyncio.timeout`: ceasul
+    trebuie să fie al CERERII HTTP (SDK-ul închide conexiunea și ridică `APITimeoutError`), nu o
+    anulare de corutină peste un request care rămâne în aer. `asyncio.timeout` de mai jos rămâne
+    exclusiv al deadline-ului de TUR, ca `TimeoutError` să însemne în continuare un singur lucru.
     """
     d = deadline.current()
     min_useful = getattr(get_settings(), "llm_retry_min_budget_ms", 600)
+    started = perf_counter()
+
+    def _remaining_total_s() -> float | None:
+        return None if total_cap_s is None else total_cap_s - (perf_counter() - started)
+
     delay = 0.5
     last: Exception | None = None
     for attempt in range(max_retries + 1):
         timeout_s = None if d is None else d.timeout_for(cap_ms)
         if timeout_s is not None and timeout_s <= 0:
             raise DeadlineExhausted("model", REASON_NO_ROOM)
+        # Ceasul acestei încercări: capul ei, tăiat de cât a mai rămas din plafonul TOTAL. Cu
+        # `total_cap_s=None` (kill-switch stins) rămâne exact `attempt_timeout_s`, adică `None`.
+        call_timeout_s = _min_positive(attempt_timeout_s, _remaining_total_s())
+        attempt_started = perf_counter()
         try:
             if timeout_s is None:
-                return await factory()
+                return await factory(call_timeout_s)
             async with asyncio.timeout(timeout_s):
-                return await factory()
+                return await factory(call_timeout_s)
         except openai.APIStatusError as e:
             # 429 (RateLimitError) + 5xx = tranzitoriu; restul 4xx = terminal → ridică.
             if e.status_code < 500 and not isinstance(e, openai.RateLimitError):
@@ -98,6 +209,12 @@ async def _with_retry(
             if d is None:
                 raise
             last, wait = e, None
+        finally:
+            # Se numără ȘI încercările REUȘITE, fiindcă exact ele sunt datele care lipseau: sub
+            # vechiul perete un apel de 29s arăta la fel ca unul de 3s, iar unul de 40s nu exista.
+            if slow_after_ms is not None:
+                if (perf_counter() - attempt_started) * 1000.0 >= slow_after_ms:
+                    turn_latency.degrade(_SLOW_CALL_CODE)
         if attempt >= max_retries:
             break
         sleep_s = (wait if wait is not None else delay) + random.uniform(0.0, 0.25)
@@ -111,14 +228,29 @@ async def _with_retry(
             )
             turn_latency.degrade("llm_retry_no_budget")
             break
+        # NX-311 — același raționament, pe plafonul TOTAL al apelului: dacă după somn n-ar mai
+        # rămâne un minim util, încercarea următoare e bani și latență pe o generare pe care oricum
+        # o tăiem la jumătate. Reutilizează codul de la NX-241, fiindcă e exact aceeași concluzie.
+        remaining_total_s = _remaining_total_s()
+        if remaining_total_s is not None and (remaining_total_s - sleep_s) * 1000.0 < min_useful:
+            log.warning(
+                "llm_api_failure: %s — retry abandonat, plafonul apelului e consumat (%.1fs/%.1fs)",
+                type(last).__name__,
+                (total_cap_s or 0.0) - remaining_total_s,
+                total_cap_s or 0.0,
+            )
+            turn_latency.degrade("llm_retry_no_budget")
+            break
         log.warning(
-            "llm_api_failure: %s tranzitoriu — retry %d/%d în %.2fs",
+            "llm_api_failure: %s tranzitoriu (%s) — retry %d/%d în %.2fs",
             type(last).__name__,
+            _retry_cause(last),
             attempt + 1,
             max_retries,
             sleep_s,
         )
         turn_latency.degrade("llm_retry")
+        turn_latency.degrade(_retry_cause(last))
         await asyncio.sleep(sleep_s)
         delay *= 2
     log.warning(
@@ -394,7 +526,7 @@ class LLMClient:
         self.model_moderation = model_moderation
         self.model_vision = model_vision
 
-    def _sampling(self, *, agent: bool, model: str, has_tools: bool = False) -> dict[str, Any]:
+    def _sampling(self, *, agent: bool, model: str, has_tools: bool = False) -> "Sampling":
         """Params trimiși la chat.completions. Ordinea contează: întâi decidem modul de
         RAȚIONAMENT, fiindcă de el atârnă și `temperature`, și dreptul de a trimite tool-uri
         (vezi tabelul de la `_MODEL_PROFILES`).
@@ -431,7 +563,10 @@ class LLMClient:
             # Prefix nedeclarat: nu inventăm capabilități. Un 400 aici e zgomotos și reparabil
             # printr-o linie în `_MODEL_PROFILES`; un parametru ghicit e un tur pierdut tăcut.
             turn_latency.degrade("llm_model_profile_unknown")
-            return out
+            # NX-311: prefix nedeclarat ⇒ nu ȘTIM dacă raționează, iar bugetul cere un răspuns.
+            # Alegem `False`, adică ceasul de azi (30s): un model necunoscut nu trebuie să capete
+            # tăcut fereastra largă. Cazul e deja numărat mai sus, deci nu degradează pe tăcute.
+            return Sampling(out, reasoning_on=False)
 
         wanted = (getattr(s, "llm_reasoning_effort_agent", "") or "").strip() if agent else ""
         effort = wanted
@@ -457,16 +592,21 @@ class LLMClient:
                 )
             else:
                 turn_latency.degrade("llm_param_unsupported_temperature")
-        return out
+        return Sampling(out, reasoning_on=reasoning_on)
 
     async def _chat(self, *, agent: bool, **kwargs: Any):
         """Wrapper unic pe chat.completions.create: retry bounded (NX-126) + sampling params.
 
         NX-241: plafonul de timp al UNUI apel (`llm_call_cap_ms`) intră aici, nu în fiecare
-        apelant — timeoutul efectiv rămâne `min(cap, buget rămas − rezervă)`."""
-        kwargs.update(
-            self._sampling(agent=agent, model=kwargs["model"], has_tools=bool(kwargs.get("tools")))
+        apelant — timeoutul efectiv rămâne `min(cap, buget rămas − rezervă)`.
+
+        NX-311: tot aici intră și ceasul apelului, derivat din ACELAȘI bit care decide dacă cererea
+        e legală (`Sampling.reasoning_on`). Clientul e un singleton per proces, deci nu poate purta
+        două ceasuri — `timeout` pleacă per CERERE."""
+        sampling = self._sampling(
+            agent=agent, model=kwargs["model"], has_tools=bool(kwargs.get("tools"))
         )
+        kwargs.update(sampling.params)
         s = get_settings()
         # NX-275 felia 3: sub același flag ca layoutul, fiindcă amândouă sunt inutile una fără
         # cealaltă (un prefix stabil pe care ruterul îl trimite în altă parte nu se cache-uiește,
@@ -474,10 +614,16 @@ class LLMClient:
         cache_key = _prompt_cache_key.get()
         if cache_key and getattr(s, "prompt_cache_layout_enabled", False):
             kwargs["prompt_cache_key"] = cache_key
+        budget = call_budget(s, reasoning_on=sampling.reasoning_on)
         resp = await _with_retry(
-            lambda: self._client.chat.completions.create(**kwargs),
+            lambda t: self._client.chat.completions.create(
+                **(kwargs if t is None else {**kwargs, "timeout": t})
+            ),
             max_retries=s.llm_retry_max,
-            cap_ms=getattr(s, "llm_call_cap_ms", 8_000),
+            cap_ms=budget.cap_ms,
+            attempt_timeout_s=budget.attempt_timeout_s,
+            total_cap_s=budget.total_cap_s,
+            slow_after_ms=budget.slow_after_ms,
         )
         _note_truncation(resp, cap=kwargs.get("max_completion_tokens"))
         _note_cache_on_span(resp)
@@ -708,7 +854,11 @@ class LLMClient:
         principiul 2, ca embed). Folosit de Gates (NX-15) ÎNAINTE de triaj. Ridică la
         eroare de API — caller-ul (gate) prinde și degradează fail-open."""
         resp = await _with_retry(
-            lambda: self._client.moderations.create(
+            # NX-311: `_t` ignorat DELIBERAT. Bugetul pe rol e al apelurilor de GENERARE, a căror
+            # durată depinde de cât gândește modelul. Moderation/embed/vision sunt extracții cu
+            # durată ~fixă, își au deja plafonul lor (`MODERATION_CAP_MS`, `embed_timeout_ms`), iar
+            # `timeout` din constructor le rămâne anti-hang. Nu sunt membri ai clasei reparate aici.
+            lambda _t: self._client.moderations.create(
                 model=model or self.model_moderation, input=text
             ),
             max_retries=get_settings().llm_retry_max,
@@ -727,7 +877,7 @@ class LLMClient:
         mdl = model or self.model_vision
         # Vision: NU trecem prin `_chat` (fără `temperature` — extracție, nu generare). Doar retry.
         resp = await _with_retry(
-            lambda: self._client.chat.completions.create(
+            lambda _t: self._client.chat.completions.create(  # `_t`: vezi nota din `moderate`
                 model=mdl,
                 messages=[
                     {"role": "system", "content": _VISION_SYSTEM},
@@ -765,7 +915,9 @@ class LLMClient:
         mdl = model or self.model_embed
         s = get_settings()
         resp = await _with_retry(
-            lambda: self._client.embeddings.create(model=mdl, input=texts),
+            lambda _t: self._client.embeddings.create(  # `_t`: vezi nota din `moderate`
+                model=mdl, input=texts
+            ),
             max_retries=s.llm_retry_max,
             # `embed_timeout_ms` (NX-225) rămâne plafonul embedului; deadline-ul turului îl poate
             # doar STRÂNGE, niciodată lărgi. 0 = fără plafon propriu → doar bugetul turului.

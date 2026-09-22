@@ -21,6 +21,22 @@ Timeouturile astea se **înmulțesc**, nu se împart: nimeni nu întreba „cât
 provider lent putea consuma minute pe un tur pe care clientul îl aștepta de trei secunde, iar
 `turn_over_budget` (NX-161) doar CONSTATA depășirea, post-factum, fără să oprească nimic.
 
+> **NX-311 (2026-09-22) — prima linie a tabelului s-a dovedit în producție, cu flagul ăsta STINS.**
+> Măsurat pe `sole-ro` (101 ture live): turele lente poartă exact `llm_retry×2` și stau în banda
+> 98-122s, adică fix `30s × 3`. Cauza nu era un provider lent, ci faptul că `llm_timeout_s` e un
+> plafon ANTI-HANG dimensionat pentru un apel care nu raționează (p50 2,9s), aplicat peste unul
+> care raționează (p90 25,9s, 24,6% peste 30s) — iar tăietura noastră ieșea ca `APITimeoutError`,
+> deci era tratată ca eroare de furnizor și reîncercată. NX-311 dă fiecărui apel ceasul lui,
+> derivat din bitul de raționament, plus un plafon TOTAL pe buclă (`llm_call_total_cap_s=90s`) ca
+> înmulțirea să nu se mute un nivel mai jos. **Nu înlocuiește cardul ăsta:** e plafonul unui APEL,
+> nu al unui TUR, și rămâne subordonat — când `TURN_DEADLINE_ENABLED` se aprinde, deadline-ul de
+> tur e în continuare autoritatea și câștigă prin `min`.
+>
+> A ieșit la iveală și un geamăn LATENT al aceleiași clase: `llm_call_cap_ms=8_000` de mai jos se
+> aplica oricărui apel de chat, deci ar fi strangulat la 8s apelul de compunere **în ziua în care
+> cineva aprinde flagul** — adică s-ar fi descoperit într-un incident, nu într-o măsurătoare.
+> Perechea lui e `llm_call_cap_reasoning_ms` (60s), din același proprietar (`llm.call_budget`).
+
 ## 2. Contractul nou
 
 Un tur are **un singur deadline monoton**, născut o dată din `web_turns.deadline_at` (fixat la
