@@ -1,10 +1,16 @@
-"""Creierul unic emite RĂSPUNS BOGAT: aceleași carduri ca v1, hidratate de ACELAȘI cod.
+"""Răspuns BOGAT derivat din fapte, fără al doilea apel de model. Doi apelanți, un singur cod.
 
-**Defectul.** `finalize.py` (v1) chema `set_rich_reply`; `brain.py` (NX-239) cheamă doar
-`set_reply(text, products=...)`. Diferența nu e de conținut, e de CONTRACT: `channels/web/render.py`
-are trei ramuri, iar ramura săracă (`reply.products`) nu poartă `reason`, `rating`, `review_count`,
-`badge`/`badge_tone`, `list_price`, `currency`, `details` și nici chips. Aprinderea creierului unic
-a mutat deci fiecare recomandare de pe ramura bogată pe cea săracă, fără ca vreun test să pice:
+Modulul s-a născut pentru creierul unic (`rich_from_plan`), dar regula pe care o implementează nu e
+a lui: **un card bogat nu are nevoie de un model ca să existe**. Motivul, ratingul, badge-ul,
+variantele, gramajul și încadrarea vin din catalog, nu din proză. De-aia stă aici și
+`rich_from_facts`, folosit de calea v1 când apelul rich cade (NX-302) — dacă ar fi fost scris
+separat, ar fi divergit din prima săptămână de la pragurile de badge, monedă și `details`.
+
+**Defectul care a cerut `rich_from_plan`.** `finalize.py` (v1) chema `set_rich_reply`; `brain.py`
+(NX-239) cheamă doar `set_reply(text, products=...)`. Diferența nu e de conținut, e de CONTRACT:
+`channels/web/render.py` are trei ramuri, iar ramura săracă (`reply.products`) nu poartă `reason`,
+`rating`, `review_count`, `badge`/`badge_tone`, `list_price`, `currency`, `details` și nici chips.
+Aprinderea creierului unic a mutat fiecare recomandare pe ramura săracă, fără ca vreun test să pice:
 cardurile erau REALE, doar goale. Nimic din aval nu putea prinde asta, din același motiv ca la
 NX-293 și la garda off-category — validatorul (stagiul 8) și `grounding_guard` sunt porți de
 ADEVĂR, nu de FORMĂ. Un card corect și sărac trece prin ele exact ca unul corect și bogat.
@@ -193,4 +199,95 @@ def rich_from_plan(
     return replace(rich, intro=text, pick=None)
 
 
-__all__ = ["card_refs", "plan_item_refs", "rich_from_plan"]
+def facts_item_refs(products: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """`j["items"]` construite DOAR din rândurile de retrieval, fără niciun plan și niciun model.
+
+    Un rând fără id, nume sau preț se ARUNCĂ, din același motiv ca în `card_refs`: pe sârmă, un card
+    mut arată apăsabil. Dedupe pe prima apariție, ca `assemble` să nu consume capul pe un duplicat
+    (retrievalul poate întoarce aceeași familie de nuanțe de două ori).
+    """
+    items: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for p in products:
+        raw = p.get("id") or p.get("product_id")
+        if not raw or p.get("name") is None or p.get("price") is None:
+            continue
+        pid = str(raw)
+        if pid in seen:
+            continue
+        seen.add(pid)
+        item: dict[str, Any] = {"product_id": pid}
+        reason = _data_reason(p)
+        if reason:
+            item["fit_clause"] = reason
+        items.append(item)
+    return items
+
+
+def rich_from_facts(
+    ctx: TurnContext,
+    products: list[dict[str, Any]],
+    *,
+    intro: str | None = None,
+) -> RichReply | None:
+    """`RichReply` construit din faptele de catalog, pentru turele în care modelul rich a căzut.
+
+    **De ce există.** Pe v1, TOATĂ bogăția răspunsului atârna de un singur apel structurat
+    (`finalize._rich`). Când el eșua — timeout, zero items după poarta de apartenență, refuz —
+    clientul nu primea un răspuns puțin mai sărac, ci `_deterministic_reply`: trei nume cu prețuri
+    și o întrebare. Măsurat pe traficul real al lui `sole-ro` (56 de ture cu `conversation_traces`):
+    **14 ture cu produse au ajuns la client cu `rich = null`**, adică un sfert. Pe turul
+    `57fa9fbe` («vreau o rutina de cosuri») cauza a fost `APITimeoutError` pe un apel pe care
+    NX-300 îl măsurase la 86,7 s dintr-un tur de 95,2 s, contra unui plafon de 30 s pe încercare:
+    nu ghinion, ci o loterie pe care o pierdem previzibil.
+
+    **Ce se pierde onest și ce nu.** Fără model nu există `intro` scris, `education`, și nici
+    `fit_clause` narat. Restul nu depindea NICIODATĂ de el: prețul, ratingul, numărul de recenzii,
+    badge-ul derivat, prețul de listă, `details`, variantele, gramajul și ordinea de ranking sunt
+    fapte de catalog pe care serverul le are deja în mână. A le arunca odată cu proza e o degradare
+    pe care n-o cere nimic — exact argumentul lui `grounded_fallback_reply`, dus până la capăt: nu
+    doar textul prezintă faptele, ci contractul întreg.
+
+    Motivul de sub card vine din `best_for` (`_data_reason`), ca pe calea creierului unic pe turele
+    de întrebare. Nu e un al doilea writer semantic: e un fapt de catalog luat ca atare.
+
+    `intro` = proza buclei de vânzare, și apelantul are voie s-o dea DOAR dacă a trecut `_valid`.
+    Pe ea se ocolește `scrub_intro`, din același motiv ca în `rich_from_plan`: poarta prin care a
+    trecut deja e strict mai tare. `validate_prose` cere ca fiecare preț să existe în retrieval,
+    fiecare link să vină din catalog, zero claim medical, zero cifră bare negroundată și niciun
+    claim de stoc nefondat; `scrub_intro` știe doar cifrele clientului și pe cele de specificație,
+    deci ar arunca ÎNTREG un text corect fiindcă numește un preț REAL. Măsurat pe suită: fără
+    ocolire, «Îți recomand Crema Hidratantă la 82,99 lei» dispărea, iar clientul rămânea cu lista de
+    carduri și fără nicio frază.
+
+    `intro=None` ⇒ `assemble` umple slotul de încadrare cu rezerva serverului (NX-299), deci tot o
+    frază iese, nu un ecran de carduri mute.
+    """
+    items = facts_item_refs(products)
+    if not items:
+        return None
+    j: dict[str, Any] = {
+        "items": items,
+        "intro": intro,
+        "education": None,
+        "pick": None,
+        "suggestions": [],
+    }
+    rich = compose.assemble(ctx, j, products)
+    if not rich.items:
+        return None
+    # `pick` stins din aceleași motive ca în `rich_from_plan`: e o A DOUA voce, iar regula de produs
+    # „fără «Recomandarea mea»" o interzice oricum. `intro` se repune doar când apelantul a dat o
+    # proză validată; altfel rămâne ce a decis `assemble` (rezerva de încadrare, sau nimic).
+    if intro:
+        return replace(rich, intro=intro, pick=None)
+    return replace(rich, pick=None)
+
+
+__all__ = [
+    "card_refs",
+    "facts_item_refs",
+    "plan_item_refs",
+    "rich_from_facts",
+    "rich_from_plan",
+]

@@ -378,6 +378,34 @@ def _mention_index(prose: str, name: str) -> int | None:
     return None
 
 
+def named_products(prose: str | None, products: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Produsele pe care proza le NUMEȘTE, în ordinea mențiunii. PURĂ, fără LLM.
+
+    NX-306: pe calea bogată, setul de carduri e cel pe care modelul l-a numit în răspunsul
+    structurat, iar apartenența e verificată. Pe calea de PROZĂ nu exista nicio legătură: cardurile
+    erau retrievalul brut, indiferent ce spunea textul. Pe turul real `78b347fa` («cat cost una?»,
+    `sole-ro`) asta a produs un text care spune „nu am găsit în catalog o mănușă" deasupra a patru
+    seturi de pensule de 1.300 lei — o contradicție pe care niciun validator n-o putea prinde,
+    fiindcă produsele și prețurile erau REALE: stagiul 8 și `grounding_guard` sunt porți de ADEVĂR,
+    nu de POTRIVIRE.
+
+    Refolosește `_mention_index`, adică EXACT regula după care se reordonează cardurile
+    (`_order_by_first_mention`). Un al doilea potrivitor de nume ar diverge de primul, iar atunci
+    ordinea și apartenența ar răspunde la întrebări diferite despre aceeași frază.
+
+    Proză goală ⇒ listă goală: absența textului nu e o aprobare tăcută a setului.
+    """
+    if not isinstance(prose, str) or not prose.strip():
+        return []
+    hits: list[tuple[int, int, dict[str, Any]]] = []
+    for rank, product in enumerate(products):
+        idx = _mention_index(prose, str(product.get("name") or ""))
+        if idx is not None:
+            hits.append((idx, rank, product))
+    # `rank` ca al doilea criteriu ține sortarea stabilă pentru două nume la aceeași poziție.
+    return [p for _, _, p in sorted(hits, key=lambda h: (h[0], h[1]))]
+
+
 def _order_by_first_mention(
     ordered_ids: list[str],
     facts: dict[str, dict[str, Any]],

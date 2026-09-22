@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import Any
 
 from src.catalog.render_text import display_name, size_label
+from src.config import card_slots
 from src.models import MAX_CHIP_LEN
 from src.web.localization import amount_text
 
@@ -348,8 +349,17 @@ def _card_variants(product: dict[str, Any], n: int = 16) -> list[dict[str, Any]]
     return out
 
 
-def _card_products(products: list[dict[str, Any]], n: int = 4) -> list[dict[str, Any]]:
-    """Câmpuri compacte pentru cardurile de produs (W1 + carusel R2)."""
+def _card_products(products: list[dict[str, Any]], n: int | None = None) -> list[dict[str, Any]]:
+    """Câmpuri compacte pentru cardurile de produs (W1 + carusel R2).
+
+    `n=None` ⇒ `settings.card_slots`. Era `4` scris aici, iar apelantul de pe calea degradată
+    (`finalize.render`) îl lăsa implicit: clientul vedea 4 carduri sub un text care numea 3
+    (`DETERMINISTIC_REPLY_MAX`), pe un tenant configurat cu 6. NX-298 a declarat `card_slots`
+    proprietar UNIC al cifrei „câte produse"; plafonul ăsta îi scăpase, fiindcă trăia pe ramura pe
+    care nimeni n-o citește până nu cade ceva. Apelanții care cer explicit `n` (detaliu = 1,
+    thin path = 6) numesc un plafon de CONTRACT, nu unul de produs, și rămân neatinși."""
+    if n is None:
+        n = card_slots()
     cards: list[dict[str, Any]] = []
     for p in products[:n]:
         card = {

@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 
 from src.analytics.demand import product_ids_from_dicts
 from src.catalog.folding import fold_text
+from src.catalog.query_terms import content_terms
 from src.catalog.render_text import cut_at_sentence, display_name
 from src.catalog.vocabulary import (
     CATEGORY_DIMENSION,
@@ -29,10 +30,12 @@ from src.catalog.vocabulary import (
     facet_overlays,
     resolve,
     resolve_any,
+    text_is_redundant_as_gate,
 )
 from src.catalog.vocabulary_cache import get_vocabulary
 from src.commerce.project import delivery_for
 from src.config import card_slots, get_settings
+from src.config import max_per_type as cfg_max_per_type
 from src.conversation.needs import corroborated_by
 from src.db.queries.catalog import (
     get_products_by_ids,
@@ -276,6 +279,79 @@ _STEP_NOTE_RO: dict[str, str] = {
     "fuzzy": "potrivire aproximativă, posibil o scriere greșită",
     "filters_only": "nu potrivește formularea, e de pe raftul cerut",
 }
+
+
+#: NX-305 — cât de bună e o treaptă, ca ORDINE. Mic = potrivire mai curată. Vocabularul e ÎNCHIS și
+#: identic cu al lui `_STEP_NOTE_RO` plus `strict` (treapta fără notă, fiindcă tăcerea acolo e chiar
+#: informația). Sincronizarea celor două e verificată de suită, nu lăsată pe seama atenției: o
+#: treaptă nouă adăugată doar într-unul ar primi tăcut rangul „necunoscut" și n-ar putea salva
+#: nimic.
+_RUNG_ORDER: dict[str, int] = {
+    "strict": 0,
+    "relaxed": 1,
+    "relaxed_any": 2,
+    "fuzzy": 3,
+    "filters_only": 4,
+}
+
+
+def _rung_of(rows: list[dict[str, Any]]) -> str:
+    """Treapta lexicală pe care a fost SERVIT un set. Aceeași regulă ca la publicarea în
+    `product_search`: primul rând care poartă eticheta o dă pentru tot setul, iar absența ei
+    înseamnă `strict`. Set gol ⇒ `filters_only`, adică cea mai proastă treaptă: un set vid nu are
+    cum să bată nimic, iar tratarea lui ca `strict` ar face ca „n-am găsit" să pară o potrivire
+    curată."""
+    if not rows:
+        return "filters_only"
+    return next((str(p["lexical_step"]) for p in rows if p.get("lexical_step")), "strict")
+
+
+def should_rescue_guessed_filters(
+    *,
+    enabled: bool,
+    category_uttered: bool,
+    facets_uttered: bool,
+    has_guessed_subject: bool,
+    has_content_terms: bool,
+    degraded: bool,
+) -> bool:
+    """NX-305 — merită să reîncercăm interogarea fără filtrele de subiect GHICITE? PURĂ.
+
+    Patru condiții, fiecare pentru alt motiv, și toate necesare:
+
+    `category_uttered` / `facets_uttered` — dacă clientul a ROSTIT raftul sau fațeta, a le scoate
+    ar însemna să ignorăm cererea. E aceeași sursă de adevăr ca la ordonarea treptelor de relaxare
+    (`corroborated_by`, NX-251), deci nu apare o a doua noțiune de „cine a spus asta".
+
+    `has_guessed_subject` — fără niciun filtru de subiect nu e nimic de scos, iar a rula a doua
+    oară aceeași interogare ar fi un cost fără cauză.
+
+    `has_content_terms` — după ce scoatem filtrele, TEXTUL e tot ce rămâne. O interogare fără
+    cuvinte de conținut ar căuta în gol, deci salvarea n-ar avea pe ce să stea.
+
+    `degraded` — pe o potrivire curată nu avem ce repara. Asta e și plafonul de cost al regulii:
+    a doua interogare rulează doar pe turele care oricum au ieșit prost.
+    """
+    return (
+        enabled
+        and not category_uttered
+        and not facets_uttered
+        and has_guessed_subject
+        and has_content_terms
+        and degraded
+    )
+
+
+def rescue_wins(before: list[dict[str, Any]], after: list[dict[str, Any]]) -> bool:
+    """A aterizat interogarea fără filtre ghicite pe o treaptă STRICT mai bună? PURĂ.
+
+    Egalitatea nu ajunge, deliberat. Fără filtre, orice interogare are șanse mai mari să prindă
+    ceva, iar „mai multe rezultate" nu înseamnă „rezultate mai bune" — pe treaptă egală, setul
+    filtrat e cel care poartă și ipoteza modelului, deci rămâne.
+    """
+    if not after:
+        return False
+    return _RUNG_ORDER.get(_rung_of(after), 99) < _RUNG_ORDER.get(_rung_of(before), 99)
 
 
 def _step_note(p: dict[str, Any]) -> str:
@@ -646,6 +722,84 @@ class _ResolvedTerms:
     category: Resolution | None = None
 
 
+async def _subject_filter_tail(
+    conn: Any,
+    ctx: TurnContext,
+    a: SearchArgs,
+    step: dict[str, Any],
+    *,
+    searchable_facets: Any,
+) -> list[dict[str, Any]]:
+    """NX-303 — restul setului pe care filtrul îl NUMEȘTE, ordonat după cuvintele clientului.
+
+    Treapta terminală NX-298 (`only_filters_step`): `WHERE` = filtrele treptei câștigătoare, fără
+    predicat de text; `ORDER BY` = `ts_rank_cd` peste aceleași cuvinte. Deci rândurile vin deja în
+    ordinea „cât de bine potrivesc formularea", iar apelantul le pune strict după pagină.
+
+    Fiecare rând poartă `lexical_step='filters_only'`: dacă ajunge vreodată în fața modelului
+    (pagina 2), se prezintă ca „asta am pe raft", nu ca „uite ce ai cerut".
+    """
+    rows = await search_products_lexical(
+        conn,
+        ctx.business.id,
+        query_text=a.query,
+        price_max=step["price_max"],
+        constraints=step["constraints"],
+        facet_filters=step["facet_filters"],
+        features=step["features"],
+        searchable_facets=searchable_facets,
+        variant_label=a.variant_label,
+        category=step["category"],
+        brand=a.brand,
+        sort_mode=a.sort_mode,
+        in_stock_only=step["in_stock_only"],
+        locale=ctx.language,
+        allow_filters_only=True,
+        only_filters_step=True,
+        pool=MAX_SEARCH_POOL,
+    )
+    for r in rows:
+        r["lexical_step"] = "filters_only"  # eticheta treptei NX-293, ca în `catalog.py`
+    return rows
+
+
+def _text_gate_is_redundant(
+    ctx: TurnContext, a: SearchArgs, vocab: CatalogVocabulary, resolutions: _ResolvedTerms
+) -> bool:
+    """NX-303 — poarta de TEXT mai spune ceva peste filtre, sau doar taie arbitrar?
+
+    Vezi `vocabulary.text_is_redundant_as_gate` pentru regula și pentru măsurătoare. Aici trăiesc
+    doar porțile de politică, în ordinea în care e ieftin să pice:
+
+    1. kill-switch;
+    2. scara lexicală v2 — treptele (deci și cea terminală) există doar sub ea;
+    3. `filters_only` trebuie să fie permisă de politica NX-293, altfel am cere o treaptă care
+       oricum se întoarce goală;
+    4. trebuie să EXISTE un filtru de subiect. Fără el, `only_filters_step` n-are ce servi, iar
+       poarta NX-293 refuză oricum — dar verificat aici, verdictul rămâne onest în telemetrie.
+
+    `features` nu intră în cheile aplicate: ele se potrivesc pe valori de fațetă NORMALIZATE, prin
+    alt predicat, deci a le trata drept „chei purtate" ar declara redundant un text pe care WHERE-ul
+    nu-l garantează. Conservator în direcția corectă.
+    """
+    s = get_settings()
+    if not getattr(s, "search_text_gate_when_redundant_enabled", True):
+        return False
+    if not getattr(s, "lexical_query_v2_enabled", True):
+        return False
+    if not getattr(s, "search_filters_only_fallback_enabled", True):
+        return False
+    applied = set(resolutions.flat_facet_keys) | set(resolutions.category_keys)
+    if not (applied or a.brand or a.variant_label):
+        return False  # fără subiect, treapta terminală nu există (NX-293)
+    if not applied:
+        return False  # brandul/varianta nu rezolvă CUVINTE, deci nu pot face textul redundant
+    overlays = facet_overlays(getattr(ctx.business, "domain_pack", None), vocab.facet_names)
+    return text_is_redundant_as_gate(
+        vocab, content_terms(a.query, ctx.language), applied, overlays=overlays
+    )
+
+
 def _resolve_search_terms(
     ctx: TurnContext, a: SearchArgs, vocab: CatalogVocabulary
 ) -> _ResolvedTerms:
@@ -729,7 +883,6 @@ _MAX_PER_BRAND = 2
 # puțin trei clase de soluție când catalogul le are — forma răspunsului iZi („plasturi ȘI
 # tratamente/creme"), nu șase variații ale aceluiași lucru. Nu e o excludere: e ordine (vezi
 # `diversify_pool`), iar faza 2 relaxează cota dacă tipurile nu ajung.
-_MAX_PER_TYPE = 2
 
 
 def _price_tertile(price: float, lo: float, hi: float) -> int:
@@ -741,12 +894,19 @@ def _price_tertile(price: float, lo: float, hi: float) -> int:
     return 0 if frac < 1 / 3 else (1 if frac < 2 / 3 else 2)
 
 
+#: NX-303 — santinelă, fiindcă `None` are DEJA un sens aici („fără cotă pe tip"), folosit de suită
+#: ca să măsoare exact contribuția cotei. Un default care ar fi citit configul prin `None` ar fi
+#: șters tăcut acea posibilitate. Rezolvarea se face la APEL, nu la import: altfel un
+#: `monkeypatch` pe settings n-ar mai fi vizibil, iar cifra ar îngheța la primul import.
+_QUOTA_FROM_OWNER = -1
+
+
 def diversify_pool(
     candidates: list[dict[str, Any]],
     limit: int,
     *,
     max_per_brand: int = _MAX_PER_BRAND,
-    max_per_type: int | None = _MAX_PER_TYPE,
+    max_per_type: int | None = _QUOTA_FROM_OWNER,
 ) -> list[dict[str, Any]]:
     """Reordonează candidații (DEJA ordonați pe relevanță) ca PRIMELE `limit` să fie DIVERSE — scară
     de preț (terțe) + max `max_per_brand` per brand + max `max_per_type` per TIP de produs —
@@ -769,6 +929,8 @@ def diversify_pool(
     Tipul LIPSĂ nu formează o clasă: produsele fără tip nu se numără între ele (vezi
     `_product_type`), altfel un sfert din catalog ar fi plafonat ca și cum ar fi un singur lucru.
     """
+    if max_per_type == _QUOTA_FROM_OWNER:  # NX-303: cifra vine de la proprietarul ei
+        max_per_type = cfg_max_per_type()
     n = len(candidates)
     if limit <= 0 or n <= limit:
         return list(candidates)
@@ -1309,6 +1471,16 @@ async def search_products_tool(
     # ARCH-2026 P0: ponderile scorului blended (din DomainPack / defaults); None = kill-switch OFF
     # (RRF pur). Calculate O DATĂ (nu se schimbă între treptele de relaxare).
     rank_weights = _rank_weights(ctx)
+    # NX-303 — textul mai adaugă ceva peste filtre, sau doar taie arbitrar? Calculat O DATĂ (nu se
+    # schimbă între trepte) și doar pe prima treaptă a scării: pe treptele de relaxare filtrele
+    # sunt deja mai slabe, deci „purtat de filtre" ar fi o afirmație despre alt WHERE.
+    text_redundant = _text_gate_is_redundant(ctx, a, vocab, resolutions)
+    if text_redundant:
+        ctx.emit(
+            "text_gate_skipped",
+            reason="carried_by_filters",
+            n_terms=len(content_terms(a.query, ctx.language)),
+        )
     ranked_final: list[dict[str, Any]] = []  # ordinea fuzionată+re-rankată la treapta care a produs
     vector_final: list[dict[str, Any]] = []
     relaxed = False
@@ -1382,6 +1554,82 @@ async def search_products_tool(
                 winning_step = f
                 break
 
+        # NX-305 — filtrul GHICIT trebuie să-și merite locul.
+        #
+        # Turul real `78b347fa` (`sole-ro`, «cat cost una?» despre mănușa de aplicare pe care botul
+        # tocmai o pomenise): modelul a trimis `category="accesorii"` (adică `Machiaj > Accesorii`,
+        # raftul pensulelor) și `concerns=["autobronzant","aplicare"]`, din care „autobronzant" s-a
+        # rezolvat pe `product_type` cu 7 produse. Cele două erau AMÂNDOUĂ ghicituri ale modelului,
+        # se contraziceau, iar intersecția era goală. Scara de relaxare le-a ordonat după TIP, cum
+        # face de la NX-299 când proveniența e la egalitate, deci a păstrat-o pe cea GROSIERĂ
+        # (raftul) și a aruncat-o pe cea SPECIFICĂ (tipul): `relaxed_any`, seturi de pensule de
+        # 1.300 de lei. Aceeași interogare fără filtrele ghicite aterizează pe `strict` și scoate pe
+        # locul 1 mănușa de 50 de lei, de pe raftul din care botul recomandase cu patru mesaje mai
+        # devreme.
+        #
+        # Regula NU e „raftul conversației câștigă". Varianta aia a fost încercată și MĂSURATĂ:
+        # cu `category="creme-autobronzante-si-bronzere"` interogarea cade pe `filters_only` și
+        # servește șase geluri autobronzante, adică tot nu mănușa. Filtrele ghicite nu trebuie
+        # ÎNLOCUITE, ci SCOASE, iar textul lăsat să răspundă singur.
+        #
+        # Condițiile trăiesc în `should_rescue_guessed_filters` / `rescue_wins` — PURE, deci
+        # testabile fără DB, și un singur loc unde se citește regula.
+        #
+        # Rulează în ACELAȘI checkout ca scara (e tot muncă pură de DB, fără await extern, NX-231).
+        if should_rescue_guessed_filters(
+            enabled=get_settings().search_guessed_filter_rescue_enabled,
+            category_uttered=category_uttered,
+            facets_uttered=facets_uttered,
+            has_guessed_subject=bool(category_keys or facet_filters),
+            has_content_terms=bool(content_terms(a.query, ctx.language)),
+            degraded=relaxed or _rung_of(ranked_final) != "strict",
+        ):
+            base = ladder[0]
+            rescued = await search_products_lexical(
+                conn,
+                ctx.business.id,
+                query_text=a.query,
+                price_max=base["price_max"],
+                constraints=base["constraints"],
+                facet_filters={},  # ghicit
+                features=base["features"],
+                searchable_facets=searchable_facets,
+                variant_label=a.variant_label,
+                category=(),  # ghicit
+                brand=a.brand,  # ROSTIT sau nu, brandul nu se relaxează niciodată (NX-135)
+                sort_mode=a.sort_mode,
+                in_stock_only=base["in_stock_only"],
+                locale=ctx.language,
+                # Fără filtru de subiect, `filters_only` ar însemna „catalogul ordonat după rating".
+                # E exact zgomotul de care se apără `_lexical_steps`, deci nu se cere.
+                allow_filters_only=False,
+                pool=_FUSION_POOL,
+            )
+            if rescue_wins(ranked_final, rescued):
+                ctx.emit(
+                    "guessed_filter_rescued",
+                    dropped_category=bool(category_keys),
+                    dropped_facets=len(facet_filters),
+                    from_step=_rung_of(ranked_final),
+                    to_step=_rung_of(rescued),
+                    before=len(ranked_final),
+                    after=len(rescued),
+                )
+                ranked_final = fuse_candidates(
+                    rescued,
+                    [],
+                    sort_mode=a.sort_mode,
+                    concerns=concern_keys,
+                    weights=rank_weights,
+                )
+                vector_final = []
+                relaxed = False
+                relax_depth = 0
+                lexical_pool_n = len(rescued)
+                # Treapta câștigătoare devine cea FĂRĂ filtrele ghicite, altfel completarea NX-298
+                # de mai jos ar umple pagina exact din raftul pe care tocmai l-am scos.
+                winning_step = {**base, "category": (), "facet_filters": {}}
+
         # NX-298: pagina nu s-a umplut, iar cererea NUMEȘTE un set (raft/fațetă/brand/variantă).
         # Sloturile rămase se completează din setul filtrului, ordonat după ACELEAȘI cuvinte ale
         # clientului (treapta `filters_only`, unde textul e ordonator, nu poartă). Trei proprietăți
@@ -1395,7 +1643,18 @@ async def search_products_tool(
         # De ce e nevoie de ea, deși scara are deja `filters_only` pe ultima treaptă: aceea se
         # atinge doar când textul n-a găsit NIMIC. Cazul măsurat e celălalt — textul a găsit CINCI
         # din 518, iar cinci e destul cât să oprească scara și prea puțin cât să fie un răspuns.
+        # NX-303 — al doilea motiv pentru care merită cerut restul setului, pe lângă „pagina nu s-a
+        # umplut": textul a umplut-o, dar ca POARTĂ nu spunea nimic peste filtre. Diferența e că
+        # aici nu completăm PAGINA (e plină, și pe bună dreptate: sunt potriviri literale), ci
+        # POOL-UL — `pool_ids` se seamănă mai jos din `ranked_final` și e tot ce va avea „mai
+        # arată-mi". Măsurat pe turul real: 6 rânduri dintr-un set de 518.
+        #
+        # ORDINEA rămâne a NX-298 și nu se negociază: potrivirile de text stau primele, completarea
+        # strict după. O variantă care extindea pool-ul ÎNAINTE de fuziune a fost încercată și
+        # respinsă pe măsurătoare — rerank-ul reordona tot, iar SKIN1004 BHA Foam (spumă cu BHA,
+        # chiar despre coșuri) ieșea din pagină, înlocuită de un toner de strălucire.
         fill_n = 0
+        pool_tail: list[dict[str, Any]] = []
         if (
             get_settings().search_fill_from_subject_filter_enabled
             and winning_step is not None
@@ -1430,6 +1689,22 @@ async def search_products_tool(
                     continue
                 ranked_final.append(p)
                 fill_n += 1
+
+        # NX-303 — coada de POOL. Textul a umplut pagina, dar ca POARTĂ nu spunea nimic peste
+        # filtre, deci „mai arată-mi" ar fi avut 6 rânduri dintr-un set de 518. Rândurile se
+        # COLECTEAZĂ aici (cât mai avem conexiunea) și se aplică abia DUPĂ diversificare: pagina
+        # rămâne exact cea de azi, byte-identic, iar coada intră doar în `pool_ids`.
+        #
+        # Două variante anterioare, măsurate și respinse, ca să nu fie reintroduse:
+        #   • extinderea pool-ului ÎNAINTE de fuziune — rerank-ul reordona tot, iar SKIN1004 BHA
+        #     Foam (spumă cu BHA, chiar despre coșuri) ieșea din pagină, înlocuită de un toner;
+        #   • extinderea în blocul NX-298 de mai sus — `diversify_pool` primea 50 de rânduri și
+        #     rearanja pagina, scoțând plasturii, adică exact clasa cea mai potrivită cererii.
+        # Ambele au aceeași formă: au atins PAGINA, când ce lipsea era MATERIALUL de după ea.
+        if text_redundant and winning_step is not None:
+            pool_tail = await _subject_filter_tail(
+                conn, ctx, a, winning_step, searchable_facets=searchable_facets
+            )
 
     # NX-173 (P0): gate de contraindicații pe setul FUZIONAT, ÎNAINTE de diversificare/pool/pagină.
     # Poziția e esențială: `pool_ids` (mai jos) semănează sesiunea din `ranked_final`, iar sesiunea
@@ -1476,6 +1751,20 @@ async def search_products_tool(
     ):
         ranked_final = diversify_pool(ranked_final, a.limit)
         diversified = True
+
+    # NX-303: coada intră ABIA acum, după ce pagina a fost aleasă. `pool_ids` (mai jos) e tot ce
+    # va avea paginarea; pagina însăși rămâne cea de dinainte de card, byte-identic.
+    if pool_tail:
+        have = {str(p.get("id")) for p in ranked_final}
+        added = 0
+        for p in pool_tail:
+            if len(ranked_final) >= MAX_SEARCH_POOL:
+                break
+            if str(p.get("id")) in have:
+                continue
+            ranked_final.append(p)
+            added += 1
+        ctx.emit("pool_extended_from_filter", page=len(have), added=added)
 
     # Pool-ul sesiunii = ordinea fuzionată COMPLETĂ (top MAX_SEARCH_POOL), NU dedup-uită: dacă l-am
     # semăna din setul minus-displayed, produsele deja afișate ar fi excluse PERMANENT din sesiune +

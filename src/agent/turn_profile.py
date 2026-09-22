@@ -35,7 +35,15 @@ from dataclasses import dataclass
 from src.agent.voice import naturalize
 from src.runtime.turn_budget import TurnClass
 
-__all__ = ["PROFILES", "PROFILE_VERSION", "TurnProfile", "select"]
+__all__ = [
+    "PER_PROFILE_FLAGS",
+    "PROFILES",
+    "PROFILE_VERSION",
+    "TurnProfile",
+    "enabled_names",
+    "gate",
+    "select",
+]
 
 #: Versiunea registrului. Intră în `brain_versions` → atribute de trace, deci o schimbare de sufix
 #: e vizibilă în telemetrie fără să ghicești ce prompt a rulat.
@@ -88,6 +96,14 @@ _ROUTINE_SUFFIX = (
     "pas în altul."
 )
 
+_HOWTO_SUFFIX = (
+    "Turul ăsta cere instrucțiuni de folosire pentru un produs anume. Cheamă "
+    "`get_product_details` și scrie pașii din ce întoarce el, fiindcă instrucțiunile sunt ale "
+    "magazinului, nu ale tale. Dacă nu e clar despre care produs vorbește clientul, întreabă care "
+    "dintre cele afișate. Dacă unealta nu întoarce instrucțiuni, spune că nu le ai și nu le "
+    "compune din ce știi tu."
+)
+
 _MUTATION_SUFFIX = (
     "Turul ăsta conține o acțiune. Confirmi DOAR acțiunile care apar în `successful_action_ids`. "
     "Dacă o acțiune n-a reușit, spui ce s-a întâmplat, nu presupui că a mers. După o adăugare în "
@@ -107,12 +123,52 @@ _RECOMMEND = TurnProfile(
 # întreagă.
 _COMPARE = TurnProfile(name="compare", extra_tools=("compare_products",), suffix=_COMPARE_SUFFIX)
 _ROUTINE = TurnProfile(name="routine", extra_tools=("routine_plan",), suffix=_ROUTINE_SUFFIX)
+# `get_product_details` e deja în toolsetul de bază, deci declararea e un no-op la compunere (se
+# face dedupe pe nume). E declarată oricum, din același motiv ca la `compare`: profilul spune de ce
+# are NEVOIE, iar componența nucleului nu e treaba lui.
+_HOWTO = TurnProfile(name="howto", extra_tools=("get_product_details",), suffix=_HOWTO_SUFFIX)
 _MUTATION = TurnProfile(name="mutation", extra_tools=(), suffix=_MUTATION_SUFFIX)
 
 #: Toate profilele, indexate pe nume.
 PROFILES: dict[str, TurnProfile] = {
-    p.name: p for p in (_EXACT, _RECOMMEND, _COMPARE, _ROUTINE, _MUTATION)
+    p.name: p for p in (_EXACT, _RECOMMEND, _COMPARE, _ROUTINE, _HOWTO, _MUTATION)
 }
+
+#: NX-307 — profile care pot fi aprinse INDIVIDUAL, fără să schimbe sufixul pentru tot traficul:
+#: nume de profil → atributul de settings care îl aprinde.
+#:
+#: Există ca DATE, într-un singur loc, fiindcă poarta se aplică în DOUĂ căi (`brain.py` și
+#: `stages/agent.py`). Până acum fiecare purta scris în cod `candidate.name == "routine"`, iar al
+#: doilea profil cu flag propriu ar fi însemnat două liste care diverg. Un profil nou cu flag
+#: propriu = o intrare aici, și ambele căi îl văd.
+PER_PROFILE_FLAGS: dict[str, str] = {
+    "routine": "routine_enabled",
+    "howto": "howto_from_catalog_enabled",
+}
+
+
+def gate(
+    candidate: TurnProfile, *, all_on: bool, enabled_names: frozenset[str]
+) -> TurnProfile | None:
+    """Profilul ales trece de flag-uri? PURĂ.
+
+    `all_on` (`TURN_PROFILES_ENABLED`) aprinde tot, deci schimbă sufixul pentru TOT traficul și se
+    decide pe golden (D15). Altfel trec doar profilele aprinse individual. Nimic aprins ⇒ `None`,
+    adică drumul de azi, byte-identic.
+    """
+    if all_on:
+        return candidate
+    return candidate if candidate.name in enabled_names else None
+
+
+def enabled_names(settings: object) -> frozenset[str]:
+    """Numele profilelor aprinse individual, citite din settings prin `PER_PROFILE_FLAGS`.
+
+    Singurul loc din modul care atinge configul. Restul rămâne pur, ca în docstring-ul de sus.
+    """
+    return frozenset(
+        name for name, flag in PER_PROFILE_FLAGS.items() if bool(getattr(settings, flag, False))
+    )
 
 
 def select(
@@ -150,6 +206,11 @@ def select(
         return _COMPARE
     if "routine" in kinds:
         return _ROUTINE if has_routine else _RECOMMEND
+    if "explain" in kinds and "recommend" not in kinds:
+        # NX-307: „cum se folosește" cere instrucțiunile MAGAZINULUI, nu o recomandare. Condiția pe
+        # `recommend` urmează exact precedentul de mai jos: un tur care cere și o recomandare n-are
+        # ce căuta pe un sufix care îl trimite să răspundă dintr-o singură fișă de produs.
+        return _HOWTO
     if turn_class is TurnClass.EXACT and kinds and kinds <= {"answer", "safety"}:
         # `EXACT` singur nu ajunge: clasa spune „ieftin", profilul spune „fapt". Un tur exact care
         # conține și o cerere de recomandare (`recommend`) n-are ce căuta pe sufixul care interzice
@@ -180,6 +241,11 @@ def _validate_registry() -> None:
         for tool in profile.extra_tools:
             if not tool.isidentifier():
                 raise ValueError(f"{name}: nume de tool invalid: {tool!r}")
+    # NX-307: un flag per-profil care numește un profil inexistent n-ar aprinde nimic și n-ar da
+    # nicio eroare — exact felul de flag „legal și inert" pe care NX-304 l-a găsit costisitor.
+    unknown = set(PER_PROFILE_FLAGS) - set(PROFILES)
+    if unknown:
+        raise ValueError(f"PER_PROFILE_FLAGS numește profile inexistente: {sorted(unknown)}")
 
 
 _validate_registry()

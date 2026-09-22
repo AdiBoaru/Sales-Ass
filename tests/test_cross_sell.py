@@ -143,6 +143,14 @@ async def test_cross_sell_no_complementary_falls_through(monkeypatch):
     await agent_stage(ctx, _deps(llm))
 
     assert ctx.reply is not None
-    assert ctx.reply.rich is None  # cross-sell NU a produs un reply bogat
+    # Invariantul e „cross-sell-ul n-a produs nimic", nu „reply-ul nu e bogat". Testul se sprijinea
+    # pe al doilea, care ținea doar fiindcă orice degradare ateriza pe ramura săracă; de la NX-302,
+    # cardurile se recuperează din catalog, deci `rich` poate exista din alt motiv. Se verifică deci
+    # CE s-a arătat: produsul adăugat în coș, niciun complementar inventat.
     ev = [e for e in ctx.events if e.type == "cross_sell"]
     assert ev and ev[0].properties["n"] == 0  # semnalat, dar fără complementare
+    shown = [it.product_id for it in (ctx.reply.rich.items if ctx.reply.rich else [])]
+    assert "c1" not in shown and "c2" not in shown
+    assert ctx.reply.text.startswith(
+        "Gata, l-am adăugat."
+    )  # confirmarea rămâne ce citește clientul

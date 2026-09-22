@@ -154,6 +154,14 @@
     {
       "path": "scripts/nx298_recall_probe.py",
       "reason": "sondă de MĂSURARE: rulează pe tenantul pilot exact frazele reale de client din `conversation_traces` (NX-298). Frazele sunt datele măsurătorii, nu comportament; fără ele proba n-ar putea reproduce turul care a expus defectul."
+    },
+    {
+      "path": "scripts/nx303_text_gate_probe.py",
+      "reason": "sondă de RETRIEVAL: reproduce argumentele EXACTE ale unui tur real (inclusiv fraza clientului și sinonimele magazinului), ca să măsoare cât taie poarta de text din recall. Fraza de client E obiectul măsurat — la fel ca nx298_recall_probe și nx299_shape_probe."
+    },
+    {
+      "path": "scripts/nx302_degraded_probe.py",
+      "reason": "sondă de MĂSURARE, ca nx298_recall_probe și nx299_shape_probe: reproduce turul real 57fa9fbe din `conversation_traces` (NX-302), ca să arate ce primea clientul când apelul rich cădea și ce primește după. Fraza clientului e titlul cazului măsurat, nu comportament."
     }
   ]
 }

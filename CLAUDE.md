@@ -353,6 +353,47 @@ Carduri: [`tasks/stage1/NX-300.md`](tasks/stage1/NX-300.md) +
 [`tasks/stage1/NX-301.md`](tasks/stage1/NX-301.md); probe:
 `pytest tests/test_phase_coverage.py tests/test_display_name_on_cards.py -q`.
 
+**NX-302 / NX-304 / NX-305 / NX-306 / NX-307 — o singură conversație reală, cinci mecanisme.**
+Conversația `70da107c` (`sole-ro`, 2026-09-21): clientul cere un autobronzant, primește cinci
+carduri bune, întreabă cum se aplică, botul îi spune să folosească o mănușă, iar la «cat cost una?»
+răspunde **„nu am găsit în catalog o mănușă"** și servește dedesubt patru seturi de pensule de
+machiaj de 1.300 de lei. Catalogul are **trei mănuși de aplicare autobronzant** (50 / 50 / 79 lei),
+de la aceleași branduri și pe EXACT raftul din care recomandase cu patru mesaje mai devreme.
+**NX-305** — cauza nu e „a ghicit raftul", ci că turul avea DOUĂ filtre de subiect, amândouă ghicite
+de model și contradictorii: `category=machiaj-accesorii` (28 de produse) și `product_type` din
+`concerns=["autobronzant"]` (7 produse, clasa CORECTĂ). De la NX-299 scara ordonează după
+(proveniență, tip); aici proveniența e la EGALITATE (`kept=0`, `facets_uttered=false`, fiindcă
+subiectul venise din replica BOTULUI), deci a decis TIPUL și a supraviețuit ghicitura GROSIERĂ.
+Varianta evidentă, „raftul conversației devine implicit", a fost încercată și RESPINSĂ pe
+măsurătoare: cade pe `filters_only` și servește șase geluri, tot nu mănușa. Filtrele ghicite nu se
+ÎNLOCUIESC, se SCOT, iar textul răspunde singur: `relaxed_any` → `strict`, mănușa de 50 de lei pe
+locul 1. Poarta cere ca NICIUN filtru de subiect să nu fie coroborat de client, ceea ce ține
+NX-298/NX-299 neatinse (acolo clientul a rostit «cosuri»), și adoptă rezultatul doar pe o treaptă
+STRICT mai bună. Kill-switch `SEARCH_GUESSED_FILTER_RESCUE_ENABLED`.
+**NX-306** — pe calea BOGATĂ setul de carduri e cel numit de model, cu apartenența verificată; pe
+calea de PROZĂ nu exista nicio legătură, deci `render` atașa retrievalul BRUT indiferent ce spunea
+textul. Poarta cere DOUĂ semnale: `no-items-selected` (singura formă de refuz măsurată de model
+însuși, deci zero regex pe proză, P11) ȘI `relevance.relaxed` (setul a ieșit doar prin renunțare la
+filtre). Singur, refuzul nu ajunge, și suita a arătat de ce: pe „ceva mai ieftin" setul e ales
+DETERMINIST de `cheaper_intent`, iar a suprima ar ascunde răspunsul corect. Filtrul se aplică
+ÎNAINTE de `rich_from_facts`, altfel NX-302 ar fi AGRAVAT refuzul (aceleași pensule, dar cu badge,
+rating și motiv sub card).
+**NX-307** — `explain` era în `ObligationKind` de la început, cu doi CONSUMATORI și niciun
+PRODUCĂTOR, deci „cum folosesc" ieșea `answer` generic și turul rula cu `retrieval_ids: []`, deși
+`product_sections.usage` există pe **2.746 din 2.758** de produse. În plus, `detail_sections` tăia
+`usage` la 150 de caractere pe un text cu media 354, iar `dosage` (86,8%) lipsea din pachet. Profil
+`howto` + plafoane corectate; flag propriu `HOWTO_FROM_CATALOG_ENABLED` (OFF).
+**NX-302** (25% din turele cu produse ajungeau la client cu `rich = null`) și **NX-304**
+(`ROUTINE_ENABLED` era legal și INERT pe v1, fiindcă `turn_profile.select` se chema doar în
+`brain.py`) erau deja scrise și au intrat în aceeași serie.
+Niciunul nu putea fi prins din aval: produsele și prețurile erau REALE (`validator_ok: true` pe tot
+turul), deci stagiul 8 și `grounding_guard` le-au lăsat să treacă. Sunt porți de **ADEVĂR**, nu de
+**POTRIVIRE**. Carduri: [`tasks/stage1/NX-305.md`](tasks/stage1/NX-305.md) +
+[`tasks/stage1/NX-306.md`](tasks/stage1/NX-306.md) +
+[`tasks/stage1/NX-307.md`](tasks/stage1/NX-307.md); probe:
+`python -m scripts.nx305_guessed_filter_probe` +
+`pytest tests/test_guessed_filter_rescue.py tests/test_refused_set_withheld.py tests/test_howto_from_catalog.py -q`.
+
 **Fix 2026-09-16 (2) — creierul unic era pus să citeze dovezi pe care nu i le arăta nimeni.**
 Găsit pe prima conversație REALĂ de după aprinderea flagului (`sole-ro`, `conversation_traces` +
 `analytics_events`), nu pe fixture: clientul a scris „parca mi uscat parul dupa ce fac dus", apoi

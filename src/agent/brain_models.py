@@ -73,6 +73,29 @@ _ROUTINE_RE = re.compile(
 #: e separată de `_ROUTINE_RE`, care lucrează pe clauză.
 _ROUTINE_SPAN_RE = re.compile(r"\bdiminea\w+\b.*\bsear\w+\b", re.IGNORECASE | re.DOTALL)
 
+#: Cerere de INSTRUCȚIUNI de folosire — obligație `explain`.
+#:
+#: NX-307: `explain` era în `ObligationKind` de la început și avea deja DOI consumatori
+#: (`answer_plan._required_for`, `chip_moves.roles_for`), dar niciun PRODUCĂTOR — deci un tur de
+#: „cum se folosește" ieșea ca `answer` generic. Pe conversația reală `70da107c`, turele 2 și 3 au
+#: rulat cu ZERO apeluri de tool (`retrieval_ids: []`) iar modelul a compus șapte pași din ce știa
+#: el, deși catalogul are secțiunea `usage` pe 2.746 din 2.758 de produse.
+#:
+#: Declanșatorul e VERBUL, nu substantivul (lecția NX-273): „cum se folosește" funcționează la fel
+#: pe un magazin de electrocasnice. Niciun cuvânt de aici nu e de cosmetice, deci poarta NX-264 nu
+#: are ce reclama.
+#:
+#: „pun" cere pronume („cum îl pun"), spre deosebire de celelalte verbe. Fără condiția asta,
+#: „cum pun in cos" ar fi devenit o cerere de instrucțiuni în loc de o acțiune de comerț.
+_HOWTO_RE = re.compile(
+    r"\bcum\s+(?:se\s+|il\s+|o\s+|le\s+|mi\s+|ma\s+)*(?:folos\w*|aplic\w*|utiliz\w*)"
+    r"|\bcum\s+(?:se|il|o|le)\s+pun\w*"
+    r"|\bmod\s+de\s+(?:folosire|utilizare|aplicare)\b"
+    r"|\binstructiuni\s+de\s+(?:folosire|utilizare|aplicare)\b"
+    r"|\bhow\s+(?:do\s+i\s+|to\s+)(?:use|apply)\b",
+    re.IGNORECASE,
+)
+
 #: Cerere de recomandare/căutare de produs (RO/EN, fără diacritice) — obligație `recommend`.
 _RECOMMEND_RE = re.compile(
     r"\brecomand\w*\b|\bcaut\b|\bvreau\b|\bimi\s+trebuie\b|\bam\s+nevoie\b"
@@ -181,6 +204,11 @@ def extract_obligations(
             # forma cerută e secvența. Cheia e fixă (`routine`), nu indexată: o rutină e una
             # singură per tur, spre deosebire de mai multe cereri de recomandare.
             kind, key = "routine", "routine"
+        elif _HOWTO_RE.search(clause):
+            # ÎNAINTEA recomandării: „cum folosesc crema pe care mi-ai recomandat-o" conține
+            # declanșatorul de recomandare, dar întrebarea e CUM, nu CE. După `routine`, fiindcă o
+            # secvență de pași e forma mai specifică a aceleiași cereri.
+            kind, key = "explain", f"howto_{min(idx, 3)}"
         elif _RECOMMEND_RE.search(clause):
             kind, key = "recommend", f"recommend_{min(idx, 3)}"
         elif (

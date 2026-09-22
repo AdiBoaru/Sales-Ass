@@ -1252,17 +1252,18 @@ async def run_main_brain(
     # tool-uri în plus. OFF → `profile is None` și nimic nu se schimbă.
     pack = getattr(ctx.business, "domain_pack", None)
     families = tenant_enum_values(pack)["families"]
-    # NX-292: două flag-uri, două domenii. `TURN_PROFILES_ENABLED` aprinde toate cele cinci profile
-    # (deci schimbă sufixul pentru TOT traficul, și se decide pe golden). `ROUTINE_ENABLED` aprinde
-    # exclusiv profilul `routine` — singurul unde răspunsul de azi e garantat degradat, fiindcă
-    # poarta `routine_evidence_required` cere o dovadă pe care nicio unealtă oferită n-o poate
-    # produce. Ambele stinse ⇒ `profile is None` și nimic nu se schimbă.
+    # NX-292/NX-307: două domenii de aprindere. `TURN_PROFILES_ENABLED` aprinde toate profilele
+    # (deci schimbă sufixul pentru TOT traficul, și se decide pe golden). Restul se aprind
+    # individual, prin `turn_profile.PER_PROFILE_FLAGS` — profile unde răspunsul de azi e garantat
+    # degradat: `routine` (poarta `routine_evidence_required` cere o dovadă pe care nicio unealtă
+    # oferită n-o poate produce) și `howto` (turul răspunde din memoria modelului, deși magazinul
+    # are instrucțiunile). Nimic aprins ⇒ `profile is None` și nimic nu se schimbă.
     profiles_on = bool(getattr(settings, "turn_profiles_enabled", False))
-    routine_on = bool(getattr(settings, "routine_enabled", False))
+    per_profile = turn_profile.enabled_names(settings)
     profile = None
-    if profiles_on or routine_on:
+    if profiles_on or per_profile:
         candidate = turn_profile.select(turn_class, obligations, has_routine=bool(families))
-        profile = candidate if profiles_on or candidate.name == "routine" else None
+        profile = turn_profile.gate(candidate, all_on=profiles_on, enabled_names=per_profile)
     if profile is not None:
         ctx.emit("turn_profile", name=profile.name, turn_class=turn_class.value)
         have = {s.get("function", {}).get("name") for s in tools}
