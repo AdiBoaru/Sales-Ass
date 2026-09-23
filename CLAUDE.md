@@ -449,6 +449,33 @@ falsă despre magazin (poarta de POTRIVIRE, NX-309). Card: [`tasks/stage1/NX-313
 probe: `pytest tests/test_guessed_filter_coherence.py -q` +
 `PYTHONPATH=. python scripts/nx313_guessed_filter_coherence_probe.py`.
 
+**NX-314 — subiectul conversației: «mai ieftin» servea benzi de nas la o cerere de cremă.**
+Conversația `f4e1431e` (`sole-ro`, 2026-09-23): după SOME BY MI Yuja Niacin (110 lei), «si ceva mai
+ieftin» a adus o bandă de nas de 3 lei și cinci măști sheet de 10 lei. `search_cheaper_than`
+păstra din conversație doar `primary_category_id`-ul produselor afișate (catalogul e o PARTIȚIE
+grosieră) și sorta `preț asc`, deci câștiga cel mai ieftin lucru din categorie. Sonda, pe 30 de
+zile: 4 «mai ieftin», 3 cu un tip de subiect, **0%** din cardurile servite de acel tip. Cauza de
+clasă: sistemul n-avea nicăieri un **subiect** (ce cumpără clientul), deci fiecare re-căutare îl
+reconstruia din ce avea la îndemână. Acum e un obiect PUR (`src/conversation/subject.py`: raft
+REZOLVAT prin vocabular, tip DOMINANT al setului arătat, nevoi ROSTITE rezolvate pe fațete), cu
+un singur scriitor (`_learn_constraints`), pe ambele stări (`search_constraints["subject"]` pe v1,
+`set_topic` + `Topic.product_type` pe v2; planul creierului nu-l poate muta, `subject_owned`).
+Consumatorul «mai ieftin» păstrează aceleași porți dure și schimbă ORDINEA: același tip, apoi
+nevoile, apoi ratingul, apoi prețul DESCRESCĂTOR (cel mai apropiat sub prag). Tipul ordonează,
+nu exclude (`enforce_ready: false`); completările de alt tip poartă `subject_match=false`, spus
+modelului în `_brief`. Pe turul real: **6/6 creme de față**, toate sub 110 lei. **Două abateri de
+la card, pe măsurătoare:** (1) un set cu UN singur produs tipat (turul de detaliu) nu schimbă un
+subiect existent, fiindcă exact setul dinaintea lui «mai ieftin» avea o singură cremă, iar regula
+„minimum 2" l-ar fi șters; (2) raftul subiectului se ADAUGĂ la categoria afișată în loc s-o
+înlocuiască, fiindcă raftul persistat e cel ghicit de model (NX-313: „Fata" e machiaj). Pe drum:
+raftul observat se persistă ca CHEIE de catalog (`topic_switched` răspundea fals pe un sinonim),
+iar `bounded_map` nu mai pierde `active_search.filters.concerns` pe v2. Măsurătoare nouă,
+neblocantă: `subject_match{path, served, type_matched, share}` pe fiecare tur cu carduri, prima
+poartă de POTRIVIRE măsurată (clasa NX-309). Kill-switch `CONVERSATION_SUBJECT_ENABLED` (ON; OFF =
+SQL byte-identic). Card: [`tasks/stage1/NX-314.md`](tasks/stage1/NX-314.md); probe:
+`pytest tests/test_conversation_subject.py tests/test_cheaper_subject_sql.py -q` +
+`PYTHONPATH=. python scripts/nx314_subject_probe.py --replay`.
+
 **Fix 2026-09-16 (2) — creierul unic era pus să citeze dovezi pe care nu i le arăta nimeni.**
 Găsit pe prima conversație REALĂ de după aprinderea flagului (`sole-ro`, `conversation_traces` +
 `analytics_events`), nu pe fixture: clientul a scris „parca mi uscat parul dupa ce fac dus", apoi

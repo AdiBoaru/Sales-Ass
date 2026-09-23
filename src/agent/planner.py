@@ -39,6 +39,7 @@ from src.analytics.demand import clean_ids
 from src.catalog.relation_chain import walk_chain
 from src.config import get_settings
 from src.conversation.state_v2 import active_needs
+from src.conversation.subject import SUBJECT_KEY, ConversationSubject
 from src.db.queries.catalog import (
     get_complementary_products,
     get_products_by_ids,
@@ -305,11 +306,33 @@ async def resolve_cheaper_followup(
     minimul a ceea ce clientul a VĂZUT, nu ceva ce se poate deduce din text."""
     baseline = min(p.price for p in ctx.state.displayed_products)
     ref_ids = [p.product_id for p in ctx.state.displayed_products]
+    # NX-314: subiectul conversației (tipul dominant al setului arătat + nevoile rostite), scris de
+    # `_learn_constraints`. Fără el, singurul lucru păstrat era categoria grosieră a produselor
+    # afișate, iar `preț asc` aducea în față cel mai ieftin lucru din ea: o bandă de nas de 3 lei
+    # după o cremă de 110. Stins = `None` = SQL-ul de dinainte, byte cu byte.
+    subject = (
+        ConversationSubject.from_dict((ctx.state.search_constraints or {}).get(SUBJECT_KEY))
+        if getattr(get_settings(), "conversation_subject_enabled", False)
+        else None
+    )
+    # `subject` pleacă doar când există: apelul fără el e EXACT cel de dinainte.
+    extra = {"subject": subject} if subject is not None else {}
     async with deps.db("search_cheaper_than") as conn:
-        cheaper = await search_cheaper_than(conn, ctx.business.id, ref_ids, baseline, limit=6)
+        cheaper = await search_cheaper_than(
+            conn, ctx.business.id, ref_ids, baseline, limit=6, **extra
+        )
     # NX-173 (P0): „ceva mai ieftin" e o CĂUTARE NOUĂ în DB, în afara `ToolRun` → gate propriu.
     cheaper = policy.gate(ctx, cheaper, purpose="cheaper")[0]
-    ctx.emit("cheaper_followup", baseline=round(baseline, 2), found=len(cheaper))
+    if getattr(get_settings(), "conversation_subject_enabled", False):
+        ctx.emit(
+            "cheaper_followup",
+            baseline=round(baseline, 2),
+            found=len(cheaper),
+            subject_type_known=bool(subject and subject.product_type),
+            type_matched=sum(1 for p in cheaper if p.get("subject_match") is True),
+        )
+    else:
+        ctx.emit("cheaper_followup", baseline=round(baseline, 2), found=len(cheaper))
     if cheaper:
         return CheaperOutcome(products=cheaper, baseline=baseline)
     # NX-163b: „ceva mai ieftin" + zero rezultate = GOL DE PREȚ în categoria setului afișat —

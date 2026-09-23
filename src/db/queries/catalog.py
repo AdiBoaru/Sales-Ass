@@ -23,6 +23,7 @@ from src.catalog.query_terms import (
 )
 from src.catalog.vocabulary import servable_subtree_counts_sql
 from src.config import get_settings
+from src.conversation.subject import ConversationSubject
 from src.domain.constraints import OP_BETWEEN, BoundConstraint
 
 # NX-191 — FEREASTRA promoției. `sale_price` fără verificarea ferestrei = minciună comercială:
@@ -1391,6 +1392,7 @@ async def search_cheaper_than(
     max_price_exclusive: float,
     *,
     limit: int = 6,
+    subject: ConversationSubject | None = None,
 ) -> list[dict[str, Any]]:
     """Produse active STRICT mai ieftine decât `max_price_exclusive`, în ACEEAȘI categorie ca
     produsele de referință (cele afișate), sortate pe preț crescător (P1 ARCH-product-retrieval).
@@ -1399,10 +1401,18 @@ async def search_cheaper_than(
     → nu aduce „cel mai ieftin gunoi" din alt raft. DOAR produse CUMPĂRABILE (în stoc) — un „cel
     mai ieftin" fără stoc e inutil. Determinist (cel mai ieftin real = rândul 1), FĂRĂ padding —
     întoarce DOAR ce e mai ieftin (1 dacă e 1). Gol = nu există nimic mai ieftin (în stoc).
-    `business_id = $1` (izolare; RLS plasă). Hard cap 6."""
+    `business_id = $1` (izolare; RLS plasă). Hard cap 6.
+
+    NX-314: cu un `subject` care are TIP, porțile rămân aceleași și se schimbă ORDINEA (vezi
+    `_search_cheaper_by_subject`). Fără subiect sau fără tip, SQL-ul e cel de dinainte, byte cu
+    byte."""
     if not reference_ids:
         return []
     limit = min(limit, 6)
+    if subject is not None and subject.product_type:
+        return await _search_cheaper_by_subject(
+            conn, business_id, reference_ids, max_price_exclusive, limit=limit, subject=subject
+        )
     cs = _content_status_pred()  # NX-171c: doar 'published' (per-tenant, gated)
     sql = (
         _SELECT
@@ -1419,6 +1429,85 @@ async def search_cheaper_than(
     )
     rows = await conn.fetch(sql, business_id, reference_ids, max_price_exclusive, limit)
     return [_row_to_product(r) for r in rows]
+
+
+def cheaper_by_subject_sql(
+    subject: ConversationSubject, *, content_status: str | None
+) -> tuple[str, list[Any]]:
+    """SQL-ul „mai ieftin" ordonat după SUBIECT + parametrii de după `$4`. PURĂ (testabilă fără DB).
+
+    Porțile dure sunt EXACT cele de azi: tenant, activ, în stoc, strict sub prag, fără produsele
+    afișate. Se schimbă două lucruri:
+
+    **Raftul.** Categoria setului afișat rămâne în poartă, iar raftul subiectului (subarborele din
+    `categories.path`, prin `_category_clause`, aceeași clauză ca la căutare) se ADAUGĂ, nu o
+    înlocuiește. Raftul persistat e cel pe care a căutat agentul, deci poate fi o ghicitură
+    greșită (NX-313: „Fata" e un raft de MACHIAJ); ca înlocuitor, ar putea îngusta pool-ul departe
+    de produsele pe care clientul chiar le-a văzut. Ca reuniune, pool-ul de azi e mereu inclus, iar
+    tipul decide ordinea.
+
+    **Ordinea.** Același tip întâi, apoi câte din nevoile ROSTITE poartă produsul, apoi ratingul,
+    apoi prețul DESCRESCĂTOR: clientul cere „ceva ca asta, dar mai ieftin", nu cel mai ieftin
+    lucru din raft. Tipul ordonează și nu exclude, fiindcă `product_type` e `enforce_ready: false`
+    (acoperirea dă dreptul de a ordona; excluderea cere auditul NX-268/271)."""
+    params: list[Any] = []
+
+    def ph(value: Any) -> str:
+        params.append(value)
+        return f"${4 + len(params)}"
+
+    category_gate = (
+        "p.primary_category_id in ("
+        "   select primary_category_id from products"
+        "   where business_id = $1 and id = any($2::uuid[]) and primary_category_id is not null)"
+    )
+    if subject.shelf_key:
+        category_gate = f"({category_gate} or {_category_clause(subject.shelf_key, ph)})"
+    type_ph = ph(subject.product_type)
+    order = [f"((p.attributes->>'product_type') is not distinct from {type_ph}) desc"]
+    if subject.needs:
+        dims_ph = ph([d for d, _ in subject.needs])
+        vals_ph = ph([v for _, v in subject.needs])
+        order.append(
+            f"(select count(*) from unnest({dims_ph}::text[], {vals_ph}::text[]) as n(d, v)"
+            " where coalesce((p.attributes->n.d) @> to_jsonb(n.v), false)) desc"
+        )
+    order += [f"{_SHRUNK_RATING} desc", f"{_EFFECTIVE_PRICE} desc", "p.id"]
+    sql = (
+        _SELECT
+        + " where p.business_id = $1 and p.status = 'active'"
+        + " and p.availability in ('in_stock', 'low_stock')"
+        + f" and {category_gate}"
+        + " and p.id <> all($2::uuid[])"
+        + f" and {_EFFECTIVE_PRICE} < $3"
+        + (f" and {content_status}" if content_status else "")
+        + " order by "
+        + ", ".join(order)
+        + " limit $4"
+    )
+    return sql, params
+
+
+async def _search_cheaper_by_subject(
+    conn: asyncpg.Connection,
+    business_id: str,
+    reference_ids: list[str],
+    max_price_exclusive: float,
+    *,
+    limit: int,
+    subject: ConversationSubject,
+) -> list[dict[str, Any]]:
+    """Execuția lui `cheaper_by_subject_sql`. Un singur query, același checkout ca azi.
+
+    Fiecare rând primește `subject_match`: `False` = completare de alt tip, spusă MODELULUI prin
+    `_brief` (ca `lexical_step` la NX-293), altfel ar prezenta-o drept „uite ce ai cerut"."""
+    sql, extra = cheaper_by_subject_sql(subject, content_status=_content_status_pred())
+    rows = await conn.fetch(sql, business_id, reference_ids, max_price_exclusive, limit, *extra)
+    out = [_row_to_product(r) for r in rows]
+    for p in out:
+        attrs = p.get("attributes") if isinstance(p.get("attributes"), dict) else {}
+        p["subject_match"] = attrs.get("product_type") == subject.product_type
+    return out
 
 
 async def get_complementary_products(

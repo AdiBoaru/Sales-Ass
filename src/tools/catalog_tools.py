@@ -281,6 +281,10 @@ _STEP_NOTE_RO: dict[str, str] = {
 }
 
 
+#: NX-314 — nota pentru un produs adus pe «mai ieftin» care NU are tipul subiectului.
+_SUBJECT_FILLER_NOTE_RO = "completare, alt tip de produs decât cel discutat"
+
+
 #: NX-305 — cât de bună e o treaptă, ca ORDINE. Mic = potrivire mai curată. Vocabularul e ÎNCHIS și
 #: identic cu al lui `_STEP_NOTE_RO` plus `strict` (treapta fără notă, fiindcă tăcerea acolo e chiar
 #: informația). Sincronizarea celor două e verificată de suită, nu lăsată pe seama atenției: o
@@ -446,7 +450,13 @@ def _step_note(p: dict[str, Any]) -> str:
     tăcerea ACOLO e informație, iar o notă pe fiecare rând ar deveni zgomot pe care modelul îl
     ignoră exact când contează."""
     note = _STEP_NOTE_RO.get(str(p.get("lexical_step") or ""))
-    return f" | {note}" if note else ""
+    out = f" | {note}" if note else ""
+    # NX-314: pe «mai ieftin» setul îl alege serverul, ordonat pe tipul subiectului. Un rând de ALT
+    # tip e o completare, nu o potrivire, iar modelul trebuie să știe asta înainte să scrie, ca la
+    # treptele lexicale. `True` și absența tac, din același motiv ca `strict`.
+    if p.get("subject_match") is False:
+        out += f" | {_SUBJECT_FILLER_NOTE_RO}"
+    return out
 
 
 def _reason_str(p: dict[str, Any]) -> str:

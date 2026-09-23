@@ -172,9 +172,11 @@ def _flag_on(monkeypatch):
     Autouse doar de aici în jos ar cere alt fișier; cum funcția pură și poarta ancorată nu citesc
     settings, aprinderea lor e un no-op. Testul de kill-switch îl stinge înapoi explicit."""
     monkeypatch.setattr(get_settings(), "observed_constraints_enabled", True)
+    # NX-314: subiectul are testele lui (`test_conversation_subject.py`); aici se măsoară stiva.
+    monkeypatch.setattr(get_settings(), "conversation_subject_enabled", False)
 
 
-def test_kill_switch_leaves_the_stack_exactly_as_it_was(monkeypatch):
+async def test_kill_switch_leaves_the_stack_exactly_as_it_was(monkeypatch):
     """OFF = byte-identic. Perechea obligatorie: o sursă nouă care scrie în aceeași stivă nu are
     voie să pornească fără ca cineva s-o aprindă — `brand` nu se relaxează niciodată în căutare,
     deci o valoare lipită acolo filtrează tăcut turele următoare."""
@@ -182,13 +184,15 @@ def test_kill_switch_leaves_the_stack_exactly_as_it_was(monkeypatch):
 
     monkeypatch.setattr(get_settings(), "observed_constraints_enabled", False)
     ctx = _ctx("caut ceva de la Kundal sub 100 lei")
-    _learn_constraints(ctx, _run_with([{"price_max": 100, "brand": "Kundal"}]), ctx.message.body)
+    await _learn_constraints(
+        ctx, _run_with([{"price_max": 100, "brand": "Kundal"}]), ctx.message.body, None
+    )
     assert ctx.state.search_constraints == {}
     assert ctx.state_proposals == []
     assert not any(e.type == "constraint_source" for e in ctx.events)
 
 
-def test_the_learned_constraint_survives_the_v2_state_writer(monkeypatch):
+async def test_the_learned_constraint_survives_the_v2_state_writer(monkeypatch):
     """Sub `CONVERSATION_STATE_V2_WRITE_ENABLED` docul persistat se re-derivă la commit din
     PROPUNERI, din starea proaspăt citită — nu din `ctx.state`. O felie care scrie doar dicționarul
     e inertă exact pe profilul care rulează azi, și tace în loc să pice.
@@ -203,7 +207,7 @@ def test_the_learned_constraint_survives_the_v2_state_writer(monkeypatch):
     monkeypatch.setattr(s, "conversation_state_v2_write_enabled", True)
 
     ctx = _ctx("caut o crema sub 100 lei")
-    _learn_constraints(ctx, _run_with([{"price_max": 100}]), ctx.message.body)
+    await _learn_constraints(ctx, _run_with([{"price_max": 100}]), ctx.message.body, None)
     ctx.set_reply("ok")
     doc = _build_new_state({}, ctx, is_rich=False, has_products=False)
 
@@ -215,36 +219,36 @@ def test_the_learned_constraint_survives_the_v2_state_writer(monkeypatch):
     assert needs["budget_max"]["source"] == "user_explicit"
 
 
-def test_the_stack_remembers_what_the_agent_searched_with():
+async def test_the_stack_remembers_what_the_agent_searched_with():
     """DoD-ul feliei: «caut o cremă sub 100 lei» → «mai arată-mi» păstrează pragul, fără nano."""
     from src.worker.stages.agent import _learn_constraints
 
     ctx = _ctx("caut o crema sub 100 lei")
-    _learn_constraints(ctx, _run_with([{"price_max": 100}]), ctx.message.body)
+    await _learn_constraints(ctx, _run_with([{"price_max": 100}]), ctx.message.body, None)
     assert ctx.state.search_constraints == {"budget_max": 100}
 
     # Turul următor: clientul nu repetă nimic, agentul nu mai caută cu prag.
     nxt = _ctx("mai arata-mi")
     nxt.state.search_constraints = dict(ctx.state.search_constraints)
-    _learn_constraints(nxt, _run_with([{"query": "crema"}]), nxt.message.body)
+    await _learn_constraints(nxt, _run_with([{"query": "crema"}]), nxt.message.body, None)
     assert nxt.state.search_constraints["budget_max"] == 100
 
 
-def test_a_turn_without_searches_leaves_the_stack_alone():
+async def test_a_turn_without_searches_leaves_the_stack_alone():
     from src.worker.stages.agent import _learn_constraints
 
     ctx = _ctx("multumesc")
     ctx.state.search_constraints = {"budget_max": 100}
-    _learn_constraints(ctx, _run_with([]), ctx.message.body)
+    await _learn_constraints(ctx, _run_with([]), ctx.message.body, None)
     assert ctx.state.search_constraints == {"budget_max": 100}
     assert not any(e.type == "constraint_source" for e in ctx.events)
 
 
-def test_an_inferred_value_is_counted_but_not_persisted():
+async def test_an_inferred_value_is_counted_but_not_persisted():
     from src.worker.stages.agent import _learn_constraints
 
     ctx = _ctx("vreau o crema hidratanta")
-    _learn_constraints(ctx, _run_with([{"price_max": 250}]), ctx.message.body)
+    await _learn_constraints(ctx, _run_with([{"price_max": 250}]), ctx.message.body, None)
     assert ctx.state.search_constraints == {}
     ev = [e for e in ctx.events if e.type == "constraint_source"]
     assert ev and (ev[0].properties["kept"], ev[0].properties["inferred"]) == (0, 1)
