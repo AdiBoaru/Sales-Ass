@@ -183,7 +183,7 @@ def _usage_event_props(acc: usage.UsageAccumulator, *, phase: str) -> dict:
     embed). Aceeași formă ca runner-ul → rollup-ul/raportul le tratează uniform; `phase` separă
     reply-ul de fundalul amortizat."""
     savings = sum(savings_for(model, row["cached_tokens"]) for model, row in acc.by_model.items())
-    return {
+    props = {
         "phase": phase,
         "tokens_in": acc.tokens_in,
         "tokens_out": acc.tokens_out,
@@ -193,7 +193,11 @@ def _usage_event_props(acc: usage.UsageAccumulator, *, phase: str) -> dict:
         "savings_usd": round(savings, 6),
         "llm_calls": acc.calls,
         "by_model": acc.by_model,
+        "per_call": list(acc.call_rows),  # NX-312: aceeași formă ca pe tur
     }
+    if acc.call_rows_dropped:
+        props["per_call_dropped"] = acc.call_rows_dropped
+    return props
 
 
 async def _cache_writeback(db: DbProvider, llm, business_id, locale, body, ctx) -> None:

@@ -547,11 +547,15 @@ class TurnUsage:
     models: list[str] = field(default_factory=list)  # modelele folosite (pt messages.model_route)
     by_stage: dict[str, dict[str, Any]] = field(default_factory=dict)
     by_model: dict[str, dict[str, Any]] = field(default_factory=dict)
+    # NX-312: un rând per apel de chat, în ordine (`usage.record_call`). Plafonat la
+    # `usage.MAX_CALL_ROWS`; ce trece peste se numără în `per_call_dropped`.
+    per_call: list[dict[str, Any]] = field(default_factory=list)
+    per_call_dropped: int = 0
 
     def as_event_props(self) -> dict[str, Any]:
         """Forma pentru event-ul `llm_usage` (analytics_events): coloane dedicate tokens_in/out +
         cost_usd extrase de insert_events; restul (cached/savings/defalcări) în properties jsonb."""
-        return {
+        props = {
             "tokens_in": self.tokens_in,
             "tokens_out": self.tokens_out,
             "cached_tokens": self.cached_tokens,
@@ -561,7 +565,11 @@ class TurnUsage:
             "llm_calls": self.calls,
             "by_stage": self.by_stage,
             "by_model": self.by_model,
+            "per_call": self.per_call,
         }
+        if self.per_call_dropped:
+            props["per_call_dropped"] = self.per_call_dropped
+        return props
 
 
 # ---------------------------------------------------------------------------

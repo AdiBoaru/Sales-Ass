@@ -172,6 +172,8 @@ async def run_pipeline(ctx: TurnContext, deps: PipelineDeps, stages: list[Stage]
             models=sorted(acc.by_model),
             by_stage=by_stage,
             by_model=acc.by_model,
+            per_call=list(acc.call_rows),
+            per_call_dropped=acc.call_rows_dropped,
         )
         if acc.calls:
             # Event `llm_usage` DOAR la apel LLM real → rollup/billing fără zero-rows. tokens/cost
