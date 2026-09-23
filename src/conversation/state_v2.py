@@ -37,6 +37,7 @@ from src.conversation.needs import (
     norm_key,
     normalize_need,
 )
+from src.conversation.subject import MAX_SUBJECT_NEEDS, SUBJECT_KEY, ConversationSubject
 
 log = logging.getLogger(__name__)
 
@@ -127,6 +128,9 @@ class Topic:
     category_key: str | None = None
     goal: str | None = None
     changed_at_revision: int = 0
+    # NX-314: tipul DOMINANT al setului arătat (`src/conversation/subject.py`). Aditiv: un document
+    # fără cheie se citește `None`, deci versiunea de schemă rămâne aceeași.
+    product_type: str | None = None
 
     def to_jsonb(self) -> dict[str, Any]:
         return _compact(
@@ -134,6 +138,7 @@ class Topic:
                 "category_key": self.category_key,
                 "goal": self.goal,
                 "changed_at_revision": self.changed_at_revision,
+                "product_type": self.product_type,
             }
         )
 
@@ -144,6 +149,7 @@ class Topic:
             category_key=_clip(raw.get("category_key")) or None,
             goal=_clip(raw.get("goal")) or None,
             changed_at_revision=_int(raw.get("changed_at_revision")),
+            product_type=_clip(raw.get("product_type"), 48) or None,
         )
 
 
@@ -592,8 +598,11 @@ def adapt_v1(raw: object, vocab: NeedVocabulary) -> ConversationStateV2:
     search_constraints = raw.get("search_constraints")
     search_constraints = search_constraints if isinstance(search_constraints, dict) else {}
     category = _clip(search_constraints.get("category_key")) or None
+    # NX-314: subiectul v1 e marker de SUBIECT, nu nevoie. Tipul lui trece pe `Topic`; nevoile lui
+    # sunt deja în `concerns`, deci nu se dublează.
+    subject = ConversationSubject.from_dict(search_constraints.get(SUBJECT_KEY))
     for key, value in search_constraints.items():
-        if vocab.is_topic_key(key):
+        if key == SUBJECT_KEY or vocab.is_topic_key(key):
             continue
         if isinstance(value, list):
             for item in value[:MAX_NEEDS]:
@@ -613,7 +622,7 @@ def adapt_v1(raw: object, vocab: NeedVocabulary) -> ConversationStateV2:
     )[-MAX_ASKED_QUESTIONS:]
 
     return ConversationStateV2(
-        topic=Topic(category_key=category),
+        topic=Topic(category_key=category, product_type=subject.product_type if subject else None),
         needs=tuple(needs)[:MAX_NEEDS],
         revocations=(),
         pending_clarification=_pending_from_v1(raw.get("pending_question"), vocab),
@@ -715,6 +724,21 @@ def project_v1(state: ConversationStateV2) -> dict[str, Any]:
         constraints[need.key] = need.normalized_value
     if state.topic.category_key:
         search_constraints["category_key"] = state.topic.category_key
+    # NX-314: cititorii v1 (`resolve_cheaper_followup`) văd subiectul exact ca într-un rând v1.
+    # Nevoile lui sunt cele ROSTITE de client pe fațete (`contains`), nu tot ce e în stare: bugetul
+    # sau brandul nu descriu CE cumpără clientul.
+    if state.topic.product_type:
+        search_constraints[SUBJECT_KEY] = ConversationSubject(
+            shelf_key=state.topic.category_key,
+            product_type=state.topic.product_type,
+            needs=tuple(
+                (n.key, n.normalized_value)
+                for n in state.active_needs()
+                if n.source == "user_explicit"
+                and n.operator == "contains"
+                and isinstance(n.normalized_value, str)
+            )[-MAX_SUBJECT_NEEDS:],
+        ).to_dict()
 
     pending = state.pending_clarification
     doc: dict[str, Any] = {
@@ -865,11 +889,31 @@ def bounded_map(raw: object) -> dict[str, Any] | None:
             ]
         elif isinstance(value, dict):
             out[_clip(key, 32)] = {
-                _clip(k, 32): (_clip(v, 64) if isinstance(v, str) else v)
+                _clip(k, 32): _bounded_leaf(v)
                 for k, v in list(value.items())[:MAX_ACTIVE_SEARCH_KEYS]
-                if isinstance(v, (str, int, float, bool))
+                if isinstance(v, (str, int, float, bool)) or _is_scalar_list(v)
             }
     return out or None
+
+
+#: NX-314: câte elemente păstrează o listă IMBRICATĂ (`active_search.filters.concerns`). Înainte
+#: dicționarele imbricate păstrau doar scalari, deci pe v2 lista de nevoi a sesiunii dispărea la
+#: commit, iar moștenirea filtrelor în sesiune (`catalog_tools`) nu mai avea ce moșteni. Plafonul e
+#: același ca pentru `concerns` în stiva de constrângeri (`MAX_CONCERNS`); peste el lista se TAIE,
+#: nu se aruncă.
+MAX_NESTED_LIST = 5
+
+
+def _is_scalar_list(value: object) -> bool:
+    return isinstance(value, list) and all(isinstance(v, (str, int, float, bool)) for v in value)
+
+
+def _bounded_leaf(value: Any) -> Any:
+    if isinstance(value, str):
+        return _clip(value, 64)
+    if isinstance(value, list):
+        return [_clip(v, 64) if isinstance(v, str) else v for v in value[:MAX_NESTED_LIST]]
+    return value
 
 
 def _int(value: object) -> int:

@@ -814,6 +814,14 @@ class Settings(BaseSettings):
     # P1: follow-up „mai ieftin" → re-căutare deterministă a produselor STRICT mai ieftine decât
     # cel mai ieftin afișat, în aceeași categorie (search_cheaper_than) — nu re-rank pe set afișat.
     cheaper_intent_enabled: bool = Field(default=True, validation_alias="CHEAPER_INTENT_ENABLED")
+    # NX-314: subiectul conversației (raft rezolvat + tipul dominant al setului arătat + nevoile
+    # rostite), scris de `_learn_constraints` pe ambele forme de stare și citit de «mai ieftin»,
+    # care ordonează același tip întâi, cel mai aproape de prag. Default ON: pe traficul real 3 din
+    # 4 «mai ieftin» aveau un subiect de tip și 0% din cardurile servite îl respectau. OFF = nicio
+    # cheie `subject` scrisă și SQL-ul de «mai ieftin» byte-identic.
+    conversation_subject_enabled: bool = Field(
+        default=True, validation_alias="CONVERSATION_SUBJECT_ENABLED"
+    )
     # IZI-parity (Tier 1, G2): intenție de COMPARAȚIE pe un set deja afișat („compară primele două",
     # „ce diferență e între ele") → tabel structurat DETERMINIST pe produsele afișate (re-fetch +
     # build_comparison), ca link/show_more/cheaper — fără să depindem de modelul care cheamă

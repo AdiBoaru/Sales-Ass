@@ -71,13 +71,24 @@ from src.agent.validator import (
     _valid,  # noqa: F401 — re-export (teste; patch-uit în test_golden)
     validate_prose,  # noqa: F401 — re-export (consumatori/teste)
 )
-from src.catalog.vocabulary import named_topic_roots, topic_root_of, topic_switched
+from src.catalog.vocabulary import (
+    facet_overlays,
+    named_topic_roots,
+    topic_root_of,
+    topic_switched,
+)
 from src.catalog.vocabulary_cache import get_vocabulary
 from src.config import get_settings
 from src.conversation import observed_constraints
 from src.conversation.needs import NeedVocabulary
 from src.conversation.state_reducer import ReducerPolicy, StateUpdateProposal, reduce_all
 from src.conversation.state_v2 import ConversationStateV2, active_needs, project_v1
+from src.conversation.subject import (
+    SUBJECT_KEY,
+    ConversationSubject,
+    derive_subject,
+    resolve_needs,
+)
 from src.db.queries.catalog import (
     get_products_by_ids,
     list_category_names,
@@ -203,6 +214,10 @@ def merge_constraints(
     cat = category_key or (None if reset else prev_cat)
     if cat:
         merged["category_key"] = cat
+    # NX-314: subiectul se CARĂ ca atare (proprietarul lui e `_learn_constraints`, care îl
+    # re-derivează după buclă); un reset de subiect îl golește odată cu restul stivei.
+    if not reset and isinstance(stored.get(SUBJECT_KEY), dict):
+        merged[SUBJECT_KEY] = stored[SUBJECT_KEY]
     return merged, reset
 
 
@@ -531,7 +546,9 @@ def _emit_query_spec_shadow(ctx: TurnContext, route: Route) -> None:
         log.warning("query_spec_shadow emit failed", exc_info=True)
 
 
-def _learn_constraints(ctx: TurnContext, run: ToolRun, message: str) -> None:
+async def _learn_constraints(
+    ctx: TurnContext, run: ToolRun, message: str, deps: PipelineDeps
+) -> None:
     """Constrângerile observate în apelurile de căutare ale turului → stiva persistată (NX-297).
 
     Sursa e ce a cerut agentul, iar ce le face ale CLIENTULUI e `corroborated_by`, nu o declarație
@@ -546,25 +563,101 @@ def _learn_constraints(ctx: TurnContext, run: ToolRun, message: str) -> None:
     `ctx.state` n-ar ajunge niciodată în el. Scrisă doar în prima formă, felia asta era inertă exact
     pe profilul care rulează azi, adică se pierdea tăcut chiar lucrul pe care e pusă să-l apere.
     """
-    if not get_settings().observed_constraints_enabled or not run.search_args:
+    settings = get_settings()
+    if not settings.observed_constraints_enabled or not run.search_args:
         return
+    subject_on = getattr(settings, "conversation_subject_enabled", False)
+    # NX-314: vocabularul intră doar cu subiectul aprins — stins, raftul rămâne șirul brut și
+    # turul nu face nicio citire în plus (byte-identic). Vocabularul e cache-uit per tenant.
+    vocab = await get_vocabulary(deps, ctx.business.id) if subject_on else None
     observed, stats = observed_constraints.from_search_args(run.search_args, message)
     # Raftul căutat e marker de SUBIECT, nu constrângere: nu se coroborează și e singurul care poate
     # reseta stiva. Se pasează chiar și cu `observed` gol — „am schimbat raftul" e o informație
     # completă în sine.
-    category = observed_constraints.observed_category(run.search_args)
-    if not observed and not category:
-        if stats["inferred"]:
-            ctx.emit("constraint_source", kept=0, inferred=stats["inferred"])
+    category = observed_constraints.observed_category(run.search_args, vocab)
+    previous = ConversationSubject.from_dict((ctx.state.search_constraints or {}).get(SUBJECT_KEY))
+    if observed or category:
+        merged, _ = merge_constraints(ctx.state.search_constraints, observed, category)
+        ctx.state.search_constraints = merged
+        ctx.state_proposals.extend(_need_proposals(ctx, observed))
+        ctx.emit(
+            "constraint_source",
+            kept=stats["kept"],
+            inferred=stats["inferred"],
+            keys=sorted(observed),
+        )
+    elif stats["inferred"]:
+        ctx.emit("constraint_source", kept=0, inferred=stats["inferred"])
+    if subject_on:
+        _learn_subject(ctx, run, vocab, category, observed, previous)
+
+
+def _learn_subject(
+    ctx: TurnContext,
+    run: ToolRun,
+    vocab: Any,
+    category: str | None,
+    observed: dict[str, Any],
+    previous: ConversationSubject | None,
+) -> None:
+    """NX-314: subiectul conversației, scris în AMBELE forme de stare de proprietarul lui unic.
+
+    Pe v1 e `search_constraints["subject"]`; pe v2 o propunere `set_topic` marcată `subject`,
+    fiindcă docul v2 se re-derivă la commit din propuneri (aceeași capcană ca la stiva de
+    constrângeri, vezi `_learn_constraints`).
+
+    Un tur «mai ieftin» NU re-derivă subiectul: setul lui e ales de server RELATIV la subiect, deci
+    a-l citi înapoi ca dovadă ar fi circular, iar pe calea v1 căutarea proprie a modelului din
+    turul ăsta ar putea muta subiectul fix înainte ca «mai ieftin» să-l citească.
+
+    `displayed` = `run.retrieved`, adică ce a adus bucla pentru model, cu `attributes`. Cardurile
+    finale sunt o selecție din el; tipul DOMINANT e robust la selecție, iar `ctx.reply` nu există
+    încă aici."""
+    if cheaper_followup_detected(ctx, ctx.message.body or ""):
         return
-    merged, _ = merge_constraints(ctx.state.search_constraints, observed, category)
-    ctx.state.search_constraints = merged
-    ctx.state_proposals.extend(_need_proposals(ctx, observed))
-    ctx.emit(
-        "constraint_source",
-        kept=stats["kept"],
-        inferred=stats["inferred"],
-        keys=sorted(observed),
+    concerns = observed.get("concerns") or []
+    overlays = (
+        facet_overlays(getattr(ctx.business, "domain_pack", None), vocab.facet_names)
+        if vocab is not None
+        else None
+    )
+    subject = derive_subject(
+        displayed=run.retrieved,
+        shelf=category if (vocab is not None and not vocab.is_empty()) else None,
+        needs=resolve_needs(vocab, concerns, overlays=overlays),
+        vocab=vocab,
+        previous=previous,
+        turn_id=ctx.turn_id,
+    )
+    constraints = dict(ctx.state.search_constraints or {})
+    # `merge_constraints` golește subiectul la o schimbare de raft; chiar dacă subiectul derivat e
+    # același, cheia trebuie rescrisă, altfel v1 l-ar pierde tăcut.
+    if subject == previous and SUBJECT_KEY in constraints:
+        return
+    # Fără tip nu există subiect persistat, pe AMBELE forme: proiecția v2 îl emite doar cu
+    # `product_type`, iar «mai ieftin» oricum nu-l folosește fără tip. Altfel v1 și v2 ar diverge
+    # (zgomot fals în `conversation_state_shadow_diff`).
+    if subject.product_type:
+        constraints[SUBJECT_KEY] = subject.to_dict()
+    else:
+        constraints.pop(SUBJECT_KEY, None)
+    ctx.state.search_constraints = constraints
+    if subject == previous:
+        return  # pe v2 `topic` e deja persistat; nu propunem o schimbare care nu există
+    # PRIMA în lotul turului, ca la `_filter_proposals`: reducerul leagă fiecare nevoie de raftul
+    # CURENT (`scope`), iar o schimbare de raft retrage nevoile legate de cel vechi. Pusă după
+    # `set_need`-urile turului, ar fi retras exact bugetul și nevoile tocmai rostite de client
+    # (măsurat: «sub 100 lei» + «hidratare» ieșeau `superseded`, cu tombstone `topic_reset`).
+    ctx.state_proposals.insert(
+        0,
+        StateUpdateProposal(
+            "set_topic",
+            category_key=subject.shelf_key,
+            product_type=subject.product_type,
+            subject=True,
+            source="catalog",
+            turn_id=ctx.turn_id,
+        ),
     )
 
 
@@ -688,7 +781,11 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
             merged_constraints = from_v2
         ctx.state.search_constraints = merged_constraints
         current = route.filters or {}
-        carried = sum(1 for k in merged_constraints if k != "category_key" and k not in current)
+        carried = sum(
+            1
+            for k in merged_constraints
+            if k not in ("category_key", SUBJECT_KEY) and k not in current
+        )
         ctx.emit(
             "constraints_merged",
             keys=sorted(merged_constraints),
@@ -788,7 +885,7 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
                 # ÎNAINTE de ea, deci fără linia de aici creierul unic ar fi singurul contract
                 # fără memorie de constrângeri — și n-ar fi apărut ca eroare, ci ca „botul uită
                 # bugetul", pe un flag deja aprins în `.env`.
-                _learn_constraints(ctx, run, query)
+                await _learn_constraints(ctx, run, query, deps)
                 return
             # NX-304: profilul de tur se aplică DOAR aici, pe calea v1. Ramura creierului unic s-a
             # întors deja mai sus și și-l aplică singură (`brain.py`), deci nu există tur pe care
@@ -804,7 +901,7 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     # Rulează DUPĂ buclă fiindcă abia acum există argumentele; seed-ul din promptul turului ăsta a
     # fost stiva stocată, deci clientul nu trebuie să-și repete bugetul ca să fie ținut minte.
     if not is_order:
-        _learn_constraints(ctx, run, query)
+        await _learn_constraints(ctx, run, query, deps)
 
     # Faza E (NX-144): shaping determinist post-loop (checkout-fallback/cross-sell/attr_query/
     # cheaper/rehidratare) → `ResponsePlan`. Ramurile care răspund direct (login / cross-sell /

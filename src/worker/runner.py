@@ -23,6 +23,7 @@ from src.agent.llm import LLMClient
 from src.agent.pricing import savings_for
 from src.channels.base import MediaFetcherRegistry
 from src.config import get_settings
+from src.conversation.subject import SUBJECT_KEY, ConversationSubject, subject_match_report
 from src.db import op_metrics
 from src.db.provider import DbProvider, static_db
 from src.models import TurnContext, TurnUsage
@@ -133,6 +134,7 @@ async def run_pipeline(ctx: TurnContext, deps: PipelineDeps, stages: list[Stage]
                 if ctx.reply is not None:  # halt (tăcere) n-are reply de măsurat
                     safety_compose.enforce(ctx)  # NX-173: vezi mai jos
                     _emit_response_shape(ctx, name)
+                    _emit_subject_match(ctx)
                 break
         else:
             ctx.emit("pipeline_complete")
@@ -490,6 +492,26 @@ def _emit_response_shape(ctx: TurnContext, stage: str) -> None:
             ctx.emit("completeness_gap", intent=intent, missing=gaps)
     except Exception as e:  # noqa: BLE001 — telemetria nu blochează livrarea
         log.warning("runner: response_shape a eșuat (%s)", type(e).__name__)
+
+
+def _emit_subject_match(ctx: TurnContext) -> None:
+    """NX-314: câte din cardurile servite au tipul SUBIECTULUI conversației, și pe ce drum.
+
+    Emis din runner (P10) pe orice tur cu carduri, după ce `_learn_constraints` a scris subiectul.
+    Pur observabilitate: o excepție nu atinge turul (P6)."""
+    if not getattr(get_settings(), "conversation_subject_enabled", False) or ctx.reply is None:
+        return
+    try:
+        raw = (ctx.state.search_constraints or {}).get(SUBJECT_KEY)
+        report = subject_match_report(
+            ConversationSubject.from_dict(raw),
+            ctx.reply.products or [],
+            (e.type for e in ctx.events),
+        )
+        if report is not None:
+            ctx.emit("subject_match", **report)
+    except Exception as e:  # noqa: BLE001 — telemetria nu blochează livrarea
+        log.warning("runner: subject_match a eșuat (%s)", type(e).__name__)
 
 
 async def fallback_stage(ctx: TurnContext, deps: PipelineDeps) -> None:

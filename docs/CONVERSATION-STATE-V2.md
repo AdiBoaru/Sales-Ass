@@ -51,7 +51,7 @@ processorul (P3), exact ca la `TurnSnapshot` (NX-234).
 ConversationStateV2
 ├── schema_version = 2
 ├── revision                       # contor MONOTON al documentului (+1 per commit)
-├── topic {category_key, goal, changed_at_revision}
+├── topic {category_key, goal, changed_at_revision, product_type}   # product_type: NX-314
 ├── needs[] {key, operator, normalized_value, strength, status, source,
 │            source_turn_id, confirmed, sensitive_class, updated_revision, scope}
 ├── revocations[] {key, prior_value_fingerprint, source_turn_id, revision, reason_code}
@@ -79,6 +79,32 @@ ConversationStateV2
   revine din rezumat".
 - Siguranța (`sensitive_class` sau `source='policy'`) nu se revocă și nu se rescrie decât la
   cererea EXPLICITĂ a clientului. Nici topic switch, nici model.
+
+### Subiectul conversației (NX-314)
+
+`topic.product_type` e tipul DOMINANT al setului arătat clientului (`src/conversation/subject.py`:
+strict peste jumătate din produsele cu tip cunoscut, minimum 2; un set cu un singur produs tipat
+nu schimbă un subiect existent). Câmp **aditiv**: un document fără cheie se citește `None`, deci
+`schema_version` rămâne 2 și nu există migrare.
+
+- **Scriitor unic:** `_learn_constraints` (stagiul agent), prin `set_topic` cu `subject=True` și
+  `source=catalog`. Pe o astfel de propunere `product_type` se aplică exact (și `None` = set
+  amestecat), iar `category_key=None` înseamnă „raftul nu s-a schimbat", nu propunere goală.
+  Raftul e o cheie de catalog deja rezolvată, deci se păstrează VERBATIM (fără `norm_key`, care
+  ar transforma `ten-ingrijirea-tenului` în `ten_ingrijirea_tenului`).
+- **Ordinea în lot:** propunerea intră PRIMA în lotul turului. Reducerul leagă fiecare nevoie de
+  raftul curent (`scope`), iar o schimbare de raft retrage nevoile raftului vechi; pusă după
+  `set_need`-urile turului, ar retrage bugetul și nevoile tocmai rostite de client.
+- **Planul creierului** poate propune în continuare `set_topic` (`model_inferred`), dar reducerul
+  îl respinge cu `subject_owned` când `topic.product_type` e deja setat de setul arătat.
+- **Proiecția v1:** `project_v1` pune subiectul în `search_constraints["subject"]`
+  (`{shelf, type, needs}`, ≤200 de octeți), cu nevoile ROSTITE de client pe fațete
+  (`source=user_explicit`, `operator=contains`). Fără `product_type` nu se proiectează nimic, deci
+  cu `CONVERSATION_SUBJECT_ENABLED=false` proiecția e cea de dinainte.
+- **`adapt_v1`** citește `search_constraints["subject"].type` în `topic.product_type` și NU îl
+  tratează ca nevoie.
+- **`active_search.filters`:** `bounded_map` păstrează acum și listele imbricate de scalari
+  (tăiate la 5). Înainte, pe v2, `filters.concerns` dispărea la commit.
 
 ### Vocabularul (P9 — config, nu cod)
 
@@ -165,7 +191,7 @@ pornească. Rollback = stinge flagul de scriere; rândurile deja v2 rămân citi
 `conversation_state_shadow_diff{fields,differs}` ·
 `conversation_state_serialized{schema,state_size_bytes_bucket,degraded,needs}` ·
 `need_update{operation,strength,source,outcome}` · `need_update_rejected{reason,operation}` ·
-`constraint_revoked{reason}` · `topic_reset{scope}` ·
+`constraint_revoked{reason}` · `topic_reset{scope}` · `subject_match{path,...}` (NX-314) ·
 `clarification_decision{decision,reason,information_gain_bucket}` · `clarify_skipped{field}` ·
 `clarify_suppressed{field,reason}` · `web_reference_resolved{source,outcome,reason}`.
 

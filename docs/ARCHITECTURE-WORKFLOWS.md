@@ -1777,6 +1777,7 @@ conversation_facts_enabled = true
 conversation_sensitive_memory_enabled = false
 conversation_state_v2_enabled = false
 conversation_state_v2_write_enabled = false
+conversation_subject_enabled = true
 conversation_trace_enabled = false
 cost_guard_enabled = true
 cross_sell_enabled = true

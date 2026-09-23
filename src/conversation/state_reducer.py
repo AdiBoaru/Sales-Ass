@@ -93,6 +93,7 @@ REJECT_REASONS: frozenset[str] = frozenset(
         "sensitive_no_consent",
         "already_pending",
         "already_asked",
+        "subject_owned",
     }
 )
 
@@ -116,6 +117,11 @@ class StateUpdateProposal:
     # set_topic
     category_key: str | None = None
     goal: str | None = None
+    # NX-314: subiectul conversației. `subject=True` marchează propunerea PROPRIETARULUI
+    # (`_learn_constraints`): `product_type` se aplică exact (și `None` = set amestecat), iar
+    # `category_key=None` înseamnă „raftul nu s-a schimbat", nu „propunere goală".
+    product_type: str | None = None
+    subject: bool = False
     # set_pending_question / resolve_question
     question_id: str | None = None
     reason: str | None = None
@@ -482,17 +488,35 @@ def _handle_set_topic(
     state: ConversationStateV2, proposal: StateUpdateProposal, policy: ReducerPolicy
 ) -> tuple[ConversationStateV2, Applied] | RejectedUpdate:
     category = norm_key(proposal.category_key) or None
-    if category is None and proposal.goal is None:
+    if proposal.subject:
+        # Raftul subiectului e deja o CHEIE de catalog (rezolvată prin vocabular), deci se păstrează
+        # verbatim: `norm_key` ar face din slug-ul `ten-ingrijirea-tenului` un
+        # `ten_ingrijirea_tenului`, pe care nici `_category_clause`, nici `topic_root_of` nu-l mai
+        # recunosc. Raftul nerezolvat nu e o schimbare de raft: subiectul poate purta doar tipul.
+        category = (proposal.category_key or "").strip() or state.topic.category_key
+    elif category is None and proposal.goal is None:
         return RejectedUpdate("set_topic", "invalid_payload", None, proposal.source)
+    elif proposal.source == "model_inferred" and state.topic.product_type:
+        # NX-314 (P3): subiectul are un singur scriitor. Planul creierului poate propune un raft,
+        # dar nu poate muta unul pe care îl susține deja setul arătat clientului.
+        return RejectedUpdate("set_topic", "subject_owned", category, proposal.source)
     previous = state.topic.category_key
+    product_type = proposal.product_type if proposal.subject else state.topic.product_type
     if category == previous:
-        topic = replace(state.topic, goal=proposal.goal or state.topic.goal)
+        topic = replace(
+            state.topic, goal=proposal.goal or state.topic.goal, product_type=product_type
+        )
         return (
             replace(state, topic=topic),
             Applied("set_topic", category, SOFT, proposal.source, "unchanged"),
         )
 
-    topic = Topic(category_key=category, goal=proposal.goal, changed_at_revision=state.revision)
+    topic = Topic(
+        category_key=category,
+        goal=proposal.goal,
+        changed_at_revision=state.revision,
+        product_type=product_type if proposal.subject else None,
+    )
     if previous is None:
         # Prima ancorare a subiectului nu retrage nimic — nu exista un „vechi" de resetat.
         return (

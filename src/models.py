@@ -193,6 +193,8 @@ class ConversationState:
     # category_key pt reset). Distinct de `constraints` (acela = slot-fill din clarify, NX-112).
     # Owner la scriere: stagiul agent (`merge_constraints`, după triaj); persistat de processor.
     # Ref-uri scalare + listă scurtă de termeni (P8); cap 6 chei / concerns ≤5 (P4).
+    # NX-314: cheia `subject` = subiectul conversației (`src/conversation/subject.py`: raft
+    # rezolvat, tip dominant, nevoi rostite), ≤200 de octeți; scriitor unic `_learn_constraints`.
     search_constraints: dict[str, Any] = field(default_factory=dict)
     # NX-79: coșul acumulat de `cart_add` (ref-uri, NU obiecte de produs — P8). Top-level în jsonb;
     # owner la scriere: Sender (processor, din `ctx.state_patch`). Cap 10 linii (impus în cart_add).

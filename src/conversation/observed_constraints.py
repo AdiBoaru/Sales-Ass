@@ -40,7 +40,8 @@ poate pierde o constrângere veche nerepetată, nu una tocmai rostită. Iar `top
 care citește raftul din cuvintele BRUTE ale clientului, rămâne a doua cale, independentă.
 
 `category` nu trece prin `corroborated_by`: nu e o afirmație a clientului, e nota serverului despre
-ce s-a căutat. Un slug inventat e inert în aval (`topic_root_of` îl întoarce `None`).
+ce s-a căutat. Din NX-314 se persistă cheia REZOLVATĂ prin vocabular, nu șirul modelului (vezi
+`observed_category`).
 
 ## Ce NU intră
 
@@ -52,7 +53,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from src.catalog.vocabulary import CatalogVocabulary
 from src.conversation.needs import corroborated_by
+from src.conversation.subject import resolve_shelf
 
 #: Argument de tool → cheia din stiva v1. Traducerea e EXPLICITĂ: un `getattr` peste numele
 #: argumentelor ar lega tăcut stiva de schema tool-ului, iar o redenumire acolo ar goli stiva fără
@@ -75,11 +78,20 @@ MAX_CONCERNS = 5
 _CATEGORY_ARG = "category"
 
 
-def observed_category(calls: list[dict[str, Any]]) -> str | None:
+def observed_category(
+    calls: list[dict[str, Any]], vocab: CatalogVocabulary | None = None
+) -> str | None:
     """Ultimul raft pe care a căutat agentul, sau `None`. PURĂ.
 
     Ultimul, nu primul: pe un tur cu două căutări, a doua e rafinarea — dacă modelul a schimbat
-    raftul în timpul turului, raftul final e cel pe care s-a oprit."""
+    raftul în timpul turului, raftul final e cel pe care s-a oprit.
+
+    NX-314: cu un vocabular VIU, raftul se persistă ca CHEIE de catalog (`resolve`, verdict
+    `KNOWN`), nu ca șirul modelului. `topic_root_of` cere egalitate exactă pe cheie, deci un nume
+    sau un sinonim („ingrijire ten") persistat brut dădea `None`, iar `topic_switched` răspundea
+    fals pe tot restul conversației. Un raft care nu se rezolvă `KNOWN` nu se persistă deloc: un
+    șir inert nu e un subiect. Fără vocabular (sau gol, adică DB jos la încărcare) comportamentul
+    e cel de dinainte, șirul brut."""
     found: str | None = None
     for args in calls:
         if not isinstance(args, dict):
@@ -87,7 +99,9 @@ def observed_category(calls: list[dict[str, Any]]) -> str | None:
         value = args.get(_CATEGORY_ARG)
         if isinstance(value, str) and value.strip():
             found = value.strip()
-    return found
+    if found is None or vocab is None or vocab.is_empty():
+        return found
+    return resolve_shelf(vocab, found)
 
 
 def from_search_args(
