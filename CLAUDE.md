@@ -446,8 +446,20 @@ latent exista pe `show_more`, reparat tot aici). **Premisa din card, corectată 
 picat ar fi lăsat cardurile fără niciun cuvânt. Când proza a fost sărită, încadrarea e singura frază
 posibilă și coboară la un tip (`rich_from_facts(sole_text=True)`). Rămâne descoperit, declarat: un set
 fără niciun `product_type` rămâne fără frază. Kill-switch `TOOL_LOOP_SKIP_PROSE_ENABLED` (**ON**, ca
-NX-311: risipă măsurată; OFF = byte-identic). Feliile 3-5 rămân deschise. Card:
-[`tasks/stage1/NX-312.md`](tasks/stage1/NX-312.md); probă: `pytest tests/test_skip_prose_round.py -q`.
+NX-311: risipă măsurată; OFF = byte-identic).
+**Felia 4 — apelul 3 fără ce se aruncă.** `finalize.rich_omissions` decide DIN CONFIGURAȚIE ce nu
+mai cere compunerea: `suggestions` când mutările de chip le suprascriu (`CHIP_MOVES_V1_ENABLED`),
+`pick` când linia nu se arată nicăieri (`RICH_PICK_WEB_ENABLED=false`), lista de rafturi mereu
+(modelul alege dintr-o listă fixă de produse). ACEEAȘI mulțime taie schema (`_rich_schema`) și
+system-ul (`build_rich_system(omit=)`), iar un test cere ca promptul să numească exact câmpurile
+rămase în schemă. Regulile se taie pe marcatori din textul existent (poartă la import), iar cele trei
+mențiuni ale lui `pick` din alte reguli se rescriu. Pe 45 de rafturi: system 3.787 → 2.819 tokeni,
+schema 220 → 140. Pe drum: `{MAX_PER_TYPE}` (NX-303) pleca LITERAL spre model pe fiecare apel rich,
+fiindcă se substituia doar în system-ul buclei; reparat pe toate variantele, deci și cu flagul stins.
+`RICH_SCHEMA_SLIM_ENABLED` (OFF până la golden; stins = schema byte-identică, iar system-ul diferă
+doar prin cifra care înlocuiește marcatorul). Feliile 3 și 5 rămân deschise. Card:
+[`tasks/stage1/NX-312.md`](tasks/stage1/NX-312.md); probe: `pytest tests/test_skip_prose_round.py
+tests/test_rich_schema_slim.py -q`.
 
 **NX-316 felia 1 — serverul RECUNOAȘTE apăsarea unui chip (flag OFF).** Pe v1 apăsarea retrimite
 doar TEXTUL, iar handlerele deterministe îl reinterpretau: „linkul la X" servea linkurile TUTUROR

@@ -1320,6 +1320,15 @@ class Settings(BaseSettings):
     tool_loop_skip_prose_enabled: bool = Field(
         default=True, validation_alias="TOOL_LOOP_SKIP_PROSE_ENABLED"
     )
+    # NX-312 felia 4: apelul de compunere bogată nu mai cere ce aruncă. `suggestions` iese când
+    # mutările de chip le suprascriu oricum (`CHIP_MOVES_V1_ENABLED`), `pick` când linia nu se
+    # arată nicăieri (`RICH_PICK_WEB_ENABLED=false`), iar lista de rafturi din system-ul rich
+    # mereu (modelul alege dintr-o listă fixă de produse, nu dintr-un raft). OFF până la golden:
+    # spre deosebire de felia 2, aici se schimbă promptul unui apel care SCRIE textul clientului.
+    # Stins → schemă și system byte-identice.
+    rich_schema_slim_enabled: bool = Field(
+        default=False, validation_alias="RICH_SCHEMA_SLIM_ENABLED"
+    )
     # NX-225: buget de TIMP pentru embed-ul de query din `search_products` (P4 — bugetul stă în cod,
     # nu în speranță). `llm_timeout_s` × retry = până la ~90s de așteptare pe un furnizor lent, deși
     # piciorul lexical răspunde în milisecunde: la depășire cădem pe lexical-only, ca la eroare
