@@ -469,8 +469,18 @@ acestea?», forward) pe fațeta partiționantă nerostită aleasă de ACEEAȘI `
 răspunsul din fișă (`fit_yes`/`fit_no` în `answer_shape_templates`, zero model); `choose_within` ⇒
 setul afișat ∩ valoare (`planner.resolve_choose_within`): setul planului pe v1, seed pe creierul
 unic (tiparul «mai ieftin»).
+**Felia 3 — mutări din graful de relații.** `routine_next` («Arata-mi crema contur ochi care merge
+cu X», pe produsul discutat, muchia `routine_next` înaintea lui `complement`) și `similar_to`
+(substitutele în stoc), din UN query agregat pe tur (`catalog.relation_type_counts`, checkout
+`chip_relations` DUPĂ apelul de model; picat ⇒ fail-open + `relations_error`). La apăsare,
+`related_in_stock` servește setul, ca la `choose_within`. `pivot_shelf` coboară: pe explain/answer
+când graful are o laterală, pe recommend după primul tur al subiectului. Felurile existente trec în
+vocea clientului sub `chip_templates_v2` (doar cu flagul, fallback per fel, testat că regexurile de
+azi le prind în continuare). Pe `sole-ro`, turul 3 al conversației reale oferă acum
+`routine_next` pentru SOME BY MI Yuja Niacin.
 `CHIP_MOVES_V2_ENABLED=false` = byte-identic. Card: [`tasks/stage1/NX-316.md`](tasks/stage1/NX-316.md);
-probe: `pytest tests/test_chip_press.py tests/test_chip_moves_v2.py -q`.
+probe: `pytest tests/test_chip_press.py tests/test_chip_moves_v2.py tests/test_relation_chips.py -q`
++ `NX_TESTS_READ_ENV_FILE=1 pytest tests/test_relation_chips_db.py -m integration -q`.
 
 **NX-313 — «vreau o cremă de hidratare»: filtrul ghicit se judecă după CERERE.**
 Turul real `bcd8e5c6` (`sole-ro`, 2026-09-23), recidiva lui `f7414c3e` DUPĂ #398: 72,4 s, trei BB-uri

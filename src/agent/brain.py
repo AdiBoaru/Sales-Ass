@@ -322,6 +322,7 @@ def _turn_chips(
     run: ToolRun,
     chip_ctx: ChipContext,
     extra: tuple[Any, ...] = (),
+    extra_stats: dict[str, int] | None = None,
 ) -> tuple[str, ...]:
     """Sugestiile turului: mutări (meniu + carduri) → mix de roluri → textul modelului sau șablon.
 
@@ -357,17 +358,22 @@ def _turn_chips(
             stats=anchor_stats,
         ),
     ]
-    from src.agent.finalize import _drop_dead_moves  # noqa: PLC0415 — aceeași regulă ca pe v1
+    from src.agent.finalize import _drop_dead_moves, _role_order  # noqa: PLC0415 — ca pe v1
 
+    kinds = [o.kind for o in plan.obligations]
     candidates, dead = _drop_dead_moves(
-        ctx, candidates, n_cards=len(_plan_products(plan, run.retrieved))
+        ctx,
+        candidates,
+        n_cards=len(_plan_products(plan, run.retrieved)),
+        obligation_kinds=kinds,
     )
     if dead:
         anchor_stats["dropped_dead"] = dead
+    anchor_stats.update(extra_stats or {})
     picked = chip_moves.select(
         candidates,
         slots=chip_slots(get_settings()),
-        role_order=chip_moves.roles_for(o.kind for o in plan.obligations),
+        role_order=_role_order(kinds),
         offered_before=chip_ctx.offered_before,
     )
     labels = {label.move_id: label.text for label in plan.chip_labels}
@@ -468,10 +474,12 @@ async def _set_brain_reply(
     if not settings.brain_chips_enabled:
         chips: tuple[str, ...] = ()
     elif chip_ctx is not None:
-        from src.agent.finalize import _facet_moves  # noqa: PLC0415 — aceeași regulă ca pe v1
+        from src.agent.finalize import _facet_moves, _relation_moves  # noqa: PLC0415 — ca v1
 
-        extra = tuple(await _facet_moves(ctx, deps, _plan_products(plan, run.retrieved)))
-        chips = _turn_chips(ctx, plan, run, chip_ctx, extra)
+        cards = _plan_products(plan, run.retrieved)
+        graph, graph_stats = await _relation_moves(ctx, deps, cards)
+        extra = (*await _facet_moves(ctx, deps, cards), *graph)
+        chips = _turn_chips(ctx, plan, run, chip_ctx, extra, graph_stats)
     else:
         chips = await _clarify_chips(ctx, deps)
 

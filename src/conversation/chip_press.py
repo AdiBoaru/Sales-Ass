@@ -56,7 +56,16 @@ __all__ = ["PRESSABLE", "facet_of", "product_ids", "recognize"]
 #: Felurile de mutare care au un handler determinist. Un fel în afara listei nu se recunoaște,
 #: deci apăsarea lui rămâne a regexurilor și a modelului, ca înainte.
 PRESSABLE: frozenset[str] = frozenset(
-    {"detail", "reviews", "link", "compare", "choose_within", "fit_question"}
+    {
+        "detail",
+        "reviews",
+        "link",
+        "compare",
+        "choose_within",
+        "fit_question",
+        "routine_next",
+        "similar_to",
+    }
 )
 
 
@@ -83,10 +92,11 @@ def recognize(
     if not said or not offered_ids or not cards:
         return None
     built = chip_moves.from_cards(cards, unique_anchor=unique_anchor, locale=locale)
-    if phrases:
-        built += chip_moves.facet_moves_for(
-            offered_ids, cards, phrases, unique_anchor=unique_anchor, locale=locale
-        )
+    # Mutările pe fațete și din graf se reconstruiesc din `move_id`; `similar_to` nu cere frază,
+    # deci se construiește și fără `phrases`.
+    built += chip_moves.facet_moves_for(
+        offered_ids, cards, phrases or {}, unique_anchor=unique_anchor, locale=locale
+    )
     moves = chip_moves.renderable(built, pack, locale)
     hits = []
     for move in moves:

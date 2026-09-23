@@ -538,15 +538,79 @@ class _RichOutcome:
     model_items: int = 0
 
 
-def _drop_dead_moves(ctx, candidates: list, *, n_cards: int) -> tuple[list, int]:
+def _drop_dead_moves(
+    ctx, candidates: list, *, n_cards: int, obligation_kinds=None
+) -> tuple[list, int]:
     """NX-316: aceeași regulă pe AMBELE căi care construiesc chips (v1 aici, creierul unic în
-    `brain._turn_chips`). Sub `CHIP_MOVES_V2_ENABLED`; stins ⇒ lista neatinsă (byte-identic)."""
+    `brain._turn_chips`). Sub `CHIP_MOVES_V2_ENABLED`; stins ⇒ lista neatinsă (byte-identic).
+
+    `obligation_kinds` (felia 3) aprinde coborârea lui `pivot_shelf`; primul tur al subiectului
+    vine din starea v1 (`subject_is_new`)."""
     if not getattr(get_settings(), "chip_moves_v2_enabled", False):
         return candidates, 0
     from src.conversation import chip_moves  # noqa: PLC0415
-    from src.conversation.subject import spoken_needs  # noqa: PLC0415
+    from src.conversation.subject import spoken_needs, subject_is_new  # noqa: PLC0415
 
-    return chip_moves.drop_dead(candidates, spoken_needs=spoken_needs(ctx.state), n_cards=n_cards)
+    return chip_moves.drop_dead(
+        candidates,
+        spoken_needs=spoken_needs(ctx.state),
+        n_cards=n_cards,
+        obligation_kinds=obligation_kinds,
+        first_subject_turn=subject_is_new(ctx.state, ctx.turn_id),
+    )
+
+
+def _role_order(obligation_kinds) -> tuple[str, ...]:
+    """`roles_for` cu ordinea feliei 3 pe explain/answer DOAR sub `CHIP_MOVES_V2_ENABLED`."""
+    from src.conversation import chip_moves  # noqa: PLC0415
+
+    return chip_moves.roles_for(
+        list(obligation_kinds),
+        graph_lateral=bool(getattr(get_settings(), "chip_moves_v2_enabled", False)),
+    )
+
+
+async def _relation_moves(ctx, deps, cards: list[dict[str, Any]]) -> tuple[list, dict[str, int]]:
+    """NX-316 felia 3: `routine_next` + `similar_to` din graful de relații, pe AMBELE căi.
+
+    UN query agregat pe ancorele afișate (`relation_type_counts`), într-un checkout SCURT
+    `chip_relations`, DUPĂ apelul de model (NX-231: nicio conexiune ținută peste model). Frazele
+    tipurilor vin din vocabular (cache-uit), doar pentru produsul discutat. Query sau vocabular
+    picat ⇒ `([], {"relations_error": 1})`: mutările din graf lipsesc, restul chips-urilor se emit
+    (fail-open), iar `chip_moves` numără eroarea. Flag stins ⇒ `([], {})` fără nicio citire."""
+    if not getattr(get_settings(), "chip_moves_v2_enabled", False) or not cards:
+        return [], {}
+    from src.catalog.clarify_menu import value_phrases  # noqa: PLC0415
+    from src.catalog.vocabulary_cache import get_vocabulary  # noqa: PLC0415
+    from src.conversation import chip_moves  # noqa: PLC0415
+    from src.db.queries.catalog import relation_type_counts  # noqa: PLC0415
+
+    ids = [
+        str(c.get("product_id") or c.get("id")) for c in cards if c.get("product_id") or c.get("id")
+    ]
+    try:
+        async with deps.db("chip_relations") as conn:
+            rows = await relation_type_counts(conn, ctx.business.id, ids)
+        pack = getattr(ctx.business, "domain_pack", None)
+        types = chip_moves.relation_types_wanted(rows, cards)
+        phrases: dict[str, str] = {}
+        if types:
+            vocab = await get_vocabulary(deps, ctx.business.id)
+            phrases = value_phrases(
+                vocab, pack, chip_moves.PRODUCT_TYPE_DIMENSION, types, locale=ctx.language or "ro"
+            )
+        moves = chip_moves.from_relations(
+            rows,
+            cards,
+            phrases,
+            offered_before=tuple(getattr(ctx.state, "offered_chips", ()) or ()),
+            unique_anchor=getattr(get_settings(), "unique_name_prefix_enabled", False),
+            locale=ctx.language,
+        )
+        return chip_moves.renderable(moves, pack, ctx.language), {}
+    except Exception as e:  # noqa: BLE001 — chips-urile nu sunt răspunsul (P6)
+        log.warning("finalize: mutările din graf au eșuat (%s)", type(e).__name__)
+        return [], {"relations_error": 1}
 
 
 async def _facet_moves(ctx, deps, cards: list[dict[str, Any]]) -> list:
@@ -659,15 +723,22 @@ async def _apply_move_chips(ctx, deps, rich) -> None:
             stats=anchor_stats,
         )
         retrieved = list(ctx.retrieval.products) if ctx.retrieval is not None else []
-        candidates += await _facet_moves(ctx, deps, _cards_with_attributes(cards, retrieved))
-        candidates, dead = _drop_dead_moves(ctx, candidates, n_cards=len(cards))
+        with_attrs = _cards_with_attributes(cards, retrieved)
+        candidates += await _facet_moves(ctx, deps, with_attrs)
+        graph, graph_stats = await _relation_moves(ctx, deps, with_attrs)
+        candidates += graph
+        anchor_stats.update(graph_stats)
+        obligations = extract_obligations(ctx.message.body or "")
+        kinds = [o.kind for o in obligations]
+        candidates, dead = _drop_dead_moves(
+            ctx, candidates, n_cards=len(cards), obligation_kinds=kinds
+        )
         if dead:
             anchor_stats["dropped_dead"] = dead
-        obligations = extract_obligations(ctx.message.body or "")
         picked = chip_moves.select(
             candidates,
             slots=chip_slots(get_settings()),
-            role_order=chip_moves.roles_for(o.kind for o in obligations),
+            role_order=_role_order(kinds),
             offered_before=offered_before,
         )
         if not picked:

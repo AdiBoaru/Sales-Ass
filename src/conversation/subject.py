@@ -295,6 +295,19 @@ def spoken_needs(state: object) -> tuple[tuple[str, str], ...]:
     return subject.needs if subject is not None else ()
 
 
+def subject_is_new(state: object, turn_id: str | None) -> bool:
+    """NX-316 felia 3: e turul ăsta PRIMUL al subiectului curent? Adevărat și fără subiect
+    (conversație nouă, flag stins, stare tăiată) sau fără `source_turn_id` (sacrificat la
+    `MAX_SUBJECT_BYTES`): în dubiu păstrăm comportamentul de azi, adică raftul vecin oferit."""
+    constraints = getattr(state, "search_constraints", None)
+    if not isinstance(constraints, dict):
+        return True
+    subject = ConversationSubject.from_dict(constraints.get(SUBJECT_KEY))
+    if subject is None or not subject.source_turn_id:
+        return True
+    return subject.source_turn_id == turn_id
+
+
 def _clean(value: object) -> str | None:
     if not isinstance(value, str):
         return None

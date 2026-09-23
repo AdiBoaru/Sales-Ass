@@ -1249,6 +1249,106 @@ async def get_substitutes(
     return [p for p in products if (p.get("availability") or "") != "out_of_stock"][:limit]
 
 
+#: NX-316 felia 3: felurile de relație din care se nasc chips-urile laterale, în ordinea
+#: preferinței. `routine_next` înaintea lui `complement`: „pasul următor” e mai precis decât „merge
+#: cu”, iar `substitute` alimentează doar „ceva similar”.
+RELATION_CHIP_KINDS: tuple[str, ...] = ("routine_next", "complement", "substitute")
+
+# Același filtru de „servabil” pe ambele query-uri de mai jos: un chip care numără produse pe care
+# handlerul nu le poate servi ar fi exact promisiunea goală pe care NX-295 a măsurat-o.
+_SERVABLE_RELATED = " and p.status = 'active' and p.availability in ('in_stock', 'low_stock')"
+
+
+async def relation_type_counts(
+    conn: asyncpg.Connection,
+    business_id: str,
+    anchor_ids: list[str],
+    kinds: tuple[str, ...] = RELATION_CHIP_KINDS,
+) -> list[dict[str, Any]]:
+    """NX-316 felia 3: câte produse SERVABILE are fiecare ancoră afișată, pe fel de relație și pe
+    tip de produs. UN singur apel pe tur, pe toate ancorele (restul funcțiilor de relații sunt pe
+    o singură ancoră), pe `product_relations_anchor_idx (business_id, product_id, kind, …)`.
+
+    Doar agregate `{anchor_id, kind, product_type, n}`, nicio hidratare: chips-urile au nevoie de
+    DOVADĂ, nu de produse. Produsele se aduc abia la apăsare (`related_in_stock`).
+
+    Abatere de la schița din card, pe date: schița cerea `attributes ? 'product_type'`, dar tipul
+    există pe 75,7% din catalog, iar „ceva similar” nu are nevoie de el. Rândurile fără tip vin cu
+    `product_type = None`; `routine_next` le ignoră, `similar_to` le numără.
+
+    `business_id = $1` pe relație ȘI pe produs (P7; FK-ul compus din 027 face oricum cross-tenant
+    imposibil). Id-urile ancoră vin din starea conversației, niciodată din model."""
+    if not anchor_ids:
+        return []
+    cs = _content_status_pred()
+    rows = await conn.fetch(
+        "select r.product_id::text as anchor_id, r.kind,"
+        " p.attributes->>'product_type' as product_type, count(*)::int as n"
+        " from product_relations r"
+        " join products p on p.business_id = r.business_id and p.id = r.related_id"
+        " where r.business_id = $1 and r.product_id = any($2::uuid[])"
+        " and r.kind = any($3::text[])"
+        + _SERVABLE_RELATED
+        + (f" and {cs}" if cs else "")
+        + " group by 1, 2, 3",
+        business_id,
+        anchor_ids[:8],
+        list(kinds),
+    )
+    return [
+        {
+            "anchor_id": r["anchor_id"],
+            "kind": r["kind"],
+            "product_type": r["product_type"],
+            "n": int(r["n"]),
+        }
+        for r in rows
+    ]
+
+
+async def related_in_stock(
+    conn: asyncpg.Connection,
+    business_id: str,
+    anchor_id: str,
+    kinds: tuple[str, ...],
+    *,
+    product_type: str | None = None,
+    limit: int = 6,
+) -> list[dict[str, Any]]:
+    """NX-316 felia 3: produsele relaționate SERVABILE ale unei ancore, pentru apăsarea unui chip
+    `routine_next` (un tip anume) sau `similar_to` (substitute, orice tip).
+
+    Tiparul lui `get_substitutes`: întâi id-urile pe indexul de ancoră, cu filtrul de servabil în
+    același statement (altfel limita s-ar consuma pe produse epuizate), apoi hidratarea DOAR a lor.
+    Ordinea: felul (în ordinea din `kinds`), apoi `position` curatoriată, apoi id (determinist)."""
+    cs = _content_status_pred()
+    params: list[Any] = [business_id, anchor_id, list(kinds)]
+    type_pred = ""
+    if product_type:
+        params.append(product_type)
+        type_pred = f" and p.attributes->>'product_type' = ${len(params)}"
+    params.append(min(max(limit, 1), 6))
+    ids = await conn.fetch(
+        "select r.related_id::text as id"
+        " from product_relations r"
+        " join products p on p.business_id = r.business_id and p.id = r.related_id"
+        " where r.business_id = $1 and r.product_id = $2::uuid and r.kind = any($3::text[])"
+        + _SERVABLE_RELATED
+        + type_pred
+        + (f" and {cs}" if cs else "")
+        + " group by r.related_id"
+        + " order by min(array_position($3::text[], r.kind)), min(r.position), r.related_id"
+        + f" limit ${len(params)}",
+        *params,
+    )
+    candidates = [r["id"] for r in ids if r["id"] != anchor_id]
+    if not candidates:
+        return []
+    return await get_products_by_ids(
+        conn, business_id, candidates, limit=6, respect_content_status=True
+    )
+
+
 # NX-292 — candidații fiecărui pas de rutină, IEFTIN: doar `{id, step, price}`, fără laterale.
 #
 # Hidratarea completă (`_DETAIL_SELECT`) aduce imagini, secțiuni, badge-uri, ingrediente și

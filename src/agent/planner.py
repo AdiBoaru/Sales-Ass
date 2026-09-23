@@ -43,6 +43,7 @@ from src.conversation.subject import SUBJECT_KEY, ConversationSubject
 from src.db.queries.catalog import (
     get_complementary_products,
     get_products_by_ids,
+    related_in_stock,
     search_cheaper_than,
     traverse_relation_chain,
 )
@@ -495,6 +496,48 @@ def _chosen_move(ctx: TurnContext) -> Any:
     return move if getattr(move, "kind", None) == "choose_within" else None
 
 
+#: NX-316 felia 3: felurile de relație din care se servește apăsarea fiecărui chip din graf.
+_GRAPH_SETS: dict[str, tuple[str, ...]] = {
+    "routine_next": ("routine_next", "complement"),
+    "similar_to": ("substitute",),
+}
+
+
+async def resolve_chip_set(
+    ctx: TurnContext, deps: PipelineDeps, *, policy: SafetyPolicy
+) -> list[dict[str, Any]]:
+    """SETUL determinist al unui chip apăsat (NX-316), sau `[]` dacă turul n-are unul.
+
+    `choose_within` ⇒ afișatele cu valoarea; `routine_next` ⇒ produsele relaționate de tipul din
+    chip (`routine_next` înaintea lui `complement`); `similar_to` ⇒ substitutele servabile. Toate
+    trec prin safety gate (un set adus direct din DB, în afara `ToolRun`). Gol ⇒ turul merge pe
+    drumul obișnuit, fiindcă un chip a cărui promisiune s-a golit între ture nu justifică
+    tăcerea."""
+    move = getattr(ctx, "chip_move", None)
+    kind = getattr(move, "kind", None)
+    if kind == "choose_within":
+        return await resolve_choose_within(ctx, deps, policy=policy)
+    if kind not in _GRAPH_SETS:
+        return []
+    from src.conversation.chip_press import facet_of, product_ids  # noqa: PLC0415
+
+    ids = product_ids(move)
+    if not ids:
+        return []
+    facet_key = facet_of(move) if kind == "routine_next" else None
+    async with deps.db("chip_relation_set") as conn:
+        products = await related_in_stock(
+            conn,
+            ctx.business.id,
+            ids[0],
+            _GRAPH_SETS[kind],
+            product_type=facet_key[1] if facet_key else None,
+        )
+    products = policy.gate(ctx, products, purpose=kind)[0]
+    ctx.emit(kind, served=len(products))
+    return products
+
+
 async def resolve_choose_within(
     ctx: TurnContext, deps: PipelineDeps, *, policy: SafetyPolicy
 ) -> list[dict[str, Any]]:
@@ -541,6 +584,18 @@ def choose_within_seed_messages(
     model despre ce a chemat."""
     call_id = "choose_" + hashlib.sha256(f"choose:{ctx.turn_id}".encode()).hexdigest()[:16]
     args = {"query": (ctx.message.body or "").strip()[:200], "concerns": [key]}
+    return _seed_pair(ctx, call_id, args, products)
+
+
+def chip_set_seed_messages(
+    ctx: TurnContext, products: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Seed-ul creierului pentru `routine_next`/`similar_to`: `search_products` cu mesajul
+    clientului (chiar textul chip-ului, care numește tipul sau produsul). Concesia e aceeași ca la
+    `choose_within_seed_messages`: setul vine din graf, nu dintr-o căutare în catalog, iar
+    `related_products` nu e în niciun toolset, deci n-am putea spune că modelul l-a chemat."""
+    call_id = "chipset_" + hashlib.sha256(f"chipset:{ctx.turn_id}".encode()).hexdigest()[:16]
+    args = {"query": (ctx.message.body or "").strip()[:200]}
     return _seed_pair(ctx, call_id, args, products)
 
 
@@ -698,12 +753,10 @@ async def build_plan(
     # reparată pe două din trei nu e reparată: fără nano, «care dintre astea e cea mai hidratantă,
     # dar sub 100 lei» ar rehidrata setul AFIȘAT în loc să caute, cu produse și prețuri reale — deci
     # validatorul și grounding guardul o lasă să treacă (porți de ADEVĂR, nu de POTRIVIRE).
-    # NX-316 felia 2: un chip `choose_within` apăsat ⇒ setul e cel AFIȘAT cu valoarea aleasă.
+    # NX-316 felia 2/3: un chip de SET apăsat (alegere dintre afișate, pas de rutină, similare).
     # Precede superlativul și «mai ieftin»: comanda e declarată de server, nu dedusă din text.
     chosen = (
-        await resolve_choose_within(ctx, deps, policy=policy)
-        if not is_order and not show_more
-        else []
+        await resolve_chip_set(ctx, deps, policy=policy) if not is_order and not show_more else []
     )
     if chosen:
         products = _dedupe(chosen)

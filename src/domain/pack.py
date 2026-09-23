@@ -118,6 +118,10 @@ class DomainPack:
     # `ro` să pară că merge și ar tăcea pe orice alt tenant. Fără șablon pentru o mutare, mutarea
     # nu se oferă deloc.
     chip_templates: dict[str, dict[str, str]] = field(default_factory=dict)
+    # NX-316 felia 3: aceleași feluri, în vocea clientului (întrebări, ca la iZi), citite DOAR sub
+    # `CHIP_MOVES_V2_ENABLED` și cu fallback pe `chip_templates` per fel. Cheie separată fiindcă
+    # șabloanele sunt date de pachet, nu cod: rescrise pe loc, flagul OFF n-ar mai fi byte-identic.
+    chip_templates_v2: dict[str, dict[str, str]] = field(default_factory=dict)
     # Șabloanele de FORMĂ (NX-299): `framing` (ce clase de produs sunt pe masă) + `list_glue`
     # (legătura dinaintea ultimului element al unei enumerări), fiecare per locale. Același motiv
     # ca la `chip_templates` — copy-ul e limbă, iar limba e configurație (P11). Diferă însă poarta:

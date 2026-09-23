@@ -29,6 +29,41 @@
     "fit_question": {
       "ro": "{slot_b} merge pentru {slot}?",
       "en": "Is {slot_b} good for {slot}?"
+    },
+    "routine_next": {
+      "ro": "Arata-mi {slot} care merge cu {slot_b}",
+      "en": "Show me {slot} that goes with {slot_b}"
+    },
+    "similar_to": {
+      "ro": "Arata-mi ceva similar cu {slot}",
+      "en": "Show me something similar to {slot}"
+    }
+  },
+  "_chip_templates_v2_note": "NX-316 felia 3: aceleasi mutari, in vocea clientului (intrebari, ca la iZi). Citite DOAR sub CHIP_MOVES_V2_ENABLED, cu fallback pe chip_templates per fel. Cuvintele care ruteaza raman (linkul, parere, mai multe despre, Compara), fiindca daca recunoasterea apasarii cade, textul ajunge la regexurile de azi.",
+  "chip_templates_v2": {
+    "refine_facet": {
+      "ro": "Ai ceva pentru {slot}?",
+      "en": "Do you have something for {slot}?"
+    },
+    "pivot_shelf": {
+      "ro": "Ce ai la {slot}?",
+      "en": "What do you have in {slot}?"
+    },
+    "reviews": {
+      "ro": "Ce parere au clientii despre {slot}?",
+      "en": "What do customers' reviews say about {slot}?"
+    },
+    "detail": {
+      "ro": "Spune-mi mai multe despre {slot}",
+      "en": "Tell me more about {slot}"
+    },
+    "compare": {
+      "ro": "Compara {slot} cu {slot_b}",
+      "en": "Compare {slot} with {slot_b}"
+    },
+    "link": {
+      "ro": "Trimite-mi linkul la {slot}",
+      "en": "Send me the link for {slot}"
     }
   },
   "currency": "RON",
