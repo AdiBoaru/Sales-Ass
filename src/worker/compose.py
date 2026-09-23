@@ -1486,6 +1486,68 @@ def product_fact_sheet(
     return sheet
 
 
+#: NX-317: sursele noi ale fișei de comparație. Toate din date deja încărcate de
+#: `get_products_by_ids` (`_DETAIL_SELECT`), deci zero citire în plus.
+COMPARISON_V2_SOURCES: tuple[str, ...] = ("recenzii", "cantitate", "tip_produs")
+
+
+def comparison_sheets(
+    products: Sequence[dict[str, Any]],
+    facets: Sequence[FacetSpec] = (),
+    language: str | None = None,
+) -> dict[str, dict[str, str]]:
+    """`product_id → fișa de fapte` pentru TOATE produsele comparate. Singurul loc din care
+    comparația narativă își ia sursele (prompt, cifre permise, verificarea celulelor), ca cele trei
+    să nu poată diverge.
+
+    Cu `COMPARISON_AXES_V2_ENABLED` stins e exact `product_fact_sheet` per produs (byte-identic).
+    Aprins, NX-317 adaugă trei surse pe care comparația reală nu le vedea, deși erau în date:
+
+    - `recenzii` = `review_summary` (NX-279, 2.557/2.758 pe SOLE), tăiat ca `descriere`;
+    - `cantitate` = gramajul din coada numelui (`size_label`, NX-301), doar dacă e cunoscut pe
+      TOATE coloanele: o axă pe jumătate goală nu compară nimic;
+    - `tip_produs` = `attributes.product_type`, doar dacă e cunoscut pe toate ȘI diferă: același
+      tip pe amândouă e fundal comun, nu axă.
+
+    Condițiile sunt peste SET, de aceea funcția primește toate produsele, nu unul.
+    """
+    from src.catalog.render_text import size_label  # noqa: PLC0415 — evită ciclul la import
+    from src.config import get_settings  # noqa: PLC0415
+
+    sheets = {
+        str(p.get("id")): product_fact_sheet(p, facets, language) for p in products if p.get("id")
+    }
+    if not getattr(get_settings(), "comparison_axes_v2_enabled", False):
+        return sheets
+    by_id = {str(p.get("id")): p for p in products if p.get("id")}
+    for pid, sheet in sheets.items():
+        summary = " ".join(str(by_id[pid].get("review_summary") or "").split())
+        if summary:
+            sheet["recenzii"] = summary[:240]
+    sizes = {pid: size_label(str(by_id[pid].get("name") or "")) for pid in sheets}
+    if len(sheets) >= 2 and all(sizes.values()):
+        for pid, sheet in sheets.items():
+            sheet["cantitate"] = str(sizes[pid])
+    types: dict[str, str | None] = {}
+    for pid in sheets:
+        attrs = by_id[pid].get("attributes")
+        value = attrs.get("product_type") if isinstance(attrs, dict) else None
+        types[pid] = value if isinstance(value, str) and value.strip() else None
+    if len(sheets) >= 2 and all(types.values()) and len(set(types.values())) >= 2:
+        for pid, sheet in sheets.items():
+            sheet["tip_produs"] = str(types[pid])
+    return sheets
+
+
+def facet_value_label(
+    facets: Sequence[FacetSpec], dimension: str, key: str, language: str | None
+) -> str | None:
+    """Eticheta afișabilă a unei valori de fațetă (NX-317: nevoia clientului, cum apare în fișă).
+    Fațetă necunoscută ⇒ `None`: nu putem spune cum apare, deci nici verifica."""
+    facet = next((f for f in facets if f.key == dimension), None)
+    return _facet_value_label(facet, key, language) if facet is not None else None
+
+
 def comparison_wire(comparison: Comparison) -> dict[str, Any]:
     """`Comparison` → forma care are voie să părăsească procesul (outbox, SSE, reply_from_outbox).
 
@@ -1516,13 +1578,12 @@ def comparison_fact_sheets(
     aici vede exact ce surse există și ce conțin. Ce nu apare în fișă nu se poate cita, deci nu se
     poate afirma — un produs fără `finish` nu primește un rând de finisaj plauzibil."""
     lines: list[str] = []
-    facts = {str(p.get("id")): p for p in products if p.get("id")}
+    sheets = comparison_sheets(products, facets, language)
     for col in comparison.columns:
-        product = facts.get(col.product_id)
-        if product is None:
+        sheet = sheets.get(col.product_id)
+        if sheet is None:
             continue
         lines.append(f"[{col.product_id}] {col.name}")
-        sheet = product_fact_sheet(product, facets, language)
         for source, value in sheet.items():
             lines.append(f"    {source}: {value}")
         if not sheet:

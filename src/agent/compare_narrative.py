@@ -110,6 +110,36 @@ _NARRATIVE_SCHEMA: dict[str, Any] = {
 }
 
 
+#: NX-317: peste cât două valori-SURSĂ ale aceleiași surse înseamnă „același lucru". Măsurat pe
+#: comparațiile reale `sole-ro` (`scripts/nx317_comparison_probe.py`, 2026-09-23): sursele identice
+#: (`skin_type`, `routine_time`) ies la 1,00, iar cele care chiar diferă între produse stau sub
+#: 0,72 (`concerns` 0,14-0,71, `recenzii` 0,33-0,62, `avantaje` 0,17-0,50). 0,8 le separă.
+SAME_SOURCE_SIMILARITY = 0.8
+#: NX-317: peste cât două bucăți de proză (propoziție din lead, subtitlu, propoziție din closing)
+#: sunt aceeași frază. Pe aceeași sondă, maximul dintre bucățile unui răspuns real e 0,40, deci
+#: pragul nu scoate nimic din ce se scrie azi: prinde doar repetiția aproape literală (vezi
+#: `dedupe_verdict`).
+SAME_VERDICT_SIMILARITY = 0.6
+
+_SENTENCE = re.compile(r"(?<=[.!?])\s+")
+
+
+def similarity(a: str, b: str, locale: str | None) -> float:
+    """Jaccard pe cuvintele de CONȚINUT ale locale-i (`query_terms`), deci fără nicio listă de
+    cuvinte în modulul ăsta (P11). PUR. Două texte fără niciun cuvânt de conținut ⇒ 0."""
+    from src.catalog.query_terms import content_terms  # noqa: PLC0415
+
+    left, right = set(content_terms(a, locale)), set(content_terms(b, locale))
+    if not left or not right:
+        return 0.0
+    return len(left & right) / len(left | right)
+
+
+def sentences(text: str | None) -> list[str]:
+    """Propozițiile unui text, pe punctuația de final. PUR."""
+    return [s.strip() for s in _SENTENCE.split(" ".join((text or "").split())) if s.strip()]
+
+
 def _allowed_numbers(
     ctx: TurnContext,
     comparison: Comparison,
@@ -127,8 +157,8 @@ def _allowed_numbers(
     cu aparență de fapt."""
     allowed = compose._allowed_client_numbers(ctx)
     allowed |= compose.spec_numbers(products, facets, ctx.language)
-    for product in products:
-        for value in compose.product_fact_sheet(product, facets, ctx.language).values():
+    for sheet in compose.comparison_sheets(products, facets, ctx.language).values():
+        for value in sheet.values():
             allowed |= set(_DIGITS.findall(value))
     for note in comparison.notes:
         allowed |= set(_DIGITS.findall(note))
@@ -203,18 +233,23 @@ def assemble_axes(
     allowed: set[str],
     facets: Sequence[FacetSpec] = (),
     language: str | None = None,
+    *,
+    cited: list[tuple[str, str, str]] | None = None,
 ) -> tuple[list[ComparisonRow], dict[str, int]]:
     """Axele modelului → rânduri de tabel, cu verificarea sursei pe fiecare celulă. PUR.
 
     Întoarce (rânduri, contoare de respingere). Ordinea axelor e a MODELULUI: el a văzut perechea
     și a decis ce contează întâi, iar asta e chiar munca pe care i-am dat-o. Ordinea coloanelor
-    rămâne a codului (cea cerută de client)."""
+    rămâne a codului (cea cerută de client).
+
+    NX-317 (`COMPARISON_AXES_V2_ENABLED`): înaintea regulii pe proză, o regulă pe SURSĂ. Dacă toate
+    celulele citează aceeași sursă și valorile ei sunt aceleași pe toate coloanele
+    (`SAME_SOURCE_SIMILARITY`), axa pică oricât de diferit ar fi formulată: două parafraze ale
+    aceleiași valori nu sunt o diferență. `cited`, dat, primește `(product_id, sursă, text)` pentru
+    fiecare celulă a axelor PĂSTRATE (verificarea nevoilor clientului citește de aici)."""
     order = [c.product_id for c in comparison.columns]
-    sheets = {
-        str(p.get("id")): compose.product_fact_sheet(p, facets, language)
-        for p in products
-        if p.get("id")
-    }
+    sheets = compose.comparison_sheets(products, facets, language)
+    by_source = bool(getattr(get_settings(), "comparison_axes_v2_enabled", False))
     rows: list[ComparisonRow] = []
     rejected: dict[str, int] = {}
 
@@ -231,6 +266,7 @@ def assemble_axes(
             _reject("axis_label")
             continue
         values: list[str | None] = [None] * len(order)
+        sources: list[str | None] = [None] * len(order)
         for cell in axis.get("cells") or []:
             if not isinstance(cell, dict):
                 continue
@@ -250,8 +286,11 @@ def assemble_axes(
                 _reject("cell_ungrounded")
                 continue
             values[order.index(pid)] = text
+            sources[order.index(pid)] = source
         if not any(values):
             _reject("axis_empty")
+        elif by_source and _same_source(sources, order, sheets, language):
+            _reject("axis_same_source")
         elif not compose.discriminates(values):
             # Aceeași regulă ca la tabelul determinist, aplicată pe ce a compus modelul: o axă pe
             # care ambele produse spun același lucru („4 g, 3 variante" pe amândouă) ocupă exact
@@ -260,7 +299,33 @@ def assemble_axes(
             _reject("axis_not_discriminating")
         else:
             rows.append(ComparisonRow(label=label, values=values))
+            if cited is not None:
+                cited.extend(
+                    (order[i], str(sources[i]), str(values[i]))
+                    for i in range(len(order))
+                    if values[i] and sources[i]
+                )
     return rows, rejected
+
+
+def _same_source(
+    sources: list[str | None],
+    order: list[str],
+    sheets: dict[str, dict[str, str]],
+    language: str | None,
+) -> bool:
+    """Toate coloanele citează ACEEAȘI sursă, iar valorile ei sunt aceleași? PUR.
+
+    Parțial gol nu intră aici: „cunoscut pe o coloană, necunoscut pe alta" rămâne informație
+    (aceeași regulă ca `compose.discriminates`)."""
+    if not all(sources) or len(set(sources)) != 1:
+        return False
+    source = str(sources[0])
+    raw = [(sheets.get(pid) or {}).get(source) for pid in order]
+    if not all(raw):
+        return False
+    first = str(raw[0])
+    return all(similarity(first, str(v), language) >= SAME_SOURCE_SIMILARITY for v in raw[1:])
 
 
 def _prompt_inputs(ctx: TurnContext) -> PromptInputs:
@@ -287,11 +352,17 @@ def _user_block(
     products: list[dict[str, Any]],
     facets: Sequence[FacetSpec],
     query: str,
+    needs: Sequence[tuple[str, str]] = (),
 ) -> str:
     history = conversation_transcript(ctx.history)
     sources = sorted(
-        {source for p in products for source in compose.product_fact_sheet(p, facets, ctx.language)}
+        {
+            source
+            for sheet in compose.comparison_sheets(products, facets, ctx.language).values()
+            for source in sheet
+        }
     )
+    needs_block = _needs_block(needs, facets, ctx.language)
     return (
         f"Limba clientului: {ctx.language}\n"
         + (f"Conversație până acum:\n{history}\n\n" if history else "")
@@ -303,7 +374,147 @@ def _user_block(
         + (", ".join(sources) or "(niciuna)")
         + "\n\n"
         + compose.comparison_facts_block(comparison, ctx.language)
+        + needs_block
     )
+
+
+def comparison_needs(ctx: TurnContext) -> tuple[tuple[str, str], ...]:
+    """NX-317: nevoile ROSTITE de client, ca `(dimensiune, cheie)`. Două surse, ambele deja
+    coroborate de client (niciuna scrisă de model): subiectul NX-314 (`subject.needs`) și, pe
+    starea v1, `concerns` din stiva de constrângeri (NX-297, `corroborated_by`). `active_needs`
+    singur ar fi inert: întoarce `()` cu starea v2 stinsă, adică exact profilul de producție."""
+    from src.conversation.subject import spoken_needs  # noqa: PLC0415
+
+    out = list(spoken_needs(ctx.state))
+    constraints = getattr(ctx.state, "search_constraints", None)
+    concerns = constraints.get("concerns") if isinstance(constraints, dict) else None
+    if isinstance(concerns, (list, tuple)):
+        out += [("concerns", str(k)) for k in concerns if isinstance(k, str) and k.strip()]
+    return tuple(dict.fromkeys((str(d), str(k)) for d, k in out))
+
+
+def _need_labels(
+    needs: Sequence[tuple[str, str]], facets: Sequence[FacetSpec], language: str | None
+) -> list[tuple[str, str, str]]:
+    """`(dimensiune, cheie, eticheta din fișă)` pentru nevoile pe care fișa le poate numi."""
+    out: list[tuple[str, str, str]] = []
+    for dimension, key in needs:
+        label = compose.facet_value_label(facets, str(dimension), str(key), language)
+        if label:
+            out.append((str(dimension), str(key), label))
+    return out
+
+
+def _needs_block(
+    needs: Sequence[tuple[str, str]], facets: Sequence[FacetSpec], language: str | None
+) -> str:
+    """NX-317: nevoile ROSTITE de client, cu eticheta din fișă. Gol ⇒ nimic (byte-identic)."""
+    labels = _need_labels(needs, facets, language)
+    if not labels:
+        return ""
+    items = "; ".join(f"{label} (sursa `{dimension}`)" for dimension, _, label in labels)
+    return (
+        "\n\nCe a spus clientul că îi trebuie: "
+        + items
+        + ". Dacă o fișă are valoarea asta la sursa ei, una dintre axe o tratează și o numește pe "
+        + "coloana produsului care o are."
+    )
+
+
+def need_coverage(
+    needs: Sequence[tuple[str, str]],
+    cited: Sequence[tuple[str, str, str]],
+    products: Sequence[dict[str, Any]],
+    facets: Sequence[FacetSpec],
+    language: str | None,
+) -> tuple[str, ...]:
+    """Dimensiunile nevoilor rostite pe care datele le ACOPERĂ, dar axele păstrate NU. PUR.
+
+    „Acoperă" = un produs comparat are cheia nevoii în `attributes[dimensiune]`. „Tratat" = FIECARE
+    produs care o are are o celulă păstrată care citează sursa dimensiunii și îi numește eticheta.
+    Per produs, nu „măcar o celulă": pe turul real SOME BY MI spunea «hidratare», iar By Wishtrend,
+    care o avea la fel, nu, deci clientul nu putea afla din tabel că amândouă hidratează. Potrivirea
+    pe cuvinte e pe prefix (flexiunea: „hidratare" / „hidratarea" / „hidratează"), pe cuvintele de
+    conținut ale locale-i, deci fără nicio listă (P11). Pe turul real, «hidratare» era în
+    `concerns` la By Wishtrend, iar celula lui n-o spunea."""
+    from src.catalog.query_terms import content_terms  # noqa: PLC0415
+
+    def _mentions(text: str, label: str) -> bool:
+        words = content_terms(text, language)
+        return all(
+            any(w[:5] == t[:5] if len(t) >= 5 else w == t for w in words)
+            for t in content_terms(label, language)
+        )
+
+    uncovered: list[str] = []
+    for dimension, key, label in _need_labels(needs, facets, language):
+        having = {str(p.get("id")) for p in products if key in _attr_values(p, dimension)}
+        if not having:
+            continue
+        named = {
+            pid for pid, source, text in cited if source == dimension and _mentions(text, label)
+        }
+        covered = having <= named
+        if not covered:
+            uncovered.append(dimension)
+    return tuple(dict.fromkeys(uncovered))
+
+
+def _attr_values(product: dict[str, Any], dimension: str) -> set[str]:
+    attrs = product.get("attributes") if isinstance(product.get("attributes"), dict) else {}
+    raw = attrs.get(dimension)
+    items = raw if isinstance(raw, (list, tuple)) else [raw]
+    return {str(v).strip() for v in items if v is not None and str(v).strip()}
+
+
+def dedupe_verdict(
+    lead: str, subtitle: str | None, closing: list[str], language: str | None
+) -> tuple[str, str | None, list[str], list[str]]:
+    """NX-317: fiecare idee o singură dată, în ordinea în care o citește clientul (lead,
+    subtitlu, închidere). O bucată prea asemănătoare (`SAME_VERDICT_SIMILARITY`) cu una deja
+    păstrată se scoate. PUR.
+
+    Prima propoziție a leadului nu cade niciodată (nimic nu o precede), deci leadul nu se poate
+    goli; un paragraf de închidere rămas fără propoziții dispare, iar leadul rămâne (P6).
+    Întoarce și ce s-a scos, ca vocabular ÎNCHIS (`lead_sentence`, `subtitle`, `closing`).
+
+    **Ce prinde și ce nu, măsurat** (`scripts/nx317_comparison_probe.py`): pe comparațiile reale,
+    verdictul repetat e PARAFRAZAT, cu similaritate 0,15-0,40 între bucăți, iar două propoziții
+    distincte ajung la 0,18. Nicio similaritate lexicală nu le separă, deci poarta asta prinde doar
+    repetiția aproape literală. Repetiția de sens se repară în STRUCTURĂ: promptul v2 cere leadul
+    fără câștigător și un singur paragraf de verdict."""
+    kept: list[str] = []
+    dropped: list[str] = []
+
+    def _fresh(piece: str) -> bool:
+        return all(similarity(piece, k, language) < SAME_VERDICT_SIMILARITY for k in kept)
+
+    lead_out: list[str] = []
+    for sentence in sentences(lead):
+        if not kept or _fresh(sentence):
+            kept.append(sentence)
+            lead_out.append(sentence)
+        else:
+            dropped.append("lead_sentence")
+    subtitle_out = subtitle
+    if subtitle:
+        if _fresh(subtitle):
+            kept.append(subtitle)
+        else:
+            subtitle_out = None
+            dropped.append("subtitle")
+    closing_out: list[str] = []
+    for paragraph in closing:
+        parts = []
+        for sentence in sentences(paragraph):
+            if _fresh(sentence):
+                kept.append(sentence)
+                parts.append(sentence)
+            else:
+                dropped.append("closing")
+        if parts:
+            closing_out.append(" ".join(parts))
+    return " ".join(lead_out), subtitle_out, closing_out, dropped
 
 
 async def compose_comparison(
@@ -314,6 +525,7 @@ async def compose_comparison(
     *,
     facets: Sequence[FacetSpec] = (),
     query: str = "",
+    needs: Sequence[tuple[str, str]] | None = None,
 ) -> Comparison:
     """Comparația NARATIVĂ: axe semantice + proză de încadrare + îndrumare finală.
 
@@ -325,8 +537,15 @@ async def compose_comparison(
     if not settings.comparison_narrative_enabled:
         return comparison
 
-    system = prompt_builder.build_compare_system(_prompt_inputs(ctx))
-    user = _user_block(ctx, comparison, products, facets, query)
+    v2 = bool(getattr(settings, "comparison_axes_v2_enabled", False))
+    if needs is None:
+        needs = comparison_needs(ctx) if v2 else ()
+    if v2:
+        system = prompt_builder.build_compare_system(_prompt_inputs(ctx), axes_v2=True)
+        user = _user_block(ctx, comparison, products, facets, query, needs)
+    else:
+        system = prompt_builder.build_compare_system(_prompt_inputs(ctx))
+        user = _user_block(ctx, comparison, products, facets, query)
     try:
         payload = await llm.complete_schema(system, user, _NARRATIVE_SCHEMA)
     except Exception as e:  # noqa: BLE001 — apel structurat eșuat → tabelul determinist (P6)
@@ -347,7 +566,20 @@ async def compose_comparison(
         ctx.emit("comparison_narrative", source="deterministic", reasons=list(failures))
         return comparison
 
-    rows, rejected = assemble_axes(payload, comparison, products, allowed, facets, ctx.language)
+    cited: list[tuple[str, str, str]] = []
+    rows, rejected = assemble_axes(
+        payload, comparison, products, allowed, facets, ctx.language, cited=cited
+    )
+    if v2:
+        ctx.emit(
+            "comparison_axes",
+            offered=len(payload.get("axes") or []),
+            dropped_same_source=rejected.get("axis_same_source", 0),
+            dropped_same_prose=rejected.get("axis_not_discriminating", 0),
+            sources_used=sorted({source for _, source, _ in cited}),
+        )
+        for dimension in need_coverage(needs, cited, products, facets, ctx.language):
+            ctx.emit("comparison_need_uncovered", need_dimension=dimension)
     if not rows:
         ctx.emit("comparison_narrative", source="deterministic", reasons=["no_axis_survived"])
         return comparison
@@ -361,8 +593,11 @@ async def compose_comparison(
     if subtitle and prose_failures(subtitle, allowed, products):
         subtitle = None  # sancțiune LOCALĂ: cade fraza, nu răspunsul
     closing: list[str] = []
+    # NX-317: un singur paragraf de verdict. Primul trece, al doilea (de obicei verdictul spus
+    # încă o dată) nu mai intră.
+    max_closing = 1 if v2 else _MAX_CLOSING
     for paragraph in payload.get("closing") or []:
-        if len(closing) >= _MAX_CLOSING:
+        if len(closing) >= max_closing:
             break
         text = _clean(paragraph, _MAX_CLOSING_CHARS)
         if text and not prose_failures(text, allowed, products):
@@ -370,6 +605,12 @@ async def compose_comparison(
         else:
             rejected["closing"] = rejected.get("closing", 0) + 1
     closing = [c for c in closing if c]
+    if v2:
+        lead, subtitle, closing, removed = dedupe_verdict(
+            lead or "", subtitle, closing, ctx.language
+        )
+        for piece in removed:
+            ctx.emit("comparison_dedup", dropped=piece)
 
     ctx.emit(
         "comparison_narrative",
@@ -392,4 +633,16 @@ async def compose_comparison(
     )
 
 
-__all__ = ["assemble_axes", "compose_comparison", "lead_failures", "prose_failures"]
+__all__ = [
+    "SAME_SOURCE_SIMILARITY",
+    "SAME_VERDICT_SIMILARITY",
+    "assemble_axes",
+    "comparison_needs",
+    "compose_comparison",
+    "dedupe_verdict",
+    "lead_failures",
+    "need_coverage",
+    "prose_failures",
+    "sentences",
+    "similarity",
+]

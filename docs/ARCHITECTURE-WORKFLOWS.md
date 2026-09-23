@@ -1767,6 +1767,7 @@ clarify_menu_enabled = true
 clarify_tool_enabled = false
 compare_coherence_guard_enabled = true
 compare_intent_enabled = true
+comparison_axes_v2_enabled = false
 comparison_facets_enabled = true
 comparison_focus_enabled = true
 comparison_lead_llm_enabled = true

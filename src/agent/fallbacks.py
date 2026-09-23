@@ -187,11 +187,46 @@ def _compare_chips(columns: list[Any], language: str | None) -> list[str]:
     un tabel clientul are deja produsele în față și pasul următor e o alegere, nu o rafinare."""
     lang = language or "ro"
     copy = _COMPARE_FOLLOWUPS.get(lang) or _COMPARE_FOLLOWUPS["ro"]
+    from src.config import get_settings  # noqa: PLC0415 — evită ciclul la import
+
+    if getattr(get_settings(), "comparison_axes_v2_enabled", False):
+        return _compare_chips_whole_words(columns, copy, lang)
     chips = [fit_chip(copy["add"], c.name) for c in columns[:2]]
     if columns:
         chips.append(fit_chip(copy["detail"], columns[0].name))
     chips.append(copy["cheaper"])
     return chips
+
+
+def _compare_chips_whole_words(
+    columns: list[Any], copy: dict[str, str], language: str
+) -> list[str]:
+    """NX-317: aceleași patru chips, cu numele scurtat pe CUVINTE ÎNTREGI, nu pe caractere.
+
+    Pe turul real ieșea „Adaugă Bakuchiol C… în coș": textul se retrimite ca mesaj, iar un nume
+    tăiat în mijlocul cuvântului nu mai numește produsul. Numele se scurtează până la prefixul lui
+    UNIC între coloane (NX-318, `unique_prefixes`), minimum două cuvinte, nu mai jos. Dacă nici așa
+    nu încape, chip-ul nu se oferă: un chip ambiguu e mai rău decât unul lipsă (aceeași regulă ca
+    `chip_moves._fit_anchor`). „Mai ieftin" nu numește nimic, deci rămâne mereu."""
+    from src.catalog.render_text import unique_prefixes  # noqa: PLC0415
+
+    names = {str(c.product_id): str(c.name) for c in columns if c.product_id and c.name}
+    unique = unique_prefixes(names, locale=language)
+
+    def _fit(template: str, pid: str) -> str | None:
+        words = names.get(pid, "").split()
+        floor = max(2, len(unique.get(pid, ())))
+        for n in range(len(words), min(floor, len(words)) - 1, -1):
+            text = template.format(name=" ".join(words[:n]))
+            if len(text) <= MAX_CHIP_LEN:
+                return text
+        return None
+
+    chips = [_fit(copy["add"], str(c.product_id)) for c in columns[:2]]
+    if columns:
+        chips.append(_fit(copy["detail"], str(columns[0].product_id)))
+    chips.append(copy["cheaper"])
+    return [c for c in chips if c]
 
 
 # Pool epuizat pe „mai arată-mi" → mesaj determinist per-locale (P6, fără tăcere; cacheable=False
