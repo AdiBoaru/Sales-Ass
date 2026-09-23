@@ -218,7 +218,7 @@ class _FakeLLM:
     async def complete(self, system, user, *, model=None):
         return "fallback"
 
-    async def run_tool_loop(self, system, user, tools, execute, *, max_steps=3, model=None):
+    async def run_tool_loop(self, system, user, tools, execute, *, max_steps=3, model=None, **kw):
         for name, args in self._tool_calls:
             await execute(name, args)
         return self._final

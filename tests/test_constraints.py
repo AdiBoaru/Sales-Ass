@@ -110,7 +110,7 @@ class _CaptureLLM:
     async def embed(self, texts, *, model=None):
         return [[0.0] * 8 for _ in texts]
 
-    async def run_tool_loop(self, system, user, tools, execute, *, max_steps=3, model=None):
+    async def run_tool_loop(self, system, user, tools, execute, *, max_steps=3, model=None, **kw):
         self.user = user
         return ""  # fără text → nu intră pe calea rich; testăm doar hint-ul
 

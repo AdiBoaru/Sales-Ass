@@ -1300,6 +1300,14 @@ class Settings(BaseSettings):
     llm_call_budget_by_role_enabled: bool = Field(
         default=True, validation_alias="LLM_CALL_BUDGET_BY_ROLE_ENABLED"
     )
+    # NX-312 felia 2: pe un tur de recomandare care a chemat DOAR `search_products` și are produse,
+    # runda de proză a buclei (apelul 2) se sare. Textul ei nu era citit pe calea bogată reușită,
+    # iar pe cea picată rezerva NX-302 + NX-299 construiește cardurile și fraza din catalog.
+    # Implicit ON, ca NX-311: e o risipă măsurată (61 din 92 de ture plăteau un apel întreg pentru
+    # un text aruncat), nu o capabilitate de câștigat pe golden. Stins → bucla de azi, byte-identic.
+    tool_loop_skip_prose_enabled: bool = Field(
+        default=True, validation_alias="TOOL_LOOP_SKIP_PROSE_ENABLED"
+    )
     # NX-225: buget de TIMP pentru embed-ul de query din `search_products` (P4 — bugetul stă în cod,
     # nu în speranță). `llm_timeout_s` × retry = până la ~90s de așteptare pe un furnizor lent, deși
     # piciorul lexical răspunde în milisecunde: la depășire cădem pe lexical-only, ca la eroare

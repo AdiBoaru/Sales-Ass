@@ -69,7 +69,7 @@ class FakeLLM:
     async def complete(self, system, user, *, model=None):
         return self._retry
 
-    async def run_tool_loop(self, system, user, tools, execute, *, max_steps=3, model=None):
+    async def run_tool_loop(self, system, user, tools, execute, *, max_steps=3, model=None, **kw):
         return self._final
 
 

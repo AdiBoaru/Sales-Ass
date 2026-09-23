@@ -190,9 +190,16 @@ class ScriptedLLM:
         # textul de la validator-retry (poate fi tot invalid → fallback determinist).
         return self._fx.get("retry", "")
 
-    async def run_tool_loop(self, system, user, tools, execute, *, max_steps=3, model=None):
-        for name, args in self._fx.get("tool_calls", []):
+    async def run_tool_loop(self, system, user, tools, execute, *, max_steps=3, model=None, **kw):
+        calls = self._fx.get("tool_calls", [])
+        for name, args in calls:
             await execute(name, args)
+        # NX-312: toate apelurile scriptate = O rundă. Dacă predicatul agentului o declară
+        # suficientă, bucla REALĂ n-ar mai cere proza, deci nici modelul scriptat n-o întoarce:
+        # altfel golden-ul ar măsura un text pe care producția nu-l mai produce.
+        stop = kw.get("stop_after_tools")
+        if calls and stop is not None and stop([name for name, _ in calls]):
+            return ""
         return self._fx.get("final", "")
 
     # --- creierul unic (NX-239): ACELEAȘI fixturi, alt contract de ieșire -----

@@ -292,7 +292,9 @@ async def test_agent_prompt_includes_context_blocks():
     captured: dict[str, str] = {}
 
     class _CapLLM:
-        async def run_tool_loop(self, system, user, tools, execute, *, max_steps=3, model=None):
+        async def run_tool_loop(
+            self, system, user, tools, execute, *, max_steps=3, model=None, **kw
+        ):
             captured["user"] = user
             return "Salut! Cu ce te ajut?"
 

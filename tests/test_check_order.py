@@ -155,7 +155,7 @@ class _FakeLLM:
         self.complete_calls += 1
         return self._retry
 
-    async def run_tool_loop(self, system, user, tools, execute, *, max_steps=3, model=None):
+    async def run_tool_loop(self, system, user, tools, execute, *, max_steps=3, model=None, **kw):
         for name, args in self._tc:
             await execute(name, args)
         return self._final
@@ -219,7 +219,7 @@ class _SpyLLM(_FakeLLM):
         super().__init__(**kw)
         self.loop_called = False
 
-    async def run_tool_loop(self, system, user, tools, execute, *, max_steps=3, model=None):
+    async def run_tool_loop(self, system, user, tools, execute, *, max_steps=3, model=None, **kw):
         self.loop_called = True
         return await super().run_tool_loop(
             system, user, tools, execute, max_steps=max_steps, model=model

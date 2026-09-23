@@ -96,7 +96,7 @@ class FakeLLM:
         self.complete_calls += 1
         return self._retry if self._retry is not None else "fallback"
 
-    async def run_tool_loop(self, system, user, tools, execute, *, max_steps=3, model=None):
+    async def run_tool_loop(self, system, user, tools, execute, *, max_steps=3, model=None, **kw):
         for name, args in self._tool_calls:
             await execute(name, args)
         return self._final
@@ -612,7 +612,9 @@ async def test_agent_uses_generated_prompt_with_business_vertical(monkeypatch):
     captured = {}
 
     class _CapLLM(FakeLLM):
-        async def run_tool_loop(self, system, user, tools, execute, *, max_steps=3, model=None):
+        async def run_tool_loop(
+            self, system, user, tools, execute, *, max_steps=3, model=None, **kw
+        ):
             captured["system"] = system
             return await super().run_tool_loop(
                 system, user, tools, execute, max_steps=max_steps, model=model

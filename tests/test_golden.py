@@ -340,6 +340,13 @@ async def test_injection_case_fails_without_its_guard(case_id, guard, monkeypatc
     case = next(c for c in CASES if c.id == case_id)
     _apply_stubs(monkeypatch, case.fixtures)
     await _disable_guard(monkeypatch, guard)
+    if guard == "validator":
+        # NX-312: cu runda de proză sărită, textul injectat nu mai există pe calea „doar căutare",
+        # deci validatorul de PROZĂ n-are ce apăra acolo. Proba îl exercită pe drumul unde proza
+        # încă se scrie (flag stins = orice tur cu altă unealtă / alt profil), nu îl declară inutil.
+        from src.config import get_settings
+
+        monkeypatch.setattr(get_settings(), "tool_loop_skip_prose_enabled", False, raising=False)
     ctx = _build_ctx(case)
     deps = PipelineDeps(conn=object(), redis=None, llm=ScriptedLLM(case.fixtures))
 
