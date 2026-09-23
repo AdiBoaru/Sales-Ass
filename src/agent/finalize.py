@@ -838,6 +838,44 @@ async def _finalize_rich(
     (compose) hidratează faptele. `rich_system` = system generat din DB (NX-78). `notes` =
     context per-tur din bucla de tool-uri (NX-137: ex. checkout eșuat → fără chips de coș).
     Întoarce `_RichOutcome`; `reply is None` → fallback pe proză."""
+    shape = shape or _TurnShape()
+    user = rich_user_message(ctx, query, products, history, notes=notes, shape=shape)
+    schema = _rich_schema(rich_omissions(), question=shape.offer is not None)
+    trace = getattr(ctx, "trace", None)  # fake-urile din teste n-au câmpul nou (tiparul aftercare)
+    try:
+        j = await llm.complete_schema(rich_system, user, schema)
+    except Exception as e:  # noqa: BLE001 — apel structurat eșuat → fallback pe proză
+        log.warning("agent: finalize structured eșuat (%s)", type(e).__name__)
+        if trace is not None:
+            trace["rich_error"] = type(e).__name__  # NX-256: în captura de diagnoză
+        return _RichOutcome(reply=None)
+    # NX-256: JSON-ul BRUT al modelului, înainte de membership/scrub — singurul loc unde există.
+    # Incidentul din 24 aug: rich-ul degradase pe „all-items-dropped-by-membership" și nu aveam
+    # cum să aflăm ce id-uri emisese modelul, fiindcă `j` murea aici, în memorie. Merge DOAR în
+    # `ctx.trace` (→ `conversation_traces`, sub flag), NU în analytics (P12: acolo contoare).
+    if trace is not None:
+        trace["rich_raw"] = j
+    emitted = [it for it in (j.get("items") or []) if isinstance(it, dict) and it.get("product_id")]
+    rich = compose.assemble(ctx, j, products, grounded_numbers=shape.grounded_numbers)
+    if rich.items:
+        # Doar pe un răspuns care chiar pleacă: pe refuz (zero carduri) turul coboară pe proză, iar
+        # a raporta acolo un „cum alegi" lipsă ar număra un eșec care nu i-a fost arătat nimănui.
+        _apply_turn_shape(ctx, rich, j, shape)
+    return _RichOutcome(reply=rich, model_items=len(emitted))
+
+
+def rich_user_message(
+    ctx,
+    query: str,
+    products: list[dict[str, Any]],
+    history: str,
+    *,
+    notes: str = "",
+    shape: _TurnShape | None = None,
+) -> str:
+    """Mesajul de USER al apelului de compunere bogată. Extras din `_finalize_rich` ca să aibă UN
+    singur autor: replay-ul de raționament (NX-312 felia 5) îl reface pe ture reale prin aceeași
+    funcție, deci nu măsoară o copie care a divergit de producție."""
     history_block = f"Conversație până acum:\n{history}\n\n" if history else ""
     notes_block = f"NB: {notes}\n" if notes else ""
     # NX-139: axele pe care VARIAZĂ setul (fațete DomainPack cu dispersie + interval de preț) —
@@ -864,28 +902,7 @@ async def _finalize_rich(
         f"Produse disponibile (alege dintre acestea):\n"
         f"{_rich_bundle(products, _rich_facets(ctx), ctx.language)}"
     )
-    schema = _rich_schema(rich_omissions(), question=shape.offer is not None)
-    trace = getattr(ctx, "trace", None)  # fake-urile din teste n-au câmpul nou (tiparul aftercare)
-    try:
-        j = await llm.complete_schema(rich_system, user, schema)
-    except Exception as e:  # noqa: BLE001 — apel structurat eșuat → fallback pe proză
-        log.warning("agent: finalize structured eșuat (%s)", type(e).__name__)
-        if trace is not None:
-            trace["rich_error"] = type(e).__name__  # NX-256: în captura de diagnoză
-        return _RichOutcome(reply=None)
-    # NX-256: JSON-ul BRUT al modelului, înainte de membership/scrub — singurul loc unde există.
-    # Incidentul din 24 aug: rich-ul degradase pe „all-items-dropped-by-membership" și nu aveam
-    # cum să aflăm ce id-uri emisese modelul, fiindcă `j` murea aici, în memorie. Merge DOAR în
-    # `ctx.trace` (→ `conversation_traces`, sub flag), NU în analytics (P12: acolo contoare).
-    if trace is not None:
-        trace["rich_raw"] = j
-    emitted = [it for it in (j.get("items") or []) if isinstance(it, dict) and it.get("product_id")]
-    rich = compose.assemble(ctx, j, products, grounded_numbers=shape.grounded_numbers)
-    if rich.items:
-        # Doar pe un răspuns care chiar pleacă: pe refuz (zero carduri) turul coboară pe proză, iar
-        # a raporta acolo un „cum alegi" lipsă ar număra un eșec care nu i-a fost arătat nimănui.
-        _apply_turn_shape(ctx, rich, j, shape)
-    return _RichOutcome(reply=rich, model_items=len(emitted))
+    return user
 
 
 def _attach_checkout_offer(ctx: TurnContext, url: str | None) -> None:

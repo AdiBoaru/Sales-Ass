@@ -457,9 +457,18 @@ mențiuni ale lui `pick` din alte reguli se rescriu. Pe 45 de rafturi: system 3.
 schema 220 → 140. Pe drum: `{MAX_PER_TYPE}` (NX-303) pleca LITERAL spre model pe fiecare apel rich,
 fiindcă se substituia doar în system-ul buclei; reparat pe toate variantele, deci și cu flagul stins.
 `RICH_SCHEMA_SLIM_ENABLED` (OFF până la golden; stins = schema byte-identică, iar system-ul diferă
-doar prin cifra care înlocuiește marcatorul). Feliile 3 și 5 rămân deschise. Card:
+doar prin cifra care înlocuiește marcatorul).
+**Felia 5 — raționamentul se decide pe REPLAY, nu pe flip.** Corelația „efort mare ⇒ lent" e
+contaminată (turele grele gândesc mai mult), deci `scripts/nx312_rich_effort_replay.py` rulează
+ACELAȘI apel 3 al unui tur real pe mai multe `reasoning_effort`: produsele din
+`agent_prompt.retrieval_ids`, istoricul din `messages` la momentul turului, iar system/mesaj/schemă
+prin funcțiile producției (mesajul de user extras în `finalize.rich_user_message`, ca să nu existe o
+copie care să diverge). Ordinea eforturilor e amestecată per tur (al doilea apel prinde cache-ul
+primului), iar calitatea se judecă pe perechi OARBE, cu cheia în alt fișier. Referința e efortul
+configurat azi (`medium`, NX-313), nu `high`. `--dry-run` = zero apeluri (59 de ture pe `sole-ro`);
+rularea reală cere `--yes` și o pornește Adi. Felia 3 așteaptă datele din `per_call`. Card:
 [`tasks/stage1/NX-312.md`](tasks/stage1/NX-312.md); probe: `pytest tests/test_skip_prose_round.py
-tests/test_rich_schema_slim.py -q`.
+tests/test_rich_schema_slim.py tests/test_nx312_effort_replay.py -q`.
 
 **NX-316 felia 1 — serverul RECUNOAȘTE apăsarea unui chip (flag OFF).** Pe v1 apăsarea retrimite
 doar TEXTUL, iar handlerele deterministe îl reinterpretau: „linkul la X" servea linkurile TUTUROR
