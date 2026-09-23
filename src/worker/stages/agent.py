@@ -633,24 +633,28 @@ async def _cheaper_seed(
 async def _choose_within_seed(
     ctx: TurnContext, deps: PipelineDeps, *, run: ToolRun
 ) -> list[dict[str, Any]] | None:
-    """NX-316 felia 2: chip-ul `choose_within` pe creierul unic, pe tiparul lui `_cheaper_seed`:
-    setul (afișat ∩ valoarea) intră în `run.retrieved` și în fața modelului ca seed. `None` când
-    nu e turul lui sau setul e gol (turul merge pe drumul obișnuit)."""
+    """NX-316 felia 2/3: un chip de SET (`choose_within`, `routine_next`, `similar_to`) pe
+    creierul unic, pe tiparul lui `_cheaper_seed`: setul determinist intră în `run.retrieved` și în
+    fața modelului ca seed. `None` când nu e turul lui sau setul e gol (drumul obișnuit)."""
     from src.agent.planner import (  # noqa: PLC0415
+        chip_set_seed_messages,
         choose_within_seed_messages,
-        resolve_choose_within,
+        resolve_chip_set,
     )
     from src.conversation.chip_press import facet_of  # noqa: PLC0415
 
     move = getattr(ctx, "chip_move", None)
-    if getattr(move, "kind", None) != "choose_within":
+    kind = getattr(move, "kind", None)
+    if kind not in ("choose_within", "routine_next", "similar_to"):
         return None
-    products = await resolve_choose_within(ctx, deps, policy=SafetyPolicy.for_turn(ctx))
-    facet_key = facet_of(move)
-    if not products or facet_key is None:
+    products = await resolve_chip_set(ctx, deps, policy=SafetyPolicy.for_turn(ctx))
+    if not products:
         return None
     run.retrieved.extend(products)
-    return choose_within_seed_messages(ctx, products, key=facet_key[1])
+    if kind == "choose_within":
+        facet_key = facet_of(move)
+        return choose_within_seed_messages(ctx, products, key=facet_key[1] if facet_key else "")
+    return chip_set_seed_messages(ctx, products)
 
 
 def _emit_query_spec_shadow(ctx: TurnContext, route: Route) -> None:

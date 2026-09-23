@@ -52,10 +52,16 @@ Sursa dovezii e, pentru fiecare mutare, date pe care turul le are DEJA:
 
   choose_within / fit_question ← fațetele PARTIȚIONANTE ale setului afișat (NX-316 felia 2)
 
-Nu există aici o mutare „alternative din graful de relații", deși planul inițial o avea: ar cere
-o interogare în plus pe drumul SINCRON, iar rolul ei (lateral) e deja acoperit de `pivot_shelf`,
-care se compune din meniu fără niciun I/O nou. Se poate adăuga când există o măsurătoare care
-arată că lipsește ceva, nu înainte (D15).
+  routine_next / similar_to    ← graful `product_relations`, UN query pe tur (NX-316 felia 3)
+
+**Mutările din graful de relații (NX-316 felia 3).** NX-296 le amânase: o interogare în plus pe
+drumul sincron, iar rolul lateral părea acoperit de `pivot_shelf`, „până când o măsurătoare arată
+că lipsește ceva”. Măsurătoarea a venit din comparația cu iZi pe «vreau o crema de hidratare»: după
+„cum se folosește”, 3 din 5 chips iZi erau pași de rutină („un gel de curățare potrivit”, „o cremă
+cu SPF care merge cu ea”), iar la noi calea laterală a fost raftul „Machiaj”. Graful are pe SOLE
+37.082 de muchii și nimic din chips nu le folosea. Costul e UN query agregat pe ancorele afișate
+(`relation_type_counts`), rulat într-un checkout scurt DUPĂ apelul de model (NX-231); produsele se
+aduc abia la apăsare. Query picat ⇒ mutările din graf lipsesc, restul chips-urilor rămân.
 
 **NX-316 felia 2 — mutări PESTE setul afișat.** La iZi chips-urile sunt întrebări legate de ce
 tocmai s-a arătat („ce aleg dintre acestea", „e potrivită pentru ten sensibil"); la noi niciun fel
@@ -88,7 +94,9 @@ if TYPE_CHECKING:
     from src.catalog.clarify_menu import ClarifyMenu
 
 __all__ = [
+    "GRAPH_LATERAL",
     "MOVE_ROLES",
+    "PRODUCT_TYPE_DIMENSION",
     "ChipMove",
     "FacetPlan",
     "apply_labels",
@@ -97,6 +105,10 @@ __all__ = [
     "facet_move_parts",
     "facet_moves_for",
     "fit_question_move",
+    "from_relations",
+    "relation_types_wanted",
+    "routine_next_move",
+    "similar_to_move",
     "from_cards",
     "from_facets",
     "from_menu",
@@ -129,13 +141,26 @@ MOVE_ROLES: dict[str, str] = {
     # cu flagul stins), deci registrul extins nu schimbă nimic pe traficul de azi.
     "choose_within": ROLE_FORWARD,
     "fit_question": ROLE_DEEPEN,
+    # NX-316 felia 3: din graful de relații, tot sub `CHIP_MOVES_V2_ENABLED`.
+    "routine_next": ROLE_LATERAL,
+    "similar_to": ROLE_LATERAL,
 }
+
+#: Mutările laterale din GRAF: când există, raftul oarecare (`pivot_shelf`) nu mai e continuarea
+#: laterală a unui tur de explicație (vezi `drop_dead`).
+GRAPH_LATERAL: frozenset[str] = frozenset({"routine_next", "similar_to"})
 
 #: NX-316: felurile care, în rolul lor, trec ÎNAINTEA celorlalte indiferent de dovadă. Dovada lor
 #: e numărul de produse AFIȘATE (≤ `card_slots`), pe când a unei îngustări din meniu e numărul din
 #: CATALOG (sute), deci o comparație directă le-ar îngropa mereu. Pe un tur cu carduri, „aleg
 #: dintre acestea" e continuarea mai bună decât încă un filtru (cardul, „Rolurile").
-_KIND_PRIORITY: dict[str, int] = {"choose_within": 0, "fit_question": 0}
+_KIND_PRIORITY: dict[str, int] = {
+    "choose_within": 0,
+    "fit_question": 0,
+    # Aceeași asimetrie de dovadă față de `pivot_shelf` (raft = sute de produse, graf = câteva).
+    "routine_next": 0,
+    "similar_to": 0,
+}
 
 #: Câte mutări din ACELAȘI fel intră în selecție. Fără plafon, un meniu bogat în fațete umple
 #: toate sloturile cu îngustări, iar clientul primește cinci feluri de a filtra și niciun fel de
@@ -188,8 +213,17 @@ class ChipMove:
 
 
 def _templates(pack: object) -> Mapping[str, Mapping[str, str]]:
+    """Tabela de șabloane a turului. Sub `CHIP_MOVES_V2_ENABLED`, `chip_templates_v2` (vocea
+    clientului) acoperă felurile pe care le declară, restul rămân pe `chip_templates`. Emiterea și
+    recunoașterea trec amândouă pe aici, deci văd mereu ACELAȘI text."""
     value = getattr(pack, "chip_templates", None)
-    return value if isinstance(value, dict) else {}
+    base = value if isinstance(value, dict) else {}
+    from src.config import get_settings  # noqa: PLC0415 — evită ciclul config ↔ conversație
+
+    if not getattr(get_settings(), "chip_moves_v2_enabled", False):
+        return base
+    v2 = getattr(pack, "chip_templates_v2", None)
+    return {**base, **v2} if isinstance(v2, dict) and v2 else base
 
 
 def _template(pack: object, kind: str, locale: str) -> str | None:
@@ -464,6 +498,8 @@ def drop_dead(
     *,
     spoken_needs: Iterable[tuple[str, str]] = (),
     n_cards: int = 0,
+    obligation_kinds: Iterable[str] | None = None,
+    first_subject_turn: bool = True,
 ) -> tuple[list[ChipMove], int]:
     """NX-316: scoate mutările ADEVĂRATE dar MOARTE, înainte de selecție. `(păstrate, câte scoase)`.
 
@@ -478,11 +514,26 @@ def drop_dead(
 
     Scoase ÎNAINTE de `select`, nu după, din motivul din `renderable`: o mutare aleasă și apoi
     aruncată ar lăsa un slot gol acolo unde exista o continuare bună.
+
+    Felia 3, `pivot_shelf` COBOARĂ (doar cu `obligation_kinds` dat; `None` = regula veche):
+    - pe `explain`/`answer`, când există o mutare laterală din graf: „Arată-mi ce ai la Machiaj”
+      sub „cum se folosește” e raftul oarecare pe care iZi îl înlocuiește cu pasul de rutină;
+    - pe `recommend`, după primul tur al subiectului (NX-314): la primul tur un raft vecin chiar
+      ajută, după el clientul și-a ales deja raftul.
     """
+    moves = list(moves)
     spoken = {(str(d), str(k)) for d, k in spoken_needs}
+    kinds = {str(k) for k in obligation_kinds} if obligation_kinds is not None else None
+    graph = any(m.kind in GRAPH_LATERAL for m in moves)
     kept: list[ChipMove] = []
     dropped = 0
     for move in moves:
+        if move.kind == "pivot_shelf" and kinds is not None:
+            explaining = bool(kinds & {"explain", "answer"}) and graph
+            settled = bool(kinds & {"recommend", "routine"}) and not first_subject_turn
+            if explaining or settled:
+                dropped += 1
+                continue
         if move.kind == "refine_facet":
             _, dimension, key = (move.move_id.split(":", 2) + ["", ""])[:3]
             if (dimension, key) in spoken:
@@ -677,6 +728,10 @@ def facet_move_parts(move_id: str) -> tuple[str, str | None, str, str] | None:
         return kind, None, parts[0], parts[1]
     if kind == "fit_question" and len(parts) == 3 and all(parts):
         return kind, parts[0], parts[1], parts[2]
+    if kind == "routine_next" and len(parts) == 2 and all(parts):
+        # Tipul relaționat e o cheie a dimensiunii `product_type`, deci fraza lui vine din același
+        # `value_phrases` ca valorile de fațetă.
+        return kind, parts[0], PRODUCT_TYPE_DIMENSION, parts[1]
     return None
 
 
@@ -706,10 +761,143 @@ def facet_moves_for(
             continue
         if kind == "choose_within":
             out.append(choose_within_move(facet, key, phrase, 1))
+        elif pid in names and kind == "routine_next":
+            short, floor = names[pid]
+            out.append(routine_next_move(pid, short, key, phrase, 1, floor=floor))
         elif pid in names:
             short, floor = names[pid]
             out.append(fit_question_move(pid, short, facet, key, phrase, floor=floor))
+    # `similar_to` n-are frază de adus: tot ce trebuie e produsul, deja în stare.
+    for move_id in offered:
+        kind, _, pid = str(move_id).partition(":")
+        if kind == "similar_to" and pid in names:
+            short, floor = names[pid]
+            out.append(similar_to_move(pid, short, 1, floor=floor))
     return out
+
+
+# --- NX-316 felia 3: mutări din graful de relații ----------------------------------------------
+
+#: Dimensiunea de vocabular a tipului de produs (`attributes.product_type`). Ancora lui
+#: `routine_next` e o cheie de pe ea, rezolvabilă la apăsare prin aceeași `resolve_any`.
+PRODUCT_TYPE_DIMENSION = "product_type"
+
+#: Relațiile care pot da „pasul următor”, în ordinea preferinței.
+_ROUTINE_KINDS: tuple[str, ...] = ("routine_next", "complement")
+
+
+def routine_next_move(
+    product_id: str,
+    short_name: str,
+    product_type: str,
+    phrase: str,
+    evidence: int,
+    *,
+    floor: int = 0,
+) -> ChipMove:
+    """„Arată-mi gel de curățare care merge cu X” — tipul relaționat, pe produsul discutat."""
+    return ChipMove(
+        kind="routine_next",
+        move_id=f"routine_next:{product_id}:{product_type}",
+        anchor=phrase,
+        slots=(("slot", phrase), ("slot_b", short_name)),
+        evidence=evidence,
+        floors=(("slot", len(phrase.split())), ("slot_b", floor)),
+    )
+
+
+def similar_to_move(product_id: str, short_name: str, evidence: int, *, floor: int = 0) -> ChipMove:
+    """„Arată-mi ceva similar cu X” — substitutele servabile ale unui produs afișat."""
+    return ChipMove(
+        kind="similar_to",
+        move_id=f"similar_to:{product_id}",
+        anchor=short_name,
+        slots=(("slot", short_name),),
+        evidence=evidence,
+        floors=(("slot", floor),),
+    )
+
+
+def _discussed(cards: Sequence[Mapping[str, Any]]) -> tuple[str, str | None] | None:
+    """Produsul discutat = primul card de pe ecran: pe un tur de explicație e singurul, pe unul de
+    recomandare e cel pe care textul îl numește primul (NX-318 ordonează cardurile după text)."""
+    for card in cards:
+        pid = card.get("product_id") or card.get("id")
+        if pid and card.get("name"):
+            attrs = card.get("attributes")
+            own = attrs.get("product_type") if isinstance(attrs, dict) else None
+            return str(pid), own if isinstance(own, str) else None
+    return None
+
+
+def _routine_types(
+    rows: Iterable[Mapping[str, Any]], anchor_id: str, own_type: str | None
+) -> list[tuple[str, int]]:
+    """Tipurile relaționate ale ancorei: `routine_next` înaintea lui `complement`, apoi după câte
+    produse au. Propriul tip nu e „pasul următor” (o cremă după o cremă e o alternativă)."""
+    best: dict[str, tuple[int, int]] = {}
+    for row in rows:
+        kind = row.get("kind")
+        ptype = row.get("product_type")
+        if str(row.get("anchor_id")) != anchor_id or kind not in _ROUTINE_KINDS or not ptype:
+            continue
+        if own_type and ptype == own_type:
+            continue
+        rank = _ROUTINE_KINDS.index(kind)
+        n = int(row.get("n") or 0)
+        prev = best.get(ptype)
+        if prev is None or (rank, -n) < (prev[0], -prev[1]):
+            best[ptype] = (rank, n)
+    ordered = sorted(best.items(), key=lambda kv: (kv[1][0], -kv[1][1], kv[0]))
+    return [(ptype, n) for ptype, (_, n) in ordered if n > 0]
+
+
+def relation_types_wanted(
+    rows: Iterable[Mapping[str, Any]], cards: Sequence[Mapping[str, Any]]
+) -> tuple[str, ...]:
+    """Tipurile pentru care apelantul trebuie să aducă fraze (doar ale produsului discutat)."""
+    anchor = _discussed(cards)
+    if anchor is None:
+        return ()
+    return tuple(t for t, _ in _routine_types(rows, anchor[0], anchor[1]))
+
+
+def from_relations(
+    rows: Iterable[Mapping[str, Any]],
+    cards: Sequence[Mapping[str, Any]],
+    phrases: Mapping[str, str],
+    *,
+    offered_before: Iterable[str] = (),
+    unique_anchor: bool = False,
+    locale: str | None = None,
+) -> list[ChipMove]:
+    """Mutările `routine_next` + `similar_to` ale turului, din agregatele `relation_type_counts`.
+
+    `routine_next`: pe produsul discutat, UN tip (cel mai bun care are frază). `similar_to`: pe
+    primele carduri cu ≥1 substitut servabil. `phrases` = `{tip: frază}`; un tip fără frază nu se
+    oferă, fiindcă fraza e cea care, la apăsare, se rezolvă înapoi pe tip. PUR."""
+    rows = list(rows)
+    seen = {str(m) for m in offered_before}
+    names = _names(cards, unique_anchor=unique_anchor, locale=locale)
+    by_pid = {pid: (short, floor) for pid, short, floor in names}
+    out: list[ChipMove] = []
+    anchor = _discussed(cards)
+    if anchor is not None and anchor[0] in by_pid:
+        short, floor = by_pid[anchor[0]]
+        for ptype, n in _routine_types(rows, anchor[0], anchor[1]):
+            phrase = phrases.get(ptype)
+            if phrase:
+                out.append(routine_next_move(anchor[0], short, ptype, phrase, n, floor=floor))
+                break
+    for pid, short, floor in names[:_FIT_CARDS]:
+        n = sum(
+            int(r.get("n") or 0)
+            for r in rows
+            if str(r.get("anchor_id")) == pid and r.get("kind") == "substitute"
+        )
+        if n > 0:
+            out.append(similar_to_move(pid, short, n, floor=floor))
+    return [m for m in out if m.move_id not in seen]
 
 
 def wanted_phrases(offered: Iterable[str]) -> dict[str, tuple[str, ...]]:
@@ -725,7 +913,7 @@ def wanted_phrases(offered: Iterable[str]) -> dict[str, tuple[str, ...]]:
 # --- selecția: ce iese la client, în ce ordine -------------------------------------------------
 
 
-def roles_for(obligation_kinds: Iterable[str]) -> tuple[str, ...]:
+def roles_for(obligation_kinds: Iterable[str], *, graph_lateral: bool = False) -> tuple[str, ...]:
     """Ordinea rolurilor, derivată din OBLIGAȚIILE turului (`plan.obligations`), nu o listă fixă.
 
     Contează pe un tur factual. La „care e prețul?" obligația e `answer`, nu `recommend`: cinci
@@ -734,6 +922,10 @@ def roles_for(obligation_kinds: Iterable[str]) -> tuple[str, ...]:
 
     Rolurile ABSENTE din ordine nu se emit deloc. Asta e regula care face diferența, nu ordinea:
     `answer` pur nu primește `forward`.
+
+    `graph_lateral` (NX-316 felia 3, sub `CHIP_MOVES_V2_ENABLED`): pe `explain`/`answer` calea
+    laterală trece înaintea lui `commit`, fiindcă acum e pasul de rutină al produsului discutat,
+    nu un raft oarecare. Stins ⇒ ordinea de azi.
     """
     kinds = {str(k) for k in obligation_kinds}
     if kinds & {"recommend", "routine"}:
@@ -741,6 +933,8 @@ def roles_for(obligation_kinds: Iterable[str]) -> tuple[str, ...]:
     if "compare" in kinds:
         return (ROLE_DEEPEN, ROLE_COMMIT, ROLE_LATERAL)
     if kinds & {"answer", "explain"}:
+        if graph_lateral:
+            return (ROLE_DEEPEN, ROLE_LATERAL, ROLE_COMMIT)
         return (ROLE_DEEPEN, ROLE_COMMIT, ROLE_LATERAL)
     # Clarificare / acțiune / tur fără obligații: clientul n-a ajuns încă la produse, deci
     # îngustarea e chiar ce îl duce mai departe.

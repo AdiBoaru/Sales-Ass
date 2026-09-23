@@ -308,6 +308,13 @@ textul întreg la tap, deci ce vede clientul n-ar mai fi ce cere.
 Backendul dropează chips-urile cu **voce de bot** (paranteze explicative, „ex:") înainte de a le
 pune în contract, așa că lista primită e deja curată.
 
+> **NX-316 — nimic nou pe sârmă, doar alt text.** Sub `CHIP_MOVES_V2_ENABLED` apar mutări care
+> lucrează pe ce s-a arătat („Pentru ten uscat, ce aleg dintre acestea?", „X merge pentru ten
+> uscat?") și din graful de relații („Arata-mi crema contur ochi care merge cu X", „Arata-mi ceva
+> similar cu X"), iar felurile existente trec în vocea clientului („Ce ai la Ten?"). Serverul
+> RECUNOAȘTE apăsarea comparând textul primit cu mutările oferite, deci **frontendul trebuie să
+> retrimită textul chip-ului neschimbat** (fără prefixe, emoji sau trimming), exact ca până acum.
+
 ---
 
 ## 6. Rezumat: ce trebuie să implementeze frontendul

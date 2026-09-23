@@ -770,11 +770,11 @@ async def serve_chip_move(ctx: TurnContext, deps: PipelineDeps, move: Any) -> bo
     ids = list(product_ids(move))
     handler = "agent"
     served = False
-    if move.kind == "choose_within":
-        # NX-316 felia 2: nu e un răspuns determinist, e un SET determinist. Restrângerea la
-        # produsele afișate cu valoarea o face planul (v1) sau seed-ul creierului, care citesc
-        # `ctx.chip_move`; aici doar numărăm apăsarea și lăsăm turul să meargă mai departe.
-        handler = "choose_within"
+    if move.kind in ("choose_within", "routine_next", "similar_to"):
+        # NX-316 felia 2/3: nu e un răspuns determinist, e un SET determinist (afișatele cu
+        # valoarea, pasul de rutină, substitutele). Setul îl aduce planul (v1) sau seed-ul
+        # creierului, care citesc `ctx.chip_move`; aici doar numărăm apăsarea.
+        handler = move.kind
     elif not ids:
         pass
     elif move.kind == "fit_question" and getattr(settings, "detail_intent_enabled", True):
