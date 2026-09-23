@@ -3,7 +3,15 @@
   "_answer_shape_templates_note": "NX-299: copy-ul de FORMA, per locale. `framing` numeste CLASELE de produs pe care retrievalul le-a servit efectiv ({types} se completeaza de server din `product_type`, niciodata de model), iar `list_glue` e legatura dinaintea ultimului element al enumerarii. Fara sablon, incadrarea ramane a modelului (fail-open): un pachet incomplet nu are voie sa stearga o fraza scrisa corect. Fara liniuta de pauza si fara punct si virgula (P13).",
   "answer_shape_templates": {
     "framing": {"ro": "Ți-am ales {types}.", "en": "I picked out {types} for you."},
-    "list_glue": {"ro": " și ", "en": " and "}
+    "list_glue": {"ro": " și ", "en": " and "},
+    "fit_yes": {
+      "ro": "Da, fișa produsului menționează {slot} printre recomandări.",
+      "en": "Yes, the product sheet lists {slot} among its recommendations."
+    },
+    "fit_no": {
+      "ro": "Fișa produsului nu menționează {slot} printre recomandări.",
+      "en": "The product sheet does not list {slot} among its recommendations."
+    }
   },
   "_chip_templates_note": "NX-296: copy-ul chips-urilor, per mutare si per locale. Un chip e MESAJUL pe care clientul il retrimite la apasare, deci se scrie la persoana I, in vocea lui. {slot} se completeaza de server din catalog (fraza de meniu, nume scurt de produs, prag de pret), niciodata de model. Mutare fara sablon = mutare care nu se ofera (P11: limba e configuratie, nu constanta in cod). Moneda face parte din sablon fiindca e a tenantului.",
   "chip_templates": {
@@ -13,7 +21,15 @@
     "detail": {"ro": "Spune-mi mai multe despre {slot}", "en": "Tell me more about {slot}"},
     "reviews": {"ro": "Ce spun recenziile despre {slot}", "en": "What do reviews say about {slot}"},
     "compare": {"ro": "Compara {slot} cu {slot_b}", "en": "Compare {slot} with {slot_b}"},
-    "link": {"ro": "Trimite-mi linkul la {slot}", "en": "Send me the link for {slot}"}
+    "link": {"ro": "Trimite-mi linkul la {slot}", "en": "Send me the link for {slot}"},
+    "choose_within": {
+      "ro": "Pentru {slot}, ce aleg dintre acestea?",
+      "en": "For {slot}, which of these should I pick?"
+    },
+    "fit_question": {
+      "ro": "{slot_b} merge pentru {slot}?",
+      "en": "Is {slot_b} good for {slot}?"
+    }
   },
   "currency": "RON",
   "concern_map": {},

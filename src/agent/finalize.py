@@ -549,6 +549,65 @@ def _drop_dead_moves(ctx, candidates: list, *, n_cards: int) -> tuple[list, int]
     return chip_moves.drop_dead(candidates, spoken_needs=spoken_needs(ctx.state), n_cards=n_cards)
 
 
+async def _facet_moves(ctx, deps, cards: list[dict[str, Any]]) -> list:
+    """NX-316 felia 2: mutările `choose_within` + `fit_question` pe setul AFIȘAT, pe AMBELE căi
+    (v1 aici, creierul unic în `brain._set_brain_reply`). `cards` trebuie să poarte `attributes`.
+
+    Fațetele „știute" sunt aceleași ca la întrebarea de îngustare (`_known_facets`), deci
+    chips-urile nu propun alegerea pe o fațetă pe care clientul a spus-o deja. Singura citire e
+    vocabularul (cache-uit per tenant), și doar când planul are ce fraza. Best-effort: orice eșec
+    ⇒ `[]`, adică chips-urile de dinainte (P6). Flag stins ⇒ `[]` fără nicio muncă (byte-identic).
+    """
+    if not getattr(get_settings(), "chip_moves_v2_enabled", False) or not cards:
+        return []
+    try:
+        from src.catalog.clarify_menu import value_phrases  # noqa: PLC0415
+        from src.catalog.vocabulary_cache import get_vocabulary  # noqa: PLC0415
+        from src.conversation import chip_moves  # noqa: PLC0415
+        from src.conversation.subject import spoken_needs  # noqa: PLC0415
+
+        pack = getattr(ctx.business, "domain_pack", None)
+        facets = tuple(getattr(pack, "facets", ()) or ())
+        plan = chip_moves.plan_facets(
+            cards, facets, known=_known_facets(ctx, pack), spoken=spoken_needs(ctx.state)
+        )
+        wanted = plan.wanted()
+        if not wanted:
+            return []
+        vocab = await get_vocabulary(deps, ctx.business.id)
+        phrases = {
+            (facet, key): phrase
+            for facet, keys in wanted.items()
+            for key, phrase in value_phrases(
+                vocab, pack, facet, keys, locale=ctx.language or "ro"
+            ).items()
+        }
+        moves = chip_moves.from_facets(
+            cards,
+            plan,
+            facets,
+            phrases,
+            offered_before=tuple(getattr(ctx.state, "offered_chips", ()) or ()),
+            unique_anchor=getattr(get_settings(), "unique_name_prefix_enabled", False),
+            locale=ctx.language,
+        )
+        return chip_moves.renderable(moves, pack, ctx.language)
+    except Exception as e:  # noqa: BLE001 — chips-urile nu sunt răspunsul (P6)
+        log.warning("finalize: mutările pe fațete au eșuat (%s)", type(e).__name__)
+        return []
+
+
+def _cards_with_attributes(
+    cards: list[dict[str, Any]], products: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Cardurile turului (ordinea de pe ecran) cu `attributes` din setul de retrieval."""
+    by_id = {str(p.get("id") or p.get("product_id") or ""): p for p in products or ()}
+    return [
+        {**c, "attributes": (by_id.get(str(c.get("product_id"))) or {}).get("attributes") or {}}
+        for c in cards
+    ]
+
+
 async def _apply_move_chips(ctx, deps, rich) -> None:
     """NX-297 felia 5 — chips-urile v1 devin MUTĂRI cu dovadă (NX-296), nu fraze scrise liber.
 
@@ -599,6 +658,8 @@ async def _apply_move_chips(ctx, deps, rich) -> None:
             ctx.language,
             stats=anchor_stats,
         )
+        retrieved = list(ctx.retrieval.products) if ctx.retrieval is not None else []
+        candidates += await _facet_moves(ctx, deps, _cards_with_attributes(cards, retrieved))
         candidates, dead = _drop_dead_moves(ctx, candidates, n_cards=len(cards))
         if dead:
             anchor_stats["dropped_dead"] = dead

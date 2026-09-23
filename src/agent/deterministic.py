@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from src.agent.compare_narrative import compose_comparison
@@ -409,8 +410,17 @@ def _detail_answer(product: dict, ctx: TurnContext) -> str:
     )
 
 
-async def serve_details(ctx: TurnContext, deps: PipelineDeps, product_id: str) -> None:
-    """Detaliile unui produs DEJA rezolvat (vezi `serve_reviews` pentru de ce e extras)."""
+async def serve_details(
+    ctx: TurnContext,
+    deps: PipelineDeps,
+    product_id: str,
+    *,
+    lead: Callable[[dict[str, Any]], str | None] | None = None,
+) -> None:
+    """Detaliile unui produs DEJA rezolvat (vezi `serve_reviews` pentru de ce e extras).
+
+    `lead` (NX-316 `fit_question`): o frază calculată din produsul PROASPĂT citit, pusă înaintea
+    detaliilor. Primește produsul după safety gate, deci nu poate răspunde despre unul exclus."""
     async with deps.db("detail_intent_product") as conn:
         products = await get_products_by_ids(conn, ctx.business.id, [product_id], limit=1)
     products = SafetyPolicy.for_turn(ctx).gate(ctx, products, purpose="detail_intent")[0]
@@ -422,9 +432,11 @@ async def serve_details(ctx: TurnContext, deps: PipelineDeps, product_id: str) -
     product = products[0]
     copy = _detail_copy(ctx.language)
     ctx.retrieval = RetrievalResult(products=products, source="detail_intent")
-    ctx.set_reply(
-        _detail_answer(product, ctx), products=_card_products(products, n=1), cacheable=False
-    )
+    answer = _detail_answer(product, ctx)
+    first = lead(product) if lead is not None else None
+    if first:
+        answer = f"{first}\n\n{answer}"
+    ctx.set_reply(answer, products=_card_products(products, n=1), cacheable=False)
     ctx.reply.suggestions = [copy["review_chip"], copy["link_chip"], copy["compare_chip"]]
     ctx.emit("detail_intent", served=1)
 
@@ -712,6 +724,39 @@ def turn_has_new_constraints(ctx: TurnContext, route: Any) -> bool:
     return bool(spoken)
 
 
+def fit_lead(
+    ctx: TurnContext, facet: str, key: str, phrase: str
+) -> Callable[[dict[str, Any]], str | None]:
+    """NX-316 `fit_question`: răspunsul la „X merge pentru {valoare}?" din FIȘA produsului.
+
+    Da/nu vin din `attributes` (sursa fațetei declarată în pachet), nu din model: valoarea e în
+    listă ⇒ `fit_yes`, lipsește dintr-o listă CUNOSCUTĂ ⇒ `fit_no`. Un „nu" cunoscut e un răspuns
+    bun, nu o eroare. Fațetă necunoscută pe produs (fișa s-a schimbat între ture) sau pachet fără
+    șablon ⇒ `None` ⇒ doar detaliile, fără o afirmație pe care n-o putem susține. Copy-ul e în
+    pachet (`answer_shape_templates`, P11), iar valoarea e fraza chip-ului, deci aceleași
+    cuvinte."""
+    from src.agent.answer_shape import pack_template  # noqa: PLC0415
+    from src.conversation.chip_moves import partitioning_sources  # noqa: PLC0415
+    from src.conversation.clarification_policy import values_of  # noqa: PLC0415
+
+    pack = getattr(ctx.business, "domain_pack", None)
+    source = partitioning_sources(getattr(pack, "facets", ()) or ()).get(facet)
+
+    def _lead(product: dict[str, Any]) -> str | None:
+        if source is None:
+            return None
+        values = values_of(product, source)
+        if not values:
+            ctx.emit("fit_question", verdict="unknown")
+            return None
+        verdict = "yes" if key.lower() in values else "no"
+        template = pack_template(pack, f"fit_{verdict}", ctx.language)
+        ctx.emit("fit_question", verdict=verdict)
+        return template.format(slot=phrase) if template else None
+
+    return _lead
+
+
 async def serve_chip_move(ctx: TurnContext, deps: PipelineDeps, move: Any) -> bool:
     """NX-316: servește apăsarea unui chip recunoscut. True = turul e servit; False = mergi mai
     departe pe drumul obișnuit (handler stins, sau comparația refuzată de porțile ei).
@@ -719,14 +764,25 @@ async def serve_chip_move(ctx: TurnContext, deps: PipelineDeps, move: Any) -> bo
     Fiecare fel intră pe ACELAȘI handler ca varianta lui din text (`serve_details`,
     `serve_reviews`, `_handle_link_intent`, `serve_comparison`), deci porțile de siguranță, de
     coerență și de disponibilitate sunt aceleași. Se schimbă doar DE UNDE vin produsele."""
-    from src.conversation.chip_press import product_ids  # noqa: PLC0415 — evită ciclul
+    from src.conversation.chip_press import facet_of, product_ids  # noqa: PLC0415 — ciclul
 
     settings = get_settings()
     ids = list(product_ids(move))
     handler = "agent"
     served = False
-    if not ids:
+    if move.kind == "choose_within":
+        # NX-316 felia 2: nu e un răspuns determinist, e un SET determinist. Restrângerea la
+        # produsele afișate cu valoarea o face planul (v1) sau seed-ul creierului, care citesc
+        # `ctx.chip_move`; aici doar numărăm apăsarea și lăsăm turul să meargă mai departe.
+        handler = "choose_within"
+    elif not ids:
         pass
+    elif move.kind == "fit_question" and getattr(settings, "detail_intent_enabled", True):
+        facet_key = facet_of(move)
+        if facet_key is not None:
+            lead = fit_lead(ctx, *facet_key, move.slot_map().get("slot", ""))
+            await serve_details(ctx, deps, ids[0], lead=lead)
+            handler, served = "fit_question", True
     elif move.kind == "detail" and getattr(settings, "detail_intent_enabled", True):
         await serve_details(ctx, deps, ids[0])
         handler, served = "detail_intent", True

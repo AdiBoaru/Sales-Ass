@@ -159,6 +159,11 @@ def missing_slots(shape: AnswerShape, filled: Mapping[str, bool]) -> tuple[str, 
 # --- textul de rezervă -------------------------------------------------------------------------
 
 
+def pack_template(pack: object, key: str, locale: str) -> str | None:
+    """Public pentru NX-316 (`fit_yes`/`fit_no`): ACEEAȘI tabelă și aceeași regulă de locale."""
+    return _template(pack, key, locale)
+
+
 def _template(pack: object, key: str, locale: str) -> str | None:
     """Șablonul în limba clientului, din pachet. Lipsă ⇒ None ⇒ slotul rămâne al modelului (P11).
 

@@ -379,7 +379,31 @@ def _lead_score_hint(ctx: TurnContext) -> str:
     )
 
 
-def _recognize_chip_press(ctx: TurnContext) -> None:
+async def _offered_phrases(
+    ctx: TurnContext, deps: PipelineDeps, offered: tuple[str, ...]
+) -> dict[tuple[str, str], str]:
+    """NX-316 felia 2: frazele valorilor din mutările pe fațete OFERITE, din ACEEAȘI funcție ca la
+    emitere (`value_phrases`). Nicio mutare pe fațete oferită ⇒ nicio citire (vocabularul e oricum
+    cache-uit per tenant). Vocabular indisponibil ⇒ `{}` ⇒ ele nu se recunosc, restul da."""
+    from src.catalog.clarify_menu import value_phrases  # noqa: PLC0415
+    from src.conversation.chip_moves import wanted_phrases  # noqa: PLC0415
+
+    wanted = wanted_phrases(offered)
+    if not wanted:
+        return {}
+    try:
+        vocab = await get_vocabulary(deps, ctx.business.id)
+    except Exception:  # noqa: BLE001 — fără vocabular nu există fraze verificate (fail-open)
+        return {}
+    pack = getattr(ctx.business, "domain_pack", None)
+    return {
+        (facet, key): phrase
+        for facet, keys in wanted.items()
+        for key, phrase in value_phrases(vocab, pack, facet, keys, locale=ctx.language).items()
+    }
+
+
+async def _recognize_chip_press(ctx: TurnContext, deps: PipelineDeps) -> None:
     """NX-316: scrie `ctx.chip_move` (owner UNIC) dacă mesajul reproduce o mutare oferită.
 
     Cardurile sunt setul afișat din stare, în ordinea de pe ecran, iar pragul de scurtare urmează
@@ -395,13 +419,15 @@ def _recognize_chip_press(ctx: TurnContext) -> None:
             {"product_id": p.product_id, "name": p.name, "price": p.price}
             for p in ctx.state.displayed_products
         ]
+        offered = tuple(getattr(ctx.state, "offered_chips", ()) or ())
         move = chip_press.recognize(
             ctx.message.body or "",
             cards,
-            getattr(ctx.state, "offered_chips", ()) or (),
+            offered,
             getattr(ctx.business, "domain_pack", None),
             ctx.language,
             unique_anchor=bool(getattr(settings, "unique_name_prefix_enabled", False)),
+            phrases=await _offered_phrases(ctx, deps, offered) if cards else None,
         )
     except Exception as e:  # noqa: BLE001 — recunoașterea e o scurtătură, nu o poartă (P6)
         log.warning("agent: recunoașterea chip-ului a eșuat (%s)", type(e).__name__)
@@ -602,6 +628,29 @@ async def _cheaper_seed(
         return None
     run.retrieved.extend(outcome.products)
     return cheaper_seed_messages(ctx, outcome.products, baseline=outcome.baseline)
+
+
+async def _choose_within_seed(
+    ctx: TurnContext, deps: PipelineDeps, *, run: ToolRun
+) -> list[dict[str, Any]] | None:
+    """NX-316 felia 2: chip-ul `choose_within` pe creierul unic, pe tiparul lui `_cheaper_seed`:
+    setul (afișat ∩ valoarea) intră în `run.retrieved` și în fața modelului ca seed. `None` când
+    nu e turul lui sau setul e gol (turul merge pe drumul obișnuit)."""
+    from src.agent.planner import (  # noqa: PLC0415
+        choose_within_seed_messages,
+        resolve_choose_within,
+    )
+    from src.conversation.chip_press import facet_of  # noqa: PLC0415
+
+    move = getattr(ctx, "chip_move", None)
+    if getattr(move, "kind", None) != "choose_within":
+        return None
+    products = await resolve_choose_within(ctx, deps, policy=SafetyPolicy.for_turn(ctx))
+    facet_key = facet_of(move)
+    if not products or facet_key is None:
+        return None
+    run.retrieved.extend(products)
+    return choose_within_seed_messages(ctx, products, key=facet_key[1])
 
 
 def _emit_query_spec_shadow(ctx: TurnContext, route: Route) -> None:
@@ -808,7 +857,7 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
 
     # NX-316: apăsarea unui chip oferit se RECUNOAȘTE înaintea intențiilor deterministe, ca
     # handlerul să primească produsele din `move_id`, nu să le ghicească din text sau din poziție.
-    _recognize_chip_press(ctx)
+    await _recognize_chip_press(ctx, deps)
 
     # Faza B (NX-143): intenții deterministe PRE-loop (link/compare) → early-exit, $0 inferență.
     if await try_pre_intents(ctx, deps):
@@ -961,6 +1010,8 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
                 )
                 if ctx.reply is not None:
                     return  # nimic mai ieftin → mesajul onest e deja setat (P6)
+                if forced_seed is None:
+                    forced_seed = await _choose_within_seed(ctx, deps, run=run)
                 await run_main_brain(
                     ctx,
                     deps,

@@ -50,10 +50,21 @@ Sursa dovezii e, pentru fiecare mutare, date pe care turul le are DEJA:
   detail / reviews / compare  ← produsele tocmai afișate
   link                        ← produsul afișat care are url
 
+  choose_within / fit_question ← fațetele PARTIȚIONANTE ale setului afișat (NX-316 felia 2)
+
 Nu există aici o mutare „alternative din graful de relații", deși planul inițial o avea: ar cere
 o interogare în plus pe drumul SINCRON, iar rolul ei (lateral) e deja acoperit de `pivot_shelf`,
 care se compune din meniu fără niciun I/O nou. Se poate adăuga când există o măsurătoare care
 arată că lipsește ceva, nu înainte (D15).
+
+**NX-316 felia 2 — mutări PESTE setul afișat.** La iZi chips-urile sunt întrebări legate de ce
+tocmai s-a arătat („ce aleg dintre acestea", „e potrivită pentru ten sensibil"); la noi niciun fel
+nu lucra pe set. `choose_within` (forward) oferă câte o valoare a fațetei partiționante nerostite pe
+care setul se desparte, aleasă de ACEEAȘI regulă ca întrebarea de îngustare NX-315
+(`narrowing_candidate`), deci chips-urile și întrebarea numesc aceleași valori. `fit_question`
+(deepen) întreabă de o valoare pe un produs doar când fișa lui are fațeta CUNOSCUTĂ: pe `UNKNOWN`
+răspunsul ar fi „nu știu", iar un „nu" cunoscut e un răspuns bun. Frazele vin din meniul închis
+(`value_phrases`, cu round-trip), deci modulul rămâne pur: apelantul le aduce.
 
 **Copy-ul nu e în cod.** Șabloanele trăiesc în `DomainPack.chip_templates` (per locale), fiindcă
 limba e configurație, nu constantă (P11). Pachet fără șablon pentru o mutare ⇒ mutarea nu se
@@ -79,15 +90,24 @@ if TYPE_CHECKING:
 __all__ = [
     "MOVE_ROLES",
     "ChipMove",
+    "FacetPlan",
     "apply_labels",
+    "choose_within_move",
     "drop_dead",
+    "facet_move_parts",
+    "facet_moves_for",
+    "fit_question_move",
     "from_cards",
+    "from_facets",
     "from_menu",
     "offer_block",
+    "partitioning_sources",
+    "plan_facets",
     "renderable",
     "render_move",
     "roles_for",
     "select",
+    "wanted_phrases",
 ]
 
 ROLE_FORWARD = "forward"  # îngustează: clientul ajunge mai aproape de ce vrea
@@ -105,7 +125,17 @@ MOVE_ROLES: dict[str, str] = {
     "reviews": ROLE_DEEPEN,
     "compare": ROLE_DEEPEN,
     "link": ROLE_COMMIT,
+    # NX-316 felia 2: produse doar sub `CHIP_MOVES_V2_ENABLED` (apelantul nu cheamă `from_facets`
+    # cu flagul stins), deci registrul extins nu schimbă nimic pe traficul de azi.
+    "choose_within": ROLE_FORWARD,
+    "fit_question": ROLE_DEEPEN,
 }
+
+#: NX-316: felurile care, în rolul lor, trec ÎNAINTEA celorlalte indiferent de dovadă. Dovada lor
+#: e numărul de produse AFIȘATE (≤ `card_slots`), pe când a unei îngustări din meniu e numărul din
+#: CATALOG (sute), deci o comparație directă le-ar îngropa mereu. Pe un tur cu carduri, „aleg
+#: dintre acestea" e continuarea mai bună decât încă un filtru (cardul, „Rolurile").
+_KIND_PRIORITY: dict[str, int] = {"choose_within": 0, "fit_question": 0}
 
 #: Câte mutări din ACELAȘI fel intră în selecție. Fără plafon, un meniu bogat în fațete umple
 #: toate sloturile cu îngustări, iar clientul primește cinci feluri de a filtra și niciun fel de
@@ -465,6 +495,233 @@ def drop_dead(
     return kept, dropped
 
 
+# --- NX-316 felia 2: mutări peste setul AFIȘAT, pe fațetele lui partiționante --------------------
+
+
+@dataclass(frozen=True, slots=True)
+class FacetPlan:
+    """Ce pot oferi mutările pe fațete, ÎNAINTE de fraze. Pur, calculat din cardurile turului.
+
+    Există ca pas separat fiindcă frazele (`value_phrases`) cer vocabularul, adică I/O: apelantul
+    află din `wanted()` ce chei are de frazat, le aduce, apoi `from_facets` construiește mutările.
+    Calculat de două ori, planul ar putea numi alte chei decât cele pentru care s-au adus fraze.
+
+    `values` = cheile fațetei `facet` prezente în set, descrescător după câte produse AFIȘATE le
+    poartă (dovada lui `choose_within`). `fit_values` = perechile `(fațetă, cheie)` pe care
+    `fit_question` le poate întreba, în ordinea preferinței: întâi ce a ROSTIT clientul, apoi
+    valorile de îngustare.
+    """
+
+    facet: str | None = None
+    values: tuple[tuple[str, int], ...] = ()
+    fit_values: tuple[tuple[str, str], ...] = ()
+
+    def wanted(self) -> dict[str, tuple[str, ...]]:
+        out: dict[str, list[str]] = {}
+        if self.facet:
+            out.setdefault(self.facet, []).extend(k for k, _ in self.values)
+        for facet, key in self.fit_values:
+            out.setdefault(facet, []).append(key)
+        return {f: tuple(dict.fromkeys(keys)) for f, keys in out.items()}
+
+
+def partitioning_sources(facets: Iterable[object]) -> dict[str, str]:
+    """`{cheia fațetei: cheia din attributes}` pentru fațetele pe care se poate alege dintre."""
+    out: dict[str, str] = {}
+    for facet in facets:
+        if getattr(facet, "binding", "additive") != "partitioning":
+            continue
+        if getattr(getattr(facet, "source", None), "value", None) != "attribute":
+            continue
+        key = str(getattr(facet, "key", "") or "")
+        if key:
+            out[key] = str(getattr(facet, "source_key", key) or key)
+    return out
+
+
+def plan_facets(
+    cards: Sequence[Mapping[str, Any]],
+    facets: Sequence[object],
+    *,
+    known: frozenset[str] = frozenset(),
+    spoken: Iterable[tuple[str, str]] = (),
+) -> FacetPlan:
+    """Fațeta pe care setul afișat se DESPARTE + valorile de întrebat pe produse. PUR.
+
+    Fațeta o alege `narrowing_candidate` (NX-315), fără prag de câștig: întrebarea de îngustare
+    are nevoie de prag fiindcă ocupă fraza de final a răspunsului, un chip nu ocupă decât un slot.
+    Aceeași regulă de alegere ⇒ pe un tur cu întrebare, chips-urile numesc exact valorile ei.
+
+    O valoare ROSTITĂ pe care o poartă TOATE cardurile nu se întreabă: setul a fost găsit chiar
+    pe ea (clientul a cerut „ten uscat", căutarea a filtrat pe `dry`), deci „merge pentru ten
+    uscat?" ar avea mereu răspunsul „da". E un chip mort, din aceeași clasă ca `drop_dead`.
+    """
+    from src.conversation.clarification_policy import (  # noqa: PLC0415 — evită ciclul
+        narrowing_candidate,
+        values_of,
+    )
+
+    if not cards:
+        return FacetPlan()
+    by_key = partitioning_sources(facets)
+    verdict = narrowing_candidate(facets, cards, known=known, min_gain=0.0)
+    offer = verdict.offer
+    facet = offer.facet if offer is not None else None
+    values = tuple(zip(offer.values, offer.partition, strict=True)) if offer is not None else ()
+
+    source_to_key = {src: key for key, src in by_key.items()}
+    fit: list[tuple[str, str]] = []
+    for dimension, value in spoken:
+        key = str(dimension) if str(dimension) in by_key else source_to_key.get(str(dimension))
+        if key is None:
+            continue
+        value = str(value)
+        if all(value in values_of(c, by_key[key]) for c in cards):
+            continue
+        fit.append((key, value))
+    if facet is not None:
+        fit.extend((facet, v) for v, _ in values)
+    return FacetPlan(facet=facet, values=values, fit_values=tuple(dict.fromkeys(fit)))
+
+
+def choose_within_move(facet: str, key: str, phrase: str, evidence: int) -> ChipMove:
+    """„Pentru ten uscat, ce aleg dintre acestea?" — o valoare a fațetei, peste setul afișat."""
+    return ChipMove(
+        kind="choose_within",
+        move_id=f"choose_within:{facet}:{key}",
+        anchor=phrase,
+        slots=(("slot", phrase),),
+        evidence=evidence,
+    )
+
+
+def fit_question_move(
+    product_id: str, short_name: str, facet: str, key: str, phrase: str, *, floor: int = 0
+) -> ChipMove:
+    """„X merge pentru ten uscat?" — ancora e fraza valorii, iar numele e al doilea slot.
+
+    Fraza nu are voie să fie scurtată (pragul ei e lungimea întreagă): o valoare trunchiată
+    («ten») s-ar rezolva pe altă cheie decât cea întrebată. Numele cedează primul, până la prefixul
+    lui unic pe ecran (NX-318)."""
+    return ChipMove(
+        kind="fit_question",
+        move_id=f"fit_question:{product_id}:{facet}:{key}",
+        anchor=phrase,
+        slots=(("slot", phrase), ("slot_b", short_name)),
+        evidence=1,
+        floors=(("slot", len(phrase.split())), ("slot_b", floor)),
+    )
+
+
+#: Pe câte carduri (primele, în ordinea de pe ecran) se oferă `fit_question`. Primul e produsul
+#: discutat; al doilea acoperă turul de recomandare. Fără limită, `select` ar alege între carduri
+#: după `move_id`, adică după un uuid.
+_FIT_CARDS = 2
+
+
+def _names(
+    cards: Sequence[Mapping[str, Any]], *, unique_anchor: bool, locale: str | None
+) -> list[tuple[str, str, int]]:
+    """`(product_id, nume scurt, prag de cuvinte)` în ordinea de pe ecran — aceeași regulă ca
+    `from_cards`, ca recunoașterea să re-randeze exact textul emis."""
+    named = [
+        (str(c.get("product_id") or c.get("id")), display_name(str(c.get("name"))))
+        for c in cards
+        if (c.get("product_id") or c.get("id")) and c.get("name")
+    ]
+    unique = unique_prefixes(dict(named), locale=locale) if unique_anchor else {}
+    return [(pid, short, len(unique.get(pid, ()))) for pid, short in named]
+
+
+def from_facets(
+    cards: Sequence[Mapping[str, Any]],
+    plan: FacetPlan,
+    facets: Sequence[object],
+    phrases: Mapping[tuple[str, str], str],
+    *,
+    offered_before: Iterable[str] = (),
+    unique_anchor: bool = False,
+    locale: str | None = None,
+) -> list[ChipMove]:
+    """Mutările `choose_within` + `fit_question` ale turului. PUR.
+
+    O valoare fără frază nu se oferă (fail-closed pe text, ca tot modulul): fraza e cea care, la
+    apăsare, se rezolvă înapoi pe cheie. `fit_question` cere fațeta CUNOSCUTĂ pe produs, fiindcă
+    răspunsul vine din fișă, iar pe o fișă fără valoare ar fi „nu știu"."""
+    from src.conversation.clarification_policy import values_of  # noqa: PLC0415
+
+    seen = {str(m) for m in offered_before}
+    by_key = partitioning_sources(facets)
+    out: list[ChipMove] = []
+    if plan.facet is not None:
+        for key, count in plan.values:
+            phrase = phrases.get((plan.facet, key))
+            if phrase:
+                out.append(choose_within_move(plan.facet, key, phrase, count))
+    for pid, short, floor in _names(cards, unique_anchor=unique_anchor, locale=locale)[:_FIT_CARDS]:
+        card = next(c for c in cards if str(c.get("product_id") or c.get("id")) == pid)
+        for facet, key in plan.fit_values:
+            phrase = phrases.get((facet, key))
+            if not phrase or facet not in by_key or not values_of(card, by_key[facet]):
+                continue
+            out.append(fit_question_move(pid, short, facet, key, phrase, floor=floor))
+            break
+    return [m for m in out if m.move_id not in seen]
+
+
+def facet_move_parts(move_id: str) -> tuple[str, str | None, str, str] | None:
+    """`(fel, product_id | None, fațetă, cheie)` pentru o mutare pe fațete, altfel `None`."""
+    kind, _, rest = str(move_id).partition(":")
+    parts = rest.split(":")
+    if kind == "choose_within" and len(parts) == 2 and all(parts):
+        return kind, None, parts[0], parts[1]
+    if kind == "fit_question" and len(parts) == 3 and all(parts):
+        return kind, parts[0], parts[1], parts[2]
+    return None
+
+
+def facet_moves_for(
+    offered: Iterable[str],
+    cards: Sequence[Mapping[str, Any]],
+    phrases: Mapping[tuple[str, str], str],
+    *,
+    unique_anchor: bool = False,
+    locale: str | None = None,
+) -> list[ChipMove]:
+    """Mutările pe fațete OFERITE, reconstruite din `move_id` + setul afișat + fraze, pentru
+    recunoașterea apăsării. Dovada nu contează aici (mutarea a fost deja oferită), iar numele
+    și pragurile vin din ACEEAȘI funcție ca la emitere, deci textul re-randat e cel emis."""
+    names = {
+        pid: (short, floor)
+        for pid, short, floor in _names(cards, unique_anchor=unique_anchor, locale=locale)
+    }
+    out: list[ChipMove] = []
+    for move_id in offered:
+        parts = facet_move_parts(move_id)
+        if parts is None:
+            continue
+        kind, pid, facet, key = parts
+        phrase = phrases.get((facet, key))
+        if not phrase:
+            continue
+        if kind == "choose_within":
+            out.append(choose_within_move(facet, key, phrase, 1))
+        elif pid in names:
+            short, floor = names[pid]
+            out.append(fit_question_move(pid, short, facet, key, phrase, floor=floor))
+    return out
+
+
+def wanted_phrases(offered: Iterable[str]) -> dict[str, tuple[str, ...]]:
+    """Ce fraze trebuie aduse ca să recunoaștem mutările pe fațete oferite. Gol ⇒ nicio citire."""
+    out: dict[str, list[str]] = {}
+    for move_id in offered:
+        parts = facet_move_parts(move_id)
+        if parts is not None:
+            out.setdefault(parts[2], []).append(parts[3])
+    return {f: tuple(dict.fromkeys(keys)) for f, keys in out.items()}
+
+
 # --- selecția: ce iese la client, în ce ordine -------------------------------------------------
 
 
@@ -529,7 +786,11 @@ def select(
         # preț care desparte un singur card, iar clientul citește primul chip, nu pe al cincilea.
         pools = sorted(
             (by_kind[k] for k in by_kind if MOVE_ROLES.get(k) == role),
-            key=lambda pool: (-pool[0].evidence, pool[0].kind),
+            key=lambda pool: (
+                _KIND_PRIORITY.get(pool[0].kind, 1),
+                -pool[0].evidence,
+                pool[0].kind,
+            ),
         )
         for rank in range(_MAX_PER_KIND):
             for pool in pools:
