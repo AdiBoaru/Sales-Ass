@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import TYPE_CHECKING, Any
 
 from src.agent import prompt_builder
@@ -95,20 +96,79 @@ _RICH_SCHEMA: dict[str, Any] = {
 }
 
 
+def _with_question(base: dict[str, Any]) -> dict[str, Any]:
+    return {
+        **base,
+        "schema": {
+            **base["schema"],
+            "required": [*base["schema"]["required"], "question"],
+            "properties": {
+                **base["schema"]["properties"],
+                "question": {"type": ["string", "null"]},
+            },
+        },
+    }
+
+
 #: NX-315 felia 2: aceeași schemă plus câmpul întrebării de îngustare. Se folosește DOAR pe turele
 #: cu ofertă, deci orice alt tur trimite exact `_RICH_SCHEMA` (byte-identic). Două obiecte, nu o
 #: schemă mutată pe loc: `_RICH_SCHEMA` e o constantă de modul folosită concurent de toate turele.
-_RICH_SCHEMA_WITH_QUESTION: dict[str, Any] = {
-    **_RICH_SCHEMA,
-    "schema": {
-        **_RICH_SCHEMA["schema"],
-        "required": [*_RICH_SCHEMA["schema"]["required"], "question"],
-        "properties": {
-            **_RICH_SCHEMA["schema"]["properties"],
-            "question": {"type": ["string", "null"]},
+_RICH_SCHEMA_WITH_QUESTION: dict[str, Any] = _with_question(_RICH_SCHEMA)
+
+#: Câmpurile de SCHEMĂ dintre omisiunile lui `prompt_builder.RICH_OMITTABLE` (`categories` e doar în
+#: system, nu e un câmp de output).
+_RICH_SCHEMA_FIELDS = frozenset({"pick", "suggestions"})
+
+_slim_logged = False
+
+
+def rich_omissions(settings: Any = None) -> frozenset[str]:
+    """NX-312 felia 4 — ce NU mai cere apelul de compunere bogată, derivat din configurație.
+
+    Un câmp iese doar când ce produce modelul pe el e aruncat oricum: `suggestions` când mutările
+    de chip le suprascriu (`chip_moves_v1_enabled`), `pick` când linia nu se arată pe niciun canal
+    (`rich_pick_web_enabled=false`, citit de `compose.flatten` și `compose.flatten_framing`,
+    singurii care îl transformă în text). `categories` iese mereu: modelul alege dintr-o listă
+    fixă de produse. Aceeași mulțime pleacă spre system (`build_rich_system(omit=)`) și spre schemă
+    (`_rich_schema`), deci promptul nu poate numi un câmp pe care schema nu-l are.
+
+    Flagul stins ⇒ mulțimea vidă ⇒ schema și system-ul de dinainte, byte-identice. Constantă per
+    proces în producție (flagurile se citesc o dată), deci prefixul de cache nu variază pe ture."""
+    global _slim_logged
+    s = settings or get_settings()
+    if not getattr(s, "rich_schema_slim_enabled", False):
+        return frozenset()
+    omit = {"categories"}
+    if getattr(s, "chip_moves_v1_enabled", False):
+        omit.add("suggestions")
+    if not getattr(s, "rich_pick_web_enabled", False):
+        omit.add("pick")
+    out = frozenset(omit)
+    if not _slim_logged:
+        # Configurație, nu comportament: o dată per proces, în log, nu un eveniment per tur.
+        log.info("rich_schema_slim removed=%s", sorted(out))
+        _slim_logged = True
+    return out
+
+
+@lru_cache(maxsize=16)
+def _rich_schema(omit: frozenset[str] = frozenset(), *, question: bool = False) -> dict[str, Any]:
+    """Schema apelului de compunere, fără câmpurile din `omit`. Fără omisiuni întoarce CHIAR
+    constantele de modul (identitate, nu doar egalitate). Cache-uit: aceleași omisiuni ⇒ același
+    obiect, deci nimeni nu construiește o schemă nouă pe fiecare tur."""
+    drop = omit & _RICH_SCHEMA_FIELDS
+    if not drop:
+        return _RICH_SCHEMA_WITH_QUESTION if question else _RICH_SCHEMA
+    body = _RICH_SCHEMA["schema"]
+    slim = {
+        **_RICH_SCHEMA,
+        "schema": {
+            **body,
+            "required": [k for k in body["required"] if k not in drop],
+            "properties": {k: v for k, v in body["properties"].items() if k not in drop},
         },
-    },
-}
+    }
+    return _with_question(slim) if question else slim
 
 
 async def _finalize(
@@ -804,7 +864,7 @@ async def _finalize_rich(
         f"Produse disponibile (alege dintre acestea):\n"
         f"{_rich_bundle(products, _rich_facets(ctx), ctx.language)}"
     )
-    schema = _RICH_SCHEMA_WITH_QUESTION if shape.offer is not None else _RICH_SCHEMA
+    schema = _rich_schema(rich_omissions(), question=shape.offer is not None)
     trace = getattr(ctx, "trace", None)  # fake-urile din teste n-au câmpul nou (tiparul aftercare)
     try:
         j = await llm.complete_schema(rich_system, user, schema)
@@ -894,7 +954,9 @@ async def render(
             outcome = await _finalize_rich(
                 deps.llm,
                 prompt_builder.build_rich_system(
-                    plan.inp, routine=getattr(ctx, "routine", None) is not None
+                    plan.inp,
+                    routine=getattr(ctx, "routine", None) is not None,
+                    omit=rich_omissions(),
                 ),
                 plan.query,
                 products,

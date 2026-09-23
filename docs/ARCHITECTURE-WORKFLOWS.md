@@ -1846,6 +1846,7 @@ rich_pick_deterministic_enabled = true
 rich_pick_relevance_gate_enabled = true
 rich_pick_web_enabled = false
 rich_review_anchor_enabled = false
+rich_schema_slim_enabled = false
 routine_enabled = false
 routine_evidence_required = true
 safety_contraindications_enabled = true

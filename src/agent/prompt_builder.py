@@ -13,7 +13,7 @@ iar rezultatul se memoizează per (business, locale) cu `lru_cache`. OpenAI NU a
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import lru_cache
 
 from src.agent.voice import VOICE_RULES
@@ -478,18 +478,84 @@ care se alege.
   departe, fără să renumerotezi restul."""
 
 
+#: NX-312 felia 4 — ce se poate scoate din apelul de compunere bogată. Vocabular ÎNCHIS: aceleași
+#: nume le citește `finalize` ca să scoată câmpurile din SCHEMĂ, deci promptul și schema nu pot
+#: diverge (o regulă care numește un câmp absent din schemă e defectul de evidence din 2026-09-16).
+RICH_OMITTABLE: frozenset[str] = frozenset({"pick", "suggestions", "categories"})
+
+# Unde începe și unde se termină regula fiecărui câmp, ca marcatori din text. Tăierea se face pe
+# textul EXISTENT, nu pe o copie: o copie a regulilor ar diverge de original la prima editare.
+_RICH_RULE_SPANS: dict[str, tuple[str, str]] = {
+    "pick": ("- `pick` = ", "- `education` = "),
+    "suggestions": ("- `suggestions` = ", "- Folosește DOAR produsele din listă"),
+}
+
+# Cele trei locuri din ALTE reguli care numesc `pick`. Fără ele, promptul slim ar cere modelului
+# să lege constrângerea „de pick", un câmp pe care nu-l mai are.
+_PICK_MENTIONS: tuple[tuple[str, str], ...] = (
+    ("LEAG-O de pick", "LEAG-O de recomandare"),
+    ("criterii, pick, fallback", "criterii, recomandare, fallback"),
+    ("· `items` și `pick` = doar acel produs.", "· `items` = doar acel produs."),
+)
+
+
+def _check_rich_anchors() -> None:
+    """Poarta de IMPORT: dacă cineva rescrie regulile și un marcator dispare, tăierea ar lăsa tăcut
+    textul pe loc. Se oprește procesul, nu primul tur (`raise`, nu `assert`, care dispare la -O)."""
+    for start, end in _RICH_RULE_SPANS.values():
+        if start not in _RICH_RULES or end not in _RICH_RULES:
+            raise RuntimeError(f"_RICH_RULES: marcator de tăiere lipsă ({start!r} / {end!r})")
+    for old, _ in _PICK_MENTIONS:
+        if old not in _RICH_RULES:
+            raise RuntimeError(f"_RICH_RULES: mențiunea lui `pick` s-a schimbat ({old!r})")
+
+
+_check_rich_anchors()
+
+
+def _cut_rule(text: str, field: str) -> str:
+    start, end = _RICH_RULE_SPANS[field]
+    return text[: text.index(start)] + text[text.index(end) :]
+
+
+def _rich_rules(omit: frozenset[str]) -> str:
+    rules = _RICH_RULES
+    if "pick" in omit:
+        rules = _cut_rule(rules, "pick")
+        for old, new in _PICK_MENTIONS:
+            rules = rules.replace(old, new)
+    if "suggestions" in omit:
+        rules = _cut_rule(rules, "suggestions")
+    # `{MAX_PER_TYPE}` pleca LITERAL spre model: NX-303 a pus marcatorul în reguli și l-a
+    # substituit doar în system-ul buclei. Se umple aici, pe toate variantele.
+    return rules.replace("{CARD_SLOTS}", str(card_slots())).replace(
+        "{MAX_PER_TYPE}", str(max_per_type())
+    )
+
+
 @lru_cache(maxsize=256)
-def build_rich_system(inp: PromptInputs, *, routine: bool = False) -> str:
+def build_rich_system(
+    inp: PromptInputs, *, routine: bool = False, omit: frozenset[str] = frozenset()
+) -> str:
     """System pt recomandarea STRUCTURATĂ / model iZi (înlocuiește `_FINAL_SCHEMA_SYSTEM`).
     Antet generat din DB + REGULI DURE identice pe toți tenanții.
 
     `routine=True` adaugă regulile de secvență (NX-292). Nu înlocuiește nimic din regulile de bază:
-    o rutină e tot o recomandare, doar cu o formă impusă de server."""
+    o rutină e tot o recomandare, doar cu o formă impusă de server.
+
+    `omit` (NX-312 felia 4, submulțime din `RICH_OMITTABLE`) scoate regulile câmpurilor pe care
+    schema nu le mai cere și lista de rafturi, pe care modelul n-are ce alege: primește deja
+    produsele. Gol ⇒ exact promptul de dinainte. Îl decide `finalize.rich_omissions`, care scoate
+    ACELEAȘI câmpuri din schemă."""
+    unknown = omit - RICH_OMITTABLE
+    if unknown:
+        raise ValueError(f"build_rich_system: omisiuni necunoscute {sorted(unknown)}")
+    header = _store_header(replace(inp, categories=()) if "categories" in omit else inp)
     base = (
-        f"{_store_header(inp)}\n"
+        f"{header}\n"
         "Primești nevoia clientului și o listă de produse REALE "
         "(id, preț, rating, avantaje din recenzii).\n"
-        f"{_RICH_RULES.replace('{CARD_SLOTS}', str(card_slots()))}\n"
+        f"{_rich_rules(omit)}\n"
         f"{_SAFETY_RULES}\n{VOICE_RULES}"
     )
     if routine:

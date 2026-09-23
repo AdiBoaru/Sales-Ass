@@ -30,7 +30,7 @@ from src.agent.fallbacks import (
     _relation_chain_query,
     _thin_path_chips,
 )
-from src.agent.finalize import _finalize_rich
+from src.agent.finalize import _finalize_rich, rich_omissions
 from src.agent.match_gate import build_match_set
 from src.agent.query_rewrite import build_query_spec
 from src.agent.relevance_gate import apply_mask
@@ -419,7 +419,9 @@ async def maybe_cross_sell(
             await _finalize_rich(
                 deps.llm,
                 prompt_builder.build_rich_system(
-                    inp, routine=getattr(ctx, "routine", None) is not None
+                    inp,
+                    routine=getattr(ctx, "routine", None) is not None,
+                    omit=rich_omissions(),
                 ),
                 _relation_chain_query(added, ctx.language, sequence_label),
                 complementary,
