@@ -484,10 +484,72 @@ def cheaper_seed_messages(
     Id-ul e DETERMINIST (derivat din `turn_id`), din același motiv ca la seed-ul speculativ: un
     tur reluat trebuie să reconstruiască aceiași octeți, altfel prompt cachingul nu se mai prinde
     pe reluări."""
-    from src.tools.catalog_tools import _brief  # noqa: PLC0415 — evită ciclul la import
-
     call_id = "cheap_" + hashlib.sha256(f"cheaper:{ctx.turn_id}".encode()).hexdigest()[:16]
     args = {"query": (ctx.message.body or "").strip()[:200], "price_max": round(baseline, 2)}
+    return _seed_pair(ctx, call_id, args, products)
+
+
+def _chosen_move(ctx: TurnContext) -> Any:
+    """Mutarea `choose_within` recunoscută pe turul ăsta (NX-316), sau `None`."""
+    move = getattr(ctx, "chip_move", None)
+    return move if getattr(move, "kind", None) == "choose_within" else None
+
+
+async def resolve_choose_within(
+    ctx: TurnContext, deps: PipelineDeps, *, policy: SafetyPolicy
+) -> list[dict[str, Any]]:
+    """NX-316 felia 2: «Pentru ten uscat, ce aleg dintre acestea?» ⇒ produsele AFIȘATE care au
+    valoarea, în ordinea de pe ecran. Setul e DETERMINIST, ca la «mai ieftin»: modelul alege și
+    argumentează, dar nu poate aduce în răspuns un produs pe care clientul nu l-a văzut.
+
+    Fișa se re-citește din catalog (starea are doar `{id, nume, preț}`, P8) și trece prin safety
+    gate, fiindcă setul afișat e stare veche. Gol (nimeni nu mai are valoarea, fațeta a dispărut din
+    pachet) ⇒ `[]` ⇒ turul merge pe drumul obișnuit. Fără chip recunoscut ⇒ `[]` fără nicio citire.
+    """
+    move = _chosen_move(ctx)
+    if move is None:
+        return []
+    from src.conversation.chip_moves import facet_move_parts, partitioning_sources  # noqa: PLC0415
+    from src.conversation.clarification_policy import values_of  # noqa: PLC0415
+
+    parts = facet_move_parts(move.move_id)
+    pack = getattr(ctx.business, "domain_pack", None)
+    sources = partitioning_sources(getattr(pack, "facets", ()) or ())
+    source = sources.get(parts[2]) if parts else None
+    ids = [p.product_id for p in ctx.state.displayed_products]
+    if source is None or not ids:
+        ctx.emit("choose_within", displayed=len(ids), served=0, reason="no_facet")
+        return []
+    async with deps.db("choose_within_hydrate") as conn:
+        products = await get_products_by_ids(conn, ctx.business.id, ids, limit=len(ids))
+    products = policy.gate(ctx, products, purpose="choose_within")[0]
+    key = parts[3].lower()
+    kept = [p for p in products if key in values_of(p, source)]
+    ctx.emit("choose_within", displayed=len(ids), served=len(kept), reason=None)
+    return kept
+
+
+def choose_within_seed_messages(
+    ctx: TurnContext, products: list[dict[str, Any]], *, key: str
+) -> list[dict[str, Any]]:
+    """Seed-ul creierului pentru `choose_within`, pe același tipar ca `cheaper_seed_messages`.
+
+    Tool call-ul e `search_products` cu nevoia apăsată în `concerns`, adică felul în care modelul
+    însuși ar fi cerut restrângerea. Diferența, declarată: căutarea reală ar fi mers în tot
+    catalogul, pe când setul e cel AFIȘAT. E exact concesia de la «mai ieftin» (acolo `price_max`
+    peste aceeași categorie), iar alternativa, un tool inventat, ar fi o afirmație falsă către
+    model despre ce a chemat."""
+    call_id = "choose_" + hashlib.sha256(f"choose:{ctx.turn_id}".encode()).hexdigest()[:16]
+    args = {"query": (ctx.message.body or "").strip()[:200], "concerns": [key]}
+    return _seed_pair(ctx, call_id, args, products)
+
+
+def _seed_pair(
+    ctx: TurnContext, call_id: str, args: dict[str, Any], products: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Perechea (assistant tool_call, tool result) — vezi `cheaper_seed_messages`."""
+    from src.tools.catalog_tools import _brief  # noqa: PLC0415 — evită ciclul la import
+
     view = _brief(products, getattr(ctx.business, "domain_pack", None), ctx.language)
     return [
         {
@@ -636,8 +698,18 @@ async def build_plan(
     # reparată pe două din trei nu e reparată: fără nano, «care dintre astea e cea mai hidratantă,
     # dar sub 100 lei» ar rehidrata setul AFIȘAT în loc să caute, cu produse și prețuri reale — deci
     # validatorul și grounding guardul o lasă să treacă (porți de ADEVĂR, nu de POTRIVIRE).
+    # NX-316 felia 2: un chip `choose_within` apăsat ⇒ setul e cel AFIȘAT cu valoarea aleasă.
+    # Precede superlativul și «mai ieftin»: comanda e declarată de server, nu dedusă din text.
+    chosen = (
+        await resolve_choose_within(ctx, deps, policy=policy)
+        if not is_order and not show_more
+        else []
+    )
+    if chosen:
+        products = _dedupe(chosen)
     attr_query = (
-        not is_order
+        not chosen
+        and not is_order
         and get_settings().attr_query_enabled
         and len(ctx.state.displayed_products) >= 2
         and not turn_has_new_constraints(ctx, route)
@@ -660,7 +732,8 @@ async def build_plan(
     # determinist (niciodată tăcere/padding, P6). Sare peste R3 pentru această intenție.
     # NU pe attr_query („care dintre acestea e cea mai ieftină" = superlativ pe set, nu căutare).
     cheaper_intent = (
-        not is_order
+        not chosen
+        and not is_order
         and not show_more  # „mai arată-mi" deja paginat determinist mai sus
         and not attr_query
         and cheaper_followup_detected(ctx, query)
@@ -690,7 +763,7 @@ async def build_plan(
     # izi-parity hardening: relevanța off-category NUMAI pe calea de căutare PROASPĂTĂ. „Mai ieftin"
     # (set determinist), paginarea și re-hidratarea din state (produse deja arătate, on-topic) NU
     # setează semnalul → compose tratează ca potrivire exactă (fail-open, fără suprimare falsă).
-    relevance = None if (cheaper_intent or rehydrated) else run.search_relevance
+    relevance = None if (cheaper_intent or rehydrated or chosen) else run.search_relevance
     # NX-173 (P0) — ENFORCEMENT FINAL: orice ar fi produs căile de mai sus (inclusiv una viitoare
     # care uită gate-ul), aici e ultimul punct înainte ca `ctx.retrieval` să alimenteze validatorul,
     # cardurile și `displayed_products`. Idempotent: pe un set deja gate-uit nu taie nimic.

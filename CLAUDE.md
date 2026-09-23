@@ -460,8 +460,17 @@ primul în `try_pre_intents` (`serve_chip_move`), pe ACELAȘI handler ca variant
 produsele din `move_id`. Chips moarte (`chip_moves.drop_dead`, v1 + creier unic): îngustare pe o
 nevoie deja rostită (`subject.needs`, NX-314), detaliu pe un tur cu un singur card. Mutările din
 meniu nu se recunosc (sunt fraze de căutare), iar coborârea lui `pivot_shelf` e a feliei 3.
+**Felia 2 — mutări PESTE setul afișat.** `choose_within` («Pentru ten uscat, ce aleg dintre
+acestea?», forward) pe fațeta partiționantă nerostită aleasă de ACEEAȘI `narrowing_candidate` ca
+întrebarea NX-315 (fără prag de câștig), cu dovada = produsele AFIȘATE cu valoarea; `fit_question`
+(«X merge pentru ten uscat?», deepen) doar unde fișa cunoaște fațeta. Frazele: `value_phrases`
+(round-trip NX-295), aduse de `finalize._facet_moves` pe ambele căi. Recunoașterea re-randează din
+`move_id` + frază (starea n-are fațete, P8). Handlere: `fit_question` ⇒ `serve_details` cu
+răspunsul din fișă (`fit_yes`/`fit_no` în `answer_shape_templates`, zero model); `choose_within` ⇒
+setul afișat ∩ valoare (`planner.resolve_choose_within`): setul planului pe v1, seed pe creierul
+unic (tiparul «mai ieftin»).
 `CHIP_MOVES_V2_ENABLED=false` = byte-identic. Card: [`tasks/stage1/NX-316.md`](tasks/stage1/NX-316.md);
-probă: `pytest tests/test_chip_press.py -q`.
+probe: `pytest tests/test_chip_press.py tests/test_chip_moves_v2.py -q`.
 
 **NX-313 — «vreau o cremă de hidratare»: filtrul ghicit se judecă după CERERE.**
 Turul real `bcd8e5c6` (`sole-ro`, 2026-09-23), recidiva lui `f7414c3e` DUPĂ #398: 72,4 s, trei BB-uri

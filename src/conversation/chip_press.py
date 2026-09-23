@@ -34,6 +34,12 @@ CĂUTARE, iar apăsarea lor merge deja unde trebuie: textul se rezolvă prin ace
 Re-randarea lor ar cere meniul turului trecut (o interogare), pentru o mutare care n-are handler
 propriu. `price_band` e o constrângere de preț, pe care extracția o prinde deja din text.
 
+**Felia 2 — mutările pe fațete.** `choose_within` și `fit_question` nu se nasc din nume, ci din
+fațetele setului afișat, pe care starea nu le ține (P8: doar `{id, nume, preț}`). Tot ce trebuie
+pentru re-randare e însă în `move_id` (fațetă + cheie, plus produsul la `fit_question`), iar fraza
+valorii o aduce apelantul din vocabular (`value_phrases`, aceeași funcție ca la emitere). Deci
+recunoașterea rămâne re-randare, nu interpretare.
+
 Modulul e PUR: fără DB, fără ceas, fără model.
 """
 
@@ -45,11 +51,13 @@ from typing import Any
 from src.catalog.clarify_menu import words_of
 from src.conversation import chip_moves
 
-__all__ = ["PRESSABLE", "product_ids", "recognize"]
+__all__ = ["PRESSABLE", "facet_of", "product_ids", "recognize"]
 
 #: Felurile de mutare care au un handler determinist. Un fel în afara listei nu se recunoaște,
 #: deci apăsarea lui rămâne a regexurilor și a modelului, ca înainte.
-PRESSABLE: frozenset[str] = frozenset({"detail", "reviews", "link", "compare"})
+PRESSABLE: frozenset[str] = frozenset(
+    {"detail", "reviews", "link", "compare", "choose_within", "fit_question"}
+)
 
 
 def recognize(
@@ -60,20 +68,26 @@ def recognize(
     locale: str,
     *,
     unique_anchor: bool = False,
+    phrases: Mapping[tuple[str, str], str] | None = None,
 ) -> chip_moves.ChipMove | None:
     """Mutarea oferită pe care mesajul o reproduce EXACT, sau `None`.
 
     `cards` = setul afișat, în ordinea de pe ecran (`state.displayed_products`), cu `product_id`,
     `name`, `price`. `unique_anchor` trebuie să fie ACELAȘI flag cu care s-au construit chips-urile
     (`UNIQUE_NAME_PREFIX_ENABLED`): el decide pragul de scurtare al numelor, deci textul.
+    `phrases` = `{(fațetă, cheie): frază}` pentru mutările pe fațete oferite (`wanted_phrases`);
+    lipsă ⇒ ele nu se recunosc, iar turul merge ca înainte.
     """
     said = words_of(message or "")
     offered_ids = {str(m) for m in offered if m}
     if not said or not offered_ids or not cards:
         return None
-    moves = chip_moves.renderable(
-        chip_moves.from_cards(cards, unique_anchor=unique_anchor, locale=locale), pack, locale
-    )
+    built = chip_moves.from_cards(cards, unique_anchor=unique_anchor, locale=locale)
+    if phrases:
+        built += chip_moves.facet_moves_for(
+            offered_ids, cards, phrases, unique_anchor=unique_anchor, locale=locale
+        )
+    moves = chip_moves.renderable(built, pack, locale)
     hits = []
     for move in moves:
         if move.kind not in PRESSABLE or move.move_id not in offered_ids:
@@ -87,6 +101,18 @@ def recognize(
 
 
 def product_ids(move: chip_moves.ChipMove) -> tuple[str, ...]:
-    """Produsele pe care le numește mutarea, din `move_id` (`kind:id` sau `compare:a:b`)."""
+    """Produsele pe care le numește mutarea, din `move_id` (`kind:id` sau `compare:a:b`).
+
+    Mutările pe fațete au în `move_id` și fațeta + cheia, care NU sunt produse: `choose_within`
+    nu numește niciunul (lucrează pe tot setul afișat), `fit_question` numește unul."""
+    parts = chip_moves.facet_move_parts(move.move_id)
+    if parts is not None:
+        return (parts[1],) if parts[1] else ()
     _, _, rest = move.move_id.partition(":")
     return tuple(p for p in rest.split(":") if p)
+
+
+def facet_of(move: chip_moves.ChipMove) -> tuple[str, str] | None:
+    """`(fațetă, cheie)` a unei mutări pe fațete, altfel `None`."""
+    parts = chip_moves.facet_move_parts(move.move_id)
+    return (parts[2], parts[3]) if parts is not None else None

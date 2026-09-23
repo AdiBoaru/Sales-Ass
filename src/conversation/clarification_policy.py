@@ -239,7 +239,9 @@ class NarrowingVerdict:
     reason: str
 
 
-def _values_of(product: object, source_key: str) -> tuple[str, ...]:
+def values_of(product: object, source_key: str) -> tuple[str, ...]:
+    """Valorile unei fațete pe un produs, normalizate. Gol = fațetă NECUNOSCUTĂ pe produs (NX-316
+    o citește ca „nu întrebăm", fiindcă răspunsul ar fi „nu știu")."""
     attrs = product.get("attributes") if isinstance(product, dict) else None
     raw = attrs.get(source_key) if isinstance(attrs, dict) else None
     items = raw if isinstance(raw, list) else [raw]
@@ -297,7 +299,7 @@ def narrowing_candidate(
             continue
         counts: dict[str, int] = {}
         for p in served:
-            for v in _values_of(p, str(getattr(facet, "source_key", key) or key)):
+            for v in values_of(p, str(getattr(facet, "source_key", key) or key)):
                 counts[v] = counts.get(v, 0) + 1
         if len(counts) < 2:
             refusals.append("single_value")
@@ -343,4 +345,5 @@ __all__ = [
     "gain_bucket",
     "narrowing_candidate",
     "relaxation_candidates",
+    "values_of",
 ]

@@ -317,7 +317,11 @@ async def _chip_context(ctx: TurnContext, deps: Any) -> ChipContext:
 
 
 def _turn_chips(
-    ctx: TurnContext, plan: AnswerPlanV2, run: ToolRun, chip_ctx: ChipContext
+    ctx: TurnContext,
+    plan: AnswerPlanV2,
+    run: ToolRun,
+    chip_ctx: ChipContext,
+    extra: tuple[Any, ...] = (),
 ) -> tuple[str, ...]:
     """Sugestiile turului: mutări (meniu + carduri) → mix de roluri → textul modelului sau șablon.
 
@@ -336,6 +340,9 @@ def _turn_chips(
     anchor_stats: dict[str, int] = {}
     candidates = [
         *chip_ctx.moves,
+        # NX-316 felia 2: mutările pe fațetele setului afișat (`finalize._facet_moves`), aduse de
+        # apelantul async fiindcă frazele cer vocabularul. Deja trecute prin `renderable`.
+        *extra,
         # Mutările cardurilor se filtrează AICI, ca și cele din meniu în `_chip_context`: o mutare
         # pe care n-o putem exprima nu are voie să consume un slot de selecție.
         *chip_moves.renderable(
@@ -461,7 +468,10 @@ async def _set_brain_reply(
     if not settings.brain_chips_enabled:
         chips: tuple[str, ...] = ()
     elif chip_ctx is not None:
-        chips = _turn_chips(ctx, plan, run, chip_ctx)
+        from src.agent.finalize import _facet_moves  # noqa: PLC0415 — aceeași regulă ca pe v1
+
+        extra = tuple(await _facet_moves(ctx, deps, _plan_products(plan, run.retrieved)))
+        chips = _turn_chips(ctx, plan, run, chip_ctx, extra)
     else:
         chips = await _clarify_chips(ctx, deps)
 
