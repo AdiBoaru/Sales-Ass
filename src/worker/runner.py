@@ -486,6 +486,10 @@ def _emit_response_shape(ctx: TurnContext, stage: str) -> None:
             report = response_quality.answer_shape_report(ctx)
             if report is not None:
                 ctx.emit("answer_shape", **report)
+            # NX-315: pe „cum se folosește", cât din răspuns vine din fișa magazinului.
+            explain = response_quality.explain_shape_report(ctx)
+            if explain is not None:
+                ctx.emit("explain_shape", **explain)
         gaps = response_quality.completeness_gaps(ctx)
         if gaps:
             intent = ctx.route.route.value if ctx.route and ctx.route.route else None

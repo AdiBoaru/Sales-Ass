@@ -94,6 +94,11 @@ class DomainPack:
     # Gol → lista istorică din cod (`_detail_view`), ca verticalele fără declarație să rămână
     # byte-identice. Per-vertical (defaults JSON) + override per-tenant.
     detail_sections: tuple[SectionSpec, ...] = ()
+    # NX-315: care tipuri de secțiune (`product_sections.kind`) sunt INSTRUCȚIUNI DE FOLOSIRE, în
+    # ordinea în care se citesc. Tot conținut al tenantului, deci config: pe SOLE sunt `usage` și
+    # `dosage`, pe un magazin de electrocasnice ar fi „instalare". Gol → turul „cum se folosește"
+    # nu primește instrucțiunile magazinului în compunere (comportamentul de dinainte).
+    howto_sections: tuple[str, ...] = ()
     # Tier 2b p2: cheile din `attributes` (ARRAY) pe care le poate FILTRA search-ul de feature
     # („ceva cu niacinamidă" → key_ingredients). Match NORMALIZAT (lower + strip diacritice). Gol →
     # fără filtru de feature. Separat de concern_map (concerns are calea lor de mapare).

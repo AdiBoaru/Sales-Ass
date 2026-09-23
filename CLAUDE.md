@@ -496,6 +496,27 @@ byte-identic). Card: [`tasks/stage1/NX-318.md`](tasks/stage1/NX-318.md); probe:
 `pytest tests/test_unique_prefixes.py tests/test_set_relative_badges.py -q` +
 `PYTHONPATH=. python scripts/nx318_display_probe.py`.
 
+**NX-315 — forma răspunsului după ce a CERUT clientul (v1, trei flaguri OFF).** Comparația iZi
+pe «vreau o crema de hidratare»: iZi pune o întrebare („ten uscat, mixt/gras sau sensibil?") și un
+paragraf „cum alegi"; la «cum se foloseste prima» răspunde din prima frază. Nativx: nicio
+întrebare, nicio educație, iar instrucțiunile îngropate sub un paragraf care revinde produsul.
+**Premisa draftului era greșită** (creierul unic „aprins"; e stins din 17 sep), deci totul e pe
+calea v1, singura care răspunde clientului. (1) `GUIDANCE_REQUIRED_ENABLED`: când
+`answer_shape.shape_for` cere `closing`, mesajul turului face `education` obligatorie și numește
+axele din `decision_axes`. Lipsa se numără (`guidance_dropped`), fără retry. (2)
+`NARROWING_QUESTION_ENABLED`: `narrowing_candidate` (pur) alege o fațetă `partitioning`, nerostită,
+neîntrebată, cu 2-4 valori în setul SERVIT și câștig ≥ 0,30 (NX-235). Frazele opțiunilor vin din
+meniul închis NX-295, cu round-trip. Schema capătă `question` DOAR pe turele cu ofertă, iar poarta
+cere ca întrebarea să numească ≥2 opțiuni (partea care le deosebește, prin `corroborated_by`).
+Rezultatul: cel mult o întrebare pe tur, ca ultimă frază a `intro`. (3) `HOWTO_FROM_CATALOG_ENABLED`
+duce și instrucțiunile MAGAZINULUI (`DomainPack.howto_sections`) în apelul rich, care altfel
+rescria răspunsul pe regula de deep-dive („intro = ce ESTE produsul"). Cifrele lor trec de scrub.
+Măsurătoarea `explain_shape` (proporția de instrucțiuni regăsite în răspuns + „prima frază
+revinde") rulează și cu flagul stins, ca baseline. OFF = mesaj și schemă byte-identice (testat pe
+forma veche). Aprinderea se decide pe golden cu model real (D15). Card:
+[`tasks/stage1/NX-315.md`](tasks/stage1/NX-315.md); probe:
+`pytest tests/test_plan_guidance.py tests/test_narrowing_question.py tests/test_explain_shape.py -q`.
+
 **Fix 2026-09-16 (2) — creierul unic era pus să citeze dovezi pe care nu i le arăta nimeni.**
 Găsit pe prima conversație REALĂ de după aprinderea flagului (`sole-ro`, `conversation_traces` +
 `analytics_events`), nu pe fixture: clientul a scris „parca mi uscat parul dupa ce fac dus", apoi

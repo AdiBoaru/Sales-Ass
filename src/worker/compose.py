@@ -387,6 +387,20 @@ def scrub_education(
     return " ".join(kept) or None
 
 
+def strip_questions(text: str | None) -> str | None:
+    """NX-315: scoate propozițiile-întrebare dintr-un paragraf. Restul rămâne neatins.
+
+    Există pentru o singură invariantă: cel mult O întrebare pe tur. Când întrebarea de îngustare
+    (fațeta aleasă de server, verificată de poartă) pleacă, alte întrebări scrise de model în
+    `intro` sau în `education` ar face din răspuns un chestionar, iar clientul n-ar ști la care să
+    răspundă. Tăietura e pe PROPOZIȚIE, cu același separator ca scrub-urile (listele numerotate nu
+    se rup)."""
+    if not text:
+        return text
+    kept = [s for s in _sentences(" ".join(text.split())) if not s.rstrip().endswith("?")]
+    return " ".join(kept) or None
+
+
 #: Minimul de cuvinte dintr-un nume de produs care mai poate identifica UNIC produsul în proză.
 #: Sub 2 rămâne doar brandul („Petala"), iar catalogul are „Petala Nourish", „Petala Rich",
 #: „Petala Matte" — un match pe brand ar lega fraza de produsul greșit, adică fix defectul pe care
@@ -591,10 +605,20 @@ def _select_pick(
     return None
 
 
-def assemble(ctx: TurnContext, j: dict[str, Any], retrieved: list[dict[str, Any]]) -> RichReply:
+def assemble(
+    ctx: TurnContext,
+    j: dict[str, Any],
+    retrieved: list[dict[str, Any]],
+    *,
+    grounded_numbers: frozenset[str] = frozenset(),
+) -> RichReply:
     """Asamblează `RichReply` din JSON-ul modelului + produsele retrievate. Hidratează
     fiecare card din `facts` (preț/rating/link/badge), motivul = fit scrubuit + pro real;
-    id necunoscut → drop tăcut; cap la `settings.card_slots`, dedupe."""
+    id necunoscut → drop tăcut; cap la `settings.card_slots`, dedupe.
+
+    `grounded_numbers` (NX-315) = cifrele unui text al MAGAZINULUI pe care turul l-a pus în fața
+    modelului (instrucțiunile de folosire: „2-3 picături", „de două ori pe zi"). Sunt fapte, nu
+    invenții, deci proza are voie să le rostească. Gol (implicit) = comportamentul de dinainte."""
     facts = {p["id"]: p for p in retrieved if p.get("id")}
     # NX-118: stoc availability-aware — orice „în stoc" din proza modelului (reason/pick/intro/
     # education) cade dacă NICIUN produs retrievat nu e pe stoc (gated fail-open de kill-switch).
@@ -768,7 +792,7 @@ def assemble(ctx: TurnContext, j: dict[str, Any], retrieved: list[dict[str, Any]
     relevance = getattr(retrieval, "relevance", None) if retrieval is not None else None
     # NX-139: cifrele permise în proză = ale CLIENTULUI (R4) + cifrele de SPECIFICAȚIE din
     # produsele AFIȘATE (nume/fațete, `spec_numbers` — gated). Prețurile nu intră (nu-s în nume).
-    allowed_numbers = _allowed_client_numbers(ctx)
+    allowed_numbers = _allowed_client_numbers(ctx) | set(grounded_numbers)
     # NX-292 — ordinalele pașilor sunt FAPTE ale serverului, deci proza are voie să le rostească.
     #
     # `scrub_intro` aruncă ÎNTREG intro-ul la prima cifră negrounded. E apărarea corectă împotriva

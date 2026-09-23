@@ -42,12 +42,13 @@ __all__ = [
     "TurnProfile",
     "enabled_names",
     "gate",
+    "name_for_turn",
     "select",
 ]
 
 #: Versiunea registrului. Intră în `brain_versions` → atribute de trace, deci o schimbare de sufix
 #: e vizibilă în telemetrie fără să ghicești ce prompt a rulat.
-PROFILE_VERSION = "turn_profile.v1"
+PROFILE_VERSION = "turn_profile.v2"  # NX-315: sufixul `howto` capătă forma „răspunsul întâi"
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,12 +97,17 @@ _ROUTINE_SUFFIX = (
     "pas în altul."
 )
 
+# NX-315: a doua jumătate e FORMA. Pe turul real «cum se foloseste prima», răspunsul revindea
+# produsul într-un paragraf, îngropa instrucțiunile la mijloc și repeta „dimineața și seara".
+# Clientul tocmai a văzut cardul, deci prima frază e răspunsul la „cum", nu descrierea.
 _HOWTO_SUFFIX = (
     "Turul ăsta cere instrucțiuni de folosire pentru un produs anume. Cheamă "
     "`get_product_details` și scrie pașii din ce întoarce el, fiindcă instrucțiunile sunt ale "
     "magazinului, nu ale tale. Dacă nu e clar despre care produs vorbește clientul, întreabă care "
     "dintre cele afișate. Dacă unealta nu întoarce instrucțiuni, spune că nu le ai și nu le "
-    "compune din ce știi tu."
+    "compune din ce știi tu. Prima frază răspunde direct la cum se folosește. Apoi pașii, în "
+    "ordinea din fișă, apoi un singur avertisment dacă fișa are unul. Nu descrie din nou produsul, "
+    "clientul tocmai l-a văzut, și nu spune același lucru de două ori."
 )
 
 _MUTATION_SUFFIX = (
@@ -217,6 +223,24 @@ def select(
         # recomandările, oricât de mic ar fi bugetul lui.
         return _EXACT
     return _RECOMMEND
+
+
+def name_for_turn(ctx: object) -> str:
+    """NX-315: numele profilului turului, FĂRĂ poarta de flaguri. Întrebarea e „ce fel de tur e",
+    nu „ce sufix primește bucla", și o pun trei locuri (compunerea rich, raportul de formă, bucla
+    v1). Un singur calcul, ca să nu poată numi același tur în două feluri.
+
+    Singura funcție din modul care citește un `TurnContext`; importurile sunt leneșe fiindcă
+    `brain_models` și `tool_definitions` trag după ele jumătate din agent."""
+    from src.agent.brain_models import extract_obligations  # noqa: PLC0415
+    from src.agent.tool_definitions import tenant_enum_values  # noqa: PLC0415
+    from src.runtime.turn_budget import turn_class_for  # noqa: PLC0415
+
+    message = getattr(ctx, "message", None)
+    obligations = extract_obligations(str(getattr(message, "body", "") or ""))
+    pack = getattr(getattr(ctx, "business", None), "domain_pack", None)
+    families = tenant_enum_values(pack)["families"]
+    return select(turn_class_for(obligations), obligations, has_routine=bool(families)).name
 
 
 def _validate_registry() -> None:

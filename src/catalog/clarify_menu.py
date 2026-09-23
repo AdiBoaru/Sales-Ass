@@ -597,6 +597,38 @@ def build_menu(
     )
 
 
+def value_phrases(
+    vocab: CatalogVocabulary,
+    pack: object,
+    dimension: str,
+    keys: Iterable[str],
+    *,
+    locale: str,
+) -> dict[str, str]:
+    """NX-315: fraza în limba clientului pentru fiecare cheie de fațetă, DOAR dacă trece
+    round-trip-ul. `{cheie: frază}`, fără cheile care nu au frază onestă.
+
+    E aceeași construcție ca un rând din meniu (`build_menu`), restrânsă la cheile pe care le are
+    setul servit. Contează pentru întrebarea de îngustare fiindcă răspunsul clientului („ten uscat")
+    reintră în pipeline ca mesaj nou: o frază care nu se întoarce pe cheia ei ar produce o căutare
+    care nu mai găsește raftul despre care tocmai am întrebat."""
+    if vocab.is_empty():
+        return {}
+    wanted = {str(k) for k in keys if k}
+    overlays = facet_overlays(pack, vocab.facet_names)
+    out: dict[str, str] = {}
+    for phrase, entry in _phrase_candidates(
+        vocab, pack, dimension, locale=locale, allowed_keys=wanted
+    ):
+        if entry.key in out:
+            continue
+        back = resolve_any(vocab, phrase, overlays=overlays)
+        if back.status is ResolutionStatus.UNKNOWN or back.evidence <= 0:
+            continue
+        out[entry.key] = phrase
+    return out
+
+
 def words_of(text: str) -> list[str]:
     """Cuvintele unui text, pliate (fără diacritice) și fără punctuație. Ordinea se PĂSTREAZĂ:
     potrivirea cere cuvinte consecutive, nu o mulțime."""

@@ -173,6 +173,29 @@ async def test_golden_case(case, single_brain, monkeypatch, request):
     assert result.passed, f"{case.id}: {result.failures}"
 
 
+@pytest.mark.parametrize("case", CASES, ids=[c.id for c in CASES])
+async def test_golden_case_with_nx315_shape_flags_on(case, monkeypatch):
+    """NX-315: aceleași cazuri, pe v1, cu cele trei flaguri de formă aprinse. Flagurile schimbă
+    CE i se cere compunerii rich, deci trebuie să nu atingă nimic din ce verifică golden-ul:
+    rutare, grounding, anti-halucinație, niciodată-tăcere. Forma în sine (întrebarea, „cum
+    alegi", instrucțiunile) se verifică în `test_narrowing_question`, `test_plan_guidance` și
+    `test_explain_shape`: harnessul golden n-are JSON rich scriptat, deci n-ar avea ce măsura."""
+    _apply_stubs(monkeypatch, case.fixtures, single_brain=False)
+    for flag in (
+        "guidance_required_enabled",
+        "narrowing_question_enabled",
+        "howto_from_catalog_enabled",
+    ):
+        monkeypatch.setattr(get_settings(), flag, True)
+    ctx = _build_ctx(case)
+    llm = ScriptedLLM(case.fixtures, business_id="biz-golden", locale=case.language)
+    deps = PipelineDeps(conn=object(), redis=None, llm=llm)
+
+    result = await run_case(ctx, deps, DEFAULT_STAGES, case.expect, case_id=case.id)
+
+    assert result.passed, f"{case.id}: {result.failures}"
+
+
 # --- gate CI: conversații MULTI-TUR (state curge între tururi) ----------------
 
 

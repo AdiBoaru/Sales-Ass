@@ -38,7 +38,7 @@ from src.agent.validator import (
     validate_prose,
 )
 from src.analytics.demand import clean_ids, product_ids_from_dicts
-from src.config import chip_slots, get_settings
+from src.config import card_slots, chip_slots, get_settings
 from src.models import MAX_OFFERED_CHIPS, Offer, RichReply, TurnContext
 from src.web.localization import amount_text
 from src.worker import compose
@@ -90,6 +90,22 @@ _RICH_SCHEMA: dict[str, Any] = {
                 "type": "array",
                 "items": {"type": "string"},
             },
+        },
+    },
+}
+
+
+#: NX-315 felia 2: aceeași schemă plus câmpul întrebării de îngustare. Se folosește DOAR pe turele
+#: cu ofertă, deci orice alt tur trimite exact `_RICH_SCHEMA` (byte-identic). Două obiecte, nu o
+#: schemă mutată pe loc: `_RICH_SCHEMA` e o constantă de modul folosită concurent de toate turele.
+_RICH_SCHEMA_WITH_QUESTION: dict[str, Any] = {
+    **_RICH_SCHEMA,
+    "schema": {
+        **_RICH_SCHEMA["schema"],
+        "required": [*_RICH_SCHEMA["schema"]["required"], "question"],
+        "properties": {
+            **_RICH_SCHEMA["schema"]["properties"],
+            "question": {"type": ["string", "null"]},
         },
     },
 }
@@ -271,6 +287,232 @@ def _rich_bundle(
 
 
 @dataclass(frozen=True, slots=True)
+class _TurnShape:
+    """NX-315 — ce FORMĂ cere turul ăsta compunerii rich, decisă de server înaintea apelului.
+
+    `block` = liniile în plus din mesajul turului (gol ⇒ mesajul e byte-identic cu înainte).
+    Restul sunt ce trebuie verificat DUPĂ apel: dacă slotul cerut a ieșit, dacă întrebarea e pe
+    fațeta oferită. Valoare locală a stagiului, nu câmp pe `TurnContext` (P3)."""
+
+    block: str = ""
+    guidance_required: bool = False
+    offer: Any = None  # `NarrowingOffer | None`
+    offer_phrases: tuple[str, ...] = ()
+    offer_reason: str | None = None  # de ce NU s-a oferit (vocabular închis), None dacă s-a oferit
+    grounded_numbers: frozenset[str] = frozenset()
+
+
+def _known_facets(ctx: TurnContext, pack: Any) -> frozenset[str]:
+    """Fațetele pe care clientul ni le-a spus deja, deci pe care nu le mai întrebăm.
+
+    Două surse, amândouă ale CLIENTULUI, nu ale modelului: constrângerile turului (cheile stivei
+    NX-133) și ce a SCRIS el, în turul ăsta sau într-unul recent. Pentru a doua, frazele vin din
+    pachet (aliasurile fațetei + harta de nevoi, pe valorile fațetei), iar potrivirea e
+    `uttered_by_client` (NX-299), deci nicio listă de cuvinte românești aici (P11). Un fals
+    „știut" costă o întrebare nepusă, adică exact comportamentul de azi; un fals „neștiut" l-ar
+    pune pe client să repete, deci dubiul merge spre „știut"."""
+    from src.conversation.state_v2 import active_needs  # noqa: PLC0415
+    from src.tools.catalog_tools import uttered_by_client  # noqa: PLC0415
+
+    known: set[str] = set()
+    for source in (
+        getattr(ctx.state, "search_constraints", None),
+        getattr(ctx.state, "constraints", None),
+    ):
+        if isinstance(source, dict):
+            known |= {str(k) for k, v in source.items() if v not in (None, "", [], {})}
+    known |= {str(n.key) for n in active_needs(ctx)}
+    concern_map = getattr(pack, "concern_map", None) or {}
+    for facet in getattr(pack, "facets", ()) or ():
+        if getattr(facet, "binding", "") != "partitioning" or facet.key in known:
+            continue
+        values = set(getattr(facet, "values", ()) or ())
+        phrases = [a for a, target in (getattr(facet, "aliases", None) or {}).items()]
+        phrases += [a for a, target in concern_map.items() if target in values]
+        phrases += [v.replace("_", " ") for v in values if v.isalpha() and len(v) >= 4]
+        if phrases and uttered_by_client(ctx, *phrases):
+            known.add(facet.key)
+    return frozenset(known)
+
+
+async def _turn_shape(
+    ctx: TurnContext, deps: PipelineDeps, products: list[dict[str, Any]]
+) -> _TurnShape:
+    """NX-315 — decide, înaintea apelului rich, ce formă cere turul. Toate flagurile OFF ⇒
+    `_TurnShape()` gol, adică mesaj și schemă byte-identice.
+
+    Trei felii, fiecare pe obligația ei (cardul: „forma e azi aceeași indiferent ce a cerut
+    clientul"): `recommend` primește „cum alegi" obligatoriu și, eventual, o întrebare de
+    îngustare; `explain` (profilul `howto`) primește instrucțiunile magazinului și forma
+    „răspunsul întâi". O rutină are regulile ei (`_ROUTINE_RICH_RULES`) și nu se atinge.
+
+    Best-effort: orice eșec întoarce ce s-a calculat până atunci, fiindcă o formă mai săracă nu e
+    un motiv să pierzi răspunsul (P6)."""
+    from src.agent import answer_shape, turn_profile  # noqa: PLC0415
+
+    s = get_settings()
+    guidance_on = bool(getattr(s, "guidance_required_enabled", False))
+    narrowing_on = bool(getattr(s, "narrowing_question_enabled", False))
+    howto_on = bool(getattr(s, "howto_from_catalog_enabled", False))
+    if not (guidance_on or narrowing_on or howto_on) or not products:
+        return _TurnShape()
+
+    pack = getattr(ctx.business, "domain_pack", None)
+    profile = turn_profile.name_for_turn(ctx)
+    routine = getattr(ctx, "routine", None) is not None
+    lines: list[str] = []
+    guidance_required = False
+    offer = None
+    phrases: tuple[str, ...] = ()
+    offer_reason: str | None = None
+    grounded: frozenset[str] = frozenset()
+
+    if profile == "recommend" and not routine:
+        if guidance_on:
+            facets = tuple(getattr(pack, "comparison_facets", ()) or ()) if pack else ()
+            axes = compose.decision_axes(products, facets, ctx.language)
+            shape = answer_shape.shape_for(
+                n_items=min(len(products), card_slots()),
+                product_types=answer_shape.distinct_types(products),
+                n_axes=len(axes),
+            )
+            directive = (
+                answer_shape.guidance_directive(answer_shape.axis_names(axes))
+                if answer_shape.SLOT_CLOSING in shape.required
+                else None
+            )
+            if directive:
+                lines.append(directive)
+                guidance_required = True
+        if narrowing_on:
+            offer, phrases, offer_reason = await _narrowing_offer(ctx, deps, pack, products)
+            if offer is not None:
+                label = next(
+                    (
+                        f.label(ctx.language, fallback_locale=None)
+                        for f in (getattr(pack, "facets", ()) or ())
+                        if f.key == offer.facet
+                    ),
+                    offer.facet,
+                )
+                directive = answer_shape.narrowing_directive(label, phrases)
+                if directive:
+                    lines.append(directive)
+                else:
+                    offer, phrases, offer_reason = None, (), "unphrasable"
+    elif profile == "howto" and howto_on:
+        product = products[0]
+        instructions, reason = answer_shape.howto_instructions(product, pack)
+        ctx.emit("howto_instructions", reason=reason)
+        if reason in ("instructions", "no_instructions"):
+            lines.append(answer_shape.howto_directive(str(product.get("id") or ""), instructions))
+            if instructions:
+                import re  # noqa: PLC0415
+
+                grounded = frozenset(re.findall(r"\d+", instructions))
+
+    return _TurnShape(
+        block="\n".join(lines) + "\n" if lines else "",
+        guidance_required=guidance_required,
+        offer=offer,
+        offer_phrases=phrases,
+        offer_reason=offer_reason,
+        grounded_numbers=grounded,
+    )
+
+
+async def _narrowing_offer(
+    ctx: TurnContext, deps: PipelineDeps, pack: Any, products: list[dict[str, Any]]
+) -> tuple[Any, tuple[str, ...], str | None]:
+    """`(ofertă, frazele opțiunilor, motivul refuzului)`. Alegerea e PURĂ
+    (`narrowing_candidate`); aici se adaugă doar frazele, din meniul închis NX-295, cu round-trip.
+    Vocabular indisponibil ⇒ nicio ofertă (fail-open: exact turul de azi)."""
+    from src.catalog.clarify_menu import value_phrases  # noqa: PLC0415
+    from src.catalog.vocabulary_cache import get_vocabulary  # noqa: PLC0415
+    from src.conversation.clarification_policy import narrowing_candidate  # noqa: PLC0415
+
+    if pack is None:
+        return None, (), "no_partitioning_facet"
+    asked = frozenset(str(k) for k in (getattr(ctx.state, "asked_intents", None) or ()))
+    verdict = narrowing_candidate(
+        tuple(getattr(pack, "facets", ()) or ()),
+        products,
+        known=_known_facets(ctx, pack),
+        asked=asked,
+    )
+    if verdict.offer is None:
+        return None, (), verdict.reason
+    try:
+        vocab = await get_vocabulary(deps, ctx.business.id)
+    except Exception:  # noqa: BLE001 — fără vocabular nu există fraze verificate
+        log.warning("finalize: vocabular indisponibil pentru oferta de îngustare")
+        return None, (), "vocabulary_unavailable"
+    phrased = value_phrases(
+        vocab, pack, verdict.offer.facet, verdict.offer.values, locale=ctx.language or "ro"
+    )
+    phrases = tuple(phrased[v] for v in verdict.offer.values if v in phrased)
+    if len(phrases) < 2:
+        return None, (), "unphrasable"
+    return verdict.offer, phrases, None
+
+
+def _apply_turn_shape(
+    ctx: TurnContext, rich: RichReply, j: dict[str, Any], shape: _TurnShape
+) -> None:
+    """NX-315 — verifică, DUPĂ apel, ce a cerut `_turn_shape`. Nu scrie text nou: doar păstrează
+    sau scoate ce a scris modelul, iar eșecul are nume și cod.
+
+    • „cum alegi" cerut și absent ⇒ `guidance_dropped` (`missing`: modelul n-a scris; `scrubbed`:
+      a scris, dar scrub-ul l-a omorât propoziție cu propoziție). Fără retry: slotul e util, nu
+      obligatoriu pentru adevăr, iar o rundă în plus costă secunde pe care clientul le simte.
+    • întrebarea de îngustare pleacă doar dacă numește opțiunile OFERITE și trece scrub-ul de
+      propoziție. Atunci devine ultima frază a `intro`-ului (contractul v1 n-are alt loc, iar
+      iZi o pune exact acolo: înaintea cardurilor), iar alte întrebări din `intro`/`education` se
+      scot, ca turul să aibă cel mult una.
+    """
+    from src.agent import answer_shape  # noqa: PLC0415
+
+    if shape.guidance_required and not rich.education:
+        raw = j.get("education")
+        reason = "scrubbed" if isinstance(raw, str) and raw.strip() else "missing"
+        ctx.emit("guidance_dropped", reason=reason)
+
+    offer = shape.offer
+    if offer is None:
+        if shape.offer_reason is not None:
+            ctx.emit(
+                "narrowing_offer",
+                facet=None,
+                values_in_set=0,
+                gain=0.0,
+                asked=False,
+                rejected_reason=shape.offer_reason,
+            )
+        return
+    question, reason = answer_shape.judge_question(j.get("question"), shape.offer_phrases)
+    if question is not None:
+        safe = compose.scrub_sentence(question, compose._allowed_client_numbers(ctx))
+        if safe is None:
+            question, reason = None, "unsafe"
+        else:
+            question = safe
+    if question is not None:
+        intro = compose.strip_questions(rich.intro)
+        rich.intro = f"{intro} {question}" if intro else question
+        rich.education = compose.strip_questions(rich.education)
+        asked = [k for k in (ctx.state.asked_intents or []) if k != offer.facet]
+        ctx.state.asked_intents[:] = [*asked, offer.facet][-8:]
+    ctx.emit(
+        "narrowing_offer",
+        facet=offer.facet,
+        values_in_set=len(offer.values),
+        gain=round(float(offer.gain), 2),
+        asked=question is not None,
+        rejected_reason=reason,
+    )
+
+
+@dataclass(frozen=True, slots=True)
 class _RichOutcome:
     """Ce a produs apelul structurat — și, când n-a produs carduri, DE CE.
 
@@ -373,6 +615,7 @@ async def _finalize_rich(
     ctx,
     history: str,
     notes: str = "",
+    shape: _TurnShape | None = None,
 ) -> _RichOutcome:
     """Compune recomandarea STRUCTURATĂ (model iZi). Modelul emite intro + referințe
     product_id/pro_index/fit_clause + pick + education + chip_intents (enum închis); codul
@@ -398,14 +641,17 @@ async def _finalize_rich(
                 + " | ".join(axes)
                 + "\n"
             )
+    shape = shape or _TurnShape()
     user = (
         f"Limba clientului: {ctx.language}\n{notes_block}{history_block}"
-        f"Nevoia clientului: {query}\n{axes_block}\nProduse disponibile (alege dintre acestea):\n"
+        f"Nevoia clientului: {query}\n{axes_block}{shape.block}\n"
+        f"Produse disponibile (alege dintre acestea):\n"
         f"{_rich_bundle(products, _rich_facets(ctx), ctx.language)}"
     )
+    schema = _RICH_SCHEMA_WITH_QUESTION if shape.offer is not None else _RICH_SCHEMA
     trace = getattr(ctx, "trace", None)  # fake-urile din teste n-au câmpul nou (tiparul aftercare)
     try:
-        j = await llm.complete_schema(rich_system, user, _RICH_SCHEMA)
+        j = await llm.complete_schema(rich_system, user, schema)
     except Exception as e:  # noqa: BLE001 — apel structurat eșuat → fallback pe proză
         log.warning("agent: finalize structured eșuat (%s)", type(e).__name__)
         if trace is not None:
@@ -418,7 +664,12 @@ async def _finalize_rich(
     if trace is not None:
         trace["rich_raw"] = j
     emitted = [it for it in (j.get("items") or []) if isinstance(it, dict) and it.get("product_id")]
-    return _RichOutcome(reply=compose.assemble(ctx, j, products), model_items=len(emitted))
+    rich = compose.assemble(ctx, j, products, grounded_numbers=shape.grounded_numbers)
+    if rich.items:
+        # Doar pe un răspuns care chiar pleacă: pe refuz (zero carduri) turul coboară pe proză, iar
+        # a raporta acolo un „cum alegi" lipsă ar număra un eșec care nu i-a fost arătat nimănui.
+        _apply_turn_shape(ctx, rich, j, shape)
+    return _RichOutcome(reply=rich, model_items=len(emitted))
 
 
 def _attach_checkout_offer(ctx: TurnContext, url: str | None) -> None:
@@ -494,6 +745,7 @@ async def render(
                 ctx,
                 plan.history,
                 notes=plan.commerce_note,
+                shape=await _turn_shape(ctx, deps, products),
             )
             rich = outcome.reply
             if rich is not None and rich.items:
