@@ -24,6 +24,31 @@ from typing import Any
 
 from src.agent.pricing import cost_for
 
+#: NX-312 — plafonul listei de apeluri per tur (P4). Un tur de recomandare face azi 3 apeluri de
+#: chat, iar plafonul de runde (3) plus compunerea și un retry de recompunere duc maximul legitim pe
+#: la 6. Peste 8 nu mai e un tur, e o buclă — se numără în `per_call_dropped`, nu se aruncă tăcut.
+MAX_CALL_ROWS = 8
+
+#: Forma unui apel, derivată din CEREREA care pleacă pe sârmă (vezi `request_shape`). Vocabular
+#: ÎNCHIS: `tools` = rundă de tool-calling, `schema` = răspuns JSON forțat (json_schema SAU
+#: json_object), `text` = răspuns liber.
+CALL_SHAPES = ("tools", "schema", "text")
+
+
+def request_shape(kwargs: dict[str, Any]) -> str:
+    """Forma unui apel de chat, din argumentele lui. PUR.
+
+    Derivată, nu pasată de apelant (P10: stagiile nu știu că sunt măsurate), și din ACEEAȘI
+    proprietate care decide legalitatea cererii: un apel cu `tools` nu poate raționa pe
+    `chat.completions`, deci forma e și cea care separă cele două populații de durată (NX-311).
+    `tools` bate `response_format`: bucla structurată a creierului unic le trimite pe amândouă, iar
+    ce o face lentă sau rapidă e bitul de raționament, pe care îl dictează uneltele."""
+    if kwargs.get("tools"):
+        return "tools"
+    if kwargs.get("response_format"):
+        return "schema"
+    return "text"
+
 
 def _empty_model_row() -> dict[str, Any]:
     return {
@@ -58,6 +83,17 @@ class UsageAccumulator:
     reasoning_tokens: int = 0
     cost_usd: float = 0.0
     by_model: dict[str, dict[str, Any]] = field(default_factory=dict)
+    # NX-312: un rând per apel de chat, în ordine. Totalurile de mai sus spun CÂT a costat turul;
+    # lista spune CARE apel a costat. Pe turul `d73822a3` totalul era `model n=3, 32.437 ms`, iar
+    # împărțirea 3s + 3s + 26s se putea doar deduce prin scădere.
+    call_rows: list[dict[str, Any]] = field(default_factory=list)
+    call_rows_dropped: int = 0
+
+    def add_call_row(self, row: dict[str, Any]) -> None:
+        if len(self.call_rows) < MAX_CALL_ROWS:
+            self.call_rows.append(row)
+        else:
+            self.call_rows_dropped += 1
 
     def add(
         self, model: str, prompt: int, completion: int, cached: int, *, reasoning: int = 0
@@ -202,6 +238,36 @@ def record_chat(resp: Any, model: str) -> None:
     # și nu importă niciun vendor. Rolul se DERIVĂ din model (vezi `model_role`), ca să nu
     # schimbăm semnătura pe toate căile de apel pentru o etichetă.
     _record_model_metrics(model, tokens_in, tokens_out, cached)
+
+
+def record_call(resp: Any, *, shape: str, reasoning: bool, ms: float, ok: bool) -> None:
+    """NX-312 — un rând per apel de chat, cu durata și tokenii LUI (best-effort, ca `record_chat`).
+
+    Chemat din `llm._chat`, wrapperul unic al tuturor apelurilor, deci și apelurile EȘUATE intră
+    în listă (`ok=False`, tokeni 0): un apel care moare după 90s de retry e exact rândul pe care
+    îl cauți când turul a durat două minute.
+
+    `ms` include retry-urile și backoff-ul: e durata apelului așa cum a trăit-o TURUL, nu a unei
+    încercări. `reasoning_tokens` rămâne `None` când furnizorul nu-l raportează — instrument de
+    măsură, deci „nu știm" nu se colapsează în `0` (vezi `_reasoning_from`).
+
+    Numai numere și un cuvânt din vocabularul închis: zero text, zero identificatori (P12)."""
+    acc = _current.get()
+    if acc is None:
+        return
+    usage = getattr(resp, "usage", None) if resp is not None else None
+    acc.add_call_row(
+        {
+            "shape": shape if shape in CALL_SHAPES else "text",
+            "reasoning": bool(reasoning),
+            "ok": bool(ok),
+            "ms": round(float(ms), 1),
+            "tokens_in": _field(usage, "prompt_tokens") if usage is not None else 0,
+            "cached": _cached_from(usage) if usage is not None else 0,
+            "tokens_out": _field(usage, "completion_tokens") if usage is not None else 0,
+            "reasoning_tokens": _reasoning_from(usage) if usage is not None else None,
+        }
+    )
 
 
 def model_role(model: str) -> str:

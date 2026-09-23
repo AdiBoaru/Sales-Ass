@@ -508,6 +508,17 @@ def _note_cache_on_span(resp: Any) -> None:
         return
 
 
+def _note_call(shape: str, reasoning: bool, started: float, resp: Any, *, ok: bool) -> None:
+    """NX-312: rândul apelului în `llm_usage.per_call`. Best-effort, ca `_note_cache_on_span`: o
+    măsurătoare care aruncă ar transforma un apel reușit într-unul eșuat (P6)."""
+    try:
+        usage.record_call(
+            resp, shape=shape, reasoning=reasoning, ms=(perf_counter() - started) * 1000.0, ok=ok
+        )
+    except Exception:  # noqa: BLE001
+        return
+
+
 class LLMClient:
     """Wrapper subțire peste AsyncOpenAI. Modelele vin din settings (nano/mini)."""
 
@@ -615,16 +626,26 @@ class LLMClient:
         if cache_key and getattr(s, "prompt_cache_layout_enabled", False):
             kwargs["prompt_cache_key"] = cache_key
         budget = call_budget(s, reasoning_on=sampling.reasoning_on)
-        resp = await _with_retry(
-            lambda t: self._client.chat.completions.create(
-                **(kwargs if t is None else {**kwargs, "timeout": t})
-            ),
-            max_retries=s.llm_retry_max,
-            cap_ms=budget.cap_ms,
-            attempt_timeout_s=budget.attempt_timeout_s,
-            total_cap_s=budget.total_cap_s,
-            slow_after_ms=budget.slow_after_ms,
-        )
+        # NX-312: forma se citește ÎNAINTE de apel, din cererea care chiar pleacă pe sârmă.
+        shape = usage.request_shape(kwargs)
+        started = perf_counter()
+        try:
+            resp = await _with_retry(
+                lambda t: self._client.chat.completions.create(
+                    **(kwargs if t is None else {**kwargs, "timeout": t})
+                ),
+                max_retries=s.llm_retry_max,
+                cap_ms=budget.cap_ms,
+                attempt_timeout_s=budget.attempt_timeout_s,
+                total_cap_s=budget.total_cap_s,
+                slow_after_ms=budget.slow_after_ms,
+            )
+        except BaseException:
+            # Și apelul EȘUAT e un rând: timpul lui a fost plătit de tur. Re-ridicăm neatins —
+            # măsurătoarea nu are voie să schimbe ce vede apelantul (P6, P10).
+            _note_call(shape, sampling.reasoning_on, started, None, ok=False)
+            raise
+        _note_call(shape, sampling.reasoning_on, started, resp, ok=True)
         _note_truncation(resp, cap=kwargs.get("max_completion_tokens"))
         _note_cache_on_span(resp)
         return resp

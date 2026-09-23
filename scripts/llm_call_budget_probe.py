@@ -25,15 +25,10 @@ import sys
 from collections import Counter
 from typing import Any
 
-from dotenv import load_dotenv
-
-if sys.platform == "win32":
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-    sys.stdout.reconfigure(encoding="utf-8")
-
-load_dotenv()
-
-from src.db.connection import admin_conn, get_pool  # noqa: E402
+# NX-312: inițializarea procesului (`.env`, politica de event loop, encodingul consolei) stă sub
+# `__main__`, nu la import. `per_call_summary` e testat din suită, iar un `load_dotenv()` la import
+# ar aprinde `.env`-ul local peste toate testele care rulează după el.
+from src.db.connection import admin_conn, get_pool
 
 #: Cheile pe care `conversation_traces.diagnostics` le poartă când turul a ÎNCERCAT compunerea
 #: bogată. Prezența oricăreia = apelul care raționează a rulat; `rich_error` = a murit de tot.
@@ -63,6 +58,55 @@ def _fmt_s(ms: float) -> str:
 
 def _phase(props: dict, name: str) -> dict:
     return (props.get("phases") or {}).get(name) or {}
+
+
+def per_call_summary(rows: list[dict]) -> dict[tuple[str, bool], dict[str, float]]:
+    """NX-312 — rândurile `llm_usage.per_call`, grupate pe (formă, raționează). PUR.
+
+    Doar apelurile REUȘITE intră în percentile: un apel mort după 90s de retry nu e durata unui
+    apel, e durata unui eșec, iar amestecate ar muta p90 fără să spună de ce. Eșecurile se
+    numără separat (`failed`)."""
+    groups: dict[tuple[str, bool], list[dict]] = {}
+    failed: Counter = Counter()
+    for r in rows:
+        key = (str(r.get("shape") or "text"), bool(r.get("reasoning")))
+        if not r.get("ok", True):
+            failed[key] += 1
+            continue
+        groups.setdefault(key, []).append(r)
+    out: dict[tuple[str, bool], dict[str, float]] = {}
+    for key in set(groups) | set(failed):
+        g = groups.get(key, [])
+        uncached = [max(0, (r.get("tokens_in") or 0) - (r.get("cached") or 0)) for r in g]
+        out[key] = {
+            "n": len(g),
+            "failed": failed[key],
+            "ms_p50": _pct([r.get("ms") or 0 for r in g], 0.5),
+            "ms_p90": _pct([r.get("ms") or 0 for r in g], 0.9),
+            "in_p50": _pct([r.get("tokens_in") or 0 for r in g], 0.5),
+            "uncached_p50": _pct(uncached, 0.5),
+            "out_p50": _pct([r.get("tokens_out") or 0 for r in g], 0.5),
+            "reasoning_p50": _pct([r.get("reasoning_tokens") or 0 for r in g], 0.5),
+            "ms_per_1k_uncached": _slope(uncached, [r.get("ms") or 0 for r in g]),
+        }
+    return out
+
+
+def _slope(xs: list[float], ys: list[float]) -> float | None:
+    """Panta celor mai mici pătrate, în ms per 1.000 de tokeni NECACHE-UIȚI. `None` sub 5 puncte
+    sau fără variație pe x: o pantă pe trei apeluri e zgomot care arată ca o cifră.
+
+    Răspunde la întrebarea pe care stă felia 3 a NX-312: cât cumpără, în timp, tăierea inputului
+    unei runde de buclă. Dacă panta e mică, input mai mic nu înseamnă apel mai rapid."""
+    n = len(xs)
+    if n < 5:
+        return None
+    mx, my = sum(xs) / n, sum(ys) / n
+    var = sum((x - mx) ** 2 for x in xs)
+    if var == 0:
+        return None
+    cov = sum((x - mx) * (y - my) for x, y in zip(xs, ys, strict=True))
+    return 1000.0 * cov / var
 
 
 async def main() -> int:
@@ -98,6 +142,17 @@ async def main() -> int:
             select turn_id, diagnostics
               from conversation_traces
              where business_id = $1
+               and created_at > now() - ($2::int || ' days')::interval
+            """,
+            business_id,
+            args.days,
+        )
+        usage_rows = await conn.fetch(
+            """
+            select properties
+              from analytics_events
+             where business_id = $1
+               and event_type = 'llm_usage'
                and created_at > now() - ($2::int || ' days')::interval
             """,
             business_id,
@@ -214,8 +269,44 @@ async def main() -> int:
     print(f"\n  apeluri peste vechiul perete (`llm_call_over_30s`): {over_wall}")
     if over_wall:
         print("    ↑ cifra care ridică cenzura: atât ar fi fost tăiat de pragul de dinainte.")
+
+    # ── 5. Pe apel (NX-312) ───────────────────────────────────────────────────────────────────
+    # Totalul pe tur nu spune CARE apel a costat. Rândurile `per_call` o spun direct, fără scădere.
+    rows: list[dict] = []
+    for r in usage_rows:
+        props = _props(r["properties"])
+        if props.get("phase") == "turn":
+            rows.extend(props.get("per_call") or [])
+    print("\nPE APEL (NX-312, doar turul, fără aftercare)")
+    if not rows:
+        print("  niciun rând `per_call` încă: trafic dinainte de NX-312.")
+        return 0
+    summary = per_call_summary(rows)
+    print("  formă    raționează    n  eșuate    ms p50    ms p90   in p50  necache p50  out p50")
+    for (shape, reasoning), s in sorted(summary.items()):
+        print(
+            f"  {shape:<8} {('da' if reasoning else 'nu'):<10} {s['n']:>4} {s['failed']:>7}"
+            f" {s['ms_p50']:>9.0f} {s['ms_p90']:>9.0f} {s['in_p50']:>8.0f}"
+            f" {s['uncached_p50']:>12.0f} {s['out_p50']:>8.0f}"
+        )
+    tools = summary.get(("tools", False))
+    if tools is not None:
+        slope = tools["ms_per_1k_uncached"]
+        if slope is None:
+            print("\n  rundă de buclă: prea puține apeluri pentru o pantă (sub 5).")
+        else:
+            print(
+                f"\n  rundă de buclă: {slope:+.0f} ms per 1.000 de tokeni necache-uiți"
+                " (cât cumpără tăierea inputului, NX-312 felia 3)"
+            )
     return 0
 
 
 if __name__ == "__main__":
+    from dotenv import load_dotenv
+
+    if sys.platform == "win32":
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+        sys.stdout.reconfigure(encoding="utf-8")
+    load_dotenv()
     raise SystemExit(asyncio.run(main()))
