@@ -17,13 +17,13 @@ scrub dur. Garanția anti-halucinație:
 from __future__ import annotations
 
 import re
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from typing import TYPE_CHECKING, Any
 
 from src.agent import answer_shape
 from src.agent.fallbacks import _card_variants
 from src.agent.voice import naturalize
-from src.catalog.render_text import display_name, size_label
+from src.catalog.render_text import display_name, size_label, unique_prefixes, word_key
 from src.config import card_slots, chip_slots, get_settings
 from src.domain.normalize import normalize
 from src.models import (
@@ -38,7 +38,7 @@ from src.models import (
     RichReply,
 )
 from src.web.localization import amount_text
-from src.worker.badges import BADGE_TONE, badge_label, derive_badge_kind
+from src.worker.badges import BADGE_TONE, badge_label, common_ranking_kinds, derive_badge_kind
 from src.worker.text_scrub import (
     has_marketing_claim,
     has_medical_claim,
@@ -394,6 +394,39 @@ def scrub_education(
 _MIN_NAME_WORDS = 2
 
 
+def _unique_mention(hay: str, prefix: tuple[str, ...]) -> int | None:
+    """NX-318 — poziția în `hay` (proza DEJA normalizată) a primei rulări de cuvinte ÎNTREGI egale
+    cu `prefix` (chei `word_key`), sau None. Pe cuvinte întregi, nu pe subșir: „EUBOS” unic în set
+    nu are voie să se potrivească în interiorul altui cuvânt."""
+    prefix = tuple(k for k in prefix if k)
+    if not prefix:
+        return None
+    tokens = [(m.start(), word_key(m.group())) for m in re.finditer(r"\S+", hay)]
+    tokens = [(pos, key) for pos, key in tokens if key]
+    n = len(prefix)
+    for i in range(len(tokens) - n + 1):
+        if tuple(key for _, key in tokens[i : i + n]) == prefix:
+            return tokens[i][0]
+    return None
+
+
+def _mention(
+    prose: str, name: str, unique: tuple[str, ...] | None = None
+) -> tuple[int, str] | None:
+    """`(poziție, cum)` pentru prima mențiune a produsului, sau None.
+
+    NX-318: întâi prefixul UNIC al produsului în setul de carduri (`unique_prefixes`), fiindcă
+    „EUBOS este alegerea potrivită” numește produsul fără să-i scrie două cuvinte din nume, iar
+    `_MIN_NAME_WORDS` îl rata. Un brand comun în set („HARUHARU”) nu ajunge aici: n-ar fi unic.
+    Apoi regula veche, prefixe descrescătoare de ≥ `_MIN_NAME_WORDS` cuvinte."""
+    if unique:
+        pos = _unique_mention(normalize(prose), unique)
+        if pos is not None:
+            return pos, "unique_prefix"
+    pos = _mention_index(prose, name)
+    return (pos, "name_prefix") if pos is not None else None
+
+
 def _mention_index(prose: str, name: str) -> int | None:
     """Poziția primei mențiuni a lui `name` în `prose`, sau None. Determinist, fără LLM.
 
@@ -463,11 +496,21 @@ def _order_by_first_mention(
     intro = j.get("intro")
     if not isinstance(intro, str) or not intro.strip():
         return ordered_ids
+    # NX-318: prefixul unic se calculează peste setul de CARDURI al turului (numele scurte, cele
+    # pe care clientul le vede), nu peste catalog: unicitatea e o proprietate a ecranului.
+    unique: dict[str, tuple[str, ...]] = {}
+    if getattr(get_settings(), "unique_name_prefix_enabled", False):
+        unique = unique_prefixes(
+            {pid: display_name(str(facts[pid].get("name") or "")) for pid in ordered_ids},
+            locale=getattr(ctx, "language", None),
+        )
     positions: dict[str, int] = {}
+    matched_by: set[str] = set()
     for pid in ordered_ids:
-        idx = _mention_index(intro, str(facts[pid].get("name") or ""))
-        if idx is not None:
-            positions[pid] = idx
+        hit = _mention(intro, str(facts[pid].get("name") or ""), unique.get(pid))
+        if hit is not None:
+            positions[pid] = hit[0]
+            matched_by.add(hit[1])
     if not positions:
         return ordered_ids
     rank = {pid: i for i, pid in enumerate(ordered_ids)}
@@ -479,8 +522,37 @@ def _order_by_first_mention(
     )
     if reordered != ordered_ids:
         # Se NUMĂRĂ: dacă apare des, promptul trebuie reparat, nu plasa de siguranță întinsă.
-        ctx.emit("rich_order_realigned", n=len(positions))
+        if unique:
+            ctx.emit(
+                "rich_order_realigned",
+                n=len(positions),
+                matched_by="unique_prefix" if "unique_prefix" in matched_by else "name_prefix",
+            )
+        else:
+            ctx.emit("rich_order_realigned", n=len(positions))
     return reordered
+
+
+def _suppress_common_badges(
+    ctx: TurnContext, items: list[RichItem], derived_kinds: dict[str, str | None]
+) -> list[RichItem]:
+    """NX-318 — scoate de pe TOATE cardurile un badge de clasament comun majorității setului.
+
+    Rulează DUPĂ ce toate cardurile au primit badge-ul, pe setul efectiv afișat (după plafon),
+    fiindcă „majoritatea” e o proprietate a ecranului, nu a produsului. Pe SOLE 173.657 din
+    183.003 de recenzii sunt de 5★, iar setul servit e deja ordonat după rating, deci „Top Favorit”
+    ajunge pe 6 din 6 carduri și nu mai spune nimic. Badge-urile pre-seedate și etichetele de pas
+    de rutină nu se ating (`derived_kinds` le ține `None`)."""
+    kinds = [derived_kinds.get(it.product_id) for it in items]
+    common = common_ranking_kinds(kinds)
+    if not common:
+        return items
+    out: list[RichItem] = []
+    for it, kind in zip(items, kinds, strict=True):
+        out.append(replace(it, badge=None, badge_tone=None) if kind in common else it)
+    for kind, on_cards in sorted(common.items()):
+        ctx.emit("badges_suppressed", kind=kind, on_cards=on_cards, total_cards=len(items))
+    return out
 
 
 def _select_pick(
@@ -533,6 +605,11 @@ def assemble(ctx: TurnContext, j: dict[str, Any], retrieved: list[dict[str, Any]
     badges_on = settings.card_badges_enabled
     pack = getattr(ctx.business, "domain_pack", None)
     badge_rules = pack.badge_rules if pack else None
+    # NX-318: badge relativ la SET (+ rating shrunk și pragul de voucher al pachetului).
+    set_relative = bool(getattr(settings, "set_relative_badges_enabled", False))
+    # Felul badge-ului DERIVAT per card (nu cel pre-seedat, nu eticheta de pas de rutină): doar
+    # el poate fi suprimat, fiindcă doar el e o judecată a noastră despre produs.
+    derived_kinds: dict[str, str | None] = {}
     currency = getattr(pack, "currency", None)  # Full-eMAG: moneda pe card (din DomainPack)
     # NX-292: secvența turului, dacă `routine_plan` a compus una. Owner unic = tool-ul; aici e
     # citită, niciodată scrisă. None ⇒ tot ce urmează se comportă exact ca înainte.
@@ -601,7 +678,10 @@ def assemble(ctx: TurnContext, j: dict[str, Any], retrieved: list[dict[str, Any]
         seeded = _safe_badge(p.get("badge"))
         kind = (
             derive_badge_kind(
-                p, badge_rules, coupon_enabled=getattr(settings, "card_coupon_enabled", False)
+                p,
+                badge_rules,
+                coupon_enabled=getattr(settings, "card_coupon_enabled", False),
+                set_relative=set_relative,
             )
             if (badges_on and not seeded)
             else None
@@ -611,6 +691,8 @@ def assemble(ctx: TurnContext, j: dict[str, Any], retrieved: list[dict[str, Any]
         # „Curățare" e singurul lucru care face cardul lizibil fără să reciteşti textul. Eticheta e
         # a PACHETULUI (fallback: cheia humanizată), nu un dicționar românesc în cod.
         step_ref = routine_by_product.get(pid)
+        derived_kinds[pid] = None if step_ref is not None else kind
+        label_rules = badge_rules if set_relative else None
         grounded = grounded_identifiers(p)  # NX-313: „complex v11" din fișă e un nume
         ai = " ".join((p.get("ai_summary") or "").split())[:400]
         if step_ref is not None:
@@ -645,7 +727,7 @@ def assemble(ctx: TurnContext, j: dict[str, Any], retrieved: list[dict[str, Any]
             image=p.get("image"),
             rating=float(p["rating"]) if p.get("rating") is not None else None,
             review_count=int(rc) if rc else None,
-            badge=seeded or badge_label(kind, ctx.language, p),
+            badge=seeded or badge_label(kind, ctx.language, p, label_rules),
             badge_tone=BADGE_TONE.get(kind) if kind else None,
             list_price=float(lp) if lp is not None and float(lp) > eff else None,
             currency=currency,
@@ -674,6 +756,8 @@ def assemble(ctx: TurnContext, j: dict[str, Any], retrieved: list[dict[str, Any]
         ordered_ids = in_routine + rest
 
     items: list[RichItem] = [_build(pid) for pid in ordered_ids[: card_slots()]]
+    if set_relative:
+        items = _suppress_common_badges(ctx, items, derived_kinds)
 
     # izi-parity hardening: retrieval OFF-CATEGORY (produse din categoria greșită — ex. „fond de
     # ten" pe catalog skincare) → NU pretinde o recomandare. Suprimă pick-ul ȘI înlocuiește intro-ul

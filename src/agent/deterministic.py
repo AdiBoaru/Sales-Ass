@@ -155,12 +155,14 @@ def _anchor_refs(ctx: TurnContext) -> list[ProductRef]:
     return refs
 
 
-def _resolve_review_product(query: str, refs: list[ProductRef]) -> ProductRef | None:
+def _resolve_review_product(
+    query: str, refs: list[ProductRef], locale: str | None = None
+) -> ProductRef | None:
     """Rezolvă deixis-ul fără LLM: produs unic, ordinal, nume complet sau tokeni unici.
 
     NX-234: logica trăiește acum în `src/agent/reference_resolver.py` (API comun, ca ancora
     paginii să folosească EXACT aceleași reguli). Semantica rămâne neschimbată."""
-    resolution = resolve_from_displayed(query, refs)
+    resolution = resolve_from_displayed(query, refs, locale=locale)
     return refs[resolution.index] if resolution.index is not None else None
 
 
@@ -190,7 +192,7 @@ def _resolve_anchor(ctx: TurnContext, query: str) -> ProductRef | None:
     page = _page_anchor_ref(ctx)
     v2 = get_settings().reference_precedence_v2_enabled
     if page is None and not v2:
-        return _resolve_review_product(query, refs)
+        return _resolve_review_product(query, refs, ctx.language)
     if v2:
         state_v2 = getattr(ctx, "state_v2", None)
         references = getattr(state_v2, "references", None)
@@ -204,6 +206,7 @@ def _resolve_anchor(ctx: TurnContext, query: str) -> ProductRef | None:
                 anchor=_signed_anchor(ctx),
                 selected_product=getattr(references, "selected_product", None),
                 displayed_revision=getattr(references, "displayed_revision", 0),
+                locale=ctx.language,
             )
         )
     else:
@@ -211,6 +214,7 @@ def _resolve_anchor(ctx: TurnContext, query: str) -> ProductRef | None:
             query,
             refs,
             page=page_anchor_from_snapshot(ctx.snapshot),
+            locale=ctx.language,
         )
     ctx.emit(
         "web_reference_resolved",
@@ -724,7 +728,7 @@ async def try_pre_intents(ctx: TurnContext, deps: PipelineDeps) -> bool:
     explicit_review = _REVIEW_RE.search(_norm_followup(query)) is not None
     resolves_pending_review = (
         pending.get("field") == "product_for_reviews"
-        and _resolve_review_product(query, displayed) is not None
+        and _resolve_review_product(query, displayed, ctx.language) is not None
     )
     review_intent = (
         getattr(get_settings(), "review_intent_enabled", True)
@@ -738,7 +742,7 @@ async def try_pre_intents(ctx: TurnContext, deps: PipelineDeps) -> bool:
     explicit_detail = _DETAIL_RE.search(_norm_followup(query)) is not None
     resolves_pending_detail = (
         pending.get("field") == "product_for_details"
-        and _resolve_review_product(query, displayed) is not None
+        and _resolve_review_product(query, displayed, ctx.language) is not None
     )
     detail_intent = (
         getattr(get_settings(), "detail_intent_enabled", True)

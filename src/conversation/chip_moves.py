@@ -67,7 +67,7 @@ from typing import TYPE_CHECKING, Any
 
 from src.agent.fallbacks import fit_template
 from src.catalog.clarify_menu import contains_run, words_of
-from src.catalog.render_text import display_name
+from src.catalog.render_text import display_name, unique_prefixes
 from src.catalog.vocabulary import CATEGORY_DIMENSION
 from src.models import MAX_CHIP_LEN
 
@@ -135,6 +135,9 @@ class ChipMove:
     anchor: str
     slots: tuple[tuple[str, str], ...]
     evidence: int
+    #: NX-318: sub câte cuvinte nu are voie să coboare fiecare slot la scurtare, fiindcă ar deveni
+    #: prefixul altui produs de pe ecran. Gol ⇒ doar pragul general `_MIN_ANCHOR_WORDS`.
+    floors: tuple[tuple[str, int], ...] = ()
 
     @property
     def role(self) -> str:
@@ -207,7 +210,9 @@ def _intact(text: str, values: Iterable[str]) -> bool:
     return all(contains_run(haystack, words_of(v)) for v in values if v)
 
 
-def _fit_anchor(move: ChipMove, pack: object, locale: str) -> ChipMove | None:
+def _fit_anchor(
+    move: ChipMove, pack: object, locale: str, *, floors: Mapping[str, int] | None = None
+) -> ChipMove | None:
     """Mutarea cu SLOTURILE scurtate cât să încapă întregi în chip, sau `None` dacă nu se poate.
 
     Găsit rulând proba pe catalogul SOLE: numele scurt al unui produs real are ~33 de caractere
@@ -225,8 +230,15 @@ def _fit_anchor(move: ChipMove, pack: object, locale: str) -> ChipMove | None:
     ancora (primul nume) supraviețuia, iar al doilea produs pleca trunchiat — «Compara BEAUTY OF
     JOSEON Relief Sun cu PURITO Daily Sof…». Verificarea doar pe ancoră spunea „e bine" despre un
     chip în care jumătate din promisiune era ilizibilă. Se taie mereu cel mai LUNG slot.
+
+    NX-318: două cuvinte nu sunt „suficiente” în absolut, ci față de ce ALTCEVA e pe ecran. Pe
+    turul real, «IT'S SKIN The Fresh» era prefixul a două produse (Blueberries, Coconut), iar
+    apăsarea cădea pe o clarificare. Fiecare slot are deci pragul lui (`move.floors`, din
+    `unique_prefixes`): se taie până la el, nu mai jos. Dacă nici așa nu încape, mutarea nu se
+    oferă, fiindcă un chip ambiguu e mai rău decât unul lipsă.
     """
     values = dict(move.slots)
+    limits = dict(move.floors) if floors is None else dict(floors)
     for _ in range(64):  # mărginit: fiecare trecere scoate un cuvânt dintr-un slot
         candidate = ChipMove(
             kind=move.kind,
@@ -234,11 +246,16 @@ def _fit_anchor(move: ChipMove, pack: object, locale: str) -> ChipMove | None:
             anchor=values.get("slot", move.anchor),
             slots=tuple(sorted(values.items())),
             evidence=move.evidence,
+            floors=move.floors,
         )
         text = render_move(candidate, pack, locale)
         if text is not None and _intact(text, values.values()):
             return candidate
-        trimmable = {k: v for k, v in values.items() if len(v.split()) > _MIN_ANCHOR_WORDS}
+        trimmable = {
+            k: v
+            for k, v in values.items()
+            if len(v.split()) > max(_MIN_ANCHOR_WORDS, limits.get(k, 0))
+        }
         if not trimmable:
             return None
         key = max(trimmable, key=lambda k: (len(values[k]), k))
@@ -246,7 +263,13 @@ def _fit_anchor(move: ChipMove, pack: object, locale: str) -> ChipMove | None:
     return None
 
 
-def renderable(moves: Iterable[ChipMove], pack: object, locale: str) -> list[ChipMove]:
+def renderable(
+    moves: Iterable[ChipMove],
+    pack: object,
+    locale: str,
+    *,
+    stats: dict[str, int] | None = None,
+) -> list[ChipMove]:
     """Doar mutările pe care le putem EXPRIMA, cu ancora ajustată la ce va apărea EFECTIV în text.
 
     Se aplică ÎNAINTE de selecție, nu după, iar diferența e un slot pierdut: filtrată la randare,
@@ -255,6 +278,9 @@ def renderable(moves: Iterable[ChipMove], pack: object, locale: str) -> list[Chi
     Întoarce mutări posibil MODIFICATE (ancoră scurtată), nu doar filtrate, fiindcă ancora e ce
     judecă poarta: dacă textul emis conține un prefix, poarta trebuie să ceară acel prefix, nu
     numele întreg pe care nimeni nu-l va scrie.
+
+    `stats`, dat, primește `dropped_ambiguous_anchor`: mutările care ar fi încăput cu pragul vechi
+    de două cuvinte și au fost refuzate fiindcă ancora scurtată ar fi numit două produse (NX-318).
     """
     out: list[ChipMove] = []
     for move in moves:
@@ -265,6 +291,8 @@ def renderable(moves: Iterable[ChipMove], pack: object, locale: str) -> list[Chi
         fitted = _fit_anchor(move, pack, locale)
         if fitted is not None:
             out.append(fitted)
+        elif stats is not None and move.floors and _fit_anchor(move, pack, locale, floors={}):
+            stats["dropped_ambiguous_anchor"] = stats.get("dropped_ambiguous_anchor", 0) + 1
     return out
 
 
@@ -319,7 +347,11 @@ def _price_band(prices: Sequence[float]) -> int | None:
 
 
 def from_cards(
-    cards: Sequence[Mapping[str, Any]], *, offered_before: Iterable[str] = ()
+    cards: Sequence[Mapping[str, Any]],
+    *,
+    offered_before: Iterable[str] = (),
+    unique_anchor: bool = False,
+    locale: str | None = None,
 ) -> list[ChipMove]:
     """Mutările născute din ce tocmai s-a ARĂTAT: detaliu, recenzii, comparație, link, preț.
 
@@ -327,6 +359,10 @@ def from_cards(
     numele întreg din catalogul real are ~190 de caractere și n-ar încăpea într-un chip. Un card
     fără id sau fără nume nu produce mutări: un chip care numește un produs pe care nu-l putem
     rezolva la apăsare e fix defectul pe care îl evităm.
+
+    `unique_anchor` (NX-318, `UNIQUE_NAME_PREFIX_ENABLED`): fiecare slot primește ca prag lungimea
+    prefixului UNIC al produsului în setul cardurilor, ca `_fit_anchor` să nu-l scurteze până devine
+    numele altui produs de pe ecran.
     """
     seen = {str(m) for m in offered_before}
     named: list[tuple[str, str]] = []
@@ -342,8 +378,16 @@ def from_cards(
             prices.append(float(price))
 
     out: list[ChipMove] = []
+    unique = unique_prefixes(dict(named), locale=locale) if unique_anchor else {}
 
-    def _add(kind: str, key: str, anchor: str, slots: dict[str, str], evidence: int) -> None:
+    def _add(
+        kind: str,
+        key: str,
+        anchor: str,
+        slots: dict[str, str],
+        evidence: int,
+        floors: dict[str, int] | None = None,
+    ) -> None:
         move_id = f"{kind}:{key}"
         if move_id in seen or evidence <= 0:
             return
@@ -354,18 +398,24 @@ def from_cards(
                 anchor=anchor,
                 slots=tuple(sorted(slots.items())),
                 evidence=evidence,
+                floors=tuple(sorted((floors or {}).items())),
             )
         )
 
+    def _floor(pid: str) -> int:
+        return len(unique.get(pid, ()))
+
     for pid, short in named:
-        _add("detail", pid, short, {"slot": short}, 1)
-        _add("reviews", pid, short, {"slot": short}, 1)
-        _add("link", pid, short, {"slot": short}, 1)
+        floors = {"slot": _floor(pid)} if unique else None
+        _add("detail", pid, short, {"slot": short}, 1, floors)
+        _add("reviews", pid, short, {"slot": short}, 1, floors)
+        _add("link", pid, short, {"slot": short}, 1, floors)
     if len(named) >= 2:
         (id_a, a), (id_b, b) = named[0], named[1]
         # Ancora comparației e PRIMUL nume: `fit_template` poate scurta al doilea slot ca să încapă,
         # iar o ancoră pe un text scurtat n-ar mai fi verificabilă.
-        _add("compare", f"{id_a}:{id_b}", a, {"slot": a, "slot_b": b}, 2)
+        floors = {"slot": _floor(id_a), "slot_b": _floor(id_b)} if unique else None
+        _add("compare", f"{id_a}:{id_b}", a, {"slot": a, "slot_b": b}, 2, floors)
     threshold = _price_band(prices)
     if threshold is not None:
         _add(

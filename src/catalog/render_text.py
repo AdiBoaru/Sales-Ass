@@ -12,8 +12,14 @@ Măsurat în docs/DB-QUERY-PROBE-2026-09-08.md.
 from __future__ import annotations
 
 import re
+from typing import TYPE_CHECKING
 
+from src.catalog.folding import fold_text
 from src.catalog.product_type import split_name
+from src.catalog.query_terms import any_locale_stopwords, stopwords
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 #: Sub lungimea asta capul numelui nu mai identifică nimic („Ser", „Cremă") — păstrăm întregul.
 _MIN_DISPLAY_LEN = 8
@@ -55,6 +61,51 @@ def size_label(name: str | None) -> str | None:
         return None
     tail = full.rsplit(" - ", 1)[-1].strip()
     return tail if _QUANTITY.match(tail) else None
+
+
+def word_key(word: str) -> str:
+    """Cheia de comparație a UNUI cuvânt: pliat (lower, fără diacritice), doar litere și cifre.
+    „IT'S” → `its`, „EUBOS,” → `eubos`. Un cuvânt doar din punctuație dă cheia goală."""
+    return "".join(re.findall(r"[0-9a-z]+", fold_text(word)))
+
+
+def name_keys(name: str | None) -> tuple[str, ...]:
+    """Cuvintele unui nume ca chei (`word_key`), câte una pe cuvânt separat de spații — deci
+    lungimea se potrivește cu `name.split()`, pe care îl scurtează ancora chip-ului."""
+    return tuple(word_key(w) for w in (name or "").split())
+
+
+def unique_prefixes(
+    names: Mapping[str, str], *, min_words: int = 1, locale: str | None = None
+) -> dict[str, tuple[str, ...]]:
+    """NX-318 — pentru fiecare id, cel mai scurt prefix de cuvinte (ca chei, `name_keys`) care nu
+    e prefix al numelui NICIUNUI alt produs din set.
+
+    Răspunsul la „câte cuvinte identifică un produs” depinde de ce ALTCEVA e pe ecran, nu de o
+    constantă: „EUBOS” singur e unic lângă SOME BY MI, dar „HARUHARU WONDER” nu e lângă alt
+    HARUHARU WONDER. Nicio listă de branduri, nicio limbă: regula e egalitatea de cuvinte în set.
+
+    Un nume care e prefix complet al altuia (sau identic cu altul) primește numele întreg: nu
+    există prefix unic mai scurt, iar a pretinde unul ar lega textul de produsul greșit. Un prefix
+    de UN cuvânt care e cuvânt gol pe locale nu se folosește (se extinde la două). `locale=None`
+    ⇒ cuvintele goale ale TUTUROR limbilor cunoscute (direcția sigură, nu „nicio gardă”). Nume gol
+    sau lipsă ⇒ id-ul lipsește din rezultat. Determinist, independent de ordinea intrărilor.
+    """
+    keyed = {pid: name_keys(n) for pid, n in names.items() if n and name_keys(n)}
+    empty = stopwords(locale) if locale else any_locale_stopwords()
+    out: dict[str, tuple[str, ...]] = {}
+    for pid, words in keyed.items():
+        others = [w for other, w in keyed.items() if other != pid]
+        chosen = words
+        for cut in range(max(1, min_words), len(words) + 1):
+            prefix = words[:cut]
+            if cut == 1 and prefix[0] in empty:
+                continue
+            if not any(o[:cut] == prefix for o in others):
+                chosen = prefix
+                break
+        out[pid] = chosen
+    return out
 
 
 def cut_at_sentence(text: str | None, max_chars: int) -> str:

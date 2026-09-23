@@ -100,7 +100,9 @@ def _j():  # JSON minimal de la model: un produs cu fit_clause
 
 
 def test_assemble_applies_derived_badge():
-    retrieved = [_prod(rating=4.8, review_count=120, url="u", image="i")]
+    # NX-318: pe calea `assemble`, „top” se judecă pe ratingul SHRUNK (4,8 × 120 ⇒ 4,64, sub prag),
+    # deci produsul are nevoie de o reputație care rezistă micșorării: 4,9 × 300 ⇒ 4,82.
+    retrieved = [_prod(rating=4.9, review_count=300, url="u", image="i")]
     rich = assemble(_ctx(), _j(), retrieved)
     assert rich.items[0].badge == "Top Favorit"  # derivat din rating + recenzii
 
