@@ -379,6 +379,36 @@ def _lead_score_hint(ctx: TurnContext) -> str:
     )
 
 
+def _recognize_chip_press(ctx: TurnContext) -> None:
+    """NX-316: scrie `ctx.chip_move` (owner UNIC) dacă mesajul reproduce o mutare oferită.
+
+    Cardurile sunt setul afișat din stare, în ordinea de pe ecran, iar pragul de scurtare urmează
+    ACELAȘI flag ca la construcția chips-urilor, deci textul re-randat e cel pe care l-a văzut
+    clientul. Best-effort: o eroare aici lasă turul exact ca înainte (regexurile rămân plasa)."""
+    settings = get_settings()
+    if not getattr(settings, "chip_moves_v2_enabled", False):
+        return
+    try:
+        from src.conversation import chip_press  # noqa: PLC0415 — modul pur, încărcat sub flag
+
+        cards = [
+            {"product_id": p.product_id, "name": p.name, "price": p.price}
+            for p in ctx.state.displayed_products
+        ]
+        move = chip_press.recognize(
+            ctx.message.body or "",
+            cards,
+            getattr(ctx.state, "offered_chips", ()) or (),
+            getattr(ctx.business, "domain_pack", None),
+            ctx.language,
+            unique_anchor=bool(getattr(settings, "unique_name_prefix_enabled", False)),
+        )
+    except Exception as e:  # noqa: BLE001 — recunoașterea e o scurtătură, nu o poartă (P6)
+        log.warning("agent: recunoașterea chip-ului a eșuat (%s)", type(e).__name__)
+        return
+    ctx.chip_move = move
+
+
 def _apply_turn_profile(
     ctx: TurnContext, system: str, tools: list[dict[str, Any]]
 ) -> tuple[str, list[dict[str, Any]]]:
@@ -775,6 +805,10 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     # ruleze; zidul apare DOAR dacă modelul cheamă `check_order` pe web anonim (lookup care chiar
     # are nevoie de cont). Tool-ul semnalează `login_required`; servim mesajul determinist după
     # buclă (cacheable=False) — nu parafraza modelului. NX-129: web cu login verificat trece.
+
+    # NX-316: apăsarea unui chip oferit se RECUNOAȘTE înaintea intențiilor deterministe, ca
+    # handlerul să primească produsele din `move_id`, nu să le ghicească din text sau din poziție.
+    _recognize_chip_press(ctx)
 
     # Faza B (NX-143): intenții deterministe PRE-loop (link/compare) → early-exit, $0 inferență.
     if await try_pre_intents(ctx, deps):

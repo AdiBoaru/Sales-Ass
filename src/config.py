@@ -1247,6 +1247,11 @@ class Settings(BaseSettings):
     # tenantului, nu o frază contextuală. Schimbul e text mai puțin colorat în locul unor
     # continuări pe care serverul chiar le poate executa. OFF = chips-urile de azi, byte-identic.
     chip_moves_v1_enabled: bool = Field(default=True, validation_alias="CHIP_MOVES_V1_ENABLED")
+    # NX-316: chips care continuă conversația. Felia 1 = serverul RECUNOAȘTE apăsarea (mesaj identic
+    # cu o mutare oferită ⇒ handlerul mutării, cu produsele din `move_id`, nu din poziție) și nu mai
+    # oferă chips moarte (o nevoie deja rostită, detaliul pe un tur cu un singur card). OFF până la
+    # golden, ca restul cardului; OFF = chips și rutare byte-identice.
+    chip_moves_v2_enabled: bool = Field(default=False, validation_alias="CHIP_MOVES_V2_ENABLED")
     # NX-114: DomainPack (config per-vertical din DB+seed). Kill-switch FAIL-SAFE: OFF →
     # BusinessConfig.domain_pack=None, consumatorii cad pe constantele lor de cod (byte-identic).
     domain_pack_enabled: bool = Field(default=True, validation_alias="DOMAIN_PACK_ENABLED")

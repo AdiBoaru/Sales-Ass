@@ -629,6 +629,11 @@ class TurnContext:
     # care e eticheta de pas a fiecărui card, și că ordinea cardurilor e a SLOTURILOR, nu a
     # rankingului. None = turul n-a compus o rutină. `Any` — ciclu models → tools.
     routine: Any = None
+    # NX-316: mutarea de chip (`chip_moves.ChipMove`) pe care mesajul o reproduce EXACT, adică
+    # apăsarea unui chip oferit în turul anterior. Owner UNIC: stagiul agent
+    # (`chip_press.recognize`), înaintea intențiilor deterministe. None = mesaj obișnuit.
+    # `Any` — ciclu models → conversation.
+    chip_move: Any = None
     reply: Reply | None = None  # owner: orice stagiu (early exit)
     # NX-173 (P0): decizia de siguranță ACUMULATĂ a turului (`safety.Decision`). Owner UNIC la
     # scriere: `SafetyPolicy.gate` (via `_merge_decision`) — call-site-urile nu o setează direct.
