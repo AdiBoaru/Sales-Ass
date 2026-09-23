@@ -1112,6 +1112,20 @@ class Settings(BaseSettings):
     # le citeasca. Kill-switch separat de `card_badges_enabled`: cuponul e o promisiune despre
     # PRETUL FINAL, deci trebuie sa poata fi stins fara sa stingi si „Top Favorit".
     card_coupon_enabled: bool = Field(default=True, validation_alias="CARD_COUPON_ENABLED")
+    # NX-318: „câte cuvinte identifică un produs” se decide față de SETUL afișat, nu cu o
+    # constantă. Cel mai scurt prefix UNIC (`render_text.unique_prefixes`) ordonează cardurile după
+    # text („EUBOS” scris singur), dă lungimea minimă a ancorei unui chip (un chip ambiguu nu se
+    # mai oferă) și rezolvă apăsarea în `reference_resolver.match_name`. OFF = byte-identic.
+    unique_name_prefix_enabled: bool = Field(
+        default=True, validation_alias="UNIQUE_NAME_PREFIX_ENABLED"
+    )
+    # NX-318: un badge de CLASAMENT („Top Favorit”) prezent pe mai mult de jumătate dintr-un set de
+    # cel puțin 3 carduri e fundal, nu diferență, deci se scoate de pe toate (6/6 pe turul real).
+    # Badge-urile de PREȚ rămân. Tot aici: „top” pe ratingul SHRUNK (cum spunea deja comentariul)
+    # și pragul voucherului din `DomainPack.badge_rules`. OFF = byte-identic.
+    set_relative_badges_enabled: bool = Field(
+        default=True, validation_alias="SET_RELATIVE_BADGES_ENABLED"
+    )
     # NX-167 (B): la o cerere CLARĂ de categorie (triajul a dat `category`) în care search a fost
     # nevoit s-o relaxeze (`category_dropped`), NU afișa carduri din altă ramură — întoarce gol +
     # semnal de clarificare, în loc să prezinte off-category ca match. OFF → relaxarea de azi.

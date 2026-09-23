@@ -38,6 +38,7 @@ from dataclasses import dataclass
 from typing import Literal, Protocol
 
 from src.catalog.folding import fold_text
+from src.catalog.render_text import name_keys, unique_prefixes
 
 ReferenceSource = Literal["action", "named", "ordinal", "page", "selected", "single", "none"]
 ReferenceOutcome = Literal["resolved", "ambiguous", "stale", "none"]
@@ -143,6 +144,8 @@ class ReferenceRequest:
     # NX-234 avea pagina ca fallback necondiționat. Modul legacy îl păstrează byte-identic până la
     # cutoverul de contract; modul v2 cere deixis sau absența oricărui alt candidat.
     legacy_page_fallback: bool = False
+    # NX-318: limba turului, pentru garda de cuvânt gol a prefixului unic din `match_name`.
+    locale: str | None = None
 
 
 def normalize_for_match(text: str) -> str:
@@ -165,18 +168,54 @@ def match_ordinal(query: str, count: int) -> int | None:
     return None
 
 
-def match_name(query: str, names: list[str]) -> int | None:
+def _unique_enabled() -> bool:
+    """`UNIQUE_NAME_PREFIX_ENABLED`, citit leneș: modulul rămâne fără I/O, iar un mediu fără
+    configurație (unit-teste pe funcții pure) cade pe comportamentul vechi."""
+    try:
+        from src.config import get_settings  # noqa: PLC0415 — config e opțional pentru modul
+
+        return bool(getattr(get_settings(), "unique_name_prefix_enabled", False))
+    except Exception:  # noqa: BLE001 — setări indisponibile ⇒ regula veche
+        return False
+
+
+def _contains_words(haystack: tuple[str, ...], needle: tuple[str, ...]) -> bool:
+    n = len(needle)
+    return bool(n) and any(haystack[i : i + n] == needle for i in range(len(haystack) - n + 1))
+
+
+def match_name(
+    query: str, names: list[str], *, unique: bool | None = None, locale: str | None = None
+) -> int | None:
     """Indexul produsului NUMIT în query, sau None dacă nu e unic.
 
-    Două trepte: numele complet conținut în query (chipul poate fi scurtat, deci comparăm în sens
-    invers), apoi scor pe tokeni ≥3 caractere. Un scor egal între două produse NU alege arbitrar:
-    un termen comun („cremă") nu are voie să decidă. Ambiguitatea se întoarce ca „nu știu", ca
-    apelantul să poată întreba."""
+    Trei trepte: numele complet conținut în query (chipul poate fi scurtat, deci comparăm în sens
+    invers), apoi prefixul UNIC al produsului în set (NX-318), apoi scor pe tokeni ≥3 caractere.
+    Un scor egal între două produse NU alege arbitrar: un termen comun („cremă") nu are voie să
+    decidă. Ambiguitatea se întoarce ca „nu știu", ca apelantul să poată întreba.
+
+    Treapta de prefix unic e ACEEAȘI regulă cu care `chip_moves` scurtează ancora unui chip, deci
+    un chip emis se rezolvă prin construcție pe produsul lui. Fără ea, «IT'S SKIN The Fresh
+    Blueberries» ajungea la scorul pe tokeni, unde „skin”/„the”/„fresh” sunt comune ambelor „The
+    Fresh” de pe ecran. `unique=None` ⇒ flagul `UNIQUE_NAME_PREFIX_ENABLED`. `locale` alege
+    cuvintele goale care nu pot fi singure un prefix („la” din «linkul la…» nu numește un «La
+    Roche…»); absentă ⇒ ale tuturor limbilor cunoscute."""
     normalized = normalize_for_match(query)
     norm_names = [normalize_for_match(n).strip() for n in names]
     exact = [i for i, n in enumerate(norm_names) if n and n in normalized]
     if len(exact) == 1:
         return exact[0]
+
+    if unique if unique is not None else _unique_enabled():
+        prefixes = unique_prefixes({str(i): n for i, n in enumerate(names)}, locale=locale)
+        query_keys = tuple(k for k in name_keys(query) if k)
+        hits = [
+            int(i)
+            for i, prefix in prefixes.items()
+            if _contains_words(query_keys, tuple(k for k in prefix if k))
+        ]
+        if len(hits) == 1:
+            return hits[0]
 
     query_tokens = set(re.findall(r"[a-z0-9]+", normalized))
     scores: list[int] = []
@@ -190,7 +229,9 @@ def match_name(query: str, names: list[str]) -> int | None:
     return None
 
 
-def resolve_from_displayed(query: str, refs: list[HasProductRef]) -> ReferenceResolution:
+def resolve_from_displayed(
+    query: str, refs: list[HasProductRef], *, locale: str | None = None
+) -> ReferenceResolution:
     """Rezolvarea ISTORICĂ (pre-NX-234), extrasă ca API comun: doar din setul afișat.
 
     Păstrată byte-identic ca semantică (`deterministic._resolve_review_product` delegă aici):
@@ -204,7 +245,7 @@ def resolve_from_displayed(query: str, refs: list[HasProductRef]) -> ReferenceRe
         return ReferenceResolution(
             refs[index].product_id, "ordinal", "resolved", refs[index].name, index
         )
-    index = match_name(query, [r.name for r in refs])
+    index = match_name(query, [r.name for r in refs], locale=locale)
     if index is not None:
         return ReferenceResolution(
             refs[index].product_id, "named", "resolved", refs[index].name, index
@@ -217,6 +258,7 @@ def resolve_product_reference(
     refs: list[HasProductRef],
     *,
     page: PageAnchor | None = None,
+    locale: str | None = None,
 ) -> ReferenceResolution:
     """API-ul NX-234, păstrat byte-identic ca semantică: `ordinal` > `named` > `page` > `single`.
 
@@ -224,9 +266,15 @@ def resolve_product_reference(
     precedenței, două configurații, ca modul nou să nu fie o a doua copie care poate diverge.
     Dispare la cutoverul de contract (NX-249), împreună cu restul căilor v1."""
     if page is None:
-        return resolve_from_displayed(query, refs)
+        return resolve_from_displayed(query, refs, locale=locale)
     return resolve_reference(
-        ReferenceRequest(query=query, refs=tuple(refs), page=page, legacy_page_fallback=True)
+        ReferenceRequest(
+            query=query,
+            refs=tuple(refs),
+            page=page,
+            legacy_page_fallback=True,
+            locale=locale,
+        )
     )
 
 
@@ -284,7 +332,7 @@ def resolve_reference(request: ReferenceRequest) -> ReferenceResolution:
 
     # 2. Numit explicit, univoc.
     if refs:
-        index = match_name(query, [r.name for r in refs])
+        index = match_name(query, [r.name for r in refs], locale=request.locale)
         if index is not None:
             return ReferenceResolution(
                 refs[index].product_id, "named", "resolved", refs[index].name, index, "named_unique"

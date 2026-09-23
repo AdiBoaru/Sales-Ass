@@ -14,6 +14,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from src.db.queries.fusion import _shrunk_rating
+
 # Default-uri AGNOSTICE de vertical (override per-tenant în DomainPack.badge_rules).
 _DEFAULT_RULES: dict[str, float] = {
     "top_rating": 4.7,  # rating shrunk minim pt „Top Favorit"
@@ -47,16 +49,30 @@ _LABELS: dict[str, dict[str, str]] = {
 # (danger, ca „Super Preț" eMAG); top/curare = info. NEUTRU de locale (kind → tone).
 BADGE_TONE: dict[str, str] = {"deal": "danger", "coupon": "danger", "top": "info"}
 
+#: NX-318: felurile de badge care sunt un CLASAMENT (reputație), nu un fapt de preț. Doar ele se
+#: pot suprima când sunt comune setului: „Top Favorit” pe toate cardurile nu deosebește nimic, pe
+#: când „Super Preț” pe toate e tot adevărat și tot util (toate sunt reduse).
+RANKING_KINDS: frozenset[str] = frozenset({"top"})
+
+#: Sub atâtea carduri nu există o „majoritate” care să spună ceva.
+_MIN_SET_FOR_SUPPRESSION = 3
+
 
 def derive_badge_kind(
     product: dict[str, Any],
     rules: dict[str, float] | None = None,
     *,
     coupon_enabled: bool = True,
+    set_relative: bool = False,
 ) -> str | None:
     """KIND-ul semantic al badge-ului („deal"/„top") sau `None`, NEUTRU de locale. Prioritate:
     `deal` (reducere reală ≥ prag) > `top` (rating ≥ prag ȘI nr. recenzii ≥ prag). Forward-safe:
-    câmpuri lipsă → None. `list_price`/`price`/`rating`/`review_count` din date."""
+    câmpuri lipsă → None. `list_price`/`price`/`rating`/`review_count` din date.
+
+    `set_relative` (NX-318, `SET_RELATIVE_BADGES_ENABLED`) repară două abateri de la ce spunea
+    deja documentația: `top` se judecă pe ratingul SHRUNK (ca ranking-ul, altfel un 5★ cu puține
+    recenzii bate un 4,8 cu sute), iar pragul voucherului vine din regulile EFECTIVE (pachetul),
+    nu din default."""
     r = {**_DEFAULT_RULES, **(rules or {})}
 
     price = product.get("price")
@@ -71,7 +87,7 @@ def derive_badge_kind(
 
     # NX-299: voucherul, sub `deal` și peste `top`. Ordinea nu e de gust: o reducere pe care o ai
     # DEJA în preț bate una pe care o obții la finalizare, iar amândouă bat o etichetă de reputație.
-    if coupon_enabled and coupon_discount_pct(product) is not None:
+    if coupon_enabled and coupon_discount_pct(product, r if set_relative else None) is not None:
         return "coupon"
 
     rating = product.get("rating")
@@ -79,7 +95,7 @@ def derive_badge_kind(
     try:
         if (
             rating is not None
-            and float(rating) >= r["top_rating"]
+            and (_shrunk_rating(product) if set_relative else float(rating)) >= r["top_rating"]
             and int(review_count) >= int(r["top_reviews"])
         ):
             return "top"
@@ -88,13 +104,17 @@ def derive_badge_kind(
     return None
 
 
-def coupon_discount_pct(product: dict[str, Any]) -> int | None:
+def coupon_discount_pct(
+    product: dict[str, Any], rules: dict[str, float] | None = None
+) -> int | None:
     """Reducerea voucherului, în procente ÎNTREGI rotunjite în JOS, sau `None`.
 
     Rotunjirea în jos, ca la reducerile din `web/localization`: promisiunea afișată trebuie să
     rămână adevărată chiar dacă prețul se mișcă puțin între momentul randării și cel al plății.
     Un cupon fără preț, cu preț mai mare decât cel curent sau sub prag nu produce badge: coloana
     `coupon_without_discount` era deja o anomalie cunoscută la import (`catalog/sole_source.py`).
+
+    `rules` = regulile efective ale tenantului (`DomainPack.badge_rules`); absente ⇒ default-ul.
     """
     code = product.get("coupon_code")
     coupon = product.get("coupon_price")
@@ -108,11 +128,15 @@ def coupon_discount_pct(product: dict[str, Any]) -> int | None:
     if not (0 < cp < pr):
         return None
     pct = int((pr - cp) / pr * 100)
-    return pct if pct >= _DEFAULT_RULES["coupon_discount_pct"] else None
+    threshold = {**_DEFAULT_RULES, **(rules or {})}["coupon_discount_pct"]
+    return pct if pct >= threshold else None
 
 
 def badge_label(
-    kind: str | None, language: str | None, product: dict[str, Any] | None = None
+    kind: str | None,
+    language: str | None,
+    product: dict[str, Any] | None = None,
+    rules: dict[str, float] | None = None,
 ) -> str | None:
     """Eticheta localizată a unui KIND de badge (sau None).
 
@@ -127,7 +151,7 @@ def badge_label(
         return None
     if "{pct}" not in template:
         return template
-    pct = coupon_discount_pct(product or {})
+    pct = coupon_discount_pct(product or {}, rules)
     return template.format(pct=pct) if pct is not None else None
 
 
@@ -137,3 +161,21 @@ def derive_badge(
     """Badge derivat (eticheta localizată) din semnalele produsului sau `None`. Wrapper peste
     `derive_badge_kind` + `badge_label` (back-compat — semnătură/retur neschimbate)."""
     return badge_label(derive_badge_kind(product, rules), language, product)
+
+
+def common_ranking_kinds(kinds: list[str | None]) -> dict[str, int]:
+    """NX-318 — `{kind: pe câte carduri}` pentru badge-urile de CLASAMENT care nu mai deosebesc
+    nimic în setul afișat: prezente pe MAI MULT de jumătate dintr-un set de cel puțin 3 carduri.
+
+    O etichetă comună majorității e fundal, nu diferență (aceeași regulă ca `_is_common` la
+    comparație și `noise_badges` la vocabular, aplicată pe setul afișat). Măsurat pe turul real:
+    „Top Favorit” pe 6 din 6 carduri. Badge-urile de preț nu intră niciodată (`RANKING_KINDS`).
+    Pur: `kinds` e felul derivat per card, `None` unde cardul n-are badge derivat."""
+    total = len(kinds)
+    if total < _MIN_SET_FOR_SUPPRESSION:
+        return {}
+    counts: dict[str, int] = {}
+    for kind in kinds:
+        if kind in RANKING_KINDS:
+            counts[kind] = counts.get(kind, 0) + 1
+    return {kind: n for kind, n in counts.items() if n * 2 > total}

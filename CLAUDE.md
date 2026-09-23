@@ -476,6 +476,26 @@ SQL byte-identic). Card: [`tasks/stage1/NX-314.md`](tasks/stage1/NX-314.md); pro
 `pytest tests/test_conversation_subject.py tests/test_cheaper_subject_sql.py -q` +
 `PYTHONPATH=. python scripts/nx314_subject_probe.py --replay`.
 
+**NX-318 — câte cuvinte identifică un produs depinde de ce ALTCEVA e pe ecran.** Aceeași conversație
+(`f4e1431e`). Codul decidea cu o constantă (minimum 2 cuvinte): `_mention_index` rata „EUBOS” scris
+singur, iar `_fit_anchor` tăia «IT'S SKIN The Fresh Blueberries» la «IT'S SKIN The Fresh», prefixul a
+DOUĂ carduri, deci apăsarea chip-ului cădea pe o clarificare. Acum un singur utilitar PUR
+(`render_text.unique_prefixes`: cel mai scurt prefix de cuvinte unic în setul afișat, fără listă de
+branduri, cuvânt gol pe locale nefolosit singur) are trei consumatori: ordinea cardurilor după text,
+pragul ancorei unui chip (sub care nu se scurtează; nu încape ⇒ mutarea nu se oferă,
+`dropped_ambiguous_anchor`) și `reference_resolver.match_name` (treaptă înaintea scorului pe
+tokeni), deci un chip emis se rezolvă prin construcție pe produsul lui. Badge-ul e aceeași clasă pe
+altă axă: un badge de CLASAMENT pe >50% dintr-un set de ≥3 carduri se scoate de pe toate
+(`badges_suppressed`), cele de preț rămân. Pe drum: `top` se judecă pe ratingul SHRUNK (catalog:
+49,4% → 34,5%), iar pragul voucherului vine din `DomainPack.badge_rules`. Măsurat pe 56 de ture cu
+carduri: 19 cu același badge pe majoritate, până la 21 cu o ancoră ambiguă. **Premisă corectată:**
+pe turul 1 fraza cu EUBOS era în `education`, nu în `intro`, iar ordonatorul citește doar `intro`
+(0 ture greșite pe `intro`, 5 pe `education`), deci pe v1 turul acela rămâne neschimbat — extinderea
+e o decizie separată. Flaguri `UNIQUE_NAME_PREFIX_ENABLED`, `SET_RELATIVE_BADGES_ENABLED` (ON; OFF =
+byte-identic). Card: [`tasks/stage1/NX-318.md`](tasks/stage1/NX-318.md); probe:
+`pytest tests/test_unique_prefixes.py tests/test_set_relative_badges.py -q` +
+`PYTHONPATH=. python scripts/nx318_display_probe.py`.
+
 **Fix 2026-09-16 (2) — creierul unic era pus să citeze dovezi pe care nu i le arăta nimeni.**
 Găsit pe prima conversație REALĂ de după aprinderea flagului (`sole-ro`, `conversation_traces` +
 `analytics_events`), nu pe fixture: clientul a scris „parca mi uscat parul dupa ce fac dus", apoi

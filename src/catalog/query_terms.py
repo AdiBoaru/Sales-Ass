@@ -133,6 +133,13 @@ def stopwords(locale: str | None) -> frozenset[str]:
     return _STOPWORDS.get(locale.split("-")[0].lower(), frozenset())
 
 
+def any_locale_stopwords() -> frozenset[str]:
+    """Reuniunea cuvintelor goale ale TUTUROR limbilor cunoscute. Pentru apelanții care nu știu
+    limba turului și trebuie să greșească în direcția sigură: a refuza un cuvânt gol al altei limbi
+    drept identificator costă un cuvânt în plus, a-l accepta leagă textul de produsul greșit."""
+    return frozenset().union(*_STOPWORDS.values())
+
+
 def _tokens(text: str) -> list[str]:
     """Tokenii unei fraze: text pliat, doar litere și cifre. UN SINGUR producător.
 
