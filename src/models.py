@@ -314,6 +314,12 @@ class Relevance:
     relaxed: bool = False
     category_dropped: bool = False
     top_cosine: float | None = None
+    # NX-313 dus până la STARE: raftul GHICIT de model a fost judecat contrazis de cerere și scos
+    # din căutare. Distinct de `category_dropped` (acolo setul e în afara categoriei și se suprimă
+    # pick-ul; aici setul e CORECT, fiindcă raftul greșit a plecat). Citit de `ToolRun`, ca raftul
+    # respins să nu devină raftul conversației: persistat, construia meniul de chips pe el
+    # («Arata-mi ce ai la Machiaj» sub o cerere de cremă hidratantă, turul `a623c53e`).
+    guessed_category_dropped: bool = False
 
 
 @dataclass

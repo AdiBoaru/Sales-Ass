@@ -511,6 +511,7 @@ def _emit_subject_match(ctx: TurnContext) -> None:
             ConversationSubject.from_dict(raw),
             ctx.reply.products or [],
             (e.type for e in ctx.events),
+            retrieved=(ctx.retrieval.products if ctx.retrieval is not None else ()),
         )
         if report is not None:
             ctx.emit("subject_match", **report)

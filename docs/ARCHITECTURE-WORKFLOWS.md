@@ -1759,6 +1759,7 @@ catalog_reason_codes_enabled = true
 cheaper_intent_enabled = true
 cheapest_alternatives_enabled = true
 checkout_intent_fallback_enabled = true
+chip_drop_dead_enabled = true
 chip_moves_enabled = true
 chip_moves_v1_enabled = true
 chip_moves_v2_enabled = false

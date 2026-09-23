@@ -1586,6 +1586,7 @@ async def search_products_tool(
     relax_depth = 0  # treapta de relaxare la care s-a oprit (0 = filtre stricte)
     lexical_pool_n = vector_pool_n = 0  # mărimea pool-urilor la treapta finală
     top_cosine = None  # cea mai mică distanță cosine (cel mai apropiat vector) — semnal de calitate
+    guessed_category_dropped = False  # raftul GHICIT a fost scos de NX-305/313 (vezi `Relevance`)
     # NX-231: treptele de relaxare sunt PUR DB (fuziunea/rankarea sunt cod pur, fără await extern)
     # → un singur checkout pentru toată scara, eliberat înainte de restul tool-ului. Embed-ul a
     # rulat deja, mai sus, cu poolul liber.
@@ -1748,6 +1749,7 @@ async def search_products_tool(
             else:
                 reason, adopt = "better_rung", rescue_wins(ranked_final, rescued)
             if adopt:
+                guessed_category_dropped = bool(category_keys) and category_guessed
                 ctx.emit(
                     "guessed_filter_rescued",
                     dropped_category=bool(category_keys) and category_guessed,
@@ -2267,7 +2269,12 @@ async def search_products_tool(
                 f"pare să acopere ce caută și propune-i o căutare fără el sau o categorie reală."
             )
         return ToolResult(ok=True, products=[], llm_view=view)
-    relevance = Relevance(relaxed=relaxed, category_dropped=category_dropped, top_cosine=top_cosine)
+    relevance = Relevance(
+        relaxed=relaxed,
+        category_dropped=category_dropped,
+        top_cosine=top_cosine,
+        guessed_category_dropped=guessed_category_dropped,
+    )
     return ToolResult(ok=True, products=products, llm_view=view, relevance=relevance)
 
 

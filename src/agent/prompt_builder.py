@@ -17,7 +17,7 @@ from dataclasses import dataclass, replace
 from functools import lru_cache
 
 from src.agent.voice import VOICE_RULES
-from src.config import card_slots, max_per_type
+from src.config import card_slots
 from src.domain import vocab_examples
 
 # Status comandă — NEUTRU pe vertical (nu vinde, doar raportează) → constantă, nu generat.
@@ -186,11 +186,14 @@ REGULI DURE:
 - Recomandă cele mai relevante PÂNĂ LA {CARD_SLOTS} produse din listă (ideal {CARD_SLOTS} dacă ai
   destule potrivite), în limba clientului. NU completa cu produse nepotrivite doar ca să ajungi la
   {CARD_SLOTS}, mai bine mai puține, toate potrivite.
-  TIPURI: acoperă clasele de produs care ajută cererea, dar CEL MULT {MAX_PER_TYPE} produse de
-  același tip, nu {CARD_SLOTS} variații ale aceluiași lucru. Nici invers: dacă ai mai multe bune
-  din aceeași clasă, nu te opri la unul singur. În `intro` spune ce tipuri ai pus pe masă și
-  pentru ce e fiecare,
-  cu cuvintele lor din listă. Asta e partea pe care clientul n-o poate face singur.
+  TIPURI: lista vine DEJA echilibrată de server pe tip de produs, brand și preț, în ordinea în
+  care merită arătată. Nu aplica tu nicio cotă pe tip: dacă mai multe produse din aceeași clasă
+  se potrivesc, le pui pe toate (când clientul cere un singur fel de produs, toată lista e din
+  clasa aia și e corect așa). Scoți un produs DOAR fiindcă nu se potrivește cererii.
+  Dacă ai pus pe masă mai multe TIPURI de produs, spune în `intro` care sunt și pentru ce e
+  fiecare, cu cuvintele lor din listă. Asta e partea pe care clientul n-o poate face singur. Dacă
+  toate sunt același fel de produs, nu anunța ce ai pus pe masă: spune direct prin ce diferă.
+  NU scrie fraze care nu deosebesc nimic (că toate intră în preț, că „diferă prin ingrediente").
 
 - `pick` = produsul PRIMAR recomandat (același pe care îl numești în `education`) + justificare în
   cuvinte (fără cifre, fără „cel mai bun").
@@ -426,11 +429,6 @@ def build_agent_system(inp: PromptInputs) -> str:
         # promptului. Scrisă de mână aici, era cel mai mic dintre patru plafoane care nu se
         # cunoșteau — iar cel mai mic câștigă mereu.
         .replace("{CARD_SLOTS}", str(card_slots()))
-        # NX-303: cota pe tip vine din ACELAȘI loc ca a codului (`diversify_pool`). Scrisă de mână,
-        # promptul spunea „acoperă tipurile" (citit ca UNUL per tip) iar codul plafona la 2 — două
-        # cifre pentru aceeași regulă, iar promptul o decidea pe a lui. Măsurat pe un tur real:
-        # pool de 6 produse cu 3 tipuri ⇒ 3 carduri servite dintr-o nevoie de 518 produse.
-        .replace("{MAX_PER_TYPE}", str(max_per_type()))
     )
     base = f"{_store_header(inp)}\n{block}\n{_SAFETY_RULES}\n{VOICE_RULES}"
     # NX-159 felia 3 / NX-165: ghidul de STIL în system-ul buclei → ajunge la textul PRIMAR,
@@ -526,11 +524,9 @@ def _rich_rules(omit: frozenset[str]) -> str:
             rules = rules.replace(old, new)
     if "suggestions" in omit:
         rules = _cut_rule(rules, "suggestions")
-    # `{MAX_PER_TYPE}` pleca LITERAL spre model: NX-303 a pus marcatorul în reguli și l-a
-    # substituit doar în system-ul buclei. Se umple aici, pe toate variantele.
-    return rules.replace("{CARD_SLOTS}", str(card_slots())).replace(
-        "{MAX_PER_TYPE}", str(max_per_type())
-    )
+    # Cota pe tip NU mai intră în prompt: e a serverului (`diversify_pool`, relaxare treptată).
+    # Spusă modelului ca cifră, devenea plafon DUR și tăia un set de un singur tip la 2 carduri.
+    return rules.replace("{CARD_SLOTS}", str(card_slots()))
 
 
 @lru_cache(maxsize=256)

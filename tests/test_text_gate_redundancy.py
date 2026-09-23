@@ -77,20 +77,26 @@ def test_empty_applied_keys_never_triggers() -> None:
 
 
 def test_the_type_quota_has_a_single_owner() -> None:
-    """Înainte, `diversify_pool` plafona la 2 per tip iar promptul rich cerea „acoperă tipurile" —
-    citit de model ca UNUL per tip. Două cifre pentru aceeași regulă, iar cea din prompt câștiga,
-    fiindcă ea vorbește cu modelul. Măsurat pe turul real: pool de 6 produse cu 3 tipuri distincte
-    ⇒ **3 carduri**, dintr-o nevoie pe care catalogul o acoperă cu 518 produse și 18 clase."""
+    """Cota pe tip are UN proprietar: serverul (`diversify_pool`), cu relaxare TREPTATĂ.
+
+    Două eșecuri opuse, ambele măsurate pe ture reale, veneau din faptul că promptul purta și el
+    regula. (1) NX-303: „acoperă tipurile" se citea ca UNUL per tip ⇒ 3 carduri din 6. (2) Turul
+    `a623c53e` (2026-09-23, «vreau o crema de hidratare»): după ce marcatorul a început să se
+    substituie (NX-312 felia 4), „CEL MULT 2 de același tip" a devenit plafon DUR, iar un set de
+    șase creme de față a ieșit cu **2 carduri** — codul relaxează cota când setul are un singur
+    tip, promptul nu. Modelul primește lista deja echilibrată și nu mai aplică nicio cotă."""
+    import re
+
     from src.agent.prompt_builder import _RICH_RULES
     from src.config import max_per_type
 
-    assert "{MAX_PER_TYPE}" in _RICH_RULES, (
-        "regula de tipuri nu mai citește marcatorul — cifra s-a întors în proza promptului"
-    )
+    assert "{MAX_PER_TYPE}" not in _RICH_RULES, "cota pe tip s-a întors în prompt"
+    assert not re.search(r"CEL MULT \S+ produse de\s+același tip", _RICH_RULES)
     assert "acoperă-le pe cele care ajută cererea" not in _RICH_RULES, (
         "formularea veche («acoperă tipurile») se citește ca UNUL per tip"
     )
-    assert max_per_type() == 2
+    assert "Nu aplica tu nicio cotă pe tip" in _RICH_RULES
+    assert max_per_type() == 2  # cota serverului rămâne
 
 
 def test_the_prompt_renders_the_owners_number(monkeypatch) -> None:

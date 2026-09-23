@@ -128,16 +128,90 @@ def test_spoken_needs_read_from_the_subject():
     assert spoken_needs(ctx.state) == (("concerns", "hydration"),)
 
 
-def test_drop_dead_is_inert_with_the_flag_off(monkeypatch):
+def test_drop_dead_is_inert_only_with_both_flags_off(monkeypatch):
+    """Chips-urile moarte au kill-switch PROPRIU (ON): pe turul `a623c53e` V2 era stins și
+    «Caut ceva pentru hidratare» a plecat sub «vreau o crema de hidratare»."""
     from src.agent.finalize import _drop_dead_moves
 
     monkeypatch.setattr(get_settings(), "chip_moves_v2_enabled", False, raising=False)
+    monkeypatch.setattr(get_settings(), "chip_drop_dead_enabled", False, raising=False)
     ctx = _ctx("x")
     ctx.state.search_constraints = {SUBJECT_KEY: {"needs": [["concerns", "hydration"]]}}
     moves = [_mv("refine_facet", "refine_facet:concerns:hydration")]
     assert _drop_dead_moves(ctx, moves, n_cards=1) == (moves, 0)
+    monkeypatch.setattr(get_settings(), "chip_drop_dead_enabled", True, raising=False)
+    assert _drop_dead_moves(ctx, moves, n_cards=1) == ([], 1)
+    monkeypatch.setattr(get_settings(), "chip_drop_dead_enabled", False, raising=False)
     monkeypatch.setattr(get_settings(), "chip_moves_v2_enabled", True, raising=False)
     assert _drop_dead_moves(ctx, moves, n_cards=1) == ([], 1)
+
+
+def test_dead_chips_are_on_by_default():
+    from src.config import Settings
+
+    assert Settings.model_fields["chip_drop_dead_enabled"].default is True
+    assert Settings.model_fields["chip_moves_v2_enabled"].default is False
+
+
+def test_pivot_shelf_lowering_stays_behind_v2(monkeypatch):
+    """Doar chips-urile MOARTE ies de sub V2; coborârea raftului vecin e o decizie de produs a
+    feliei 3 și rămâne pe flagul ei."""
+    from src.agent.finalize import _drop_dead_moves
+
+    monkeypatch.setattr(get_settings(), "chip_moves_v2_enabled", False, raising=False)
+    monkeypatch.setattr(get_settings(), "chip_drop_dead_enabled", True, raising=False)
+    ctx = _ctx("x")
+    moves = [_mv("pivot_shelf", "pivot_shelf:category:machiaj")]
+    kept, dropped = _drop_dead_moves(ctx, moves, n_cards=2, obligation_kinds=["recommend"])
+    assert kept == moves and dropped == 0
+
+
+def test_refinement_already_true_of_every_card_is_dead():
+    """Turul `a623c53e`: «Caut ceva pentru zi si noapte» sub două creme care sunt AMBELE de zi și
+    de noapte. Îngustarea n-ar scoate nimic de pe ecran."""
+    moves = [
+        _mv("refine_facet", "refine_facet:routine_time:am_pm"),
+        _mv("refine_facet", "refine_facet:skin_type:dry"),
+    ]
+    cards = [
+        {"product_id": "p1", "attributes": {"routine_time": "am_pm", "skin_type": "dry"}},
+        {"product_id": "p2", "attributes": {"routine_time": "am_pm", "skin_type": "sensitive"}},
+    ]
+    kept, dropped = chip_moves.drop_dead(moves, cards=cards)
+    assert [m.move_id for m in kept] == ["refine_facet:skin_type:dry"] and dropped == 1
+
+
+@pytest.mark.parametrize(
+    "cards",
+    [
+        # un singur card: o îngustare poate aduce produse NOI, nu e moartă
+        [{"product_id": "p1", "attributes": {"routine_time": "am_pm"}}],
+        # un card fără valoare = „nu știm", nu „are": UNKNOWN ≠ MISMATCH
+        [
+            {"product_id": "p1", "attributes": {"routine_time": "am_pm"}},
+            {"product_id": "p2", "attributes": {}},
+        ],
+        # valori diferite: îngustarea chiar alege
+        [
+            {"product_id": "p1", "attributes": {"routine_time": "am_pm"}},
+            {"product_id": "p2", "attributes": {"routine_time": "pm"}},
+        ],
+    ],
+)
+def test_refinement_that_still_narrows_survives(cards):
+    moves = [_mv("refine_facet", "refine_facet:routine_time:am_pm")]
+    kept, dropped = chip_moves.drop_dead(moves, cards=cards)
+    assert kept == moves and dropped == 0
+
+
+def test_list_valued_attributes_count_per_element():
+    moves = [_mv("refine_facet", "refine_facet:concerns:hydration")]
+    cards = [
+        {"attributes": {"concerns": ["hydration", "redness"]}},
+        {"attributes": {"concerns": ["Hydration", "anti_aging"]}},
+    ]
+    kept, dropped = chip_moves.drop_dead(moves, cards=cards)
+    assert kept == [] and dropped == 1
 
 
 # --- cap-coadă pe agent_stage ----------------------------------------------------------------

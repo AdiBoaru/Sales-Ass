@@ -276,7 +276,14 @@ class ToolRun:
         # reușită: că a cerut sub 100. Filtrată pe `result.ok`, stiva ar uita tocmai constrângerile
         # prea strânse, adică pe cele care contează.
         if name == "search_products" and isinstance(args, dict):
-            self.search_args.append(dict(args))
+            kept = dict(args)
+            # Raftul pe care căutarea însăși l-a respins ca ghicitură greșită (NX-313) nu e raftul
+            # conversației: `observed_category` l-ar persista, iar meniul de chips s-ar construi pe
+            # el. Argumentul modelului rămâne în `tool_call` (telemetrie), nu în stare.
+            relevance = getattr(result, "relevance", None)
+            if getattr(relevance, "guessed_category_dropped", False):
+                kept.pop("category", None)
+            self.search_args.append(kept)
         self.generated_links.update(result.links)
         self.grounded_prices.update(result.prices)
         if result.state_patch:  # NX-79: cart_add → mutație de state (persistată de processor)

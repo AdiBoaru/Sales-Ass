@@ -1259,6 +1259,11 @@ class Settings(BaseSettings):
     # oferă chips moarte (o nevoie deja rostită, detaliul pe un tur cu un singur card). OFF până la
     # golden, ca restul cardului; OFF = chips și rutare byte-identice.
     chip_moves_v2_enabled: bool = Field(default=False, validation_alias="CHIP_MOVES_V2_ENABLED")
+    # Chips MOARTE scoase și fără V2: îngustare pe o nevoie deja rostită, îngustare pe o valoare pe
+    # care o au TOATE cardurile afișate, detaliu pe un tur cu un singur card. Nu e o capabilitate
+    # nouă de câștigat pe golden, e risipă măsurată (turul `a623c53e`: 3 din 5 chips moarte), deci
+    # ON, ca NX-311/312. Coborârea lui `pivot_shelf` rămâne a lui V2. OFF = lista neatinsă.
+    chip_drop_dead_enabled: bool = Field(default=True, validation_alias="CHIP_DROP_DEAD_ENABLED")
     # NX-114: DomainPack (config per-vertical din DB+seed). Kill-switch FAIL-SAFE: OFF →
     # BusinessConfig.domain_pack=None, consumatorii cad pe constantele lor de cod (byte-identic).
     domain_pack_enabled: bool = Field(default=True, validation_alias="DOMAIN_PACK_ENABLED")

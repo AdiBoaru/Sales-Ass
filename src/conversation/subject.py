@@ -260,19 +260,40 @@ def subject_match_report(
     subject: ConversationSubject | None,
     products: Sequence[Mapping[str, Any]],
     event_types: Iterable[str],
+    retrieved: Sequence[Mapping[str, Any]] = (),
 ) -> dict[str, Any] | None:
     """Evenimentul `subject_match` al unui tur cu carduri, sau `None` fără carduri. PURĂ.
 
     Prima măsurătoare de POTRIVIRE din sistem (clasa NX-309), pe o singură dimensiune, fără să
     blocheze nimic. Fără text de client și fără id-uri de produs (P12): doar numărători și
     drumul. Un tur cu carduri fără niciun eveniment de retrieval le-a re-arătat din stare
-    (`rehydrate`)."""
+    (`rehydrate`).
+
+    `retrieved` = produsele turului CU `attributes` (`ctx.retrieval`). Cardurile servite pe calea
+    bogată sunt compacte (`compose.card_products`: id, nume, preț, url, imagine), deci n-au tip:
+    citit doar de pe card, raportul dădea `type_matched=0` pe ORICE tur bogat (turul `a623c53e`:
+    două creme de față servite, subiect «crema de fata», share 0,0). Tipul se ia de pe rândul de
+    retrieval cu același id, iar cardul rămâne sursa când îl poartă el însuși."""
     if not products:
         return None
     seen = set(event_types)
     path = next((name for event, name in _PATHS if event in seen), "rehydrate")
     subject_type = subject.product_type if subject else None
-    matched = sum(1 for p in products if product_type_of(p) == subject_type) if subject_type else 0
+    by_id: dict[str, str] = {}
+    for row in retrieved:
+        rid = row.get("product_id") or row.get("id")
+        ptype = product_type_of(row)
+        if rid and ptype:
+            by_id.setdefault(str(rid), ptype)
+
+    def _type(p: Mapping[str, Any]) -> str | None:
+        own = product_type_of(p)
+        if own:
+            return own
+        pid = p.get("product_id") or p.get("id")
+        return by_id.get(str(pid)) if pid else None
+
+    matched = sum(1 for p in products if _type(p) == subject_type) if subject_type else 0
     return {
         "path": path,
         "subject_type_known": subject_type is not None,

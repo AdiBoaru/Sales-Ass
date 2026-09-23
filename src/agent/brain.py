@@ -361,11 +361,13 @@ def _turn_chips(
     from src.agent.finalize import _drop_dead_moves, _role_order  # noqa: PLC0415 — ca pe v1
 
     kinds = [o.kind for o in plan.obligations]
+    shown = _plan_products(plan, run.retrieved)
     candidates, dead = _drop_dead_moves(
         ctx,
         candidates,
-        n_cards=len(_plan_products(plan, run.retrieved)),
+        n_cards=len(shown),
         obligation_kinds=kinds,
+        cards=shown,
     )
     if dead:
         anchor_stats["dropped_dead"] = dead
