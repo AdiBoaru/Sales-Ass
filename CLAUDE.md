@@ -20,7 +20,7 @@ Referință de piață: similar cu iZi (eMAG) și Aura (SOLE), livrat ca servici
 | API | FastAPI (webhook + health) |
 | Coadă | Redis Streams (lock per conversație, debounce) |
 | DB | Postgres **17.6** — Supabase, proiect `NativexSales` eu-west-2 (**o singură schemă `public`**, multi-tenant pe `business_id`). Proiectul vechi (eu-west-1, PG16) e abandonat din 2026-08-28 |
-| LLM sales | OpenAI **`gpt-5.6-luna`** (`MODEL_AGENT`; era `gpt-5.4-mini` până pe 2026-08-24). Escaladarea `MODEL_AGENT_COMPLEX` e GOALĂ implicit |
+| LLM sales | OpenAI **`gpt-5.6-luna`** (`MODEL_AGENT`; era `gpt-5.4-mini` până pe 2026-08-24), `reasoning_effort=medium` pe compunere (NX-313; era `high`). Escaladarea `MODEL_AGENT_COMPLEX` e GOALĂ implicit |
 | Embeddings | text-embedding-3-small (pgvector în Supabase) |
 | **Web widget** | **SINGURUL canal de lucru (NX-179)** — `/web/chat` sincron + `/web/stream` SSE; widgetul e în repo FE separat (`docs/FRONTEND-CONTRACT-IZI.md`) |
 | Validare | Pydantic v2 |
@@ -430,6 +430,24 @@ NU atinge `reasoning_effort` (ar tăia și baseline-ul de ~25s, dar atinge calit
 D15) și nu aprinde `TURN_DEADLINE_ENABLED`. Card: [`tasks/stage1/NX-311.md`](tasks/stage1/NX-311.md);
 probe: `pytest tests/test_llm_call_budget.py -q` +
 `PYTHONPATH=. python scripts/llm_call_budget_probe.py --business sole-ro`.
+
+**NX-313 — «vreau o cremă de hidratare»: filtrul ghicit se judecă după CERERE.**
+Turul real `bcd8e5c6` (`sole-ro`, 2026-09-23), recidiva lui `f7414c3e` DUPĂ #398: 72,4 s, trei BB-uri
+de machiaj, două cu același nume, motivul primului card lipsă. Modelul a trimis `category="fata"`
+(raftul „Fata" e MACHIAJ) lângă `concerns=hidratare` ROSTIT, iar textul prindea STRICT 4 BB-uri.
+NX-305 nu avea ce prinde: scotea filtrele ghicite tot-sau-nimic și doar pe ture degradate.
+Acum (`guessed_filter_verdict`, PUR) se scoate DOAR ce e ghicit, iar criteriul e o proporție pe
+date: aceeași cerere fără ghicitură, câtă din ea cade în filtrul ghicit. Corect ⇒ doar îngustează
+(0,16-0,94 pe trafic), greșit ⇒ contrazis (0,00). Prag 0,10, judecat doar pe `strict` (pe treptele
+relaxate proporția măsura zgomot și scotea rafturi bune). Pe drum: `filters_only` + sort explicit
+CRĂPA căutarea pe `main` (`$2` legat și nefolosit, «ceva mai ieftin»), poartă generală pe toate
+treptele × sorturile; motivul cardului nu mai cade pe un IDENTIFICATOR din fișă („complex v11",
+„N05"), cantitățile rămân respinse; un card per familie pe pagină (13% din ture arătau două carduri
+cu același nume); `LLM_REASONING_EFFORT_AGENT` `high` → **`medium`** (60,1 s din 72,4 s era
+raționamentul compunerii; calitatea rămâne de confirmat pe golden). Neacoperit, declarat: afirmația
+falsă despre magazin (poarta de POTRIVIRE, NX-309). Card: [`tasks/stage1/NX-313.md`](tasks/stage1/NX-313.md);
+probe: `pytest tests/test_guessed_filter_coherence.py -q` +
+`PYTHONPATH=. python scripts/nx313_guessed_filter_coherence_probe.py`.
 
 **Fix 2026-09-16 (2) — creierul unic era pus să citeze dovezi pe care nu i le arăta nimeni.**
 Găsit pe prima conversație REALĂ de după aprinderea flagului (`sole-ro`, `conversation_traces` +

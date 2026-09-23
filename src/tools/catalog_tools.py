@@ -354,6 +354,93 @@ def rescue_wins(before: list[dict[str, Any]], after: list[dict[str, Any]]) -> bo
     return _RUNG_ORDER.get(_rung_of(after), 99) < _RUNG_ORDER.get(_rung_of(before), 99)
 
 
+def one_per_family(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """NX-313: prima apariție a fiecărui nume AFIȘAT, în ordinea dată, apoi repetițiile. PURĂ.
+
+    Cheia e exact ce vede clientul pe card (`display_name`), nu `name`: două rânduri cu nume
+    întregi diferite („…Light Ivory 30 ml" / „…Natural Beige 30 ml") sunt identice pe ecran. O
+    reordonare stabilă, nu o excludere: lungimea și conținutul listei rămân aceleași."""
+    first: list[dict[str, Any]] = []
+    later: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for p in rows:
+        key = display_name(str(p.get("name") or "")).casefold()
+        (later if key in seen else first).append(p)
+        seen.add(key)
+    return first + later
+
+
+def should_probe_guessed_filters(
+    *,
+    enabled: bool,
+    category_guessed: bool,
+    facets_guessed: bool,
+    has_content_terms: bool,
+) -> bool:
+    """NX-313: merită să întrebăm catalogul dacă ce a GHICIT modelul se potrivește cererii? PURĂ.
+
+    Spre deosebire de NX-305 (`should_rescue_guessed_filters`), nu cere ca NIMIC să nu fie rostit
+    și nici ca rezultatul să fie degradat. Un filtru rostit rămâne pe loc în interogarea de probă,
+    deci nu mai poate proteja un vecin ghicit, iar un raft greșit în care textul prinde ceva
+    STRICT arată exact ca o potrivire curată. Prețul e o interogare lexicală în plus, doar pe
+    turele cu un filtru ghicit.
+
+    `has_content_terms` rămâne: interogarea de probă nu cere `filters_only`, deci fără cuvinte de
+    conținut n-ar avea pe ce să potrivească."""
+    return enabled and (category_guessed or facets_guessed) and has_content_terms
+
+
+def guessed_filter_verdict(
+    before: list[dict[str, Any]],
+    after: list[dict[str, Any]],
+    *,
+    comparable: bool,
+    min_share: float,
+    min_rows: int,
+) -> tuple[str | None, float | None]:
+    """NX-313: se scot filtrele ghicite? Întoarce `(motiv, proporție)`; motiv `None` = nu. PURĂ.
+
+    `before` = setul cu filtrele ghicite, `after` = aceeași cerere fără ele (filtrele rostite
+    rămân în ambele). Două motive de a le scoate:
+
+    `better_rung` — regula NX-305: fără ghicitură, textul aterizează pe o treaptă strict mai bună.
+
+    `contradicted` — pe treaptă EGALĂ, câtă din cererea deschisă cade în filtrul ghicit. Setul cu
+    filtru e un SUBSET al celui deschis (același text, aceleași filtre rostite, plus ghicitura),
+    iar ordinea lexicală e per rând, deci rândurile din `after` care sunt și în `before` sunt
+    exact cele din interiorul ghiciturii. Un raft ghicit corect doar ÎNGUSTEAZĂ: o parte mare din
+    potriviri e deja acolo. Unul ghicit greșit e contrazis de catalog. Pe turul `bcd8e5c6`
+    raftul „Fata" (machiaj) ținea 4 din 50 de potriviri pentru «crema de hidratare».
+
+    `comparable=False` când scara de filtre a relaxat ceva: atunci `before` a rulat alt `WHERE`,
+    iar relația de subset nu mai ține. `min_rows` ține proporția departe de seturi prea mici ca să
+    spună ceva. Proporția se întoarce și când nu decide, ca să poată fi măsurată."""
+    if not after:
+        return None, None
+    rung_before = _RUNG_ORDER.get(_rung_of(before), 99)
+    rung_after = _RUNG_ORDER.get(_rung_of(after), 99)
+    if rung_after < rung_before:
+        # O treaptă mai bună pe UN rând nu e o cerere mai bine servită: pe trafic real, «dar eu am
+        # zis sa nu fie cremos» ar fi schimbat raftul de buze pe un singur produs de ten. Cerem
+        # cel puțin cât avea setul cu ghicitură, plafonat la `min_rows`.
+        if len(after) < min(min_rows, len(before)):
+            return None, None
+        return "better_rung", None
+    # Doar pe `strict`: acolo textul a potrivit TOATE cuvintele, deci setul deschis e cererea.
+    # Pe treptele relaxate (SAU, typo) setul deschis e dominat de cuvinte comune, iar proporția
+    # ar măsura zgomotul, nu ghicitura — pe trafic real asta scotea rafturi corecte.
+    if (
+        not comparable
+        or rung_after != rung_before
+        or rung_after != _RUNG_ORDER["strict"]
+        or len(after) < min_rows
+    ):
+        return None, None
+    inside = {str(p.get("id")) for p in before}
+    share = sum(1 for p in after if str(p.get("id")) in inside) / len(after)
+    return ("contradicted" if share < min_share else None), share
+
+
 def _step_note(p: dict[str, Any]) -> str:
     """Nota de treaptă pentru un produs servit degradat. `strict` (potrivire curată) n-are notă:
     tăcerea ACOLO e informație, iar o notă pe fiecare rând ar deveni zgomot pe care modelul îl
@@ -1576,26 +1663,49 @@ async def search_products_tool(
         # testabile fără DB, și un singur loc unde se citește regula.
         #
         # Rulează în ACELAȘI checkout ca scara (e tot muncă pură de DB, fără await extern, NX-231).
-        if should_rescue_guessed_filters(
-            enabled=get_settings().search_guessed_filter_rescue_enabled,
-            category_uttered=category_uttered,
-            facets_uttered=facets_uttered,
-            has_guessed_subject=bool(category_keys or facet_filters),
-            has_content_terms=bool(content_terms(a.query, ctx.language)),
-            degraded=relaxed or _rung_of(ranked_final) != "strict",
-        ):
+        #
+        # NX-313 — judecata se generalizează: se scot DOAR filtrele ghicite (cele rostite rămân în
+        # interogarea de probă), iar proba rulează și pe potrivirile curate, fiindcă un raft greșit
+        # în care textul prinde ceva arată exact ca o potrivire curată. Regula trăiește în
+        # `should_probe_guessed_filters` / `guessed_filter_verdict`, tot PURE. Cu flagul stins,
+        # blocul de mai jos e NX-305 byte-identic.
+        settings_now = get_settings()
+        coherence = settings_now.search_guessed_filter_coherence_enabled
+        category_guessed = bool(category_keys) and not category_uttered
+        facets_guessed = bool(facet_filters) and not facets_uttered
+        has_terms = bool(content_terms(a.query, ctx.language))
+        if coherence:
+            probe = should_probe_guessed_filters(
+                enabled=settings_now.search_guessed_filter_rescue_enabled,
+                category_guessed=category_guessed,
+                facets_guessed=facets_guessed,
+                has_content_terms=has_terms,
+            )
+        else:
+            probe = should_rescue_guessed_filters(
+                enabled=settings_now.search_guessed_filter_rescue_enabled,
+                category_uttered=category_uttered,
+                facets_uttered=facets_uttered,
+                has_guessed_subject=bool(category_keys or facet_filters),
+                has_content_terms=has_terms,
+                degraded=relaxed or _rung_of(ranked_final) != "strict",
+            )
+            category_guessed = facets_guessed = True  # NX-305: scoate tot
+        if probe:
             base = ladder[0]
+            kept_category = base["category"] if not category_guessed else ()
+            kept_facets = base["facet_filters"] if not facets_guessed else {}
             rescued = await search_products_lexical(
                 conn,
                 ctx.business.id,
                 query_text=a.query,
                 price_max=base["price_max"],
                 constraints=base["constraints"],
-                facet_filters={},  # ghicit
+                facet_filters=kept_facets or {},
                 features=base["features"],
                 searchable_facets=searchable_facets,
                 variant_label=a.variant_label,
-                category=(),  # ghicit
+                category=kept_category or (),
                 brand=a.brand,  # ROSTIT sau nu, brandul nu se relaxează niciodată (NX-135)
                 sort_mode=a.sort_mode,
                 in_stock_only=base["in_stock_only"],
@@ -1605,11 +1715,34 @@ async def search_products_tool(
                 allow_filters_only=False,
                 pool=_FUSION_POOL,
             )
-            if rescue_wins(ranked_final, rescued):
+            if coherence:
+                reason, share = guessed_filter_verdict(
+                    ranked_final,
+                    rescued,
+                    comparable=not relaxed,
+                    min_share=settings_now.search_guessed_filter_min_share,
+                    min_rows=settings_now.search_guessed_filter_min_rows,
+                )
+                # Proba se publică ORICUM, și când nu decide: pragul e o primă calibrare, iar
+                # recalibrarea cere distribuția proporției pe trafic, nu doar pe turele adoptate.
+                ctx.emit(
+                    "guessed_filter_probe",
+                    category_guessed=category_guessed,
+                    facets_guessed=facets_guessed,
+                    share=round(share, 3) if share is not None else None,
+                    verdict=reason or "kept",
+                    before=len(ranked_final),
+                    after=len(rescued),
+                )
+                adopt = reason is not None
+            else:
+                reason, adopt = "better_rung", rescue_wins(ranked_final, rescued)
+            if adopt:
                 ctx.emit(
                     "guessed_filter_rescued",
-                    dropped_category=bool(category_keys),
-                    dropped_facets=len(facet_filters),
+                    dropped_category=bool(category_keys) and category_guessed,
+                    dropped_facets=len(facet_filters) if facets_guessed else 0,
+                    reason=reason,
                     from_step=_rung_of(ranked_final),
                     to_step=_rung_of(rescued),
                     before=len(ranked_final),
@@ -1627,8 +1760,13 @@ async def search_products_tool(
                 relax_depth = 0
                 lexical_pool_n = len(rescued)
                 # Treapta câștigătoare devine cea FĂRĂ filtrele ghicite, altfel completarea NX-298
-                # de mai jos ar umple pagina exact din raftul pe care tocmai l-am scos.
-                winning_step = {**base, "category": (), "facet_filters": {}}
+                # de mai jos ar umple pagina exact din raftul pe care tocmai l-am scos. Filtrele
+                # ROSTITE rămân (NX-313): completarea vine din fațeta pe care a cerut-o clientul.
+                winning_step = {
+                    **base,
+                    "category": kept_category or (),
+                    "facet_filters": kept_facets or {},
+                }
 
         # NX-298: pagina nu s-a umplut, iar cererea NUMEȘTE un set (raft/fațetă/brand/variantă).
         # Sloturile rămase se completează din setul filtrului, ordonat după ACELEAȘI cuvinte ale
@@ -1751,6 +1889,20 @@ async def search_products_tool(
     ):
         ranked_final = diversify_pool(ranked_final, a.limit)
         diversified = True
+
+    # NX-313: un card per FAMILIE pe pagină. Clientul vede numele SCURT (`display_name`, NX-301),
+    # iar nuanțele și gramajele aceluiași produs îl au identic: pe traficul real 10 din 76 de ture
+    # cu ≥2 carduri (13%) arătau două carduri cu același nume, iar turul `bcd8e5c6` avea patru
+    # „VILLAGE 11 FACTORY MY Skin Fit BB Cream" din șase. Nu se scoate nimic: repetițiile trec
+    # după toate primele apariții, deci rămân în pool pentru „mai arată-mi". Aceleași condiții ca
+    # diversificarea: pe sort explicit ordinea e a clientului, pe produs numit căutăm exact acel
+    # produs (și nuanța lui).
+    if (
+        get_settings().search_one_card_per_family_enabled
+        and a.sort_mode == "relevance"
+        and a.product_name is None
+    ):
+        ranked_final = one_per_family(ranked_final)
 
     # NX-303: coada intră ABIA acum, după ce pagina a fost aleasă. `pool_ids` (mai jos) e tot ce
     # va avea paginarea; pagina însăși rămâne cea de dinainte de card, byte-identic.

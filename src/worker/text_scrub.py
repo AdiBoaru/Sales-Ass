@@ -54,11 +54,45 @@ def has_marketing_claim(text: str | None) -> bool:
     return bool(_PCT.search(text) or _CLAIMY.search(text) or _SUPER.search(text))
 
 
-def has_unverifiable_claim(text: str | None) -> bool:
+#: NX-313: un cuvânt care conține o cifră. Separat de `_DIGIT` fiindcă aici contează TOKENUL
+#: întreg („v11"), nu doar prezența unei cifre.
+_DIGIT_TOKEN = re.compile(r"\w*\d\w*")
+_LETTER = re.compile(r"[^\W\d_]")
+
+
+def identifier_tokens(*texts: str | None) -> frozenset[str]:
+    """NX-313: IDENTIFICATORII (litere ȘI cifre în același cuvânt: „v11", „b5", „q10") din textele
+    date, pliați (fără diacritice, litere mici). PURĂ.
+
+    Cantitățile pure („50", „0.05") nu intră niciodată: un număr fără literă e o MĂSURĂ, iar o
+    măsură în proza modelului rămâne neverificabilă chiar dacă aceeași cifră apare pe fișă (pe
+    „50 ml" din nume, „50 lei" ar trece)."""
+    out: set[str] = set()
+    for t in texts:
+        for tok in _DIGIT_TOKEN.findall(fold_text(t or "")):
+            if _LETTER.search(tok):
+                out.add(tok)
+    return frozenset(out)
+
+
+def has_unverifiable_claim(text: str | None, grounded: frozenset[str] = frozenset()) -> bool:
     """Toată proza neverificabilă a căii BOGATE: cifre + procente + claim + superlativ. Paritate
-    EXACTĂ cu vechiul `scrub_prose` (NU include stoc → zero regresie pe calea bogată)."""
+    EXACTĂ cu vechiul `scrub_prose` (NU include stoc → zero regresie pe calea bogată).
+
+    NX-313 — `grounded` = identificatorii din fișa PRODUSULUI despre care e textul
+    (`identifier_tokens`). O cifră care face parte dintr-un astfel de identificator e un NUME, nu o
+    cantitate: turul `bcd8e5c6` pierdea tot motivul cardului fiindcă spunea „complex v11", numele
+    real al complexului din fișă. Orice altă cifră respinge textul ca înainte. Fără `grounded`
+    (implicit) comportamentul e cel vechi, byte-identic."""
     if not text:
         return False
+    if grounded:
+        loose = [
+            tok
+            for tok in _DIGIT_TOKEN.findall(fold_text(text))
+            if not (_LETTER.search(tok) and tok in grounded)
+        ]
+        return bool(loose) or has_marketing_claim(text)
     return bool(_DIGIT.search(text)) or has_marketing_claim(text)
 
 

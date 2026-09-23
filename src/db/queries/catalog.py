@@ -902,7 +902,12 @@ async def _lexical_fetch(
         # (`relaxed_query_any`): pe o treaptă care nu mai filtrează, un `ȘI` ar face rangul zero
         # pentru aproape tot setul, adică exact ordinea pe care o reparăm.
         # `not v2` nu poate ajunge aici: `_lexical_steps` întoarce atunci doar `strict`.
-        if v2 and terms:
+        #
+        # NX-313: DOAR pe `relevance`. Sub un sort explicit (preț/rating) rangul nu intră în
+        # `ORDER BY`, iar un placeholder legat și nefolosit nu are tip, deci Postgres refuză tot
+        # query-ul (`IndeterminateDatatypeError: $2`). Măsurat pe trafic real: «Vreau ceva mai
+        # ieftin decât astea» (`sort_mode=price_asc`) crăpa căutarea pe treapta asta.
+        if v2 and terms and sort_mode == "relevance":
             q_ph = placeholder(relaxed_query_any(terms))
             rank_expr = (
                 f"ts_rank_cd(p.search_tsv, websearch_to_tsquery('simple', ro_unaccent({q_ph})))"

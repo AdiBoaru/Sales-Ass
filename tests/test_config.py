@@ -41,7 +41,7 @@ def test_defaults(monkeypatch):
     # Escaladarea la modelul mare e OPRITĂ implicit: se aprinde cu o variabilă, nu din cod.
     assert s.model_agent_complex == ""
     assert s.model_embed == "text-embedding-3-small"
-    assert s.llm_reasoning_effort_agent == "high"
+    assert s.llm_reasoning_effort_agent == "medium"
     assert s.redis_url == "redis://redis:6379/0"
     assert s.daily_cost_cap_usd == 5.0
     assert s.env == "dev"

@@ -1045,6 +1045,39 @@ class Settings(BaseSettings):
     search_guessed_filter_rescue_enabled: bool = Field(
         default=True, validation_alias="SEARCH_GUESSED_FILTER_RESCUE_ENABLED"
     )
+    # NX-313: filtrul ghicit se judecă după CERERE, nu după cât de curat a ieșit rezultatul.
+    #
+    # NX-305 avea două limite care se compun. Scotea filtrele ghicite TOATE sau NICIUNUL, deci
+    # o fațetă rostită ținea în viață un raft ghicit. Și se uita doar la turele degradate, deci
+    # un raft greșit în care textul prindea ceva trecea drept potrivire curată. Turul real
+    # `bcd8e5c6` (`sole-ro`, 2026-09-23, «vreau o crema de hidratare») le are pe amândouă:
+    # `category="fata"` ghicit (raftul „Fata" e MACHIAJ), `concerns=hidratare` rostit, iar
+    # textul prindea STRICT patru BB-uri. Clientul a primit creme colorante, iar catalogul are
+    # 189 de creme de față cu hidratare pe `ten-ingrijirea-tenului`.
+    #
+    # Semnalul e o proporție pe date, nu o listă de rafturi „periculoase": aceeași cerere,
+    # rulată fără ce a ghicit modelul, câtă din ea cade ÎN filtrul ghicit? Un raft ghicit corect
+    # doar îngustează (o parte mare din potriviri e deja acolo). Unul ghicit greșit e
+    # contrazis de catalog (aproape nimic nu e acolo). Sub `min_share` filtrul ghicit se scoate.
+    # Filtrele rostite nu se ating niciodată. `min_rows` ține proporția departe de seturi prea
+    # mici ca să spună ceva. Pragurile sunt o PRIMĂ calibrare, măsurată pe traficul real
+    # (`scripts/nx313_guessed_filter_coherence_probe.py`), nu un adevăr.
+    # OFF → NX-305 exact ca înainte, byte-identic.
+    search_guessed_filter_coherence_enabled: bool = Field(
+        default=True, validation_alias="SEARCH_GUESSED_FILTER_COHERENCE_ENABLED"
+    )
+    search_guessed_filter_min_share: float = Field(
+        default=0.10, validation_alias="SEARCH_GUESSED_FILTER_MIN_SHARE", ge=0.0, le=1.0
+    )
+    search_guessed_filter_min_rows: int = Field(
+        default=5, validation_alias="SEARCH_GUESSED_FILTER_MIN_ROWS", ge=1
+    )
+    # NX-313: un card per familie (același nume AFIȘAT) pe pagina de căutare; repetițiile trec la
+    # coada pool-ului, nu dispar. Măsurat pe trafic real: 13% din turele cu ≥2 carduri arătau două
+    # carduri cu același nume. OFF → ordinea de dinainte, byte-identic.
+    search_one_card_per_family_enabled: bool = Field(
+        default=True, validation_alias="SEARCH_ONE_CARD_PER_FAMILY_ENABLED"
+    )
     # NX-302: când apelul rich al căii v1 cade, cardurile se construiesc din CATALOG, nu se pierd.
     #
     # Toată bogăția răspunsului v1 (motiv per card, rating, badge, preț de listă, variante, chips)
@@ -1246,8 +1279,13 @@ class Settings(BaseSettings):
     # `llm_reasoning_disabled_for_tools`). Adică valoarea de aici se aplică DOAR apelurilor de
     # text/schemă fără tool-uri. Raționament + tool-uri ar cere `/v1/responses` — schimbare mare,
     # se decide pe măsurători (D15). Triajul rămâne nano și nu primește effort aici.
+    #
+    # NX-313: `high` → `medium`. Pe turul real `bcd8e5c6` apelul de compunere a durat 60,1 s din
+    # 72,4 s, cu 5.068 din 5.624 de tokeni de ieșire în raționament (90%), iar textul vizibil avea
+    # ~550. Decizie de produs (Adi, 2026-09-23), luată pe latență; efectul pe calitate se
+    # confirmă pe golden înainte de a coborî mai jos (D15).
     llm_reasoning_effort_agent: str = Field(
-        default="high", validation_alias="LLM_REASONING_EFFORT_AGENT"
+        default="medium", validation_alias="LLM_REASONING_EFFORT_AGENT"
     )
     # Temperatură pe ROL (independentă de corectitudine — aia o asigură validatorul stagiului 8):
     # extracția de fundal (profil/lead, JSON structurat) vrea determinism → mică; agentul (copy
