@@ -185,16 +185,26 @@ def _enumerate(values: Sequence[str], glue: str) -> str:
     return f"{', '.join(values[:-1])}{glue}{values[-1]}"
 
 
-def framing_text(pack: object, locale: str, product_types: Sequence[str]) -> str | None:
+def framing_text(
+    pack: object,
+    locale: str,
+    product_types: Sequence[str],
+    *,
+    min_types: int = _MIN_TYPES_FOR_FRAMING,
+) -> str | None:
     """Încadrarea SERVERULUI: ce clase de produs sunt pe masă. `None` = nu se poate spune onest.
 
     Nu e un al doilea writer semantic și nu costă o rundă: nu afirmă nimic despre produse, doar
     NUMEȘTE tipurile pe care retrievalul chiar le-a servit. E același tipar ca la `render_move`
     (NX-296) — serverul are șablonul, modelul poate doar să scrie o variantă mai bună, iar poarta
     decide care pleacă.
+
+    `min_types`: ca SLOT cerut, încadrarea are sens de la două clase în sus (peste una singură ar
+    repeta ce se vede). Ca UNICĂ frază a răspunsului (NX-312: proza sărită, rich picat) pragul
+    coboară la 1, fiindcă alternativa nu mai e „o frază mai bună", ci carduri fără niciun cuvânt.
     """
     types = [t for t in product_types if t]
-    if len(types) < _MIN_TYPES_FOR_FRAMING:
+    if len(types) < max(1, min_types):
         return None
     template = _template(pack, "framing", locale)
     glue = _template(pack, "list_glue", locale)

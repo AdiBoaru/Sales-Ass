@@ -431,6 +431,24 @@ D15) și nu aprinde `TURN_DEADLINE_ENABLED`. Card: [`tasks/stage1/NX-311.md`](ta
 probe: `pytest tests/test_llm_call_budget.py -q` +
 `PYTHONPATH=. python scripts/llm_call_budget_probe.py --business sole-ro`.
 
+**NX-312 — turul de recomandare: trei apeluri de model → două (felia 1 măsurare, felia 2 tăiere).**
+Pe v1, recomandarea avea două straturi puse unul peste altul: bucla de tool-calling (apelul 1
+caută, apelul 2 scrie proză) și compunerea bogată (apelul 3 rescrie totul ca JSON). Pe calea bogată
+reușită proza apelului 2 **nu era citită de nimeni**, iar forma cu trei apeluri era dominantă
+(61 din 92 de ture). Felia 1 (#404) măsoară fiecare apel (`llm_usage.per_call`). Felia 2:
+`run_tool_loop(stop_after_tools=…)` primește predicatul AGENTULUI (`_prose_round_redundant`, pur),
+care sare runda de proză DOAR pe profilul `recommend`, când runda a chemat numai `search_products`
+(și în paralel) și a adus produse. ORDER, alt profil, altă unealtă sau zero produse își păstrează
+runda. Evenimentul `prose_round{skipped, reason}` are vocabular închis. Pe eșecul rich-ului,
+`_finalize(recompose=False)` nu mai cere un apel de recompunere după unul picat (același defect
+latent exista pe `show_more`, reparat tot aici). **Premisa din card, corectată pe test:** rezerva de
+încadrare NX-299 cere ≥2 tipuri de produs, deci pe «vreau o cremă de hidratare» (șase creme) rich-ul
+picat ar fi lăsat cardurile fără niciun cuvânt. Când proza a fost sărită, încadrarea e singura frază
+posibilă și coboară la un tip (`rich_from_facts(sole_text=True)`). Rămâne descoperit, declarat: un set
+fără niciun `product_type` rămâne fără frază. Kill-switch `TOOL_LOOP_SKIP_PROSE_ENABLED` (**ON**, ca
+NX-311: risipă măsurată; OFF = byte-identic). Feliile 3-5 rămân deschise. Card:
+[`tasks/stage1/NX-312.md`](tasks/stage1/NX-312.md); probă: `pytest tests/test_skip_prose_round.py -q`.
+
 **NX-313 — «vreau o cremă de hidratare»: filtrul ghicit se judecă după CERERE.**
 Turul real `bcd8e5c6` (`sole-ro`, 2026-09-23), recidiva lui `f7414c3e` DUPĂ #398: 72,4 s, trei BB-uri
 de machiaj, două cu același nume, motivul primului card lipsă. Modelul a trimis `category="fata"`
@@ -1053,6 +1071,9 @@ Orice stagiu poate seta `reply` → early exit direct la Sender (stagiul 9).
       sănătos. S-a întâmplat pe 2026-08-24 (bbb77b3, ambele schimbări deodată)
     • buying stages framework: browsing → narrowing → comparing → ready_to_buy
     • AGENT decide mutarea de vânzare (NU routerul)
+    • NX-312: pe profilul `recommend`, o rundă care a chemat DOAR `search_products` și a adus
+      produse încheie bucla (fără runda de proză): compunerea bogată scrie din produse ⇒ 2 apeluri
+      de model pe tur, nu 3. Kill-switch `TOOL_LOOP_SKIP_PROSE_ENABLED`
     • MAX 3 RUNDE de model per tur (limită dură: llm.py:364). NU e un plafon de tool calls:
       o rundă poate emite N apeluri și toate se execută. Plafoanele separate pe apeluri/mutații
       există în src/runtime/turn_budget.py (NX-241), dar sunt OFF (turn_budget_enforced=false)

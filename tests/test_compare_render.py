@@ -486,7 +486,9 @@ async def test_agent_stage_builds_comparison_not_recommendation(monkeypatch):
         async def embed(self, texts, *, model=None):
             return [[0.0] * 8 for _ in texts]
 
-        async def run_tool_loop(self, system, user, tools, execute, *, max_steps=3, model=None):
+        async def run_tool_loop(
+            self, system, user, tools, execute, *, max_steps=3, model=None, **kw
+        ):
             await execute("compare_products", {"product_ids": ["p1", "p2"]})
             return "Crema A e mai ușoară, Crema B mai bogată."
 

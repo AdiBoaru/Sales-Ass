@@ -84,7 +84,7 @@ class StubLLM:
         # rută „simple" → răspuns direct, fără agent (proba e despre conexiuni, nu despre calitate)
         return {"route": "simple", "reply": "Salut! Cu ce te pot ajuta?"}
 
-    async def run_tool_loop(self, system, user, tools, execute):
+    async def run_tool_loop(self, system, user, tools, execute, **kw):
         await self._wait()
         return "Îți răspund imediat."
 

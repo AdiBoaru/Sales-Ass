@@ -121,9 +121,17 @@ async def _finalize(
     history: str,
     allowed_links: set[str] | None = None,
     allowed_prices: set[float] | None = None,
+    *,
+    recompose: bool = True,
 ) -> tuple[str, ValidationResult]:
     """Validează textul final (preț + link). Invalid → 1 retry (recompune din produse cu
     prețuri permise) → fallback determinist. Invariantul: zero prețuri/linkuri inventate.
+
+    NX-312: `recompose=False` + text GOL ⇒ direct fallback-ul determinist, fără retry. Textul
+    lipsește atunci deliberat (runda de proză sărită), iar apelantul tocmai a pierdut apelul rich:
+    un al doilea apel de model, posibil după un timeout, ar fi latență plătită pentru o frază pe
+    care rezerva din catalog o dă oricum. Un text PREZENT și invalid se recompune ca înainte
+    (adevărul nu se negociază).
     `reco_system` = system-ul de recompunere generat din DB (NX-78). `allowed_links`/
     `allowed_prices` = linkuri/sume grounded de bot (checkout_link/check_order). Întoarce textul
     servit ÎMPREUNĂ cu `ValidationResult` (NX-146 felia 2 fix — corelat în `agent_prompt` pt
@@ -134,6 +142,8 @@ async def _finalize(
     SEPARAT doar pe calea de eșec, ca să raporteze motivele fără să schimbe gating-ul testat."""
     if text and _valid(text, products, allowed_links, allowed_prices):
         return text, ValidationResult(ok=True, reasons=[])
+    if not text and not recompose:
+        return _deterministic_reply(products), ValidationResult(ok=False, reasons=["empty_text"])
 
     history_block = f"Conversație până acum:\n{history}\n\n" if history else ""
     prices = _allowed_prices(products) + sorted(allowed_prices or set())
@@ -803,6 +813,7 @@ async def render(
             plan.history,
             plan.generated_links,
             plan.grounded_prices,
+            recompose=not plan.prose_skipped,
         )
         # NX-306: un set pe care modelul l-a REFUZAT, și pe care retrievalul îl dăduse deja ca
         # pe un COMPROMIS, nu se servește — nici ca fapte, nici ca text.
@@ -858,7 +869,12 @@ async def render(
         # prețuri nu e o încadrare, e chiar contradicția din turul măsurat. Slotul rămas gol îl
         # umple rezerva de încadrare a serverului (NX-299), deci clientul primește tot o frază.
         salvaged = (
-            rich_from_facts(ctx, servable, intro=reply if result.ok else None)
+            rich_from_facts(
+                ctx,
+                servable,
+                intro=reply if result.ok else None,
+                sole_text=plan.prose_skipped,
+            )
             if get_settings().rich_from_facts_enabled and servable
             else None
         )

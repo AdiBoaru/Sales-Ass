@@ -535,7 +535,7 @@ class Stage1FakeLLM:
         self.counters.complete += 1
         return ""
 
-    async def run_tool_loop(self, system, user, tools, execute, *, max_steps=3, model=None):
+    async def run_tool_loop(self, system, user, tools, execute, *, max_steps=3, model=None, **kw):
         self.counters.tool_loop += 1
         await self._maybe_stall()
         if self.script.script == "pipeline_error":

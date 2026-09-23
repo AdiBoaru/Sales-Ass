@@ -67,7 +67,7 @@ class _FakeLLM:
     async def embed(self, texts, *, model=None):
         return [[0.0] * 8 for _ in texts]
 
-    async def run_tool_loop(self, system, user, tools, execute, *, max_steps=3, model=None):
+    async def run_tool_loop(self, system, user, tools, execute, *, max_steps=3, model=None, **kw):
         for name, args in self._tc:
             await execute(name, args)
         return self._final

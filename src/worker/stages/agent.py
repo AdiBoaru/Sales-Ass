@@ -425,6 +425,74 @@ def _apply_turn_profile(
     return f"{system}\n{profile.suffix}", tools
 
 
+#: NX-312: motivele deciziei despre runda de proză. Vocabular ÎNCHIS: fără el nu se poate număra
+#: nici acoperirea (câte ture economisesc un apel), nici regresia (câte cad pe rezerva NX-299).
+PROSE_ROUND_REASONS = frozenset(
+    {"search_only", "order", "not_recommend", "other_tool", "no_products", "no_tools"}
+)
+
+
+def _prose_round_redundant(
+    *, is_order: bool, profile: str, called: list[str], has_products: bool
+) -> tuple[bool, str]:
+    """NX-312: runda de proză a buclei (apelul 2) mai aduce ceva? PURĂ.
+
+    Pe calea bogată reușită proza nu e citită (`render` iese din `rich`), iar pe cea picată
+    `rich_from_facts` + rezerva de încadrare fac cardurile și fraza din catalog. Deci runda contează
+    doar acolo unde modelul chiar poate vrea o a doua unealtă, și acolo rămâne:
+
+    - ORDER: statusul comenzii se scrie din `order_views`, nu din carduri;
+    - alt profil decât `recommend` (compare/howto/routine/mutation/exact): a doua unealtă e
+      plauzibilă;
+    - altă unealtă decât `search_products` în rundă (detalii, coș, comparație);
+    - căutarea n-a adus nimic: modelul poate corecta (turul `21319dec`).
+
+    Căutările PARALELE din aceeași rundă trec („un ruj si un fond de ten" nu pierde nimic). Treapta
+    lexicală NU contează: pe 30 de zile, 0 din 36 de căutări relaxate au fost urmate de a doua.
+    """
+    if is_order:
+        return False, "order"
+    if profile != "recommend":
+        return False, "not_recommend"
+    if not called or set(called) != {"search_products"}:
+        return False, "other_tool"
+    if not has_products:
+        return False, "no_products"
+    return True, "search_only"
+
+
+class _ProseRoundGate:
+    """Predicatul `stop_after_tools` al buclei + evenimentul `prose_round`, o dată pe tur.
+
+    Profilul se calculează o singură dată, cu ACELAȘI selector ca NX-304/NX-315
+    (`turn_profile.name_for_turn`), deci bucla, compunerea și raportul de formă nu pot numi turul
+    în două feluri. Se ține minte ULTIMA decizie: dacă runda 1 n-a adus produse și runda 2 le aduce,
+    turul contează ca `search_only` (s-a sărit runda 3)."""
+
+    def __init__(self, ctx: TurnContext, run: ToolRun, *, is_order: bool) -> None:
+        self._ctx = ctx
+        self._run = run
+        self._is_order = is_order
+        self._profile: str | None = None
+        self.skipped = False
+        self.reason = "no_tools"
+
+    def __call__(self, called: list[str]) -> bool:
+        if self._profile is None:
+            self._profile = turn_profile.name_for_turn(self._ctx)
+        self.skipped, self.reason = _prose_round_redundant(
+            is_order=self._is_order,
+            profile=self._profile,
+            called=list(called),
+            has_products=bool(self._run.retrieved),
+        )
+        return self.skipped
+
+    def emit(self) -> bool:
+        self._ctx.emit("prose_round", skipped=self.skipped, reason=self.reason)
+        return self.skipped
+
+
 # NX-122: whitelist de chei per tool pentru `tool_call` în analytics, ALINIATĂ la arg-urile
 # REALE ale tool-urilor (SearchArgs/CartAddArgs/...). NICIUN fallback „pune tot ce e acolo" —
 # tool necunoscut sau cheie ne-listată → omis (P12: analytics nu primește text liber / PII).
@@ -820,6 +888,7 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     user = user_parts.legacy()
 
     system: str | None = None  # NX-146: promptul de sistem rendered (pt agent_prompt event)
+    prose_skipped = False  # NX-312: runda de proză sărită DELIBERAT (nu „modelul n-a scris nimic")
     try:
         inp = await _load_prompt_inputs(deps, ctx)  # prompt generat din DB (NX-78, P9)
         if show_more:
@@ -833,6 +902,9 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
             retrieved = page.products
             ctx.emit("show_more", served=len(retrieved))
             final = ""  # fără text de model — compose-ul rich phrasează din produse mai jos
+            # NX-312: același drum ca runda de proză sărită, deci aceeași reparație: rich picat pe
+            # o pagină nu mai cere un apel de recompunere, cade direct pe rezerva din catalog.
+            prose_skipped = bool(getattr(get_settings(), "tool_loop_skip_prose_enabled", False))
         else:
             system = prompt_builder.build_agent_system(inp)
             # NX-239: sub single-brain, bucla + planul structurat + validarea + render-ul sunt ale
@@ -891,7 +963,14 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
             # întors deja mai sus și și-l aplică singură (`brain.py`), deci nu există tur pe care
             # sufixul să se lipească de două ori.
             system, tools = _apply_turn_profile(ctx, system, tools)
-            final = await deps.llm.run_tool_loop(system, user, tools, run.execute)
+            if getattr(get_settings(), "tool_loop_skip_prose_enabled", False):
+                prose = _ProseRoundGate(ctx, run, is_order=is_order)
+                final = await deps.llm.run_tool_loop(
+                    system, user, tools, run.execute, stop_after_tools=prose
+                )
+                prose_skipped = prose.emit()
+            else:
+                final = await deps.llm.run_tool_loop(system, user, tools, run.execute)
             retrieved = run.retrieved  # produsele acumulate de tool executor în această buclă
     except Exception as e:  # noqa: BLE001 — bucla eșuată → lasă echo fallback
         log.warning("agent: tool loop eșuat (%s)", type(e).__name__)
@@ -918,6 +997,7 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         query=query,
         history=history,
         tool_names=tool_names,
+        prose_skipped=prose_skipped,
     )
     # Faza F (NX-144): render pe plan → răspuns final (comparație / rich / proză / order /
     # fallback), validat + retry + fallback. Singurul punct de ieșire e Sender, via `render`.

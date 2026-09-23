@@ -165,7 +165,7 @@ class ScriptedLLM:
             "slots": {},
         }
 
-    async def run_tool_loop(self, system, user, tools, execute, *, max_steps=3, model=None):
+    async def run_tool_loop(self, system, user, tools, execute, *, max_steps=3, model=None, **kw):
         # Turul 1: modelul caută → execute populează `retrieved` cu cele 3 produse. Turul 2: modelul
         # tot cheamă search (set vechi); codul determinist `cheaper_intent` îl ÎNLOCUIEȘTE.
         await execute("search_products", {"query": "crema hidratanta", "limit": 6})

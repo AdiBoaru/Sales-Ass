@@ -43,8 +43,10 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
+from src.agent import answer_shape
 from src.agent.fallbacks import _card_variants
 from src.catalog.render_text import display_name, size_label
+from src.config import get_settings
 from src.worker import compose
 
 if TYPE_CHECKING:
@@ -229,8 +231,14 @@ def rich_from_facts(
     products: list[dict[str, Any]],
     *,
     intro: str | None = None,
+    sole_text: bool = False,
 ) -> RichReply | None:
     """`RichReply` construit din faptele de catalog, pentru turele în care modelul rich a căzut.
+
+    `sole_text=True` (NX-312): nu există nicio proză de model în tur (runda de text a fost sărită),
+    deci încadrarea serverului e SINGURA frază posibilă. Pragul ei coboară atunci la un singur tip
+    de produs: altfel «vreau o cremă de hidratare», cu șase creme pe ecran, ar ieși fără niciun
+    cuvânt deasupra cardurilor.
 
     **De ce există.** Pe v1, TOATĂ bogăția răspunsului atârna de un singur apel structurat
     (`finalize._rich`). Când el eșua — timeout, zero items după poarta de apartenență, refuz —
@@ -281,6 +289,18 @@ def rich_from_facts(
     # proză validată; altfel rămâne ce a decis `assemble` (rezerva de încadrare, sau nimic).
     if intro:
         return replace(rich, intro=intro, pick=None)
+    if sole_text and not rich.intro and getattr(get_settings(), "answer_shape_enabled", False):
+        shown_ids = {it.product_id for it in rich.items}
+        shown = [p for p in products if str(p.get("product_id") or p.get("id")) in shown_ids]
+        framing = answer_shape.framing_text(
+            getattr(ctx.business, "domain_pack", None),
+            ctx.language,
+            answer_shape.distinct_types(shown),
+            min_types=1,
+        )
+        if framing:
+            ctx.emit("answer_shape_filled", slot=answer_shape.SLOT_FRAMING, sole_text=True)
+            return replace(rich, intro=framing, pick=None)
     return replace(rich, pick=None)
 
 

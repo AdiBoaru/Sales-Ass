@@ -1870,6 +1870,7 @@ single_brain_enabled = false
 spec_digits_grounded_enabled = true
 speculative_retrieval_enabled = false
 summary_enabled = true
+tool_loop_skip_prose_enabled = true
 topic_switch_reset_enabled = true
 turn_budget_alerts_enabled = true
 turn_budget_enforced = false

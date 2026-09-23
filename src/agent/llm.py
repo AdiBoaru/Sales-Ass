@@ -729,6 +729,7 @@ class LLMClient:
         *,
         max_steps: int = 3,
         model: str | None = None,
+        stop_after_tools: Callable[[list[str]], bool] | None = None,
     ) -> str:
         """Buclă de tool-calling (agentul, G7). Modelul cere tool-uri → `execute(name, args)`
         le rulează (callback-ul agentului, întoarce `llm_view`) → rezultatele intră înapoi în
@@ -737,7 +738,13 @@ class LLMClient:
         aici (adaptorul = singurul loc care vorbește OpenAI). Întoarce textul final.
 
         `execute` poate fi chemat de mai multe ori într-un pas (modelul cere ≥1 tool) — le
-        rulăm CONCURENT (`asyncio.gather`) ca să tăiem latența."""
+        rulăm CONCURENT (`asyncio.gather`) ca să tăiem latența.
+
+        NX-312: `stop_after_tools(nume_unelte)` = predicatul AGENTULUI, chemat după ce o rundă
+        și-a rulat uneltele. `True` ⇒ bucla iese cu `""`, fără runda de text care ar fi urmat:
+        apelantul compune singur din ce au adus uneltele. Adaptorul nu știe de ce (P3); un
+        predicat care aruncă e ignorat și bucla continuă ca înainte, fiindcă o rundă în plus e o
+        pierdere de timp, iar un tur pierdut e o pierdere de client."""
         mdl = model or self.model_agent
         messages: list[dict[str, Any]] = [
             {"role": "system", "content": system},
@@ -777,6 +784,14 @@ class LLMClient:
             contents = await _run_tool_calls(execute, tool_calls)
             for tc, content in zip(tool_calls, contents, strict=True):
                 messages.append({"role": "tool", "tool_call_id": tc.id, "content": content})
+            if stop_after_tools is not None:
+                try:
+                    stop = bool(stop_after_tools([tc.function.name for tc in tool_calls]))
+                except Exception as e:  # noqa: BLE001 — predicatul nu are voie să piardă turul
+                    log.warning("llm: stop_after_tools a eșuat (%s)", type(e).__name__)
+                    stop = False
+                if stop:
+                    return ""
 
         # cap atins → un ultim apel FĂRĂ tools (text forțat, nu o a 4-a rundă de tool calls).
         before = _usage_snapshot()

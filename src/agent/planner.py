@@ -259,6 +259,10 @@ class ResponsePlan:
     order_views: list[str] = field(default_factory=list)
     checkout_url: str | None = None
     successful_action_ids: set[str] = field(default_factory=set)
+    # NX-312: textul de model lipsește DELIBERAT (runda de proză sărită, sau paginarea „mai
+    # arată-mi"), nu fiindcă modelul n-a scris nimic. `render` nu mai cere atunci o recompunere:
+    # dacă rich-ul pică, un al doilea apel de model după unul picat e exact latența pe care o tăiem.
+    prose_skipped: bool = False
 
 
 @dataclass(frozen=True)
@@ -546,6 +550,7 @@ async def build_plan(
     query: str,
     history: str,
     tool_names: list[str],
+    prose_skipped: bool = False,
 ) -> ResponsePlan:
     """Faza E: shaping determinist post-loop → `ResponsePlan`. Byte-identic cu vechiul bloc din
     `agent_stage`. Ramurile care răspund direct setează `ctx.reply` și întorc `handled=True`."""
@@ -720,4 +725,5 @@ async def build_plan(
         order_views=run.order_views,
         checkout_url=run.checkout_url,
         successful_action_ids=set(run.successful_action_ids),
+        prose_skipped=prose_skipped,
     )
