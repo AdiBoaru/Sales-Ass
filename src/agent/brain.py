@@ -350,6 +350,13 @@ def _turn_chips(
             stats=anchor_stats,
         ),
     ]
+    from src.agent.finalize import _drop_dead_moves  # noqa: PLC0415 — aceeași regulă ca pe v1
+
+    candidates, dead = _drop_dead_moves(
+        ctx, candidates, n_cards=len(_plan_products(plan, run.retrieved))
+    )
+    if dead:
+        anchor_stats["dropped_dead"] = dead
     picked = chip_moves.select(
         candidates,
         slots=chip_slots(get_settings()),

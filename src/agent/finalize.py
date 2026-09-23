@@ -538,6 +538,17 @@ class _RichOutcome:
     model_items: int = 0
 
 
+def _drop_dead_moves(ctx, candidates: list, *, n_cards: int) -> tuple[list, int]:
+    """NX-316: aceeași regulă pe AMBELE căi care construiesc chips (v1 aici, creierul unic în
+    `brain._turn_chips`). Sub `CHIP_MOVES_V2_ENABLED`; stins ⇒ lista neatinsă (byte-identic)."""
+    if not getattr(get_settings(), "chip_moves_v2_enabled", False):
+        return candidates, 0
+    from src.conversation import chip_moves  # noqa: PLC0415
+    from src.conversation.subject import spoken_needs  # noqa: PLC0415
+
+    return chip_moves.drop_dead(candidates, spoken_needs=spoken_needs(ctx.state), n_cards=n_cards)
+
+
 async def _apply_move_chips(ctx, deps, rich) -> None:
     """NX-297 felia 5 — chips-urile v1 devin MUTĂRI cu dovadă (NX-296), nu fraze scrise liber.
 
@@ -588,6 +599,9 @@ async def _apply_move_chips(ctx, deps, rich) -> None:
             ctx.language,
             stats=anchor_stats,
         )
+        candidates, dead = _drop_dead_moves(ctx, candidates, n_cards=len(cards))
+        if dead:
+            anchor_stats["dropped_dead"] = dead
         obligations = extract_obligations(ctx.message.body or "")
         picked = chip_moves.select(
             candidates,

@@ -80,6 +80,7 @@ __all__ = [
     "MOVE_ROLES",
     "ChipMove",
     "apply_labels",
+    "drop_dead",
     "from_cards",
     "from_menu",
     "offer_block",
@@ -426,6 +427,42 @@ def from_cards(
             sum(1 for p in prices if p < threshold),
         )
     return out
+
+
+def drop_dead(
+    moves: Iterable[ChipMove],
+    *,
+    spoken_needs: Iterable[tuple[str, str]] = (),
+    n_cards: int = 0,
+) -> tuple[list[ChipMove], int]:
+    """NX-316: scoate mutările ADEVĂRATE dar MOARTE, înainte de selecție. `(păstrate, câte scoase)`.
+
+    Două clase, amândouă văzute pe conversația reală comparată cu iZi:
+
+    - `refine_facet` pe o nevoie pe care clientul a ROSTIT-o deja: «Caut ceva pentru hidratare»
+      sub răspunsul la «vreau o cremă de hidratare». Dovada nu e o listă de cuvinte, ci perechea
+      `(dimensiune, cheie)` din subiectul conversației (NX-314), unde intră doar nevoile coroborate
+      de client și rezolvate pe fațete KNOWN. Deci merge pe orice limbă și orice vertical (P11).
+    - `detail` pe un tur cu UN singur card: cardul are deja butonul lui de detalii, iar chip-ul ar
+      repeta același lucru într-un slot care putea duce altundeva.
+
+    Scoase ÎNAINTE de `select`, nu după, din motivul din `renderable`: o mutare aleasă și apoi
+    aruncată ar lăsa un slot gol acolo unde exista o continuare bună.
+    """
+    spoken = {(str(d), str(k)) for d, k in spoken_needs}
+    kept: list[ChipMove] = []
+    dropped = 0
+    for move in moves:
+        if move.kind == "refine_facet":
+            _, dimension, key = (move.move_id.split(":", 2) + ["", ""])[:3]
+            if (dimension, key) in spoken:
+                dropped += 1
+                continue
+        if move.kind == "detail" and n_cards == 1:
+            dropped += 1
+            continue
+        kept.append(move)
+    return kept, dropped
 
 
 # --- selecția: ce iese la client, în ce ordine -------------------------------------------------

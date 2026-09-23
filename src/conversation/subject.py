@@ -284,6 +284,17 @@ def subject_match_report(
     }
 
 
+def spoken_needs(state: object) -> tuple[tuple[str, str], ...]:
+    """NX-316: nevoile pe care clientul le-a ROSTIT, ca `(dimensiune, cheie)`, din subiectul
+    persistat în starea v1. Gol când nu există subiect (flag stins, conversație nouă, stare
+    tăiată). Citit de chips ca să nu ofere o îngustare pe care clientul a făcut-o deja."""
+    constraints = getattr(state, "search_constraints", None)
+    if not isinstance(constraints, dict):
+        return ()
+    subject = ConversationSubject.from_dict(constraints.get(SUBJECT_KEY))
+    return subject.needs if subject is not None else ()
+
+
 def _clean(value: object) -> str | None:
     if not isinstance(value, str):
         return None
@@ -306,5 +317,6 @@ __all__ = [
     "product_type_of",
     "resolve_needs",
     "resolve_shelf",
+    "spoken_needs",
     "subject_match_report",
 ]

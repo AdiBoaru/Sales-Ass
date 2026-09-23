@@ -1761,6 +1761,7 @@ cheapest_alternatives_enabled = true
 checkout_intent_fallback_enabled = true
 chip_moves_enabled = true
 chip_moves_v1_enabled = true
+chip_moves_v2_enabled = false
 clarification_policy_v2_enabled = false
 clarify_menu_enabled = true
 clarify_tool_enabled = false

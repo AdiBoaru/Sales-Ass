@@ -449,6 +449,20 @@ fără niciun `product_type` rămâne fără frază. Kill-switch `TOOL_LOOP_SKIP
 NX-311: risipă măsurată; OFF = byte-identic). Feliile 3-5 rămân deschise. Card:
 [`tasks/stage1/NX-312.md`](tasks/stage1/NX-312.md); probă: `pytest tests/test_skip_prose_round.py -q`.
 
+**NX-316 felia 1 — serverul RECUNOAȘTE apăsarea unui chip (flag OFF).** Pe v1 apăsarea retrimite
+doar TEXTUL, iar handlerele deterministe îl reinterpretau: „linkul la X" servea linkurile TUTUROR
+produselor afișate, iar comparația lua primele două din poziție. Măsurat pe `sole-ro`
+(`scripts/nx316_chip_press_probe.py`, 30 de zile): **24,6%** din turele de după chips sunt
+apăsări. `chip_press.recognize` (pur) refolosește lanțul care a PRODUS chips-urile (`from_cards` →
+`renderable` → `render_move`) pe setul afișat, deci textul re-randat e identic prin construcție;
+recunoscută = `move_id` oferit + egalitate cuvânt cu cuvânt. `ctx.chip_move` (owner: agent) intră
+primul în `try_pre_intents` (`serve_chip_move`), pe ACELAȘI handler ca varianta din text, cu
+produsele din `move_id`. Chips moarte (`chip_moves.drop_dead`, v1 + creier unic): îngustare pe o
+nevoie deja rostită (`subject.needs`, NX-314), detaliu pe un tur cu un singur card. Mutările din
+meniu nu se recunosc (sunt fraze de căutare), iar coborârea lui `pivot_shelf` e a feliei 3.
+`CHIP_MOVES_V2_ENABLED=false` = byte-identic. Card: [`tasks/stage1/NX-316.md`](tasks/stage1/NX-316.md);
+probă: `pytest tests/test_chip_press.py -q`.
+
 **NX-313 — «vreau o cremă de hidratare»: filtrul ghicit se judecă după CERERE.**
 Turul real `bcd8e5c6` (`sole-ro`, 2026-09-23), recidiva lui `f7414c3e` DUPĂ #398: 72,4 s, trei BB-uri
 de machiaj, două cu același nume, motivul primului card lipsă. Modelul a trimis `category="fata"`

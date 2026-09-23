@@ -444,7 +444,9 @@ async def _handle_detail_intent(ctx: TurnContext, deps: PipelineDeps, query: str
     await serve_details(ctx, deps, selected.product_id)
 
 
-async def _handle_link_intent(ctx: TurnContext, deps: PipelineDeps) -> None:
+async def _handle_link_intent(
+    ctx: TurnContext, deps: PipelineDeps, ids: list[str] | None = None
+) -> None:
     """Servește o cerere de LINK pe produsele DEJA arătate, FĂRĂ bucla LLM (NX-131) — ca
     show_more/cheaper. State ține doar ref-uri (P8) → fetch `product_url` PROASPĂT din catalog
     (sursa de adevăr). Link real → Offer(open_url) + card(uri); `product_url` NULL (gaură de date
@@ -452,8 +454,12 @@ async def _handle_link_intent(ctx: TurnContext, deps: PipelineDeps) -> None:
 
     NX-234: „unde-l cumpăr?" pe o pagină de produs, fără nimic afișat înainte, avea zero ancore —
     ancora paginii intră în set, cu URL-ul luat tot din catalog (`product_url`), niciodată din
-    browser (un URL afirmat de host ar fi exact linkul pe care nu-l putem valida)."""
-    ids = [p.product_id for p in _anchor_refs(ctx)]
+    browser (un URL afirmat de host ar fi exact linkul pe care nu-l putem valida).
+
+    NX-316: `ids` date = produsele NUMITE de un chip recunoscut. Fără ele, handlerul servea
+    linkurile tuturor produselor afișate la „Trimite-mi linkul la X"."""
+    if ids is None:
+        ids = [p.product_id for p in _anchor_refs(ctx)]
     async with deps.db("link_intent_products") as conn:
         products = await get_products_by_ids(conn, ctx.business.id, ids, limit=6)
     # NX-173 (P0): `displayed_products` e STATE VECHI — poate conține produse afișate ÎNAINTE ca
@@ -706,6 +712,37 @@ def turn_has_new_constraints(ctx: TurnContext, route: Any) -> bool:
     return bool(spoken)
 
 
+async def serve_chip_move(ctx: TurnContext, deps: PipelineDeps, move: Any) -> bool:
+    """NX-316: servește apăsarea unui chip recunoscut. True = turul e servit; False = mergi mai
+    departe pe drumul obișnuit (handler stins, sau comparația refuzată de porțile ei).
+
+    Fiecare fel intră pe ACELAȘI handler ca varianta lui din text (`serve_details`,
+    `serve_reviews`, `_handle_link_intent`, `serve_comparison`), deci porțile de siguranță, de
+    coerență și de disponibilitate sunt aceleași. Se schimbă doar DE UNDE vin produsele."""
+    from src.conversation.chip_press import product_ids  # noqa: PLC0415 — evită ciclul
+
+    settings = get_settings()
+    ids = list(product_ids(move))
+    handler = "agent"
+    served = False
+    if not ids:
+        pass
+    elif move.kind == "detail" and getattr(settings, "detail_intent_enabled", True):
+        await serve_details(ctx, deps, ids[0])
+        handler, served = "detail_intent", True
+    elif move.kind == "reviews" and getattr(settings, "review_intent_enabled", True):
+        await serve_reviews(ctx, deps, ids[0], move.slot_map().get("slot", ""))
+        handler, served = "review_intent", True
+    elif move.kind == "link" and settings.link_intent_enabled:
+        await _handle_link_intent(ctx, deps, ids=ids[:1])
+        handler, served = "link_intent", True
+    elif move.kind == "compare" and settings.compare_intent_enabled and len(ids) >= 2:
+        served = await serve_comparison(ctx, deps, ids[:2])
+        handler = "agent_compared" if served else "agent"
+    ctx.emit("chip_pressed", kind=move.kind, recognized=True, handler=handler)
+    return served
+
+
 async def try_pre_intents(ctx: TurnContext, deps: PipelineDeps) -> bool:
     """Faza B: intenții deterministe PRE-loop (link + compare). True = tratat (early-exit din
     `stage.py`); False = lasă bucla LLM. Doar SALES; toate exclud «mai ieftin» (cheaper_intent) și
@@ -716,6 +753,13 @@ async def try_pre_intents(ctx: TurnContext, deps: PipelineDeps) -> bool:
     query = (ctx.message.body or "").strip()
     if not query:
         return False
+
+    # NX-316: un chip RECUNOSCUT (`ctx.chip_move`, scris de agent_stage) e o comandă declarată, nu
+    # o intenție de dedus: produsele vin din `move_id`, deci „Compară A cu B" compară A și B, iar
+    # „linkul la X" trimite linkul lui X, nu pe al tuturor produselor de pe ecran.
+    move = getattr(ctx, "chip_move", None)
+    if move is not None and await serve_chip_move(ctx, deps, move):
+        return True
 
     # Un follow-up de recenzii se referă la setul deja afișat chiar dacă triajul a propagat filtre
     # istorice. Cu mai multe produse, handlerul cere ancora în loc să aleagă primul card.

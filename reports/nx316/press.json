@@ -1,0 +1,23 @@
+{
+  "business": "sole-ro",
+  "days": 30,
+  "traces": 107,
+  "turns_after_chips": 57,
+  "presses": 14,
+  "press_rate": 0.246,
+  "by_kind": {
+    "compare": 3,
+    "detail": 2,
+    "link": 1,
+    "other": 8
+  },
+  "by_handler": {
+    "compare → agent_compared": 2,
+    "detail → detail_intent": 2,
+    "compare → agent": 1,
+    "link → agent": 1,
+    "other → agent": 8
+  },
+  "link_presses_serving_more_than_one": 0,
+  "compare_presses_wrong_pair": 0
+}
