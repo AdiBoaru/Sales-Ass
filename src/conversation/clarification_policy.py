@@ -183,6 +183,143 @@ def _gate(
     return None
 
 
+# --- NX-315: întrebarea de îngustare, ALĂTURI de produse ------------------------------------------
+#
+# Diferența față de `decide_clarification`: acolo întrebarea ține locul răspunsului (n-am căutat
+# încă, sau n-am găsit). Aici produsele sunt deja pe ecran, iar întrebarea e cea pe care un vânzător
+# o pune după ce ți-a arătat raftul: „pentru ce tip de ten?". Deci câștigul se măsoară pe setul
+# SERVIT, nu pe un catalog ipotetic, și asta face ca `total_candidates` să fie chiar cunoscut.
+
+#: Peste atâtea valori nu mai e o întrebare, e un formular. Aceeași limită ca meniul NX-295
+#: (`clarify_menu._MAX_PER_DIMENSION`), din același motiv.
+NARROWING_MAX_VALUES = 4
+
+#: Vocabular ÎNCHIS de motive (eticheta evenimentului `narrowing_offer`).
+NARROWING_REASONS: tuple[str, ...] = (
+    "offered",
+    "no_partitioning_facet",
+    "known",
+    "asked",
+    "single_value",
+    "too_many_values",
+    "low_gain",
+)
+
+# Ordinea în care se raportează un refuz când NICIO fațetă nu trece: cel mai apropiat de a trece
+# câștigă. „low_gain" spune „am avut ce întreba, dar nu merita"; „no_partitioning_facet" spune „n-am
+# avut nimic de întrebat" — pentru diagnoză sunt întrebări foarte diferite.
+_NARROWING_REFUSAL_RANK = {
+    "low_gain": 0,
+    "too_many_values": 1,
+    "single_value": 2,
+    "asked": 3,
+    "known": 4,
+    "no_partitioning_facet": 5,
+}
+
+# Tipurile de fațetă ale căror valori se pot oferi ca opțiuni. Un număr (preț, SPF) se întreabă ca
+# interval, nu ca listă, iar un boolean nu desparte un set, doar îl filtrează.
+_NARROWABLE_TYPES = frozenset({"enum", "text", "list"})
+
+
+@dataclass(frozen=True)
+class NarrowingOffer:
+    """Ce are voie modelul să întrebe pe turul ăsta. `values` = cheile canonice prezente în set,
+    descrescător după câte produse le poartă; `partition` = aceleași numere, sursa câștigului."""
+
+    facet: str
+    values: tuple[str, ...]
+    partition: tuple[int, ...]
+    gain: float
+
+
+@dataclass(frozen=True)
+class NarrowingVerdict:
+    offer: NarrowingOffer | None
+    reason: str
+
+
+def _values_of(product: object, source_key: str) -> tuple[str, ...]:
+    attrs = product.get("attributes") if isinstance(product, dict) else None
+    raw = attrs.get(source_key) if isinstance(attrs, dict) else None
+    items = raw if isinstance(raw, list) else [raw]
+    out: list[str] = []
+    for v in items:
+        if isinstance(v, str) and (k := " ".join(v.split()).lower()) and k not in out:
+            out.append(k)
+    return tuple(out)
+
+
+def narrowing_candidate(
+    facets: Sequence[object],
+    served: Sequence[object],
+    *,
+    known: frozenset[str] = frozenset(),
+    asked: frozenset[str] = frozenset(),
+    min_gain: float = 0.30,
+    max_values: int = NARROWING_MAX_VALUES,
+) -> NarrowingVerdict:
+    """Fațeta care merită întrebată ALĂTURI de setul servit, sau niciuna. PURĂ.
+
+    O fațetă e candidată dacă (toate):
+      • e declarată `binding == "partitioning"` în pachet: cumpărătorul are exact UNA dintre valori,
+        deci răspunsul chiar îngustează. La o fațetă `additive` („hidratare și luminozitate")
+        răspunsul „amândouă" e valid, iar întrebarea n-ar tăia nimic;
+      • clientul n-a spus-o deja (`known`, calculat de apelant din ce a SCRIS clientul și din
+        constrângerile turului). A-l pune să repete e bucla pe care clienții o resimt ca „nu
+        ascultă";
+      • n-a fost întrebată în conversație (`asked`);
+      • setul are ≥2 valori pe ea, fiecare pe ≥1 produs, și cel mult `max_values`;
+      • câștigul informațional pe setul servit trece pragul NX-235.
+
+    Dintre candidate câștigă cea cu câștigul cel mai mare; la egalitate, ordinea din pachet.
+    Nu numește nicio categorie și nicio limbă: pe electrocasnice fațeta ar fi voltajul, pe
+    anvelope dimensiunea, iar codul e același.
+    """
+    total = len(served)
+    best: NarrowingOffer | None = None
+    refusals: list[str] = []
+    for facet in facets:
+        if getattr(facet, "binding", "additive") != "partitioning":
+            continue
+        vtype = getattr(getattr(facet, "value_type", None), "value", None)
+        source = getattr(getattr(facet, "source", None), "value", None)
+        if vtype not in _NARROWABLE_TYPES or source != "attribute":
+            continue
+        key = str(getattr(facet, "key", "") or "")
+        if not key:
+            continue
+        if key in known:
+            refusals.append("known")
+            continue
+        if key in asked:
+            refusals.append("asked")
+            continue
+        counts: dict[str, int] = {}
+        for p in served:
+            for v in _values_of(p, str(getattr(facet, "source_key", key) or key)):
+                counts[v] = counts.get(v, 0) + 1
+        if len(counts) < 2:
+            refusals.append("single_value")
+            continue
+        if len(counts) > max_values:
+            refusals.append("too_many_values")
+            continue
+        ordered = sorted(counts, key=lambda v: (-counts[v], v))
+        partition = tuple(counts[v] for v in ordered)
+        gain = estimate_information_gain(total, partition)
+        if gain < min_gain:
+            refusals.append("low_gain")
+            continue
+        if best is None or gain > best.gain:
+            best = NarrowingOffer(key, tuple(ordered), partition, gain)
+    if best is not None:
+        return NarrowingVerdict(best, "offered")
+    if not refusals:
+        return NarrowingVerdict(None, "no_partitioning_facet")
+    return NarrowingVerdict(None, min(refusals, key=_NARROWING_REFUSAL_RANK.__getitem__))
+
+
 def relaxation_candidates(state: ConversationStateV2) -> tuple[str, ...]:
     """Ce se poate RELAXA onest când nu există rezultate: doar nevoile `soft`, în ordinea inversă a
     declarării (cea mai recentă preferință cedează prima). `hard` nu apare niciodată aici — bugetul
@@ -193,12 +330,17 @@ def relaxation_candidates(state: ConversationStateV2) -> tuple[str, ...]:
 
 __all__ = [
     "MANDATORY_REASONS",
+    "NARROWING_MAX_VALUES",
+    "NARROWING_REASONS",
     "ClarificationCandidate",
     "ClarificationDecision",
     "ClarificationPolicy",
     "ClarificationReason",
+    "NarrowingOffer",
+    "NarrowingVerdict",
     "decide_clarification",
     "estimate_information_gain",
     "gain_bucket",
+    "narrowing_candidate",
     "relaxation_candidates",
 ]

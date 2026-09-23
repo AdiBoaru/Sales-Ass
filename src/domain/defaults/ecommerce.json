@@ -31,6 +31,8 @@
     {"kind": "benefits", "max_chars": 220},
     {"kind": "scenarios", "max_chars": 220}
   ],
+  "_howto_sections_note": "NX-315: tipurile de secțiune care sunt INSTRUCȚIUNI DE FOLOSIRE, în ordinea în care se citesc. La „cum se folosește”, compunerea primește textul lor (plafonat de detail_sections) și scrie pașii din el, nu din memoria modelului. Un tenant cu alte tipuri le declară în settings.domain_pack.howto_sections.",
+  "howto_sections": ["usage", "dosage", "warnings"],
   "concern_map": {},
   "profile_whitelist": ["budget_band", "fav_brands", "concerns"],
   "fact_type_whitelist": ["budget_band", "fav_brands", "concerns", "size", "restriction"],

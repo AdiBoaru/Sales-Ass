@@ -100,6 +100,48 @@ def completeness_gaps(ctx: TurnContext) -> list[str]:
     return gaps
 
 
+def explain_shape_report(ctx: TurnContext) -> dict[str, Any] | None:
+    """NX-315 felia 3 — pe un tur „cum se folosește", cât din răspuns vine din fișa magazinului.
+
+    `None` pe orice alt tur (cardinalitate: evenimentul există doar unde are sens). Rulează
+    indiferent de `HOWTO_FROM_CATALOG_ENABLED`, deliberat: aprinderea flagului se decide pe date
+    (D15), iar fără măsurătoarea pe traficul de AZI n-ar exista cifra cu care comparăm.
+
+    Pur, ca restul modulului: citește `ctx.reply` și `ctx.retrieval`, zero I/O."""
+    from src.agent import answer_shape as shape_mod  # noqa: PLC0415
+    from src.agent import turn_profile  # noqa: PLC0415
+    from src.worker import compose  # noqa: PLC0415
+
+    r = ctx.reply
+    if r is None or turn_profile.name_for_turn(ctx) != "howto":
+        return None
+    retrieval = getattr(ctx, "retrieval", None)
+    products = list(getattr(retrieval, "products", None) or [])
+    pack = getattr(ctx.business, "domain_pack", None)
+    if not products:
+        return {"has_instructions": False, "reason": "no_sheet", "path": _path(r)}
+    product = products[0]
+    instructions, reason = shape_mod.howto_instructions(product, pack)
+    if not instructions:
+        # Fișa fără instrucțiuni: răspunsul corect e „nu am", deci nu există ce măsura.
+        return {"has_instructions": False, "reason": reason, "path": _path(r)}
+    if r.rich is not None:
+        parts = [r.rich.intro or "", r.rich.education or ""]
+    else:
+        parts = [r.text or ""]
+    answer = " ".join(p for p in parts if p).strip()
+    sentences = compose._sentences(" ".join(answer.split())) if answer else []
+    description = " ".join(str(product.get(k) or "") for k in ("ai_summary", "description")).strip()
+    measured = shape_mod.explain_measure(
+        answer, sentences[0] if sentences else "", instructions, description, ctx.language or ""
+    )
+    return {"has_instructions": True, "reason": reason, "path": _path(r), **measured}
+
+
+def _path(r) -> str:
+    return "rich" if r.rich is not None else "prose"
+
+
 def answer_shape_report(ctx: TurnContext) -> dict[str, Any] | None:
     """NX-299 — ce FORMĂ cerea turul și ce a ieșit. `None` = turul n-are carduri, deci n-are formă.
 

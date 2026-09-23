@@ -242,6 +242,11 @@ def load_domain_pack(business: BusinessConfig) -> DomainPack | None:
         rank_weights=_norm_numeric_map(merged.get("rank_weights")),
         comparison_facets=_norm_comparison_facets(merged.get("comparison_facets")),
         detail_sections=_norm_detail_sections(merged.get("detail_sections")),
+        howto_sections=tuple(
+            dict.fromkeys(
+                k for k in (merged.get("howto_sections") or []) if isinstance(k, str) and k
+            )
+        ),
         searchable_facets=tuple(
             k for k in (merged.get("searchable_facets") or []) if isinstance(k, str) and k
         ),

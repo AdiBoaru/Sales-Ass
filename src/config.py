@@ -942,8 +942,26 @@ class Settings(BaseSettings):
     # el, deși `product_sections.usage` există pe 2.746 din 2.758 de produse ale tenantului și
     # conține chiar fraza care lipsea din răspuns („folosind mainile sau o manusa speciala").
     # ON aprinde exclusiv profilul `howto`. OFF = byte-identic.
+    # NX-315: pe v1 același flag duce și instrucțiunile MAGAZINULUI în compunerea rich, cu forma
+    # „răspunsul întâi". Fără asta sufixul ajungea doar la bucla de tool-uri, iar apelul rich
+    # rescria răspunsul pe regula de DEEP-DIVE („intro = ce ESTE produsul"), adică exact paragraful
+    # care revinde produsul înaintea instrucțiunilor.
     howto_from_catalog_enabled: bool = Field(
         default=False, validation_alias="HOWTO_FROM_CATALOG_ENABLED"
+    )
+    # NX-315 felia 1: „cum alegi" devine OBLIGATORIU când setul servit îl justifică (≥2 carduri și
+    # ≥1 axă de decizie, `answer_shape.shape_for`). Promptul rich declară `education` opțională
+    # („REGULA DE AUR… mai bine gol"), iar pe turul real «vreau o crema de hidratare» a ieșit goală.
+    # Serverul spune, în mesajul turului, că slotul e cerut și pe ce axe. OFF = byte-identic.
+    guidance_required_enabled: bool = Field(
+        default=False, validation_alias="GUIDANCE_REQUIRED_ENABLED"
+    )
+    # NX-315 felia 2: O întrebare de îngustare, alături de carduri (nu în locul lor), pe o fațetă
+    # aleasă de SERVER din setul servit (`narrowing_candidate`). Schema rich capătă câmpul
+    # `question` doar pe turele cu ofertă, iar poarta cere ca întrebarea să numească valorile
+    # oferite. OFF = byte-identic (aceeași schemă, același mesaj).
+    narrowing_question_enabled: bool = Field(
+        default=False, validation_alias="NARROWING_QUESTION_ENABLED"
     )
     # IZI: badge de card DERIVAT din semnale reale (rating+recenzii → „Top Favorit"; reducere reală
     # → „Super Preț"), prin praguri din DomainPack.badge_rules (default-uri agnostice de vertical).

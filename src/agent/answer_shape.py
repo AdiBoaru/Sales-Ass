@@ -208,7 +208,220 @@ def framing_text(pack: object, locale: str, product_types: Sequence[str]) -> str
         return None
 
 
+# --- NX-315: forma după ce a CERUT clientul ------------------------------------------------------
+#
+# Sloturile de mai sus MĂSOARĂ. Directivele de mai jos CER: sunt liniile pe care serverul le pune în
+# mesajul turului către compunerea rich, doar pe turele pe care setul servit le justifică. Nu intră
+# în system (prefixul cache-uit rămâne byte-identic), iar fiecare e sub flagul feliei ei.
+#
+# Sunt scrise ÎN vocea pe care o cer (principiul 13), verificat la import: un exemplu cu liniuță
+# într-un prompt îl învață pe model exact ce îi interzici.
+
+_GUIDANCE_DIRECTIVE = (
+    "Pe turul ăsta `education` NU e opțională. Scrie 1-2 fraze despre cum alege clientul între "
+    "produsele de pe masă, pe axele {axes}: criteriile întâi, pe categorie, apoi, dacă ajută, ce "
+    "produs se potrivește fiecărui segment, cu produsul lui din listă. Fără cifre."
+)
+
+_NARROWING_DIRECTIVE = (
+    "Poți pune O singură întrebare clientului, despre {label}. Opțiunile din set sunt: {options}. "
+    "Scrie-o în câmpul `question`, scurt, numind opțiunile, ca să poată răspunde dintr-un cuvânt. "
+    "Nu pune nicio altă întrebare în `intro` sau în `education`. Dacă întrebarea n-ar schimba ce "
+    "îi recomanzi, lasă `question` gol."
+)
+
+_HOWTO_DIRECTIVE = (
+    "Turul ăsta cere instrucțiuni de folosire. Instrucțiunile magazinului pentru [{product_id}]: "
+    "{instructions}\n"
+    "`intro` = prima frază răspunde direct la cum se folosește. `education` = pașii din "
+    "instrucțiunile de mai sus, în ordinea lor, apoi un singur avertisment dacă instrucțiunile au "
+    "unul. Nu descrie din nou produsul, clientul tocmai l-a văzut. Nu adăuga pași care nu sunt în "
+    "instrucțiuni și nu spune același lucru de două ori."
+)
+
+_HOWTO_MISSING_DIRECTIVE = (
+    "Turul ăsta cere instrucțiuni de folosire, dar magazinul nu are instrucțiuni pentru produsul "
+    "[{product_id}]. Spune asta pe scurt în `intro` și nu compune pași din ce știi tu."
+)
+
+
+def guidance_directive(axis_names: Sequence[str]) -> str | None:
+    """Linia care face „cum alegi" obligatoriu. `None` fără axe: fără axă de decizie nu există
+    criteriu onest de numit, iar un paragraf generic e exact umplutura pe care regula de aur din
+    `_RICH_RULES` o interzice pe bună dreptate."""
+    names = [n for n in axis_names if n]
+    if not names:
+        return None
+    return _GUIDANCE_DIRECTIVE.format(axes=", ".join(names))
+
+
+def narrowing_directive(label: str, phrases: Sequence[str]) -> str | None:
+    """Oferta de întrebare. `None` sub două opțiuni: o întrebare cu un singur răspuns posibil nu
+    îngustează nimic."""
+    options = [p for p in phrases if p]
+    if len(options) < 2 or not label:
+        return None
+    return _NARROWING_DIRECTIVE.format(label=label, options=", ".join(options))
+
+
+def howto_directive(product_id: str, instructions: str | None) -> str:
+    """Instrucțiunile MAGAZINULUI în compunere, sau spusa onestă că nu există (regula NX-307)."""
+    if instructions:
+        return _HOWTO_DIRECTIVE.format(product_id=product_id, instructions=instructions)
+    return _HOWTO_MISSING_DIRECTIVE.format(product_id=product_id)
+
+
+def axis_names(axes: Sequence[str]) -> tuple[str, ...]:
+    """„Tip de ten: uscat / gras" → „Tip de ten". Axele vin din `compose.decision_axes`, deci
+    numele sunt etichetele fațetelor din pachet, nu cuvinte alese aici."""
+    return tuple(a.split(":", 1)[0].strip() for a in axes if a and a.split(":", 1)[0].strip())
+
+
+#: Motivele pentru care întrebarea scrisă de model NU pleacă. Vocabular ÎNCHIS (event).
+QUESTION_REJECTIONS: tuple[str, ...] = ("no_question", "not_a_question", "off_target", "unsafe")
+
+#: Câte dintre opțiunile oferite trebuie să NUMEASCĂ întrebarea ca să fie a fațetei oferite.
+#: Două, nu una: „ai tenul uscat?" e o întrebare de confirmare, nu una care desparte setul.
+_MIN_OPTIONS_NAMED = 2
+
+
+def distinguishing_parts(phrases: Sequence[str]) -> tuple[str, ...]:
+    """Partea din fiecare frază care o DEOSEBEȘTE de celelalte.
+
+    „ten uscat", „ten gras", „ten sensibil" → „uscat", „gras", „sensibil". Un om întreabă „ai tenul
+    uscat, gras sau sensibil?", nu repetă subiectul la fiecare opțiune, deci o poartă care ar cere
+    fraza întreagă ar respinge exact întrebarea firească. Cuvintele comune TUTUROR frazelor sunt
+    subiectul, nu opțiunea, iar ele se scot. Pur, fără listă de cuvinte: ce e comun se calculează.
+    """
+    tokenized = [[w for w in p.lower().split() if w] for p in phrases]
+    if len(tokenized) < 2:
+        return tuple(" ".join(t) for t in tokenized)
+    common = set(tokenized[0]).intersection(*tokenized[1:])
+    out: list[str] = []
+    for words in tokenized:
+        rest = [w for w in words if w not in common]
+        out.append(" ".join(rest or words))
+    return tuple(out)
+
+
+def judge_question(question: object, phrases: Sequence[str]) -> tuple[str | None, str | None]:
+    """`(întrebarea curățată, None)` dacă pleacă, `(None, motiv)` altfel. PURĂ.
+
+    Poarta e „întrebarea e pe fațeta OFERITĂ", măsurată prin câte opțiuni numește. Potrivirea e
+    `corroborated_by` (NX-251): pe prefix, deci „uscată" numește „uscat" fără nicio regulă de
+    flexiune scrisă pentru română. Siguranța textului (cifre, claim-uri, medical) e a apelantului,
+    care are scrub-ul compunerii.
+    """
+    from src.conversation.needs import corroborated_by  # noqa: PLC0415 — modul altfel fără deps
+
+    if not isinstance(question, str) or not question.strip():
+        return None, "no_question"
+    text = " ".join(question.split())
+    if text.count("?") != 1 or not text.endswith("?"):
+        return None, "not_a_question"
+    named = sum(1 for part in distinguishing_parts(phrases) if corroborated_by(text, part))
+    if named < _MIN_OPTIONS_NAMED:
+        return None, "off_target"
+    return text, None
+
+
+#: Motivele pentru `howto_instructions`, vocabular ÎNCHIS (event `howto_instructions`).
+HOWTO_REASONS: tuple[str, ...] = ("instructions", "no_instructions", "no_sheet", "not_declared")
+
+
+def howto_instructions(product: Mapping[str, Any], pack: object) -> tuple[str | None, str]:
+    """`(textul instrucțiunilor MAGAZINULUI, motiv)` pentru un produs. PURĂ.
+
+    Motivul contează mai mult decât pare: `no_instructions` (fișa e încărcată și n-are secțiunea)
+    îi dă turului dreptul să spună „nu am instrucțiuni", pe când `no_sheet` (produsul a venit
+    fără fișă, de exemplu dintr-o căutare) înseamnă doar că NU ȘTIM, iar a afirma lipsa ar fi o
+    minciună. `not_declared`: pachetul nu spune care secțiuni sunt instrucțiuni.
+
+    Plafonul fiecărei secțiuni e cel din `detail_sections`, deci compunerea vede exact cât a
+    văzut modelul la detaliu, iar măsurătoarea compară cu exact ce i s-a arătat."""
+    from src.catalog.render_text import cut_at_sentence  # noqa: PLC0415
+
+    kinds = tuple(getattr(pack, "howto_sections", ()) or ())
+    if not kinds:
+        return None, "not_declared"
+    if "sections" not in product:
+        return None, "no_sheet"
+    caps = {s.kind: s.max_chars for s in (getattr(pack, "detail_sections", ()) or ())}
+    by_kind: dict[str, str] = {}
+    for sec in product.get("sections") or []:
+        if isinstance(sec, dict) and sec.get("kind") in kinds and sec.get("body"):
+            by_kind.setdefault(str(sec["kind"]), str(sec["body"]))
+    parts = [
+        cut_at_sentence(" ".join(by_kind[k].split()), caps.get(k, 400))
+        for k in kinds
+        if k in by_kind
+    ]
+    parts = [p for p in parts if p]
+    if not parts:
+        return None, "no_instructions"
+    return " ".join(parts), "instructions"
+
+
+#: Sub proporția asta de cuvinte de conținut din instrucțiuni regăsite în răspuns, pașii au venit
+#: din memoria modelului, nu din fișă. PRIMĂ calibrare, declarată ca atare: nu există încă o
+#: distribuție măsurată pe trafic (flagul e OFF), iar pragul se mută pe date, nu pe păreri.
+EXPLAIN_GROUNDED_MIN = 0.25
+#: „Prima frază revinde produsul": peste jumătate din cuvintele ei vin din descriere și sub o
+#: cincime din instrucțiuni.
+_RESOLD_FROM_DESCRIPTION = 0.5
+_RESOLD_MAX_FROM_USAGE = 0.2
+
+
+def explain_measure(
+    answer: str, first_sentence: str, instructions: str, description: str, locale: str
+) -> dict[str, Any]:
+    """NX-315 felia 3 — cât din răspunsul la „cum se folosește" vine din fișa MAGAZINULUI. PURĂ.
+
+    Măsurătoare, nu poartă. O poartă pe proză ar putea tăia un răspuns bun care parafrazează
+    instrucțiunile, iar asta e exact decizia pe care o lăsăm datelor (D15). Cuvintele de conținut
+    vin din `query_terms.content_terms`, cu cuvintele goale ale LOCALEI (P11), deci nicio listă
+    scrisă aici. Doar numere și booleeni la ieșire (P12)."""
+    from src.catalog.query_terms import content_terms  # noqa: PLC0415
+
+    usage = set(content_terms(instructions, locale))
+    said = set(content_terms(answer, locale))
+    grounded = len(usage & said) / len(usage) if usage else 0.0
+    first = set(content_terms(first_sentence, locale)) if first_sentence.strip() else set()
+    desc = set(content_terms(description, locale)) if description.strip() else set()
+    resold = bool(
+        first
+        and len(first & desc) / len(first) > _RESOLD_FROM_DESCRIPTION
+        and len(first & usage) / len(first) < _RESOLD_MAX_FROM_USAGE
+    )
+    return {
+        "grounded": round(grounded, 2),
+        "grounded_below": grounded < EXPLAIN_GROUNDED_MIN,
+        "resold": resold,
+    }
+
+
+def _validate_directives() -> None:
+    """Poartă de IMPORT, ca la `turn_profile`: un text de prompt care încalcă vocea oprește
+    procesul, nu primul tur."""
+    from src.agent.voice import naturalize  # noqa: PLC0415
+
+    for name, text in (
+        ("guidance", _GUIDANCE_DIRECTIVE),
+        ("narrowing", _NARROWING_DIRECTIVE),
+        ("howto", _HOWTO_DIRECTIVE),
+        ("howto_missing", _HOWTO_MISSING_DIRECTIVE),
+    ):
+        if naturalize(text) != text:
+            raise ValueError(f"directiva {name} încalcă vocea (P13)")
+
+
+_validate_directives()
+
+
 __all__ = [
+    "EXPLAIN_GROUNDED_MIN",
+    "HOWTO_REASONS",
+    "QUESTION_REJECTIONS",
     "REASONS",
     "SLOTS",
     "SLOT_CLOSING",
@@ -216,8 +429,16 @@ __all__ = [
     "SLOT_FRAMING",
     "AnswerShape",
     "SlotVerdict",
+    "axis_names",
     "distinct_types",
+    "distinguishing_parts",
+    "explain_measure",
     "framing_text",
+    "guidance_directive",
+    "howto_directive",
+    "howto_instructions",
+    "judge_question",
     "missing_slots",
+    "narrowing_directive",
     "shape_for",
 ]
