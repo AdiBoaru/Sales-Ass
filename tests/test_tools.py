@@ -1231,6 +1231,17 @@ def test_diversify_spreads_product_types():
     assert fara["ser"] > types["ser"]
 
 
+def test_diversify_single_type_pool_fills_the_page():
+    """Jumătatea de SERVER a contractului „cota pe tip e a codului, nu a promptului": când clientul
+    cere un singur fel de produs, pool-ul are o singură clasă și cota se relaxează treptat, deci
+    pagina se umple. Promptul rich nu mai spune nicio cifră tocmai pentru că ar fi tăiat aici la 2
+    (turul `a623c53e`, «vreau o crema de hidratare»)."""
+    cands = [_ct(f"c{i}", f"B{i}", 50.0 + i * 20, "crema de fata") for i in range(8)]
+    page = ct.diversify_pool(cands, 6)[:6]
+    assert len(page) == 6
+    assert {ct._product_type(p) for p in page} == {"crema de fata"}
+
+
 def test_diversify_missing_type_does_not_form_a_class():
     """Un sfert din catalogul real n-are tip derivat. Dacă „fără tip" ar fi o clasă, ele s-ar
     plafona reciproc ca și cum ar fi același lucru — adică exact invers decât știm."""

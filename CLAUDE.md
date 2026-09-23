@@ -536,6 +536,24 @@ falsă despre magazin (poarta de POTRIVIRE, NX-309). Card: [`tasks/stage1/NX-313
 probe: `pytest tests/test_guessed_filter_coherence.py -q` +
 `PYTHONPATH=. python scripts/nx313_guessed_filter_coherence_probe.py`.
 
+**Fix 2026-09-23 — «vreau o crema de hidratare»: 2 carduri din 6, iar chips-urile stăteau pe raftul
+respins.** Turul `a623c53e`: căutarea a adus 6 creme de față, compunerea a arătat 2. Cauza era o
+reparație din aceeași zi: NX-312 felia 4 a început să substituie `{MAX_PER_TYPE}` în regulile rich,
+care până atunci plecau LITERAL, deci „CEL MULT 2 produse de același tip" a devenit plafon DUR pentru
+model, în timp ce `diversify_pool` îl RELAXEAZĂ când setul are un singur tip. Aceeași regulă, doi
+proprietari, două semantici. Cota pleacă din prompt (serverul e proprietarul unic), iar încadrarea
+„ce am pus pe masă" se cere doar la mai multe tipuri. Trei defecte vecine, găsite pe același tur:
+(1) raftul GHICIT pe care NX-313 îl scosese din căutare (`category=fata`, adică Machiaj) se persista
+totuși în stare, fiindcă `ToolRun` reținea argumentele MODELULUI, deci meniul de chips oferea «Arata-mi
+ce ai la Machiaj»; verdictul ajunge acum până la stare (`Relevance.guessed_category_dropped`); (2)
+chips-urile moarte («Caut ceva pentru hidratare» sub «…de hidratare») erau scoase doar sub
+`CHIP_MOVES_V2_ENABLED`; au acum kill-switch propriu, `CHIP_DROP_DEAD_ENABLED` (ON), plus o clasă
+nouă: îngustare pe o valoare pe care o au TOATE cardurile («zi si noapte» sub două creme de zi și
+noapte); (3) `subject_match` citea tipul de pe cardurile compacte ale căii bogate, care n-au
+`attributes`, deci raporta `type_matched=0` pe orice tur bogat. Probe:
+`pytest tests/test_rejected_shelf_not_learned.py tests/test_chip_press.py
+tests/test_conversation_subject.py tests/test_text_gate_redundancy.py -q`.
+
 **NX-314 — subiectul conversației: «mai ieftin» servea benzi de nas la o cerere de cremă.**
 Conversația `f4e1431e` (`sole-ro`, 2026-09-23): după SOME BY MI Yuja Niacin (110 lei), «si ceva mai
 ieftin» a adus o bandă de nas de 3 lei și cinci măști sheet de 10 lei. `search_cheaper_than`

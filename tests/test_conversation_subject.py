@@ -608,6 +608,43 @@ def test_the_runner_emits_subject_match_without_client_text_or_product_ids(monke
     assert ev[0].properties["type_matched"] == 1
 
 
+def test_subject_match_reads_the_type_of_compact_rich_cards_from_retrieval(monkeypatch):
+    """Pe calea BOGATĂ cardurile sunt compacte (`compose.card_products`: fără `attributes`), deci
+    citit doar de pe card raportul dădea `type_matched=0` pe orice tur bogat. Turul `a623c53e`:
+    două creme de față servite, subiect «crema de fata», `share: 0.0`."""
+    from src.models import RetrievalResult
+    from src.worker.runner import _emit_subject_match
+
+    monkeypatch.setattr(get_settings(), "conversation_subject_enabled", True)
+    ctx = _ctx("vreau o crema de hidratare")
+    ctx.state.search_constraints = {SUBJECT_KEY: {"type": CREMA}}
+    ctx.emit("product_search", n=3)
+    retrieved = [
+        {"id": "a", "name": "A", "attributes": {"product_type": CREMA}},
+        {"id": "b", "name": "B", "attributes": {"product_type": CREMA}},
+        {"id": "c", "name": "C", "attributes": {"product_type": SER}},
+    ]
+    ctx.retrieval = RetrievalResult(products=retrieved, source="tools")
+    compact = [
+        {"product_id": "a", "name": "A", "price": 1.0},
+        {"product_id": "b", "name": "B", "price": 2.0},
+    ]
+    ctx.set_reply("iata", products=compact)
+    _emit_subject_match(ctx)
+    props = next(e.properties for e in ctx.events if e.type == "subject_match")
+    assert props["type_matched"] == 2 and props["share"] == 1.0
+
+
+def test_card_type_wins_over_retrieval_when_the_card_carries_it():
+    report = subject_match_report(
+        ConversationSubject(product_type=CREMA),
+        [_p(SER)],
+        ["product_search"],
+        retrieved=[{"id": _p(SER).get("id"), "attributes": {"product_type": CREMA}}],
+    )
+    assert report["type_matched"] == 0
+
+
 # ── modelul află că o completare e completare ───────────────────────────────────────────────────
 
 

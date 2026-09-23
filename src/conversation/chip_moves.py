@@ -79,6 +79,7 @@ oferă. Alternativa — o frază românească scrisă aici ca fallback — ar fi
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -89,7 +90,7 @@ from src.catalog.vocabulary import CATEGORY_DIMENSION
 from src.models import MAX_CHIP_LEN
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Mapping, Sequence
+    from collections.abc import Iterable, Sequence
 
     from src.catalog.clarify_menu import ClarifyMenu
 
@@ -500,6 +501,7 @@ def drop_dead(
     n_cards: int = 0,
     obligation_kinds: Iterable[str] | None = None,
     first_subject_turn: bool = True,
+    cards: Sequence[Mapping[str, Any]] = (),
 ) -> tuple[list[ChipMove], int]:
     """NX-316: scoate mutările ADEVĂRATE dar MOARTE, înainte de selecție. `(păstrate, câte scoase)`.
 
@@ -511,6 +513,10 @@ def drop_dead(
       de client și rezolvate pe fațete KNOWN. Deci merge pe orice limbă și orice vertical (P11).
     - `detail` pe un tur cu UN singur card: cardul are deja butonul lui de detalii, iar chip-ul ar
       repeta același lucru într-un slot care putea duce altundeva.
+    - `refine_facet` pe o valoare pe care o poartă TOATE cardurile afișate (≥2, `cards` cu
+      `attributes`): «Caut ceva pentru zi si noapte» sub două creme care sunt amândouă de zi și de
+      noapte (turul `a623c53e`). O îngustare care nu scoate nimic din ce e pe ecran nu îngustează.
+      Un card fără valoare pe fațetă înseamnă „nu știm", deci mutarea rămâne (UNKNOWN ≠ MISMATCH).
 
     Scoase ÎNAINTE de `select`, nu după, din motivul din `renderable`: o mutare aleasă și apoi
     aruncată ar lăsa un slot gol acolo unde exista o continuare bună.
@@ -525,6 +531,7 @@ def drop_dead(
     spoken = {(str(d), str(k)) for d, k in spoken_needs}
     kinds = {str(k) for k in obligation_kinds} if obligation_kinds is not None else None
     graph = any(m.kind in GRAPH_LATERAL for m in moves)
+    everywhere = _values_on_every_card(cards)
     kept: list[ChipMove] = []
     dropped = 0
     for move in moves:
@@ -536,7 +543,7 @@ def drop_dead(
                 continue
         if move.kind == "refine_facet":
             _, dimension, key = (move.move_id.split(":", 2) + ["", ""])[:3]
-            if (dimension, key) in spoken:
+            if (dimension, key) in spoken or (dimension, key) in everywhere:
                 dropped += 1
                 continue
         if move.kind == "detail" and n_cards == 1:
@@ -544,6 +551,31 @@ def drop_dead(
             continue
         kept.append(move)
     return kept, dropped
+
+
+def _values_on_every_card(cards: Sequence[Mapping[str, Any]]) -> frozenset[tuple[str, str]]:
+    """`(cheie de atribut, valoare)` purtate de FIECARE card afișat. Sub două carduri, gol: pe un
+    singur card orice valoare e „a tuturor", dar acolo `detail`/alegerea n-au sens oricum, iar o
+    îngustare poate aduce produse noi. Valorile listă contribuie fiecare element; comparația e pe
+    forma normalizată (`lower`, spații comprimate), cum o scrie și `from_menu` în `move_id`."""
+    if len(cards) < 2:
+        return frozenset()
+    common: set[tuple[str, str]] | None = None
+    for card in cards:
+        attrs = card.get("attributes")
+        pairs: set[tuple[str, str]] = set()
+        if isinstance(attrs, Mapping):
+            for dim, raw in attrs.items():
+                values = raw if isinstance(raw, (list, tuple)) else [raw]
+                for v in values:
+                    if isinstance(v, (str, int, float)) and not isinstance(v, bool):
+                        norm = " ".join(str(v).split()).lower()
+                        if norm:
+                            pairs.add((str(dim), norm))
+        common = pairs if common is None else common & pairs
+        if not common:
+            return frozenset()
+    return frozenset(common or ())
 
 
 # --- NX-316 felia 2: mutări peste setul AFIȘAT, pe fațetele lui partiționante --------------------

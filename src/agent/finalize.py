@@ -599,14 +599,19 @@ class _RichOutcome:
 
 
 def _drop_dead_moves(
-    ctx, candidates: list, *, n_cards: int, obligation_kinds=None
+    ctx, candidates: list, *, n_cards: int, obligation_kinds=None, cards=()
 ) -> tuple[list, int]:
     """NX-316: aceeași regulă pe AMBELE căi care construiesc chips (v1 aici, creierul unic în
-    `brain._turn_chips`). Sub `CHIP_MOVES_V2_ENABLED`; stins ⇒ lista neatinsă (byte-identic).
+    `brain._turn_chips`).
 
-    `obligation_kinds` (felia 3) aprinde coborârea lui `pivot_shelf`; primul tur al subiectului
-    vine din starea v1 (`subject_is_new`)."""
-    if not getattr(get_settings(), "chip_moves_v2_enabled", False):
+    Chips-urile MOARTE (nevoie rostită, valoare pe toate cardurile, detaliu pe un card) se scot
+    sub `CHIP_DROP_DEAD_ENABLED` (ON), fiindcă sunt risipă măsurată, nu o capabilitate de câștigat
+    pe golden. Coborârea lui `pivot_shelf` (`obligation_kinds`, felia 3) rămâne sub
+    `CHIP_MOVES_V2_ENABLED`. Ambele stinse ⇒ lista neatinsă. `cards` = cardurile afișate CU
+    `attributes`; primul tur al subiectului vine din starea v1 (`subject_is_new`)."""
+    s = get_settings()
+    v2 = bool(getattr(s, "chip_moves_v2_enabled", False))
+    if not v2 and not getattr(s, "chip_drop_dead_enabled", False):
         return candidates, 0
     from src.conversation import chip_moves  # noqa: PLC0415
     from src.conversation.subject import spoken_needs, subject_is_new  # noqa: PLC0415
@@ -615,8 +620,9 @@ def _drop_dead_moves(
         candidates,
         spoken_needs=spoken_needs(ctx.state),
         n_cards=n_cards,
-        obligation_kinds=obligation_kinds,
+        obligation_kinds=obligation_kinds if v2 else None,
         first_subject_turn=subject_is_new(ctx.state, ctx.turn_id),
+        cards=cards,
     )
 
 
@@ -791,7 +797,7 @@ async def _apply_move_chips(ctx, deps, rich) -> None:
         obligations = extract_obligations(ctx.message.body or "")
         kinds = [o.kind for o in obligations]
         candidates, dead = _drop_dead_moves(
-            ctx, candidates, n_cards=len(cards), obligation_kinds=kinds
+            ctx, candidates, n_cards=len(cards), obligation_kinds=kinds, cards=with_attrs
         )
         if dead:
             anchor_stats["dropped_dead"] = dead
