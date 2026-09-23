@@ -549,10 +549,54 @@ NATURAL: scrii ca un vânzător care ține produsele în mână, nu ca o fișă 
 diferențele", fără „După cum poți observa", fără să-ți anunți procesul."""
 
 
+# NX-317: aceleași reguli dure, cu trei schimbări, fiecare dintr-un defect văzut pe turul real
+# «Compara SOME BY MI Yuja Niacin cu By Wishtrend Vitamin»: (1) verdictul apărea în lead, în
+# subtitlu și în închidere, deci leadul NU mai numește un câștigător, iar închiderea e UN paragraf;
+# (2) fișa are acum `recenzii`, `cantitate`, `tip_produs`, iar două celule care spun ce spune
+# ACEEAȘI sursă cu aceeași valoare nu sunt o axă; (3) nevoia clientului se tratează când o fișă o
+# are.
+_COMPARE_RULES_V2 = (
+    _COMPARE_RULES.split("`lead` = 1-2 fraze.")[0]
+    + """`lead` = 1-2 fraze. Ce ai pus față în față și pe ce dimensiuni se joacă alegerea. NU spui
+aici care e mai bun și nici pentru cine e fiecare: asta e treaba închiderii, iar spus de două ori
+sună a umplutură.
+
+`subtitle` = o frază care spune, pe scurt, CE SUNT cele două, fiecare prin atributul care îl
+separă de celălalt, fără verdict. `null` dacă n-ai destule fapte cât să fie utilă.
+
+`axes` = 3-6 axe, în ORDINEA în care contează pentru clientul ăsta. Alege-le după ce chiar SEPARĂ
+perechea din față, nu după un șablon. Reguli:
+- `label` = titlu scurt, în limba clientului, formulat ca o întrebare de cumpărător, nu ca un câmp
+  de bază de date. BINE: „Cum se simte la folosire", „Cât rezistă", „Pentru ce situație".
+  RĂU: numele brut al câmpului din catalog, „Atribute".
+- `text` = o propoziție scurtă (max ~15 cuvinte) care spune ce ÎNSEAMNĂ faptul pentru client, nu
+  faptul brut. Un fapt de forma „avantaje: <X>" devine ce înseamnă X la folosire.
+- Celulele aceleiași axe trebuie să se poată citi COMPARATIV, una lângă alta. Dacă o sursă are
+  aceeași valoare pe toate produsele, nu e o axă, e ceva ce au în comun: renunță la ea.
+- `recenzii` spune ce au observat cumpărătorii, `cantitate` câte primești, `tip_produs` ce fel de
+  produs e fiecare. Folosește-le când chiar despart perechea.
+- NU face o axă din preț, rating sau disponibilitate. Primele două le pune codul, a treia nu e o
+  diferență de produs.
+- Dacă mai jos apare ce a spus clientul că îi trebuie, iar o fișă are valoarea aceea, una dintre
+  axe o tratează și o numește pe coloana produsului care o are.
+
+`closing` = UN singur paragraf SCURT, sub tabel. E singurul loc cu verdictul: „dacă vrei X,
+primul, iar dacă preferi Y, al doilea", pe situația LUI. Dacă din conversație se vede contextul
+(cadou, ocazie, buget), leagă-l de el. Fără să anunți că recomanzi.
+
+NATURAL: scrii ca un vânzător care ține produsele în mână, nu ca o fișă tehnică. Fără „Iată
+diferențele", fără „După cum poți observa", fără să-ți anunți procesul."""
+)
+
+
 @lru_cache(maxsize=256)
-def build_compare_system(inp: PromptInputs) -> str:
+def build_compare_system(inp: PromptInputs, *, axes_v2: bool = False) -> str:
     """System pt leadul de COMPARAȚIE (`compare_lead`). Antet generat din DB + reguli identice pe
-    toți tenanții, ca la rich. Static per (business, locale, currency) → prompt caching."""
-    base = f"{_store_header(inp)}\n{_COMPARE_RULES}\n{_SAFETY_RULES}\n{VOICE_RULES}"
+    toți tenanții, ca la rich. Static per (business, locale, currency) → prompt caching.
+
+    `axes_v2` (NX-317, `COMPARISON_AXES_V2_ENABLED`): regulile cu verdictul o singură dată și
+    sursele noi. Implicit False ⇒ exact promptul de azi."""
+    rules = _COMPARE_RULES_V2 if axes_v2 else _COMPARE_RULES
+    base = f"{_store_header(inp)}\n{rules}\n{_SAFETY_RULES}\n{VOICE_RULES}"
     style = response_style_block(dict(inp.response_style))
     return f"{base}\n{style}" if style else base

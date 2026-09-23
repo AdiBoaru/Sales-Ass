@@ -482,6 +482,21 @@ azi le prind în continuare). Pe `sole-ro`, turul 3 al conversației reale ofer�
 probe: `pytest tests/test_chip_press.py tests/test_chip_moves_v2.py tests/test_relation_chips.py -q`
 + `NX_TESTS_READ_ENV_FILE=1 pytest tests/test_relation_chips_db.py -m integration -q`.
 
+**NX-317 — comparația: axe din date, fără axe egale pe sursă, verdictul o dată (flag OFF).**
+Turul real «Compara SOME BY MI Yuja Niacin cu By Wishtrend Vitamin»: verdictul în lead, subtitlu și
+închidere, iar «hidratare» (în `concerns` la AMBELE) numită doar la una. `compose.comparison_sheets`
+e fișa UNICĂ a comparației (prompt, cifre permise, verificarea celulelor) și primește `recenzii`,
+`cantitate` (cunoscut pe toate coloanele) și `tip_produs` (cunoscut și diferit); o axă ale cărei
+celule citează aceeași sursă cu aceeași valoare pică (`axis_same_source`, prag 0,8, măsurat:
+sursele identice 1,00, cele diferite ≤0,72); nevoile rostite intră în mesaj și se verifică PER
+PRODUS (`comparison_need_uncovered`); promptul v2 cere leadul fără câștigător și UN paragraf de
+verdict. **Măsurat și declarat:** verdictul repetat e o repetiție de SENS (0,15-0,40 lexical), deci
+poarta de deduplicare prinde doar repetiția literală, iar reparația e structura; axa „Cum se simte"
+cita `avantaje` (0,45), nu `texture`, și nicio regulă pe proză nu o separă de un rând informativ
+(0,56 vs 0,71). `COMPARISON_AXES_V2_ENABLED=false` = byte-identic. Card:
+[`tasks/stage1/NX-317.md`](tasks/stage1/NX-317.md); probe: `pytest tests/test_comparison_axes_v2.py -q`
++ `PYTHONPATH=. python scripts/nx317_comparison_probe.py --business sole-ro`.
+
 **NX-313 — «vreau o cremă de hidratare»: filtrul ghicit se judecă după CERERE.**
 Turul real `bcd8e5c6` (`sole-ro`, 2026-09-23), recidiva lui `f7414c3e` DUPĂ #398: 72,4 s, trei BB-uri
 de machiaj, două cu același nume, motivul primului card lipsă. Modelul a trimis `category="fata"`

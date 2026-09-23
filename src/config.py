@@ -879,6 +879,13 @@ class Settings(BaseSettings):
     comparison_narrative_enabled: bool = Field(
         default=True, validation_alias="COMPARISON_NARRATIVE_ENABLED"
     )
+    # NX-317: fișa de fapte a comparației primește recenziile, gramajul și tipul de produs; o axă
+    # ale cărei celule citează ACEEAȘI sursă cu aceeași valoare pică; nevoile rostite de client
+    # intră în input și se verifică; verdictul apare o singură dată (lead fără câștigător, un
+    # paragraf de închidere). OFF până la golden, apoi ON; OFF = prompt și ieșire byte-identice.
+    comparison_axes_v2_enabled: bool = Field(
+        default=False, validation_alias="COMPARISON_AXES_V2_ENABLED"
+    )
     # IZI-parity (Tier 2b): fațetele de domeniu (aceleași DomainPack.comparison_facets) intră și în
     # BUNDLE-ul rich → modelul VEDE ingredientele/beneficiul/potrivirea reale și scrie fit_clause
     # grounded („cu acid hialuronic, pentru ten uscat"), nu tautologic. Generic pe vertical; date

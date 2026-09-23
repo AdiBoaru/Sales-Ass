@@ -251,6 +251,9 @@ cu un **tabel structurat** (ca iZi). `content` = doar lead-ul; tabelul îl rande
 - **Ordinea pe verticală:** `content` → `subtitle` (ton secundar) → `heading` → tabel →
   `closing[]` (paragrafe normale) → `suggestions`. `heading` vine mereu; `subtitle` și `closing`
   lipsesc când agentul n-a avut destule fapte cât să fie utile.
+- **NX-317** (`COMPARISON_AXES_V2_ENABLED`): `closing[]` are cel mult **un** paragraf (verdictul
+  apare o singură dată), iar rândurile pot cita și recenziile, gramajul și tipul produsului. Forma
+  e aceeași: tot listă, tot text liber, deci frontendul nu schimbă nimic.
 - Mobile: dacă tabelul nu încape, comută pe layout vertical (per produs), nu trunchia.
 
 ### Fallback (canale fără tabel)
