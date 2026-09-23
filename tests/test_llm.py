@@ -121,7 +121,9 @@ async def test_agent_call_includes_sampling_params():
     pleacă REAL: cu effort configurat, raționamentul e pornit, deci temperatura rămâne acasă."""
     c, comp = _llm_client([_Resp("raspuns")])
     await c.complete("sys", "usr")
-    assert comp.last_kwargs["reasoning_effort"] == "high"
+    # Valoarea CONFIGURATĂ pleacă pe sârmă (implicit `medium` din NX-313, era `high`).
+    assert comp.last_kwargs["reasoning_effort"] == get_settings().llm_reasoning_effort_agent
+    assert comp.last_kwargs["reasoning_effort"]
     assert "temperature" not in comp.last_kwargs
     # `max_tokens` e deprecat (→ 400 pe modelele curente); dacă vreodată se trimite un plafon, el
     # se numește `max_completion_tokens`. Implicit nu se trimite niciunul — vezi testul dedicat.
@@ -194,7 +196,7 @@ async def test_bucla_cu_tooluri_forteaza_oprirea_rationamentului():
 async def test_agent_fara_tooluri_pastreaza_effortul_configurat_si_pierde_temperature():
     c, comp = _llm_client([_Resp("raspuns")], model_agent="gpt-5.6-luna")
     await c.complete("sys", "usr")
-    assert comp.last_kwargs["reasoning_effort"] == "high"
+    assert comp.last_kwargs["reasoning_effort"] == get_settings().llm_reasoning_effort_agent
     assert "temperature" not in comp.last_kwargs  # rationament pornit ⇒ doar valoarea implicita
 
 

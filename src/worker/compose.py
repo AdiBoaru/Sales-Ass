@@ -44,6 +44,7 @@ from src.worker.text_scrub import (
     has_medical_claim,
     has_stock_claim,
     has_unverifiable_claim,
+    identifier_tokens,
 )
 
 if TYPE_CHECKING:
@@ -129,16 +130,50 @@ def _unsafe_medical(t: str) -> bool:
     return get_settings().safety_medical_guardrail_enabled and has_medical_claim(t)
 
 
-def scrub_prose(s: str | None) -> str | None:
+#: NX-313: câmpurile unui produs din care NU se iau identificatori. Adrese, chei și codul de
+#: voucher conțin cifre, dar nu sunt NUMELE a ceva din produs — un motiv care le citează nu devine
+#: mai adevărat, ci doar trece de poartă.
+_NOT_GROUNDING = frozenset({"id", "url", "image", "coupon_code", "currency", "synced_at"})
+
+
+def grounded_identifiers(p: dict[str, Any]) -> frozenset[str]:
+    """NX-313: identificatorii („v11", „b5") din fișa produsului, pentru `scrub_prose`. PURĂ.
+
+    Se citesc TOATE valorile text ale rândului (nume, rezumat, atribute, pro-uri din recenzii),
+    nu o listă de câmpuri: ingredientul care poartă cifra poate sta în `key_ingredients` pe un
+    catalog și în rezumat pe altul, iar o listă scrisă de mână ar rămâne în urmă tăcut."""
+    texts: list[str] = []
+
+    def walk(v: Any) -> None:
+        if isinstance(v, str):
+            texts.append(v)
+        elif isinstance(v, dict):
+            for x in v.values():
+                walk(x)
+        elif isinstance(v, (list, tuple)):
+            for x in v:
+                walk(x)
+
+    for k, v in p.items():
+        if k not in _NOT_GROUNDING:
+            walk(v)
+    return identifier_tokens(*texts)
+
+
+def scrub_prose(s: str | None, grounded: frozenset[str] = frozenset()) -> str | None:
     """Proza LLM poate referi NEVOIA clientului, nu fapte cuantificate. Strecoară cifre /
     procente / claim-uri / superlative neverificabile → DROP (None). Faptele reale vin
-    din card, randate de cod. Drop, nu retry (P0-safety: claim medical → DROP)."""
+    din card, randate de cod. Drop, nu retry (P0-safety: claim medical → DROP).
+
+    NX-313: `grounded` = identificatorii din fișa produsului despre care e textul
+    (`grounded_identifiers`); o cifră dintr-un astfel de NUME („complex v11") nu mai aruncă tot
+    motivul. Cantitățile rămân respinse. Gol (implicit) = comportamentul vechi."""
     if not s:
         return None
     t = " ".join(s.split())
     if not t:
         return None
-    if has_unverifiable_claim(t):  # NX-117: digit + pct + claim + super (semantică neschimbată)
+    if has_unverifiable_claim(t, grounded):  # NX-117 (+ NX-313: identificatorii fișei)
         return None
     if _unsafe_medical(t):  # P0-safety: sfat medical/terapeutic → DROP câmpul
         return None
@@ -466,7 +501,7 @@ def _select_pick(
             return None
         top = items[0]
         just = (
-            scrub_prose(pj.get("justification"))
+            scrub_prose(pj.get("justification"), grounded_identifiers(facts[top.product_id]))
             if isinstance(pj, dict) and pj.get("product_id") == top.product_id
             else None
         )
@@ -576,6 +611,7 @@ def assemble(ctx: TurnContext, j: dict[str, Any], retrieved: list[dict[str, Any]
         # „Curățare" e singurul lucru care face cardul lizibil fără să reciteşti textul. Eticheta e
         # a PACHETULUI (fallback: cheia humanizată), nu un dicționar românesc în cod.
         step_ref = routine_by_product.get(pid)
+        grounded = grounded_identifiers(p)  # NX-313: „complex v11" din fișă e un nume
         ai = " ".join((p.get("ai_summary") or "").split())[:400]
         if step_ref is not None:
             return RichItem(
@@ -584,7 +620,7 @@ def assemble(ctx: TurnContext, j: dict[str, Any], retrieved: list[dict[str, Any]
                 size=size_label(p["name"]),
                 price=eff,
                 reason=_drop_unfounded_stock(
-                    _join_reason(scrub_prose(it.get("fit_clause")), anchor), stock_present
+                    _join_reason(scrub_prose(it.get("fit_clause"), grounded), anchor), stock_present
                 ),
                 url=p.get("url"),
                 image=p.get("image"),
@@ -603,7 +639,7 @@ def assemble(ctx: TurnContext, j: dict[str, Any], retrieved: list[dict[str, Any]
             size=size_label(p["name"]),
             price=eff,
             reason=_drop_unfounded_stock(
-                _join_reason(scrub_prose(it.get("fit_clause")), anchor), stock_present
+                _join_reason(scrub_prose(it.get("fit_clause"), grounded), anchor), stock_present
             ),
             url=p.get("url"),
             image=p.get("image"),
