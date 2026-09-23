@@ -324,8 +324,17 @@ async def _apply_move_chips(ctx, deps, rich) -> None:
         cards = [
             {"product_id": it.product_id, "name": it.name, "price": it.price} for it in rich.items
         ]
+        anchor_stats: dict[str, int] = {}
         candidates += chip_moves.renderable(
-            chip_moves.from_cards(cards, offered_before=offered_before), pack, ctx.language
+            chip_moves.from_cards(
+                cards,
+                offered_before=offered_before,
+                unique_anchor=getattr(get_settings(), "unique_name_prefix_enabled", False),
+                locale=ctx.language,
+            ),
+            pack,
+            ctx.language,
+            stats=anchor_stats,
         )
         obligations = extract_obligations(ctx.message.body or "")
         picked = chip_moves.select(
@@ -347,6 +356,7 @@ async def _apply_move_chips(ctx, deps, rich) -> None:
             roles=sorted({m.role for m in picked}),
             offered=len(candidates),
             path="v1",
+            **anchor_stats,
         )
         previous = [str(m) for m in offered_before]
         merged = previous + [m.move_id for m in picked if m.move_id not in previous]

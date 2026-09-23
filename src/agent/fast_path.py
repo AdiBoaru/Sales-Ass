@@ -138,7 +138,9 @@ def eligible(ctx: TurnContext, query: str) -> tuple[str | None, FactKind | None,
     page = getattr(ctx, "page_context", None)
     anchor = PageAnchor(product_id=page.product_id) if getattr(page, "product_id", None) else None
     displayed = list(getattr(ctx.state, "displayed_products", None) or [])
-    resolution = resolve_product_reference(query, displayed, page=anchor)
+    resolution = resolve_product_reference(
+        query, displayed, page=anchor, locale=getattr(ctx, "language", None)
+    )
     if not resolution.resolved or resolution.stale:
         return "no_anchor", fact, None
     if resolution.source not in _TRUSTED_SOURCES:

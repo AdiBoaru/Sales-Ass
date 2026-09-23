@@ -333,16 +333,21 @@ def _turn_chips(
     from src.conversation import chip_moves  # noqa: PLC0415
 
     pack = getattr(ctx.business, "domain_pack", None)
+    anchor_stats: dict[str, int] = {}
     candidates = [
         *chip_ctx.moves,
         # Mutările cardurilor se filtrează AICI, ca și cele din meniu în `_chip_context`: o mutare
         # pe care n-o putem exprima nu are voie să consume un slot de selecție.
         *chip_moves.renderable(
             chip_moves.from_cards(
-                _plan_products(plan, run.retrieved), offered_before=chip_ctx.offered_before
+                _plan_products(plan, run.retrieved),
+                offered_before=chip_ctx.offered_before,
+                unique_anchor=getattr(get_settings(), "unique_name_prefix_enabled", False),
+                locale=ctx.language,
             ),
             pack,
             ctx.language,
+            stats=anchor_stats,
         ),
     ]
     picked = chip_moves.select(
@@ -361,6 +366,7 @@ def _turn_chips(
             roles=sorted({m.role for m in picked}),
             offered=len(candidates),
             **{f"label_{k}": v for k, v in stats.items()},
+            **anchor_stats,
         )
         _remember_offered(ctx, [m.move_id for m in picked])
     return tuple(texts)
