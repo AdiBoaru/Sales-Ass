@@ -588,12 +588,64 @@ def tenant_enum_values(pack: Any) -> dict[str, tuple[str, ...]]:
     }
 
 
+#: NX-322: uneltele al căror `concerns` devine meniu închis + citat, când meniul e aprins.
+_NEED_MENU_TOOLS = frozenset({"search_products", "routine_plan"})
+
+#: Descrierile noului `concerns`. Scrise în vocea pe care o cer (P13): fără liniuță, fără punct și
+#: virgulă. Meniul intră în descriere, nu în enum, doar ca SENS (`cheie = etichetă`): enumul ține
+#: valorile, descrierea îl ajută pe model să aleagă.
+_NEED_MENU_DESCRIPTION = (
+    "Nevoile clientului, alese din lista de mai jos după SENSUL a ce a scris, nu după cuvinte. "
+    "Fiecare cu citatul EXACT din mesajele clientului care o susține. Nu alege o nevoie pe care "
+    "doar tu ai presupus-o. Gol dacă n-a spus niciuna. Lista: {menu}."
+)
+_NEED_QUOTE_DESCRIPTION = (
+    "Cuvintele clientului, copiate exact din mesajul lui (cel puțin două cuvinte), care arată "
+    "nevoia. Nu parafraza și nu cita ce ai scris tu."
+)
+
+
+def _with_need_menu(schema: dict[str, Any], menu: Any) -> dict[str, Any]:
+    """NX-322: `concerns` devine listă de `{key, quote}`, cu `key` din meniul ÎNCHIS al tenantului.
+
+    Pe conversația `bc7a356e` schema cerea nevoile „în cuvintele clientului", modelul a transcris
+    «se usucă după duș», iar rezoluția pe frază exactă n-a găsit nimic, deși pachetul avea `dry`.
+    Cu meniul, modelul alege sensul, iar citatul îi dă codului ce să verifice (`need_menu`).
+    Meniu gol (flag stins, vocabular căzut) ⇒ schema de azi, byte-identică."""
+    options = tuple(getattr(menu, "options", ()) or ())
+    fn = schema.get("function") or {}
+    if not options or fn.get("name") not in _NEED_MENU_TOOLS:
+        return schema
+    params = fn["parameters"]
+    old = params["properties"].get("concerns")
+    if old is None:
+        return schema
+    nullable = isinstance(old.get("type"), list) and "null" in old["type"]
+    item = {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "key": {"type": "string", "enum": [o.key for o in options]},
+            "quote": {"type": "string", "description": _NEED_QUOTE_DESCRIPTION},
+        },
+        "required": ["key", "quote"],
+    }
+    concerns = {
+        "type": ["array", "null"] if nullable else "array",
+        "items": item,
+        "description": _NEED_MENU_DESCRIPTION.format(menu=menu.description()),
+    }
+    props = {**params["properties"], "concerns": concerns}
+    return {**schema, "function": {**fn, "parameters": {**params, "properties": props}}}
+
+
 def tool_schemas(
     names: list[str],
     examples: vocab_examples.VocabExamples = vocab_examples.EMPTY_EXAMPLES,
     relation_kinds: tuple[str, ...] = (),
     families: tuple[str, ...] = (),
     moments: tuple[str, ...] = (),
+    need_menu: Any = None,
 ) -> list[dict[str, Any]]:
     """Schemele OpenAI pentru tool-urile active (ordine stabilă → prompt caching).
 
@@ -625,7 +677,7 @@ def tool_schemas(
             # răspunsul (P6). Numărat, ca să nu fie tăcut.
             turn_latency.degrade("tool_dropped_empty_tenant_enum")
             continue
-        out.append(schema)
+        out.append(_with_need_menu(schema, need_menu))
     return out
 
 

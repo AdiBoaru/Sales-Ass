@@ -153,3 +153,18 @@ class DomainPack:
     # pașii de instalare la electrocasnice), iar codul definește doar ce E un pas. Gol → niciun
     # produs n-are pas, adică exact comportamentul de dinaintea NX-280.
     routine_steps: RoutineSpec = EMPTY_ROUTINE_STEPS
+
+    def value_label(self, facet_key: str, code: str, locale: str | None) -> str | None:
+        """Eticheta localizată a unei VALORI de fațetă, sau `None` dacă pachetul n-o declară.
+
+        UN proprietar: `FacetSpec.value_labels` din `comparison_facets` (același pe care îl citește
+        `compose._facet_value_label` când randează tabelul de comparație). Meniul de nevoi (NX-322)
+        și încadrarea serverului (NX-325) citesc de aici, ca să nu apară o a doua tabelă de
+        etichete care să divergă tăcut de prima. Fallback pe `ro` e al pachetului, nu al codului:
+        lipsa unei traduceri întoarce `None`, iar apelantul decide (de obicei, cheia)."""
+        for spec in self.comparison_facets:
+            if spec.key != facet_key:
+                continue
+            trans = spec.value_labels.get(code) or {}
+            return trans.get(locale or "") or None
+        return None

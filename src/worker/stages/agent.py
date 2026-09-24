@@ -71,6 +71,7 @@ from src.agent.validator import (
     _valid,  # noqa: F401 — re-export (teste; patch-uit în test_golden)
     validate_prose,  # noqa: F401 — re-export (consumatori/teste)
 )
+from src.catalog.need_menu import NeedMenu, build_menu
 from src.catalog.vocabulary import (
     facet_overlays,
     named_topic_roots,
@@ -439,8 +440,28 @@ async def _recognize_chip_press(ctx: TurnContext, deps: PipelineDeps) -> None:
     ctx.chip_move = move
 
 
+async def need_menu_for_turn(ctx: TurnContext, deps: PipelineDeps) -> NeedMenu | None:
+    """NX-322: meniul de nevoi al tenantului, pentru schema uneltelor. `None` = schema de azi.
+
+    Fail-open, ca meniul de rafturi: un vocabular căzut nu are voie să transforme orice căutare
+    într-o cerere fără nevoi. Vocabularul vine din cache-ul cu TTL, iar uneltele reconstruiesc
+    ACELAȘI meniu din el (`build_menu` e pur), deci schema și verdictul nu pot diverge."""
+    if not getattr(get_settings(), "need_menu_enabled", False):
+        return None
+    try:
+        vocab = await get_vocabulary(deps, ctx.business.id)
+    except Exception as e:  # noqa: BLE001 — P6: fără meniu, schema de azi
+        log.warning("agent: meniul de nevoi indisponibil (%s)", type(e).__name__)
+        return None
+    if vocab.is_empty():
+        return None
+    pack = getattr(ctx.business, "domain_pack", None)
+    menu = build_menu(pack, vocab.dimensions, facet_overlays(pack, vocab.facet_names), ctx.language)
+    return menu if menu.options else None
+
+
 def tool_loop_tools(
-    business: Any, route: str, *, unrouted: bool
+    business: Any, route: str, *, unrouted: bool, need_menu: NeedMenu | None = None
 ) -> tuple[list[str], list[dict[str, Any]]]:
     """Uneltele pe care bucla de tool-calling le oferă modelului: (nume, scheme). Publică pentru
     replay-ul NX-320, care trebuie să ofere EXACT setul de producție, nu o copie rămasă în urmă.
@@ -457,7 +478,9 @@ def tool_loop_tools(
         tool_names = list(dict.fromkeys(tool_names + enabled_tools(business, "order")))
     pack = getattr(business, "domain_pack", None)
     examples = vocab_examples.from_pack(pack)
-    return tool_names, tool_schemas(tool_names, examples, **tenant_enum_values(pack))
+    return tool_names, tool_schemas(
+        tool_names, examples, **tenant_enum_values(pack), need_menu=need_menu
+    )
 
 
 def tool_loop_user_parts(
@@ -479,7 +502,10 @@ def tool_loop_user_parts(
 
 
 def _apply_turn_profile(
-    ctx: TurnContext, system: str, tools: list[dict[str, Any]]
+    ctx: TurnContext,
+    system: str,
+    tools: list[dict[str, Any]],
+    need_menu: NeedMenu | None = None,
 ) -> tuple[str, list[dict[str, Any]]]:
     """NX-304: direcția răspunsului, aleasă de COD, ajunge și pe calea v1, nu doar pe creierul unic.
 
@@ -520,7 +546,10 @@ def _apply_turn_profile(
     extra = [t for t in profile.extra_tools if t not in have]
     if extra:
         examples = vocab_examples.from_pack(pack)
-        tools = [*tools, *tool_schemas(extra, examples, **tenant_enum_values(pack))]
+        tools = [
+            *tools,
+            *tool_schemas(extra, examples, **tenant_enum_values(pack), need_menu=need_menu),
+        ]
     return f"{system}\n{profile.suffix}", tools
 
 
@@ -932,7 +961,10 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     ):
         ctx.emit("refinement_over_shortcut", shortcut="show_more")
 
-    tool_names, tools = tool_loop_tools(ctx.business, route.route.value, unrouted=unrouted)
+    need_menu = await need_menu_for_turn(ctx, deps)
+    tool_names, tools = tool_loop_tools(
+        ctx.business, route.route.value, unrouted=unrouted, need_menu=need_menu
+    )
     # Faza D (NX-143): tool executor cu stare explicită. Acumulatorii (produse/linkuri/sume/…) sunt
     # câmpuri ale lui `run`, nu `nonlocal`; `run.execute` e callback-ul buclei; citim `run.X` după.
     run = ToolRun(ctx, deps)
@@ -1077,7 +1109,7 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
             # NX-304: profilul de tur se aplică DOAR aici, pe calea v1. Ramura creierului unic s-a
             # întors deja mai sus și și-l aplică singură (`brain.py`), deci nu există tur pe care
             # sufixul să se lipească de două ori.
-            system, tools = _apply_turn_profile(ctx, system, tools)
+            system, tools = _apply_turn_profile(ctx, system, tools, need_menu)
             if getattr(get_settings(), "tool_loop_skip_prose_enabled", False):
                 prose = _ProseRoundGate(ctx, run, is_order=is_order)
                 final = await deps.llm.run_tool_loop(

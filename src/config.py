@@ -1139,6 +1139,12 @@ class Settings(BaseSettings):
     search_category_menu_enabled: bool = Field(
         default=True, validation_alias="SEARCH_CATEGORY_MENU_ENABLED"
     )
+    # NX-322: nevoile clientului, ca la rafturi, din meniu ÎNCHIS + citatul care le susține. Pe
+    # `bc7a356e` schema cerea „cuvintele clientului", modelul a transcris «se usucă după duș», iar
+    # rezoluția pe frază exactă n-a găsit `dry`, deși pachetul îl avea. Cheia aleasă semantic doar
+    # ORDONEAZĂ; filtrează numai când citatul conține un alias al tenantului (D7). OFF până la
+    # replay + golden (D15), fiindcă schimbă ce scrie modelul. OFF → schema de azi, byte-identică.
+    need_menu_enabled: bool = Field(default=False, validation_alias="NEED_MENU_ENABLED")
     # Conversația `cd98a513`: motivul de card «cu pigmenți corectori și SPF 40» era aruncat ÎNTREG
     # (cardul rămânea fără motiv), fiindcă orice număr care nu e identificator lipit („v11") era
     # tratat drept cantitate inventată. Pe 30 de zile, 19 din 276 de motive aveau cifre, iar cele

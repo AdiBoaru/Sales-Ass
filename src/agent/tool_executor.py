@@ -103,8 +103,17 @@ def _safe_tool_args(name: str, args: dict[str, Any]) -> dict[str, Any]:
     for k in allowed:
         val = args.get(k)
         if val is not None:
-            out[k] = _trunc(val)
+            out[k] = _trunc(_without_quotes(val) if k == "concerns" else val)
     return out
+
+
+def _without_quotes(concerns: Any) -> Any:
+    """NX-322: cu meniul de nevoi, `concerns` poartă `{key, quote}`, iar citatul e textul
+    CLIENTULUI. În analytics pleacă doar cheia (vocabular închis al pachetului), niciodată citatul
+    (P12). String-urile schemei de azi rămân cum erau logate."""
+    if not isinstance(concerns, list):
+        return concerns
+    return [c.get("key") if isinstance(c, dict) else c for c in concerns]
 
 
 @dataclass

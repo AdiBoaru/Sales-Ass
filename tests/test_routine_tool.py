@@ -101,9 +101,17 @@ def _catalog(monkeypatch):
     }
 
     async def fake_candidates(
-        conn, business_id, *, values, facet_filters=None, per_step=8, include_cheapest=False
+        conn,
+        business_id,
+        *,
+        values,
+        facet_filters=None,
+        per_step=8,
+        include_cheapest=False,
+        prefer=None,
     ):
         state["seen_filters"].append(facet_filters)
+        state["prefer"] = prefer
         pool = state["concern_only"] if facet_filters else state["available"]
         rows = [
             {"id": pid, "step": step, "price": price}

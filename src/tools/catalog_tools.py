@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 
 from src.analytics.demand import product_ids_from_dicts
 from src.catalog.folding import fold_text
+from src.catalog.need_menu import NeedArg, build_menu, need_verdict, split_args, split_needs
 from src.catalog.query_terms import content_terms
 from src.catalog.render_text import cut_at_sentence, display_name
 from src.catalog.vocabulary import (
@@ -117,7 +118,10 @@ class SearchArgs(BaseModel):
     price_max: float | None = Field(default=None, ge=0)
     category: str | None = None
     brand: str | None = None
-    concerns: list[str] | None = None
+    # NX-322: string-uri (schema de azi) sau `{key, quote}` din meniul de nevoi (schema cu meniu).
+    # Separarea o face `need_menu.split_args`, imediat după parsare, ca restul uneltei să vadă tot
+    # o listă de string-uri.
+    concerns: list[str | NeedArg] | None = None
     # Tier 2b p2: ingrediente/caracteristici cerute EXPLICIT („cu niacinamidă") → filtru pe
     # DomainPack.searchable_facets (key_ingredients), match normalizat. Altfel [] (fără filtru).
     features: list[str] | None = None
@@ -780,6 +784,40 @@ def price_bound_source(
         if abs(float(session_price_max) - float(price_max)) <= 0.005:
             return PRICE_BOUND_SESSION
     return None
+
+
+def apply_need_menu(
+    ctx: TurnContext,
+    need_args: list[NeedArg],
+    vocab: CatalogVocabulary,
+    *,
+    consumer: str,
+) -> tuple[dict[str, list[str]] | None, dict[str, list[str]]]:
+    """NX-322: nevoile alese din meniu → (`prefer` pentru ordonare, `hard` pentru filtru).
+
+    Meniul se reconstruiește din vocabularul pe care unealta îl are deja (același `build_menu` ca
+    schema din `agent_stage`), deci nu trece niciun obiect de la un stagiu la altul. Verdictul e al
+    codului: citatul trebuie să fie al clientului, iar filtrul cere un alias al tenantului în citat
+    (`need_menu.need_verdict`). Evenimentul poartă chei și motive, niciodată citatul (P12).
+    Împărțit cu `routine_plan`, ca cele două unelte să nu judece aceeași nevoie diferit."""
+    if not need_args:
+        return None, {}
+    pack = getattr(ctx.business, "domain_pack", None)
+    menu = build_menu(pack, vocab.dimensions, facet_overlays(pack, vocab.facet_names), ctx.language)
+    texts = client_texts(ctx)
+    verdicts = [need_verdict(n, menu, texts, ctx.language) for n in need_args]
+    for v in verdicts:
+        ctx.emit(
+            "need_resolved",
+            dimension=v.dimension,
+            key=v.key if v.dimension else None,
+            source=v.source,
+            strength=v.strength,
+            reason=v.reason,
+            consumer=consumer,
+        )
+    hard, soft = split_needs(verdicts)
+    return (soft or None), hard
 
 
 def price_units(ctx: TurnContext) -> UnitRegistry | None:
@@ -1517,6 +1555,8 @@ async def search_products_tool(
     (paritate „arată altele", P8). Degradare grațioasă la lexical-only fără LLM/embeddings sau
     dacă `embed` pică. Singurul apel extern rămâne `embed([query])` (P2)."""
     a = SearchArgs(**args)
+    legacy_concerns, need_args = split_args(a.concerns)
+    a.concerns = legacy_concerns or None
     # IZI-anti-drift: rafinare ÎN sesiune activă, fără categorie/nevoi NOI → moștenește-le pe ale
     # sesiunii (ține „raftul" curent). Bug „mai ieftin → mască/ser/toner": user scrie „mai ifetin"
     # (typo) → `cheaper_intent` (regex) ratează → modelul re-caută `price_asc` fără categorie →
@@ -1535,7 +1575,7 @@ async def search_products_tool(
         if a.category is None and sess_filters.get("category"):
             a.category = sess_filters["category"]
             inherited.append("category")
-        if not a.concerns and sess_filters.get("concerns"):
+        if not a.concerns and not need_args and sess_filters.get("concerns"):
             a.concerns = [str(x) for x in sess_filters["concerns"]]
             inherited.append("concerns")
         if inherited:
@@ -1590,6 +1630,15 @@ async def search_products_tool(
     # Compatibilitate cu straturile care mai vorbesc despre „concerns" ca listă plată (rerank,
     # sesiune, telemetrie): cheile rezolvate, indiferent de dimensiunea din care provin.
     concern_keys = resolutions.flat_facet_keys or None
+    need_prefer, hard_needs = apply_need_menu(ctx, need_args, vocab, consumer="search_products")
+    if hard_needs:
+        facet_filters = {
+            dim: list(dict.fromkeys([*(facet_filters or {}).get(dim, []), *keys]))
+            for dim, keys in {**(facet_filters or {}), **hard_needs}.items()
+        }
+        concern_keys = list(
+            dict.fromkeys([*(concern_keys or []), *(k for ks in hard_needs.values() for k in ks)])
+        )
     # NX-298 — o variantă ÎNCERCATĂ ȘI RESPINSĂ, scrisă aici ca să nu fie reintrodusă: să SCĂDEM
     # din text termenii pe care filtrele îi poartă deja („cosuri", când `concerns=acne` e în
     # WHERE). Pare curat — aceeași cerere nu trebuie pusă de două ori — și pe hârtie repară exact
@@ -1664,7 +1713,9 @@ async def search_products_tool(
     ):
         category_uttered = False
         ctx.emit("category_subshelf_homograph", category_key=category_keys[0])
-    facets_uttered = "concerns" in inherited or uttered_by_client(ctx, *(a.concerns or []))
+    facets_uttered = (
+        "concerns" in inherited or bool(hard_needs) or uttered_by_client(ctx, *(a.concerns or []))
+    )
     ladder = _relax_ladder(
         price_max=price_max_sql,
         facet_filters=facet_filters,
@@ -1801,7 +1852,12 @@ async def search_products_tool(
             if cosines:
                 top_cosine = min(cosines)
             ranked = fuse_candidates(
-                lexical, vector, sort_mode=a.sort_mode, concerns=concern_keys, weights=rank_weights
+                lexical,
+                vector,
+                sort_mode=a.sort_mode,
+                concerns=concern_keys,
+                weights=rank_weights,
+                prefer=need_prefer,
             )
             had_any_match = had_any_match or bool(ranked)
             if ranked:
@@ -1925,6 +1981,7 @@ async def search_products_tool(
                     sort_mode=a.sort_mode,
                     concerns=concern_keys,
                     weights=rank_weights,
+                    prefer=need_prefer,
                 )
                 vector_final = []
                 relaxed = False

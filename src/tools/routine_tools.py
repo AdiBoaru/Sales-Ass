@@ -40,6 +40,7 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field
 
+from src.catalog.need_menu import NeedArg, split_args
 from src.catalog.routine_compose import RoutinePlan, compose
 from src.catalog.vocabulary import facet_overlays, resolve_any
 from src.catalog.vocabulary_cache import get_vocabulary
@@ -57,6 +58,7 @@ from src.tools.base import ToolResult, register
 from src.tools.catalog_tools import (
     _is_relative_price_request,
     _safety_gate,
+    apply_need_menu,
     client_texts,
     price_bound_source,
     price_units,
@@ -186,7 +188,8 @@ class RoutineArgs(BaseModel):
     decât ca enum."""
 
     family: str
-    concerns: list[str] = Field(default_factory=list)
+    #: NX-322: string-uri (schema de azi) sau `{key, quote}` din meniul de nevoi.
+    concerns: list[str | NeedArg] = Field(default_factory=list)
     budget_max: float | None = None
     anchor_id: str | None = None
     #: Momentul zilei, dacă clientul l-a spus. Validat contra `time_markers` în handler, ca
@@ -562,6 +565,8 @@ async def routine_plan_tool(
 
     steps = list(families[a.family])
     values = [f"{a.family}{SEP}{s}" for s in steps]
+    legacy_needs, need_args = split_args(a.concerns)
+    a.concerns = legacy_needs
 
     # NX-321: argumentele fără sursă ies ÎNAINTE de rezoluție și de buget, deci nu ating nici
     # `routine_candidates(include_cheapest=…)`, nici `_fit_budget`.
@@ -580,6 +585,14 @@ async def routine_plan_tool(
         a.concerns = list(provenance.kept_needs)
 
     facet_filters, unresolved = await _resolve_needs(ctx, deps, a.concerns)
+    # NX-322: nevoile alese din meniu. `hard` (citat + alias al tenantului) filtrează ca orice
+    # nevoie rezolvată; `soft` doar ordonează candidații în interiorul pasului.
+    prefer: dict[str, list[str]] | None = None
+    if need_args:
+        vocab = await get_vocabulary(deps, ctx.business.id)
+        prefer, hard = apply_need_menu(ctx, need_args, vocab, consumer="routine_plan")
+        for dim, keys in hard.items():
+            facet_filters[dim] = sorted({*facet_filters.get(dim, []), *keys})
     if provenance is not None:
         asked_budget = args.get("budget_max") is not None
         ctx.emit(
@@ -604,6 +617,7 @@ async def routine_plan_tool(
             facet_filters=facet_filters or None,
             per_step=CANDIDATES_PER_STEP,
             include_cheapest=a.budget_max is not None,
+            prefer=prefer,
         )
         by_step: dict[str, list[dict[str, Any]]] = {}
         for row in rows:
