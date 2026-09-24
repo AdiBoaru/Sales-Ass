@@ -6,7 +6,7 @@ NU atinge Supabase/OpenAI reale: query-urile de DB sunt monkeypatch-uite pe un M
 (`_Store`) — dar `conversations.state` se persistă/re-hidratează prin codul REAL
 (`patch_conversation_state` fake stochează jsonb-ul → `from_jsonb` îl reîncarcă la turul 2). LLM-ul
 e scriptat (`ScriptedLLM`). Pipeline-ul rulat = `DEFAULT_STAGES` (gates→language→clarify→greeting→
-alias→cache→faq→agent→fallback), exact ca în producție. Calea SYNC web (deliver=False, ca
+alias→cache→agent→fallback), exact ca în producție. Calea SYNC web (deliver=False, ca
 `src/web/app.py` POST /web/chat).
 
 Turul 1: search → 3 produse (88.99 / 58.99 / 97.99) → reply rich → displayed_products = cele 3.
@@ -25,7 +25,6 @@ import pytest
 import src.worker.processor as proc
 import src.worker.stages.alias as alias_mod
 import src.worker.stages.cache as cache_mod
-import src.worker.stages.faq as faq_mod
 from src.agent import planner as planner_mod
 from src.db.provider import static_db
 from src.models import BusinessConfig, Contact
@@ -266,7 +265,7 @@ def store(monkeypatch):
     monkeypatch.setattr(proc, "persist_events", _noop_writeback)
     monkeypatch.setattr(proc, "run_aftercare", _noop_writeback)
 
-    # --- straturi gratuite (alias/cache/faq) → MISS, ca să ajungem la triaj+agent -----------
+    # --- straturi gratuite (alias/cache) → MISS, ca să ajungem la triaj+agent -----------
     async def _no_alias(conn, business_id, phrase_norm):
         return None
 
@@ -276,19 +275,11 @@ def store(monkeypatch):
     async def _cache_exact_miss(conn, business_id, language, h, **k):
         return None
 
-    async def _cache_semantic_miss(conn, business_id, language, emb, **k):
-        return None
-
-    async def _faq_semantic_miss(conn, business_id, language, emb, **k):
-        return None
-
     # Stagiile importă funcțiile în PROPRIUL namespace (`from ... import x`) → patch pe modulul
     # STAGIULUI, nu pe modulul de query (altfel nu prinde — vezi run-ul anterior cu AttributeError).
     monkeypatch.setattr(alias_mod, "lookup_alias", _no_alias)
     monkeypatch.setattr(alias_mod, "get_faq_answer", _no_faq_answer)
     monkeypatch.setattr(cache_mod, "exact_lookup", _cache_exact_miss)
-    monkeypatch.setattr(cache_mod, "semantic_lookup", _cache_semantic_miss)
-    monkeypatch.setattr(faq_mod, "semantic_lookup", _faq_semantic_miss)
 
     # --- triaj + agent: categorii/aliase pentru promptul generat din DB ---------------------
     async def _cat_slugs(conn, business_id):

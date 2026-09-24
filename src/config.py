@@ -381,47 +381,17 @@ class Settings(BaseSettings):
     # price-check + data_version la lookup, nu expirarea. Default 30 min.
     cache_ttl_dynamic_minutes: int = Field(default=30, validation_alias="CACHE_TTL_DYNAMIC_MINUTES")
 
-    # --- Strat gratuit FAQ (NX-74, stagiul 4) ---
-    # Întrebări de cunoștințe (retur/livrare/garanție/plată) → răspuns din `faqs` ÎNAINTE de
-    # triaj/agent (early-exit fără LLM de generare). Lookup ÎNTOTDEAUNA business_id + locale +
-    # cosine. Doar `embed()`, niciodată generare (principiul 2). Kill-switch global.
+    # --- FAQ (NX-74) ---
+    # 2026-09-24: stratul FAQ de dinaintea agentului și potrivirea pe vectori au plecat odată cu
+    # embeddings (0 răspunsuri servite din 102 în 30 de zile). Regulile magazinului ajung la model
+    # prin unealta `faq_lookup`, care aduce setul activ al tenantului; alegerea o face modelul.
+    # `FAQ_TAU_*`, `FAQ_RERANK_ENABLED`, `FAQ_TOPK`, `FAQ_FALLBACK_TAU` nu mai există; rămase în
+    # `.env` sunt ignorate (`extra="ignore"`). `faq_enabled` rămâne kill-switch-ul jobului de seed.
     faq_enabled: bool = Field(default=True, validation_alias="FAQ_ENABLED")
-    # τ_high strat gratuit: prag de auto-accept (cosine). FAQ-ul e curat (editat de client) →
-    # poate fi puțin mai relaxat decât cache_tau_high, dar precision-first. NX-124a: cu paritate de
-    # normalizare (canonicalize seed↔lookup) similaritățile question↔question cresc → 0.78 (tunat
-    # empiric pe setul RO: matchurile corecte ~0.79-1.0, întrebarea greșită cade mult sub).
-    faq_tau_high: float = Field(default=0.78, validation_alias="FAQ_TAU_HIGH")
-    # τ tool: agentul parafrazează oricum răspunsul (el e filtrul de precizie pe hint) → un match
-    # aproximativ e util. NX-124a: 0.66 după paritate + variante de formulare (recall RO bun;
-    # agentul decide dacă folosește hint-ul).
-    faq_tau_tool: float = Field(default=0.66, validation_alias="FAQ_TAU_TOOL")
-    # τ POLICY: prag relaxat DOAR când mesajul conține o întrebare CLARĂ de livrare/plată/retur/
-    # garanție (regex în faq_stage). Măsurat live: „aveti livrare in cat timp ajunge" atinge doar
-    # ~0.56 cosine față de FAQ-urile de livrare (chiar și pur ~0.62), sub faq_tau_high=0.78 → nu se
-    # aprindea NICIODATĂ, iar agentul re-recomanda (bug „copy-paste"). Regexul dă precizia; 0.45
-    # lasă întrebarea de livrare să prindă FAQ-ul real. Tunabil din env.
-    faq_tau_policy: float = Field(default=0.45, validation_alias="FAQ_TAU_POLICY")
-    # NX-138 (R7): pragul relaxat de politică se aplică DOAR dacă FAQ-ul potrivit e el însuși de
-    # politică (întrebarea lui match-uiește regexul). Fără asta, pragul jos „salva" un FAQ de
-    # CONSULTANȚĂ produs pe un mesaj MIXT (produs + livrare) → deflecta cererea de produs (live).
-    # OFF (False) → comportamentul #171 (relaxare pe orice FAQ dacă mesajul e de politică).
-    faq_policy_gate_on_faq_kind: bool = Field(
-        default=True, validation_alias="FAQ_POLICY_GATE_ON_FAQ_KIND"
-    )
-    # NX-175: rerank determinist (calificatori + marjă → clarify) vs top-1 orb pe cosine.
-    # Măsurat: „Cum pot face un retur?" servea excepția „produs desfăcut" (0.619) în loc de
-    # procedura generală (0.592) — marjă 0.026. Rerank demotează EXCEPȚIILE când întrebarea nu are
-    # calificatorul → procedura câștigă. OFF (kill-switch) → top-1 orb (byte-identic cu #171).
-    faq_rerank_enabled: bool = Field(default=True, validation_alias="FAQ_RERANK_ENABLED")
-    # Câți candidați aduce top-k pentru rerank (5 = suficient pt clusterele reale; cost cosine mic).
-    faq_topk: int = Field(default=5, validation_alias="FAQ_TOPK")
-    # NX-124a: fallback de locale — user pe o limbă fără cunoștințe seedate, dar `default_locale`
-    # le are → servim cunoștința existentă (NU traducem). DEFAULT OFF (opt-in: doar tenanții care
-    # servesc o limbă fără FAQ seedat, ex. RO→EN). Prag STRICT (precision-first).
+    # NX-124a: setul gol pe limba turului cade pe `default_locale` (NU traducem). Opt-in.
     faq_locale_fallback_enabled: bool = Field(
         default=False, validation_alias="FAQ_LOCALE_FALLBACK_ENABLED"
     )
-    faq_fallback_tau: float = Field(default=0.85, validation_alias="FAQ_FALLBACK_TAU")
 
     # NX-208: QuerySpec în SHADOW (ADR D6/D11). ON → triajul emite `query_spec_shadow` (fără PII:
     # intent/sort/fațete/nr. constrângeri) pe turul sales — ZERO schimbare de comportament, DOAR

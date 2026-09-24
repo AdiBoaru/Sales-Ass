@@ -119,7 +119,6 @@ def _apply_stubs_dyn(monkeypatch, get_fx, *, single_brain: bool = False) -> None
     monkeypatch.setattr(ct, "get_products_by_ids", fake_by_ids)
     # cache → miss curat (forțăm regenerarea prin pipeline)
     monkeypatch.setattr(cache_mod, "exact_lookup", none_lookup)
-    monkeypatch.setattr(cache_mod, "semantic_lookup", none_lookup)
     # moderation gate e premisa cazului moderation-neutral → pin True (independent de .env)
     monkeypatch.setattr(get_settings(), "moderation_enabled", True)
     # Calea (v1 legacy / creier unic) e a HARNESSULUI, nu a `.env`-ului mașinii — vezi antetul.

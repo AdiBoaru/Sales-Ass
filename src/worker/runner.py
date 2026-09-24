@@ -200,7 +200,6 @@ _PHASE_BY_STAGE: dict[str, str] = {
     "greeting_stage": "gates",
     "alias_stage": "gates",
     "cache_stage": "gates",
-    "faq_stage": "gates",
 }
 
 
@@ -537,8 +536,8 @@ async def fallback_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
 # ÎNAINTE de straturile locale-keyed (principiul 11). Welcome întâmpină DETERMINIST un pur salut
 # (free layer, fără LLM). Alias (NX-73) face match EXACT pe `intent_aliases` aprobate (index
 # B-tree, zero token) ÎNAINTE de cache — cel mai ieftin strat. Cache (G5b) servește query-uri
-# statice repetate fără LLM; FAQ (NX-74) răspunde la întrebări de cunoștințe din `faqs` (un
-# embed, fără generare). Triaj setează reply pt simple/clarify; agentul răspunde pt sales.
+# repetate fără model (potrivire exactă). Regulile magazinului (FAQ, NX-74) nu mai au strat propriu
+# din 2026-09-24: ajung la agent prin unealta `faq_lookup`.
 # Importate jos ca să evităm un ciclu (stagiile referă PipelineDeps sub TYPE_CHECKING).
 from src.agent import control_plane  # noqa: E402 — NX-239: poarta de fast-path (doar sub flag)
 from src.agent.action_kernel import action_kernel_stage  # noqa: E402
@@ -546,7 +545,6 @@ from src.worker.stages.agent import agent_stage  # noqa: E402
 from src.worker.stages.alias import alias_stage  # noqa: E402
 from src.worker.stages.cache import cache_stage  # noqa: E402
 from src.worker.stages.clarify import clarify_resume_stage  # noqa: E402
-from src.worker.stages.faq import faq_stage  # noqa: E402
 from src.worker.stages.gates import gates_stage  # noqa: E402
 from src.worker.stages.greeting import greeting_stage  # noqa: E402
 from src.worker.stages.language import language_stage  # noqa: E402
@@ -554,13 +552,12 @@ from src.worker.stages.language import language_stage  # noqa: E402
 # clarify_resume (NX-130) rulează după `language` și ÎNAINTE de greeting/cache:
 # dacă un slot e în așteptare, răspunsul scurt al clientului e consumat determinist
 # (rută + constraint), nu tratat ca salut / cache / trimis de la zero la agent.
-# alias (NX-73) e IMEDIAT ÎNAINTE de cache: match exact pe index, mai ieftin și mai sigur decât
-# embed-ul semantic din cache. Un hit FAQ early-exit-ează; un hit route/category setează ctx.route,
-# iar cache/FAQ îl respectă (skip dacă ctx.route e setat) → agentul servește.
+# alias (NX-73) e IMEDIAT ÎNAINTE de cache: match exact pe index. Un hit FAQ early-exit-ează; un
+# hit route/category setează ctx.route, iar cache-ul îl respectă (skip) → agentul servește.
 # action_kernel (NX-236) rulează IMEDIAT după `language` și înaintea tuturor straturilor care
 # interpretează TEXT: o acțiune opacă e o decizie deja luată, nu o intenție de ghicit, iar mesajul
 # ei e gol prin construcție (eticheta butonului nu e input). Un `Handled` iese cu reply; un
-# `Continue` setează `ctx.route`, pe care alias/cache/FAQ îl respectă (skip). Fără acțiune pe
+# `Continue` setează `ctx.route`, pe care alias/cache îl respectă (skip). Fără acțiune pe
 # tur, stagiul e un no-op — pipeline-ul de text rămâne byte-identic.
 DEFAULT_STAGES: list[Stage] = [
     gates_stage,
@@ -570,7 +567,6 @@ DEFAULT_STAGES: list[Stage] = [
     greeting_stage,
     alias_stage,
     cache_stage,
-    faq_stage,
     agent_stage,
     fallback_stage,
 ]

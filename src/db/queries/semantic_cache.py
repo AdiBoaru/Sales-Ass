@@ -1,8 +1,9 @@
 """Query-uri pe `semantic_cache` — stratul gratuit 4 (G5b).
 
-Două straturi de lookup (vezi docs/semantic-cache-design.md §2):
-  • L1 exact: `(business_id, locale, canonical_hash)` → O(1), zero false-positive.
-  • L2 semantic: embed → HNSW cosine, filtru `business_id + locale + neexpirat`.
+Un singur lookup: EXACT pe `(business_id, locale, canonical_hash)` → O(1), zero false-positive.
+Lookup-ul pe vectori (L2) a plecat odată cu embeddings (2026-09-24); coloana `embedding` rămâne
+în schemă până la migrarea de contract, dar nu se mai scrie și nu se mai citește (052 o face
+opțională, ca rândurile noi să poată exista fără vector).
 
 Write-back-ul (gated) face upsert idempotent pe `(business_id, locale, canonical_hash)`.
 RLS pe `bot_runtime` (003) e plasa: lookup fără filtru de tenant → 0 rânduri, nu
@@ -24,11 +25,6 @@ from src.cache.version import DEFAULT_PROMPT_VERSION
 # Prețul efectiv (min variantă, fallback la products) — ACELAȘI ca în search_products
 # (catalog._EFFECTIVE_PRICE). Price-check-ul trebuie să vadă exact prețul oferit clientului.
 _EFFECTIVE_PRICE = "coalesce(vp.price, p.sale_price, p.price)"
-
-
-def _vec(embedding: list[float]) -> str:
-    """list[float] → literalul pgvector `[a,b,c]` (ca în search_products_semantic)."""
-    return "[" + ",".join(f"{x:.7f}" for x in embedding) + "]"
 
 
 def _row(row: asyncpg.Record | None) -> dict[str, Any] | None:
@@ -54,9 +50,8 @@ async def exact_lookup(
     """L1 exact: entry neexpirat din clasa cerută pentru hash-ul canonic. None la miss.
     Întoarce și `retrieval_signature`+`data_version` (provenance pt price-check dynamic).
 
-    NX-124a: L1 NU filtrează pe `embedding_model` — match pe hash-ul canonic (cheia de precizie),
-    iar `answer`-ul servit e TEXT, independent de model (vectorul stocat nu e citit pe un hit L1).
-    Filtrul de model trăiește DOAR pe calea cosine (`semantic_lookup`), unde contează spațiul."""
+    NX-124a: nu filtrează pe `embedding_model`: match pe hash-ul canonic (cheia de precizie), iar
+    `answer`-ul servit e TEXT, deci rândurile vechi, scrise cu vector, rămân servibile."""
     row = await conn.fetchrow(
         """
         select id::text as id, answer, retrieval_signature, data_version
@@ -74,82 +69,6 @@ async def exact_lookup(
         canonical_hash,
         volatility_class,
         prompt_version,
-    )
-    return _row(row)
-
-
-# Filtrul care decide ce entry-uri sunt SERVIBILE pe calea cosine. Scos în constantă fiindcă e
-# folosit de DOUĂ interogări (sonda de existență + lookup-ul propriu-zis), iar dacă ele ar diverge,
-# sonda ar răspunde despre altă mulțime decât cea căutată — adică ar stinge L2 tăcut. Ordinea
-# parametrilor e comună; vectorul vine ultimul, tocmai ca fragmentul să fie literal identic.
-_SERVABLE_FILTER = """
-        where business_id = $1
-          and locale = $2
-          and volatility_class = $3
-          and embedding_model = $4
-          and prompt_version = $5
-          and expires_at > now()
-"""
-
-_EXISTS_SQL = f"select exists(select 1 from semantic_cache{_SERVABLE_FILTER})"
-
-_SEMANTIC_SQL = f"""
-        select id::text as id, answer, retrieval_signature, data_version,
-               1 - (embedding <=> $6::vector) as similarity
-        from semantic_cache{_SERVABLE_FILTER}
-        order by embedding <=> $6::vector
-        limit 1
-"""
-
-
-async def semantic_candidates_exist(
-    conn: asyncpg.Connection,
-    business_id: str,
-    locale: str,
-    *,
-    volatility_class: str = "static",
-    embedding_model: str,
-    prompt_version: str = DEFAULT_PROMPT_VERSION,
-) -> bool:
-    """Există MĂCAR UN entry pe care `semantic_lookup` l-ar putea întoarce? (NX-291)
-
-    Rostul: `embed()` e cel mai scump pas al stratului gratuit, iar pe o mulțime goală L2 nu poate
-    întoarce nimic. Sonda folosește EXACT filtrul lui `semantic_lookup` (`_SERVABLE_FILTER`), deci
-    „false" e o dovadă, nu o presupunere: dacă nu există niciun rând servibil, apelul de embedding
-    ar fi fost plătit pentru un rezultat imposibil.
-
-    E o verificare pe index, gândită să ruleze în ACELAȘI checkout cu L1 — nu deschide conexiune."""
-    return bool(
-        await conn.fetchval(
-            _EXISTS_SQL, business_id, locale, volatility_class, embedding_model, prompt_version
-        )
-    )
-
-
-async def semantic_lookup(
-    conn: asyncpg.Connection,
-    business_id: str,
-    locale: str,
-    embedding: list[float],
-    *,
-    volatility_class: str = "static",
-    embedding_model: str,
-    prompt_version: str = DEFAULT_PROMPT_VERSION,
-) -> dict[str, Any] | None:
-    """L2 semantic: cel mai apropiat entry din clasa cerută (cosine). Întoarce
-    `{id, answer, similarity, retrieval_signature, data_version}` sau None. Caller-ul
-    aplică pragul τ_high (și, pe dynamic, price-check-ul).
-
-    NX-124a: filtru OBLIGATORIU pe `embedding_model` — ordonarea cosine pe vectori din alt model
-    (dim/spațiu diferit) e zgomot. Un upgrade de embeddings nu mai amestecă spațiile (P11)."""
-    row = await conn.fetchrow(
-        _SEMANTIC_SQL,
-        business_id,
-        locale,
-        volatility_class,
-        embedding_model,
-        prompt_version,
-        _vec(embedding),
     )
     return _row(row)
 
@@ -174,10 +93,8 @@ async def upsert_entry(
     *,
     canonical_str: str,
     canonical_hash: str,
-    embedding: list[float],
     answer: str,
     volatility_class: str,
-    embedding_model: str,
     quality_score: float,
     ttl_days: int = 0,
     ttl_minutes: int = 0,
@@ -186,9 +103,11 @@ async def upsert_entry(
     prompt_version: str = DEFAULT_PROMPT_VERSION,
 ) -> None:
     """Write-back idempotent pe `(business_id, locale, canonical_hash)`. Reîmprospătează
-    answer+embedding+clasă+provenance+expires_at dacă entry-ul exista (paraphrase nou pe
-    același canonic). TTL = days (static, 7z) SAU minutes (dynamic, backstop scurt);
-    `retrieval_signature`/`data_version` se setează DOAR pentru tierul dynamic (G5b-2)."""
+    answer+clasă+provenance+expires_at dacă entry-ul exista. Fără vector (embeddings scoase):
+    `embedding`/`embedding_model` se scriu NULL, iar la conflict se golesc, ca un rând vechi
+    reîmprospătat să nu mai poarte un vector pe care nu-l citește nimeni. TTL = days (static,
+    7z) SAU minutes (dynamic, backstop scurt); `retrieval_signature`/`data_version` se setează
+    DOAR pentru tierul dynamic (G5b-2)."""
     await conn.execute(
         """
         insert into semantic_cache
@@ -196,12 +115,12 @@ async def upsert_entry(
              volatility_class, embedding_model, quality_score,
              retrieval_signature, data_version, prompt_version, expires_at)
         values
-            ($1, $2, $3, $4, $5::vector, $6, $7, $8, $9, $10::jsonb, $11, $12,
-             now() + make_interval(days => $13, mins => $14))
+            ($1, $2, $3, $4, null, $5, $6, null, $7, $8::jsonb, $9, $10,
+             now() + make_interval(days => $11, mins => $12))
         on conflict (business_id, locale, canonical_hash, prompt_version) do update
             set answer = excluded.answer,
-                embedding = excluded.embedding,
-                embedding_model = excluded.embedding_model,
+                embedding = null,
+                embedding_model = null,
                 quality_score = excluded.quality_score,
                 volatility_class = excluded.volatility_class,
                 retrieval_signature = excluded.retrieval_signature,
@@ -212,10 +131,8 @@ async def upsert_entry(
         locale,
         canonical_str,
         canonical_hash,
-        _vec(embedding),
         answer,
         volatility_class,
-        embedding_model,
         quality_score,
         json.dumps(retrieval_signature) if retrieval_signature is not None else None,
         data_version,

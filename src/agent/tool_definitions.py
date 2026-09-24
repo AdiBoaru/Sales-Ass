@@ -313,9 +313,9 @@ _SCHEMAS: dict[str, dict[str, Any]] = {
         "function": {
             "name": "faq_lookup",
             "description": (
-                "Caută în baza de cunoștințe a magazinului un fapt de business (livrare, retur, "
-                "garanție, plată, facturare). Folosește când clientul întreabă o regulă/politică, "
-                "NU pentru produse."
+                "Aduce regulile magazinului (livrare, retur, garanție, plată, facturare) ca listă "
+                "de întrebări frecvente, din care alegi răspunsul potrivit. Folosește când "
+                "clientul întreabă o regulă/politică, NU pentru produse."
             ),
             "strict": True,
             "parameters": {

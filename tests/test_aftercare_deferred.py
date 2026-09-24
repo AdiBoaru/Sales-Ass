@@ -78,7 +78,7 @@ def _ctx_dynamic() -> TurnContext:
     return ctx
 
 
-async def test_cache_writeback_deferred_releases_conn_across_embed(monkeypatch):
+async def test_cache_writeback_uses_short_checkouts_and_no_model(monkeypatch):
     async def fake_dv(conn, bid):
         return 3
 
@@ -95,8 +95,8 @@ async def test_cache_writeback_deferred_releases_conn_across_embed(monkeypatch):
     # read (data_version) + write (upsert) = checkout-uri SEPARATE, niciodată 2 simultan.
     assert spy_db.checkouts == 2
     assert spy_db.max_concurrent == 1
-    # embed-ul (LLM) a rulat cu ZERO conn deschis (regula 1 — nu ținem db() peste LLM).
-    assert spy_llm.db_open_at_llm == 0
+    # 2026-09-24: cache-ul nu mai are vector, deci write-back-ul nu mai cheamă niciun model.
+    assert spy_llm.db_open_at_llm is None
 
 
 async def test_summarize_deferred_releases_conn_across_generate(monkeypatch):

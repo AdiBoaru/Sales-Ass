@@ -81,7 +81,6 @@ async def test_normal_turn_still_uses_cache(monkeypatch):
         return None
 
     monkeypatch.setattr("src.worker.stages.cache.exact_lookup", lookup)
-    monkeypatch.setattr("src.worker.stages.cache.semantic_lookup", lookup)
     ctx = _ctx("ce cremă antirid recomanzi?")
     await cache_stage(ctx, _deps())
     assert _bypass(ctx) != "safety_context"

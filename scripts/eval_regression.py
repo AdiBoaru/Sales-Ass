@@ -123,7 +123,6 @@ def _apply_stubs(patch: _Patcher, get_fx, *, single_brain: bool = False) -> None
     patch.setattr(planner_mod, "search_cheaper_than", fake_search_cheaper_than)
     patch.setattr(planner_mod, "get_complementary_products", fake_complementary)
     patch.setattr(cache_mod, "exact_lookup", none_lookup)
-    patch.setattr(cache_mod, "semantic_lookup", none_lookup)
     patch.setattr(get_settings(), "moderation_enabled", True)
     # Calea e a HARNESSULUI, nu a `.env`-ului mașinii — aceeași regulă ca în gate-ul CI. Fără
     # pinul ăsta, snapshot-ul depindea de cine îl rulează, iar diff-ul dintre două rulări putea

@@ -1,390 +1,125 @@
-"""NX-74 — strat gratuit FAQ (faq_stage) + tool faq_lookup + query semantic_lookup.
+"""NX-74 — unealta `faq_lookup` fără embeddings (2026-09-24) + query-ul `list_active`.
 
-`embed` și query-ul de lookup sunt monkeypatch-uite; ZERO apeluri OpenAI/DB reale (ca
-test_cache_stage / test_check_order). Acoperă: hit peste prag → reply + early-exit (triaj
-neatins), miss sub prag, izolare pe locale (param), fără LLM, eroare grațioasă, tool.
+Unealta aduce setul ACTIV de FAQ al tenantului, pe locale, iar modelul alege răspunsul. Query-ul
+e monkeypatch-uit; ZERO apeluri OpenAI/DB reale. Ce se pinuiește: izolarea pe tenant și pe limbă
+(P7/P11), fallback-ul de locale doar sub flag, plafonul vederii (intrări întregi, nicio regulă
+tăiată la mijloc) și că NICIUN apel de model nu mai pleacă din unealtă.
 """
-
-from types import SimpleNamespace
 
 from src.config import get_settings
 from src.db.queries import faqs as faqs_q
 from src.models import BusinessConfig, Contact, InboundMessage, TurnContext
 from src.tools import faq_tools as ft
 from src.tools.base import enabled_tools
-from src.worker.runner import PipelineDeps, run_pipeline
-from src.worker.stages import faq as faq_mod
-from src.worker.stages.faq import faq_stage
+from src.worker.runner import PipelineDeps
 
-FAQ_Q = "care e politica de retur"
-
-
-class _LLM:
-    def __init__(self, vec=None):
-        self._vec = vec or [0.1, 0.2, 0.3, 0.4]
-
-    async def embed(self, texts, *, model=None):
-        return [self._vec for _ in texts]
+_ROWS = [
+    {"id": "f1", "question": "Cât costă livrarea?", "answer": "Livrare gratuită peste 199 lei."},
+    {"id": "f2", "question": "Pot returna un produs?", "answer": "Da, în 30 de zile."},
+]
 
 
-def _ctx(body: str, *, locale: str = "ro") -> TurnContext:
+def _ctx(*, locale: str = "ro", default_locale: str | None = "ro") -> TurnContext:
     return TurnContext(
         turn_id="t",
-        business=BusinessConfig(id="biz-1", slug="s", name="n"),
+        business=BusinessConfig(id="biz-1", slug="s", name="n", default_locale=default_locale),
         contact=Contact(id="c", business_id="biz-1"),
-        message=InboundMessage(provider_msg_id="m", body=body),
+        message=InboundMessage(provider_msg_id="m", body="cat e livrarea"),
         conversation_id="conv",
         language=locale,
     )
 
 
-def _patch_topk(monkeypatch, *rows):
-    """NX-175: calea primară a faq_stage e acum `semantic_topk` (top-k + rerank). Un singur
-    candidat → rerank îl servește direct. `rows` = dict-urile candidate (0 = miss)."""
+class _NoEmbedLLM:
+    async def embed(self, texts, *, model=None):  # pragma: no cover - nu trebuie chemat
+        raise AssertionError("unealta FAQ nu mai cheamă niciun model")
 
-    async def fake_topk(conn, bid, locale, emb, **k):
-        return list(rows)
 
-    monkeypatch.setattr(faq_mod, "semantic_topk", fake_topk)
+def _deps():
+    return PipelineDeps(conn=object(), redis=None, llm=_NoEmbedLLM())
 
 
-# --- faq_stage (strat gratuit) ----------------------------------------------
+def _patch_rows(monkeypatch, by_locale):
+    calls = []
 
+    async def fake(conn, bid, locale, *, limit):
+        calls.append((bid, locale, limit))
+        return list(by_locale.get(locale, []))
 
-async def test_hit_above_threshold_serves_and_early_exits(monkeypatch):
-    _patch_topk(
-        monkeypatch,
-        {"id": "f1", "question": "retur?", "answer": "Retur în 14 zile.", "similarity": 0.9},
-    )
+    monkeypatch.setattr(ft, "list_active", fake)
+    return calls
 
-    async def boom_triage(ctx, deps):
-        raise AssertionError("triaj NU trebuie atins după un hit FAQ")
 
-    ctx = _ctx(FAQ_Q)
-    await run_pipeline(ctx, PipelineDeps(conn=None, llm=_LLM()), [faq_stage, boom_triage])
-
-    assert ctx.reply is not None and ctx.reply.text == "Retur în 14 zile."
-    assert ctx.reply.cacheable is True  # răspuns static reutilizabil → G5b îl prinde data viitoare
-    assert any(e.type == "faq_hit" and e.properties["faq_id"] == "f1" for e in ctx.events)
-
-
-async def test_miss_below_threshold_continues(monkeypatch):
-    # sub faq_tau_policy (0.45) — FAQ_Q („retur") e politică → prag relaxat; 0.40 tot pică
-    _patch_topk(monkeypatch, {"id": "f2", "question": "x", "answer": "y", "similarity": 0.40})
-    ctx = _ctx(FAQ_Q)
-    await faq_stage(ctx, PipelineDeps(conn=None, llm=_LLM()))
-    assert ctx.reply is None  # miss → pipeline continuă spre triaj
-    assert any(e.type == "faq_lookup" and e.properties["layer"] == "miss" for e in ctx.events)
-
-
-async def test_policy_question_relaxed_threshold_hits(monkeypatch):
-    # FAQ_Q = „...retur" → întrebare de POLITICĂ → prag relaxat faq_tau_policy (0.45). 0.60 e SUB
-    # faq_tau_high (0.78) dar PESTE 0.45 → HIT. Repară bug-ul „copy-paste": întrebarea de livrare/
-    # politică (diluată de partea de produs) nu mai pică la agent, care re-recomanda.
-    # NX-138: FAQ-ul potrivit e el ÎNSUȘI de politică („cum returnez") → relaxarea se aplică.
-    _patch_topk(
-        monkeypatch,
-        {
-            "id": "f3",
-            "question": "cum returnez un produs",
-            "answer": "Retur în 14 zile.",
-            "similarity": 0.60,
-        },
-    )
-    ctx = _ctx(FAQ_Q)
-    await faq_stage(ctx, PipelineDeps(conn=None, llm=_LLM()))
-    assert ctx.reply is not None and ctx.reply.text == "Retur în 14 zile."
-    assert ctx.reply.cacheable is False  # hit relaxat pe mesaj de politică → NU se cache-uiește
-    assert any(e.type == "faq_hit" and e.properties.get("policy") is True for e in ctx.events)
-
-
-async def test_mixed_message_nonpolicy_faq_defers_to_agent(monkeypatch):
-    # NX-138 (R7): mesaj MIXT produs+politică („caut o cremă… și cât durează livrarea?") — „livrare"
-    # aprinde regexul de politică, DAR cel mai apropiat FAQ e unul de CONSULTANȚĂ produs („cum aleg
-    # crema"), nu de politică. Fără fix, pragul relaxat (0.45) l-ar servi → deflecta cererea de
-    # produs. Cu fix: FAQ-ul nu e de politică → prag HIGH (0.78) → 0.60 pică → merge la agent.
-    _patch_topk(
-        monkeypatch,
-        {
-            "id": "f4",
-            "question": "cum aleg crema potrivita pentru tenul meu",
-            "answer": "Spune-mi tipul de ten…",
-            "similarity": 0.60,
-        },
-    )
-    ctx = _ctx("caut o crema pentru ten uscat si cat dureaza livrarea")
-    await faq_stage(ctx, PipelineDeps(conn=None, llm=_LLM()))
-    assert ctx.reply is None  # NU deflectează → pipeline continuă spre triaj/agent (multi-intent)
-    assert any(e.type == "faq_lookup" and e.properties["layer"] == "miss" for e in ctx.events)
-
-
-async def test_kill_switch_off_restores_171_behavior(monkeypatch):
-    # Kill-switch OFF → comportamentul #171 (relaxare pe orice FAQ dacă mesajul e de politică).
-    monkeypatch.setattr(get_settings(), "faq_policy_gate_on_faq_kind", False)
-    _patch_topk(
-        monkeypatch,
-        {"id": "f5", "question": "cum aleg crema", "answer": "x", "similarity": 0.60},
-    )
-    ctx = _ctx("caut o crema pentru ten uscat si cat dureaza livrarea")
-    await faq_stage(ctx, PipelineDeps(conn=None, llm=_LLM()))
-    assert ctx.reply is not None  # OFF → prag relaxat pe FAQ non-politică (ca înainte de NX-138)
-
-
-async def test_zero_rows_miss(monkeypatch):
-    _patch_topk(monkeypatch)  # 0 candidați → rerank miss
-    ctx = _ctx(FAQ_Q)
-    await faq_stage(ctx, PipelineDeps(conn=None, llm=_LLM()))
-    assert ctx.reply is None
-    assert any(e.properties.get("similarity") == 0.0 for e in ctx.events)
-
-
-async def test_clarify_above_threshold_serves_chips(monkeypatch):
-    # Două FAQ-uri RELEVANTE (peste tau_high 0.78) și apropiate (marjă < eps 0.03) cu răspunsuri
-    # DIFERITE → clarify: chips = întrebările candidate, early-exit, necacheabil.
-    _patch_topk(
-        monkeypatch,
-        {
-            "id": "a",
-            "question": "Cum aleg crema pentru tenul meu?",
-            "answer": "Depinde de ten…",
-            "similarity": 0.82,
-        },
-        {
-            "id": "b",
-            "question": "Ce produse recomandați pentru început?",
-            "answer": "Un set de bază…",
-            "similarity": 0.80,
-        },
-    )
-    ctx = _ctx("ceva despre produse")  # non-politică → tau = tau_high (0.78)
-    await faq_stage(ctx, PipelineDeps(conn=None, llm=_LLM()))
-    assert ctx.reply is not None
-    assert ctx.reply.suggestions == [
-        "Cum aleg crema pentru tenul meu?",
-        "Ce produse recomandați pentru început?",
-    ]
-    assert ctx.reply.cacheable is False  # clarify specific turului → NU se cache-uiește
-    assert any(
-        e.type == "faq_clarify" and set(e.properties["options"]) == {"a", "b"} for e in ctx.events
-    )
-
-
-async def test_clarify_below_threshold_misses_not_intercepts(monkeypatch):
-    # Fix review Codex: rerank întoarce „clarify" pe marja mică (0.70 vs 0.685), DAR stage-ul NU
-    # mai interceptează — candidatul top (0.70) e SUB tau_high (0.78) → niciun FAQ relevant → miss.
-    # Fără fix, două FAQ-uri irelevante apropiate deflectau ORICE mesaj cu o clarificare falsă.
-    _patch_topk(
-        monkeypatch,
-        {
-            "id": "a",
-            "question": "Cum aleg crema pentru tenul meu?",
-            "answer": "Depinde de ten…",
-            "similarity": 0.70,
-        },
-        {
-            "id": "b",
-            "question": "Ce produse recomandați pentru început?",
-            "answer": "Un set de bază…",
-            "similarity": 0.685,
-        },
-    )
-    ctx = _ctx("ceva despre produse")
-    await faq_stage(ctx, PipelineDeps(conn=None, llm=_LLM()))
-    assert ctx.reply is None  # NU interceptează → pipeline continuă spre triaj
-    assert not any(e.type == "faq_clarify" for e in ctx.events)
-    assert any(e.type == "faq_lookup" and e.properties["layer"] == "miss" for e in ctx.events)
-
-
-async def test_no_llm_skips_without_embed():
-    ctx = _ctx(FAQ_Q)
-    await faq_stage(ctx, PipelineDeps(conn=None, llm=None))  # fără LLM → skip grațios
-    assert ctx.reply is None
-    assert not ctx.events  # nici măcar miss (n-a ajuns la lookup)
-
-
-async def test_empty_body_noop(monkeypatch):
-    async def boom(*a, **k):
-        raise AssertionError("body gol → niciun lookup")
-
-    monkeypatch.setattr(faq_mod, "semantic_topk", boom)
-    ctx = _ctx("   ")
-    await faq_stage(ctx, PipelineDeps(conn=None, llm=_LLM()))
-    assert ctx.reply is None
-
-
-async def test_disabled_noop(monkeypatch):
-    monkeypatch.setattr(get_settings(), "faq_enabled", False)
-
-    async def boom(*a, **k):
-        raise AssertionError("dezactivat → niciun lookup")
-
-    monkeypatch.setattr(faq_mod, "semantic_topk", boom)
-    ctx = _ctx(FAQ_Q)
-    await faq_stage(ctx, PipelineDeps(conn=None, llm=_LLM()))
-    assert ctx.reply is None
-
-
-async def test_lookup_error_is_graceful_miss(monkeypatch):
-    async def boom(*a, **k):
-        raise RuntimeError("DB down")
-
-    monkeypatch.setattr(faq_mod, "semantic_topk", boom)
-    ctx = _ctx(FAQ_Q)
-    await faq_stage(ctx, PipelineDeps(conn=None, llm=_LLM()))  # nu propagă excepția
-    assert ctx.reply is None
-
-
-# --- NX-124a: fallback de locale (gated) -------------------------------------
-
-
-def _fallback_settings(**over):
-    base = dict(
-        faq_enabled=True,
-        faq_tau_high=0.78,
-        faq_tau_policy=0.45,
-        faq_policy_gate_on_faq_kind=True,
-        faq_fallback_tau=0.85,
-        faq_locale_fallback_enabled=True,
-        faq_rerank_enabled=True,  # NX-175: calea primară e topk+rerank
-        faq_topk=5,
-        model_embed="m1",
-    )
-    base.update(over)
-    return SimpleNamespace(**base)
-
-
-async def test_locale_fallback_serves_default_locale(monkeypatch):
-    # user pe DE → miss (topk pe de = gol); default_locale RO are cunoștința → fallback (care
-    # folosește `semantic_lookup`) o servește. NX-175: calea primară e topk, fallback rămâne lookup.
-    _patch_topk(monkeypatch)  # primary pe de → gol
-
-    async def fake_lookup(conn, bid, locale, emb, **k):
-        if locale == "ro":
-            return {"id": "f-ro", "question": "q", "answer": "Retur 14 zile.", "similarity": 0.95}
-        return None
-
-    monkeypatch.setattr(faq_mod, "semantic_lookup", fake_lookup)
-    monkeypatch.setattr(faq_mod, "get_settings", _fallback_settings)
-    ctx = _ctx(FAQ_Q, locale="de")  # business.default_locale = "ro" (default)
-    await faq_stage(ctx, PipelineDeps(conn=None, llm=_LLM()))
-    assert ctx.reply is not None and ctx.reply.text == "Retur 14 zile."
-    assert ctx.reply.cacheable is False  # cross-locale → NU se cache-uiește (evită otrăvirea)
-    assert any(e.type == "faq_hit" and e.properties.get("locale_fallback") for e in ctx.events)
-
-
-async def test_locale_unserved_when_no_fallback_hit(monkeypatch):
-    _patch_topk(monkeypatch)  # primary gol
-
-    async def none_lookup(*a, **k):
-        return None
-
-    monkeypatch.setattr(faq_mod, "semantic_lookup", none_lookup)
-    monkeypatch.setattr(faq_mod, "get_settings", _fallback_settings)
-    ctx = _ctx(FAQ_Q, locale="de")
-    await faq_stage(ctx, PipelineDeps(conn=None, llm=_LLM()))
-    assert ctx.reply is None
-    assert any(e.type == "locale_unserved" and e.properties["locale"] == "de" for e in ctx.events)
-
-
-async def test_locale_fallback_skipped_when_same_locale(monkeypatch):
-    # ctx.language == default_locale → NU al doilea lookup (fără cost dublu); miss normal.
-    # NX-175: primary = topk pe ro (gol); fallback nu se cheamă (aceeași limbă) → lookup NEatins.
-    topk_calls = []
-
-    async def fake_topk(conn, bid, locale, emb, **k):
-        topk_calls.append(locale)
-        return []
-
-    async def boom_lookup(*a, **k):
-        raise AssertionError("fallback NU trebuie chemat când ctx.language == default_locale")
-
-    monkeypatch.setattr(faq_mod, "semantic_topk", fake_topk)
-    monkeypatch.setattr(faq_mod, "semantic_lookup", boom_lookup)
-    monkeypatch.setattr(faq_mod, "get_settings", _fallback_settings)
-    ctx = _ctx(FAQ_Q, locale="ro")  # == default_locale
-    await faq_stage(ctx, PipelineDeps(conn=None, llm=_LLM()))
-    assert topk_calls == ["ro"]  # un singur retrieval, fără fallback
-    assert not any(e.type == "locale_unserved" for e in ctx.events)
-
-
-# --- semantic_lookup (query) — fake conn -------------------------------------
-
-
-class _FakeConn:
-    """NX-175: `semantic_lookup` e acum wrapper peste `semantic_topk` (care folosește `fetch`),
-    deci fake-ul expune `fetch` (listă), nu `fetchrow`."""
-
-    def __init__(self, rows):
-        self._rows = rows if isinstance(rows, list) else ([rows] if rows else [])
-        self.captured = None
-
-    async def fetch(self, sql, *args):
-        self.captured = args
-        return self._rows
-
-
-async def test_query_returns_dict_and_passes_locale():
-    conn = _FakeConn({"id": "f9", "question": "q", "answer": "a", "similarity": 0.88})
-    out = await faqs_q.semantic_lookup(conn, "biz-1", "de", [0.1, 0.2], embedding_model="m1")
-    assert out["answer"] == "a"
-    # business_id=$1, locale=$2, embedding_model=$4 trec în WHERE (izolare + limbă + model)
-    assert conn.captured[0] == "biz-1" and conn.captured[1] == "de"
-    assert conn.captured[3] == "m1"  # NX-124a: filtru pe model
-
-
-async def test_query_none_on_no_rows():
-    conn = _FakeConn(None)
-    assert await faqs_q.semantic_lookup(conn, "biz-1", "ro", [0.1], embedding_model="m1") is None
-
-
-async def test_topk_returns_list_ordered():
-    rows = [
-        {"id": "a", "question": "q1", "answer": "a1", "similarity": 0.9},
-        {"id": "b", "question": "q2", "answer": "a2", "similarity": 0.7},
-    ]
-    conn = _FakeConn(rows)
-    out = await faqs_q.semantic_topk(conn, "biz-1", "ro", [0.1], embedding_model="m1", k=5)
-    assert [r["id"] for r in out] == ["a", "b"]
-    assert conn.captured[4] == 5  # k trece ca $5 (limit)
-
-
-# --- tool faq_lookup ---------------------------------------------------------
-
-
-def _deps(llm=None):
-    return PipelineDeps(conn=object(), redis=None, llm=llm)
-
-
-def test_faq_lookup_in_sales_toolset():
+def test_faq_lookup_in_sales_and_order_toolsets():
     assert "faq_lookup" in enabled_tools(None, "sales")
-    # NX-128++ (FAQ-first): `faq_lookup` ȘI pe ORDER — o întrebare de proces/politică rutată acolo
-    # (cum comand, ce retur, cât e livrarea) primește răspuns din baza de cunoștințe, FĂRĂ cont.
+    # NX-128++ (FAQ-first): și pe ORDER — o întrebare de proces/politică primește răspuns FĂRĂ cont.
     assert "faq_lookup" in enabled_tools(None, "order")
 
 
-async def test_tool_hit_returns_answer(monkeypatch):
-    async def fake_topk(conn, bid, locale, emb, **k):
-        return [{"id": "f1", "question": "q", "answer": "Livrare 1-3 zile.", "similarity": 0.85}]
-
-    monkeypatch.setattr(ft, "semantic_topk", fake_topk)
-    res = await ft.faq_lookup_tool(_ctx(FAQ_Q), _deps(_LLM()), {"query": "cat e livrarea"})
-    assert res.ok is True and res.llm_view == "Livrare 1-3 zile." and res.products == []
-
-
-async def test_tool_miss_neutral(monkeypatch):
-    async def fake_topk(conn, bid, locale, emb, **k):
-        # sub faq_tau_tool (0.66) — rerank alege f1, dar caller-ul aplică pragul → neutru
-        return [{"id": "f1", "question": "q", "answer": "x", "similarity": 0.50}]
-
-    monkeypatch.setattr(ft, "semantic_topk", fake_topk)
-    res = await ft.faq_lookup_tool(_ctx(FAQ_Q), _deps(_LLM()), {"query": "ceva"})
-    assert res.ok is True and "Nu am un răspuns" in res.llm_view
+async def test_tool_returns_the_whole_active_set_for_the_model_to_choose(monkeypatch):
+    calls = _patch_rows(monkeypatch, {"ro": _ROWS})
+    res = await ft.faq_lookup_tool(_ctx(), _deps(), {"query": "cat e livrarea"})
+    assert res.ok is True and res.products == []
+    assert "Livrare gratuită peste 199 lei." in res.llm_view
+    assert "Da, în 30 de zile." in res.llm_view  # modelul vede setul, nu un top-1 ghicit
+    assert "nu o compune" in res.llm_view  # instrucțiunea de a nu inventa o regulă
+    assert calls == [("biz-1", "ro", ft.MAX_FAQS)]  # tenantul și limba vin din ctx (P7/P11)
 
 
-async def test_tool_no_llm(monkeypatch):
-    async def boom(*a, **k):
-        raise AssertionError("fără LLM → nu atinge DB")
+async def test_empty_set_is_a_neutral_answer_not_an_invented_rule(monkeypatch):
+    _patch_rows(monkeypatch, {})
+    res = await ft.faq_lookup_tool(_ctx(), _deps(), {"query": "garantie"})
+    assert res.ok is True and "nu ai informația" in res.llm_view
 
-    monkeypatch.setattr(ft, "semantic_topk", boom)
-    res = await ft.faq_lookup_tool(_ctx(FAQ_Q), _deps(None), {"query": "x"})
-    assert res.ok is False and res.error == "no_llm"
+
+async def test_locale_fallback_only_under_flag(monkeypatch):
+    calls = _patch_rows(monkeypatch, {"ro": _ROWS})
+    s = get_settings()
+    monkeypatch.setattr(s, "faq_locale_fallback_enabled", False)
+    res = await ft.faq_lookup_tool(_ctx(locale="en"), _deps(), {"query": "shipping"})
+    assert "nu ai informația" in res.llm_view  # fără flag: nicio regulă din altă limbă
+    assert [c[1] for c in calls] == ["en"]
+
+    calls.clear()
+    monkeypatch.setattr(s, "faq_locale_fallback_enabled", True)
+    res = await ft.faq_lookup_tool(_ctx(locale="en"), _deps(), {"query": "shipping"})
+    assert "199 lei" in res.llm_view
+    assert [c[1] for c in calls] == ["en", "ro"]
+
+
+def test_view_keeps_whole_entries_under_the_cap(monkeypatch):
+    monkeypatch.setattr(ft, "MAX_VIEW_CHARS", 500)
+    rows = [{"id": str(i), "question": f"Q{i}?", "answer": "x" * 60} for i in range(10)]
+    view = ft.render_view(rows)
+    kept = [ln for ln in view.splitlines() if ln.strip().startswith("Răspuns:")]
+    assert 0 < len(kept) < len(rows)  # plafonul a lăsat afară intrări întregi
+    for line in view.splitlines():
+        if line.strip().startswith("Răspuns:"):
+            assert line.strip() == "Răspuns: " + "x" * 60  # niciun răspuns tăiat la mijloc
+
+
+def test_view_has_no_pause_dash_or_semicolon_in_instructions():
+    """P13: promptul se scrie în vocea pe care o cere."""
+    view = ft.render_view(_ROWS)
+    header = view.splitlines()[0]
+    assert " — " not in header and " – " not in header and ";" not in header
+
+
+class _FakeConn:
+    def __init__(self, rows):
+        self._rows = rows
+        self.args = None
+
+    async def fetch(self, sql, *args):
+        self.sql, self.args = sql, args
+        return self._rows
+
+
+async def test_list_active_filters_tenant_locale_and_active():
+    conn = _FakeConn([dict(r) for r in _ROWS])
+    out = await faqs_q.list_active(conn, "biz-1", "ro", limit=40)
+    assert out == _ROWS
+    assert conn.args == ("biz-1", "ro", 40)
+    sql = " ".join(conn.sql.split())
+    assert "business_id = $1" in sql and "locale = $2" in sql and "is_active = true" in sql
+    assert "embedding" not in sql  # nicio dependență de vectori

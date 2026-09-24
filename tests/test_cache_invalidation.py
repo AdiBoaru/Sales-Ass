@@ -115,7 +115,7 @@ def _coro(value):
 
 
 async def _evict_setup(monkeypatch, entry, *, data_version=3, prices=None):
-    """Exact lookup întoarce `entry`; L2 semantic = None (→ miss final). Înregistrează
+    """Exact lookup întoarce `entry` (→ evict + miss final, nu mai există L2). Înregistrează
     id-urile evacuate. Întoarce lista `deleted`."""
     deleted = []
 
@@ -126,19 +126,12 @@ async def _evict_setup(monkeypatch, entry, *, data_version=3, prices=None):
         assert prompt_version == "v1"
         return entry
 
-    async def fake_sem(
-        conn, bid, locale, emb, *, volatility_class, embedding_model=None, prompt_version="v1"
-    ):
-        assert prompt_version == "v1"
-        return None
-
     async def fake_delete(conn, bid, eid):
         deleted.append(eid)
 
     _patch(
         monkeypatch,
         exact_lookup=fake_exact,
-        semantic_lookup=fake_sem,
         touch_hit=_noop,
         delete_entry=fake_delete,
         get_data_version=lambda conn, bid: _coro(data_version),
@@ -344,7 +337,6 @@ async def test_current_prices_and_pricecheck_real_db(pool):
         upsert_entry,
     )
 
-    emb = [0.011] * 1536
     async with pool.acquire() as conn:
         tr = conn.transaction()
         await tr.start()
@@ -369,10 +361,8 @@ async def test_current_prices_and_pricecheck_real_db(pool):
                 "ro",
                 canonical_str="proba g5b2 dynamic",
                 canonical_hash="g5b2-probe-hash",
-                embedding=emb,
                 answer="Recomandare de test.",
                 volatility_class="dynamic",
-                embedding_model="text-embedding-3-small",
                 quality_score=1.0,
                 ttl_minutes=30,
                 retrieval_signature=[{"product_id": pid, "price": price}],

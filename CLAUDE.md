@@ -21,7 +21,7 @@ Referință de piață: similar cu iZi (eMAG) și Aura (SOLE), livrat ca servici
 | Coadă | Redis Streams (lock per conversație, debounce) |
 | DB | Postgres **17.6** — Supabase, proiect `NativexSales` eu-west-2 (**o singură schemă `public`**, multi-tenant pe `business_id`). Proiectul vechi (eu-west-1, PG16) e abandonat din 2026-08-28 |
 | LLM sales | OpenAI **`gpt-6-luna`** (`MODEL_AGENT`, din 2026-09-24; înainte `gpt-5.6-luna`, iar până pe 2026-08-24 `gpt-5.4-mini`), `reasoning_effort=low` pe compunere (2026-09-24, pe replay: `low` refuză aceleași seturi greșite ca `medium` în jumătate din timp, 8,5 s față de 18,2 s p50; `none` nu mai refuză nimic, deci NX-306 ar rămâne fără semnal. NX-313 coborâse deja `high` → `medium`). Escaladarea `MODEL_AGENT_COMPLEX` e GOALĂ implicit. `gpt-6-astra` NU e declarat: nu acceptă `reasoning_effort=none`, deci n-ar putea rula bucla cu tool-uri pe `chat.completions` |
-| Embeddings | text-embedding-3-small (pgvector în Supabase) |
+| Embeddings | **NICIUNUL pe drumul turului (2026-09-24).** FAQ-ul e unealta agentului (`faq_lookup` aduce setul activ, modelul alege), cache-ul potrivește doar exact. Restul codului de embeddings (căutare vectorială oprită, job de embed) și tabelele vectoriale pleacă în pașii următori |
 | **Web widget** | **SINGURUL canal de lucru (NX-179)** — `/web/chat` sincron + `/web/stream` SSE; widgetul e în repo FE separat (`docs/FRONTEND-CONTRACT-IZI.md`) |
 | Validare | Pydantic v2 |
 | Teste | pytest + pytest-asyncio |
@@ -1175,8 +1175,10 @@ Orice stagiu poate seta `reply` → early exit direct la Sender (stagiul 9).
 [4] STRATURI GRATUITE (fără LLM, țintă 40-60% din trafic opresc aici)
     • alias lookup: phrase_norm(text) → match în intent_aliases
       (status='approved', filtrat pe business_id)
-    • cache semantic: embedding → cosine search în semantic_cache
-      (filtrat pe business_id + locale)
+    • cache: potrivire EXACTĂ pe canonical_hash în semantic_cache (filtrat pe business_id +
+      locale). Stratul semantic (embed + cosine) și stratul FAQ pe vectori au plecat pe
+      2026-09-24: pe 30 de zile serviseră 0 răspunsuri din 92, respectiv 102, dar costau un apel
+      de rețea pe fiecare tur. Regulile magazinului ajung la agent prin unealta `faq_lookup`
     • clarificare: dacă state are pending_question → formulare din cod/prompt
     • oricare produce reply → early exit la Sender
 
@@ -1667,8 +1669,8 @@ nativx-assistant/
 │   ├── schema_reference.md      ← mapare nume vechi → real + decizii de design
 │   ├── 003_bot_runtime_role.sql ← rol bot_runtime + RLS (app.business_id) + guard 8KB
 │   ├── 004_inbound_dedupe.sql   ← NX-51 layer 2 (aplicat live)
-│   ├── 0NN_*.sql                ← migrări delta (003→051), aplicate ORDONAT de scripts/migrate.py
-│   │                              (030/031 ARSE — vezi antetul lui 034; următorul număr liber: 052)
+│   ├── 0NN_*.sql                ← migrări delta (003→052), aplicate ORDONAT de scripts/migrate.py
+│   │                              (030/031 ARSE — vezi antetul lui 034; următorul număr liber: 053)
 │   ├── 014_schema_migrations.sql← NX-123: tabel tracking migrări + backfill 003–013 (legacy)
 │   ├── PROJECT_STATUS.md        ← starea proiectului (actualizat la fiecare milestone)
 │   ├── DB_MIGRATION_NOTES.md    ← note migrare v1 → v2 + runner migrate.py (NX-123)
@@ -1832,7 +1834,10 @@ plan free, **Data API STINS** → `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` nu 
 secrete sunt connection stringurile). Cele **47 de migrări (003→051, cu 030/031 arse)** sunt
 înregistrate în `schema_migrations` — ultima aplicată e **051** (NX-289, ștergerea canalelor
 înghețate), verificat pe DB pe 2026-09-17 — deci poarta de boot NX-123 nu cere re-rularea lor.
-Producția rulează pe `schema: requires 51, tolerates 52` (`/health/startup`).
+Producția rulează pe `schema: requires 51, tolerates 52` (`/health/startup`). **Migrarea 052**
+(`docs/052_embeddings_optional.sql`, expand: coloanele vectoriale din `semantic_cache` și
+`faqs.embedding_model` devin opționale) intră odată cu imaginea fără embeddings; o aplică jobul de
+migrare din Release. Ștergerea tabelelor vectoriale e o migrare de CONTRACT separată, după deploy.
 
 **business_id**: `99fe1292-f9ed-469e-8183-f994ea5b59c0`
 **Slug**: `sole-ro` (name „SOLE") · **Vertical**: `ecommerce` · locale `ro`, `Europe/Bucharest`

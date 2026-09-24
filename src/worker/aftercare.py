@@ -206,11 +206,11 @@ async def _cache_writeback(db: DbProvider, llm, business_id, locale, body, ctx) 
     Două tiere: `static` (fără produse, TTL zile) și `dynamic` (produse, `retrieval_signature` +
     `data_version`, TTL minute — invalidat la lookup prin price-check).
 
-    NX-161 F1: `data_version` (read) + upsert (write) în checkout-uri SCURTE separate; embed-ul LLM
-    rulează ÎNTRE ele, fără conn ținut (regula 1)."""
+    NX-161 F1: `data_version` (read) + upsert (write) în checkout-uri SCURTE separate. Fără apel
+    de model: embeddings au fost scoase (2026-09-24), iar cache-ul se potrivește doar exact."""
     settings = get_settings()
     reply = ctx.reply
-    if not settings.cache_enabled or ctx.from_cache or reply is None or llm is None:
+    if not settings.cache_enabled or ctx.from_cache or reply is None:
         return
     if not reply.cacheable:
         return
@@ -259,7 +259,7 @@ async def _cache_writeback(db: DbProvider, llm, business_id, locale, body, ctx) 
         if volatility == "static":
             kwargs: dict = {"ttl_days": settings.cache_ttl_static_days}
         else:  # dynamic (produse garantate de gate)
-            async with db() as conn:  # READ scurt (data_version) — eliberat ÎNAINTE de embed
+            async with db() as conn:  # READ scurt (data_version)
                 data_version = await get_data_version(conn, business_id)
             kwargs = {
                 "ttl_minutes": settings.cache_ttl_dynamic_minutes,
@@ -274,7 +274,6 @@ async def _cache_writeback(db: DbProvider, llm, business_id, locale, body, ctx) 
         # NX-216: scrie în namespace-ul versiunii de prompt, din ACEEAȘI sursă ca lookup-ul
         # (cache_stage) → v1/vNext nu se suprascriu și nu se servesc încrucișat.
         prompt_version = cache_prompt_version(ctx.business)
-        embedding = (await llm.embed([canonical]))[0]  # LLM — FĂRĂ conn ținut
         async with db() as conn:  # WRITE scurt (upsert)
             async with conn.transaction():
                 await upsert_entry(
@@ -283,10 +282,8 @@ async def _cache_writeback(db: DbProvider, llm, business_id, locale, body, ctx) 
                     locale,
                     canonical_str=canonical,
                     canonical_hash=canonical_hash,
-                    embedding=embedding,
                     answer=text,
                     volatility_class=volatility,
-                    embedding_model=settings.model_embed,
                     quality_score=1.0,
                     prompt_version=prompt_version,
                     **kwargs,
