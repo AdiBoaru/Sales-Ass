@@ -144,6 +144,9 @@ async def test_refined_filters_start_new_session(monkeypatch):
     fp1 = ctx1.state_patch["active_search"]["fp"]
     # filtru rafinat (price_max nou) → fp DIFERIT → SESIUNE NOUĂ (action=new), NU paginare din pool
     ctx2 = _continue_ctx(ctx1, res1.products)
+    # NX-319: marginea cere SURSĂ, deci clientul chiar o rostește (altfel nu filtrează și nici nu
+    # schimbă amprenta — vezi `price_bound_source`).
+    ctx2.message.body = "ceva sub 50 lei"
     res2 = await run_tool(ctx2, _deps(), "search_products", {"query": "creme", "price_max": 50})
     sess2 = ctx2.state_patch["active_search"]
     assert sess2["fp"] != fp1  # filtru rafinat → fp nou

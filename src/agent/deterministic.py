@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import logging
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Any
 
 from src.agent.compare_narrative import compose_comparison
@@ -41,9 +41,14 @@ from src.agent.reference_resolver import (
     resolve_reference,
 )
 from src.catalog.query_terms import fold, stopwords
+from src.catalog.render_text import cut_at_sentence, display_name
 from src.config import get_settings
 from src.conversation.state_reducer import StateUpdateProposal
-from src.db.queries.catalog import get_products_by_ids, product_category_roots
+from src.db.queries.catalog import (
+    get_products_by_ids,
+    product_category_roots,
+    similar_candidates,
+)
 from src.domain.constraints import extract_constraints
 from src.models import Offer, ProductRef, RetrievalResult, Route, TurnContext
 from src.safety.policy import SafetyPolicy
@@ -274,13 +279,18 @@ def _safe_review_text(value: object) -> str | None:
 
 def _review_answer(product: dict, language: str) -> tuple[str, bool]:
     copy = _review_copy(language)
-    name = str(product.get("name") or "produs")
+    # NX-319: numele SCURT (NX-301). Cel întreg e nume + frază de marketing, iar aici intra de două
+    # ori în același paragraf.
+    name = display_name(str(product.get("name") or "produs"))
     lines: list[str] = []
     summary = _safe_review_text(product.get("review_summary"))
     pros = [_safe_review_text(value) for value in (product.get("top_pros") or [])]
     cons = [_safe_review_text(value) for value in (product.get("top_cons") or [])]
-    pros = [value for value in pros if value]
-    cons = [value for value in cons if value]
+    # NX-319: rezumatul NX-279 e construit din aceleași teme ca `top_pros`, deci o temă pe care o
+    # spune deja nu se mai repetă ca „ce au apreciat" («dă rezultate vizibile», de două ori).
+    said = fold(summary or "")
+    pros = [value for value in pros if value and fold(value) not in said]
+    cons = [value for value in cons if value and fold(value) not in said]
     if summary:
         lines.append(copy["summary"].format(name=name, value=summary) + ".")
     if pros:
@@ -360,6 +370,7 @@ def _detail_copy(language: str) -> dict[str, str]:
             "which": "Which product would you like more details about?",
             "why": "Why I recommend it",
             "features": "Main features",
+            "usage": "How to use it",
             "reviews": "What customers say",
             "empty_features": "I don't have additional specifications for this product yet.",
             "unavailable": "That product is no longer available, so I can't show reliable details.",
@@ -372,6 +383,7 @@ def _detail_copy(language: str) -> dict[str, str]:
         "which": "Pentru care produs vrei mai multe detalii?",
         "why": "De ce ți-l recomand",
         "features": "Caracteristici principale",
+        "usage": "Cum se folosește",
         "reviews": "Ce spun clienții",
         "empty_features": "Nu am încă specificații suplimentare pentru acest produs.",
         "unavailable": "Produsul nu mai este disponibil, așa că nu îți pot arăta detalii sigure.",
@@ -388,14 +400,46 @@ def _detail_choice_chips(refs: list[ProductRef], language: str) -> list[str]:
     return [fit_chip(template, f"{i}. {ref.name}") for i, ref in enumerate(refs[:4], 1)]
 
 
+def _section_text(product: dict, pack: Any, kinds: Sequence[str]) -> str | None:
+    """Prima secțiune de fișă din `kinds` (în ordinea dată), tăiată la plafonul din pachet. PURĂ.
+
+    NX-319: plafonul vine din `detail_sections`, ca în vederea de detaliu a modelului
+    (`catalog_tools._detail`), deci clientul și modelul citesc aceeași porție din fișă. Textul cu
+    claim medical nu iese (aceeași poartă ca rezumatul, stagiul 8)."""
+    caps = {s.kind: s.max_chars for s in (getattr(pack, "detail_sections", ()) or ())}
+    by_kind: dict[str, str] = {}
+    for sec in product.get("sections") or []:
+        if isinstance(sec, dict) and sec.get("body") and sec.get("kind"):
+            by_kind.setdefault(str(sec["kind"]), str(sec["body"]))
+    for kind in kinds:
+        body = " ".join(by_kind.get(kind, "").split())
+        if not body:
+            continue
+        text = cut_at_sentence(body, caps.get(kind, _DEFAULT_SECTION_CAP))
+        if text and not has_medical_claim(text):
+            return text
+    return None
+
+
+#: Plafonul unei secțiuni pe care pachetul nu o declară în `detail_sections`.
+_DEFAULT_SECTION_CAP = 240
+
+
 def _detail_answer(product: dict, ctx: TurnContext) -> str:
-    """Build a product deep-dive exclusively from catalog facets and review aggregates."""
+    """Build a product deep-dive exclusively from catalog facets and review aggregates.
+
+    NX-319: „de ce" cădea pe NUMELE ÎNTREG al produsului (`ai_summary` e gol pe tot catalogul
+    SOLE), adică o frază de marketing de 100+ caractere sub un titlu care promite un motiv. Acum
+    vine din secțiunea `summary` a fișei, iar numele e cel scurt (`display_name`, NX-301). Se
+    adaugă „cum se folosește" din `howto_sections` (NX-315), când fișa îl are."""
     copy = _detail_copy(ctx.language)
+    pack = getattr(ctx.business, "domain_pack", None)
     summary = " ".join(str(product.get("ai_summary") or "").split()).strip()
     if not summary or has_medical_claim(summary):
-        summary = str(product.get("name") or "Produs")
+        summary = _section_text(product, pack, ("summary",)) or display_name(
+            str(product.get("name") or "Produs")
+        )
 
-    pack = getattr(ctx.business, "domain_pack", None)
     facet_text = compose.facet_summary(
         product, (pack.comparison_facets if pack else ()), ctx.language
     )
@@ -403,9 +447,12 @@ def _detail_answer(product: dict, ctx: TurnContext) -> str:
     feature_lines = [f"✓ {fact}" for fact in facts]
     features = "\n".join(feature_lines) or copy["empty_features"]
     reviews, _ = _review_answer(product, ctx.language)
+    howto = _section_text(product, pack, tuple(getattr(pack, "howto_sections", ()) or ()))
+    usage = f"{copy['usage']}\n\n{howto}\n\n" if howto else ""
     return (
         f"{copy['why']}\n\n{summary}\n\n"
         f"{copy['features']}\n\n{features}\n\n"
+        f"{usage}"
         f"{copy['reviews']}\n\n{reviews}"
     )
 
@@ -578,6 +625,58 @@ async def serve_comparison(ctx: TurnContext, deps: PipelineDeps, ids: list[str])
     )
     ctx.emit("agent_compared", n=len(comparison.columns), deterministic=True)
     return True
+
+
+def is_compare_with_similar(query: str, language: str | None) -> bool:
+    """NX-319: mesajul e exact chip-ul NOSTRU «Compară-l cu un produs similar»? PUR.
+
+    Nu e o intenție dedusă din text, e recunoașterea unui buton pe care serverul l-a emis sub
+    detaliu (`_detail_copy`), ca la NX-316: textul re-randat trebuie să fie IDENTIC, după aceeași
+    normalizare ca restul follow-up-urilor. O formulare liberă („compar-o cu altceva") nu intră
+    aici și rămâne a modelului, fiindcă poate numi chiar produsul cu care vrea comparația."""
+    wanted = _norm_followup(_detail_copy(language)["compare_chip"]).strip(" ?.!")
+    return bool(query) and _norm_followup(query).strip(" ?.!") == wanted
+
+
+def pick_similar_partner(candidates: list[dict[str, Any]]) -> str | None:
+    """NX-319: primul candidat care NU e geamăn al ancorei. PURĂ.
+
+    Geamăn = același nume AFIȘAT (nuanțe, gramaje, NX-313) sau același brand la același preț
+    (culori listate ca produse separate: «GESKE SmartAppGuided Sonic Facial Brush | 5 in 1
+    Magenta» e peria din turul real în altă culoare, cu alt nume afișat). O comparație între doi
+    gemeni n-are axe: tabelul ar ieși cu toate rândurile egale. Ordinea candidaților e a
+    interogării (substitut, tip, asemănare, preț)."""
+    for c in candidates:
+        anchor_name = display_name(str(c.get("anchor_name") or "")).casefold()
+        if display_name(str(c.get("name") or "")).casefold() == anchor_name:
+            continue
+        same_brand = c.get("brand_id") is not None and c.get("brand_id") == c.get("anchor_brand_id")
+        price, anchor_price = c.get("price"), c.get("anchor_price")
+        same_price = (
+            price is not None and anchor_price is not None and abs(price - anchor_price) < 0.005
+        )
+        if same_brand and same_price:
+            continue
+        return str(c["id"])
+    return None
+
+
+async def serve_compare_with_similar(ctx: TurnContext, deps: PipelineDeps, anchor_id: str) -> bool:
+    """NX-319: comparația ancorei cu cel mai apropiat înlocuitor. False ⇒ bucla de model (P6)."""
+    async with deps.db("similar_candidates") as conn:
+        candidates = await similar_candidates(conn, ctx.business.id, anchor_id)
+    partner = pick_similar_partner(candidates)
+    if partner is None:
+        ctx.emit("compare_with_similar", served=False, reason="no_partner", n=len(candidates))
+        return False
+    served = await serve_comparison(ctx, deps, [anchor_id, partner])
+    ctx.emit(
+        "compare_with_similar",
+        served=served,
+        reason=None if served else "comparison_refused",
+        n=len(candidates),
+    )
+    return served
 
 
 # Cuvintele care fac parte din FORMULA unei scurtături, dincolo de ce prinde regexul declanșator
@@ -816,6 +915,19 @@ async def try_pre_intents(ctx: TurnContext, deps: PipelineDeps) -> bool:
     move = getattr(ctx, "chip_move", None)
     if move is not None and await serve_chip_move(ctx, deps, move):
         return True
+
+    # NX-319: chip-ul de sub detaliu, «Compară-l cu un produs similar». Ancora trebuie să fie
+    # UNICĂ (detaliul arată un singur card); altfel „-l" nu are un referent sigur și turul rămâne
+    # al modelului, ca înainte.
+    settings = get_settings()
+    if (
+        getattr(settings, "compare_with_similar_enabled", False)
+        and getattr(settings, "compare_intent_enabled", False)
+        and is_compare_with_similar(query, ctx.language)
+    ):
+        refs = _anchor_refs(ctx)
+        if len(refs) == 1 and await serve_compare_with_similar(ctx, deps, refs[0].product_id):
+            return True
 
     # Un follow-up de recenzii se referă la setul deja afișat chiar dacă triajul a propagat filtre
     # istorice. Cu mai multe produse, handlerul cere ancora în loc să aleagă primul card.

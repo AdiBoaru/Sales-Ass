@@ -28,6 +28,7 @@ from src.catalog.vocabulary import (
     CatalogVocabulary,
     Resolution,
     facet_overlays,
+    named_only_as_subshelf,
     resolve,
     resolve_any,
     text_is_redundant_as_gate,
@@ -708,11 +709,69 @@ def uttered_by_client(ctx: TurnContext, *values: object) -> bool:
     (`direction == "inbound"`) — o parafrază a botului nu e o afirmație a clientului. Pură, fără
     I/O, agnostică de limbă: nicio listă de cuvinte, doar coroborarea pe prefix din NX-251.
     """
+    return any(
+        corroborated_by(text, value) for text in client_texts(ctx) for value in values if value
+    )
+
+
+def client_texts(ctx: TurnContext) -> list[str]:
+    """Ce a scris CLIENTUL: mesajul curent primul, apoi mesajele lui din fereastra de istoric.
+
+    Un singur loc care decide ce înseamnă „a spus clientul" pentru porțile de proveniență (raft,
+    fațete, preț), ca să nu existe două ferestre care să difere tăcut."""
     texts: list[str] = [str(getattr(ctx.message, "body", "") or "")]
     for m in getattr(ctx, "history", None) or []:
         if getattr(m, "direction", None) == "inbound" and getattr(m, "body", None):
             texts.append(str(m.body))
-    return any(corroborated_by(text, value) for text in texts for value in values if value)
+    return texts
+
+
+#: NX-319: de ce a rămas `price_max` al modelului în `WHERE`. Vocabular ÎNCHIS (telemetrie).
+PRICE_BOUND_SPOKEN_NOW = "spoken_now"
+PRICE_BOUND_SPOKEN_EARLIER = "spoken_earlier"
+PRICE_BOUND_RELATIVE_REQUEST = "relative_request"
+PRICE_BOUND_SESSION = "session"
+
+
+def price_bound_source(
+    price_max: float,
+    *,
+    texts: Sequence[str],
+    relative_request: bool,
+    session_price_max: object,
+) -> str | None:
+    """NX-319: are marginea de preț a modelului o SURSĂ? Întoarce sursa sau `None`. PURĂ.
+
+    Un filtru de preț EXCLUDE produse, iar NX-266 spune deja că o deducție n-are voie să excludă:
+    doar calea moștenită a lui `price_max` scăpa de regulă. Pe turul real `38b47d4a`, «ai ceva anti
+    aging?» a plecat cu `price_max=29.99` dus de model din «mai ieftin»-ul de dinainte, adică o
+    margine relativă la ALT set, aplicată unui subiect nou.
+
+    Sursele, în ordinea în care se verifică:
+      • numărul e rostit în mesajul curent (`texts[0]`) sau într-unul anterior al clientului: un
+        buget spus acum trei ture rămâne buget, exact ca în starea v2 (NX-235);
+      • mesajul curent e o cerere RELATIVĂ de preț («mai ieftin», «cam scumpe»): marginea e
+        derivată de model din setul afișat, iar derivarea e chiar ce a cerut clientul;
+      • marginea e identică cu cea a sesiunii active: e aceeași cerere, paginată.
+    Numerele se compară prin `corroborated_by` (aceleași lecturi ale separatorului zecimal)."""
+    if texts and corroborated_by(texts[0], price_max):
+        return PRICE_BOUND_SPOKEN_NOW
+    if any(corroborated_by(t, price_max) for t in texts[1:]):
+        return PRICE_BOUND_SPOKEN_EARLIER
+    if relative_request:
+        return PRICE_BOUND_RELATIVE_REQUEST
+    if isinstance(session_price_max, (int, float)) and not isinstance(session_price_max, bool):
+        if abs(float(session_price_max) - float(price_max)) <= 0.005:
+            return PRICE_BOUND_SESSION
+    return None
+
+
+def _is_relative_price_request(text: str) -> bool:
+    """Același detector ca ramura deterministă «mai ieftin» (un singur proprietar al intenției).
+    Import leneș: `deterministic` trage `compose`, care la rândul lui ajunge la unelte."""
+    from src.agent.deterministic import _CHEAPER_RE
+
+    return _CHEAPER_RE.search(text or "") is not None
 
 
 def _relax_ladder(
@@ -1415,6 +1474,22 @@ async def search_products_tool(
         if inherited:
             ctx.emit("search_filter_inherited", fields=inherited)
 
+    # NX-319: marginea de preț a modelului filtrează doar cu sursă (vezi `price_bound_source`).
+    # Înaintea amprentei de sesiune, deliberat: o margine respinsă nu are voie să definească
+    # sesiunea, altfel „mai arată-mi" ar pagina un pool tăiat la un preț pe care clientul nu l-a
+    # cerut.
+    if a.price_max is not None and get_settings().search_price_bound_provenance_enabled:
+        texts = client_texts(ctx)
+        source = price_bound_source(
+            a.price_max,
+            texts=texts,
+            relative_request=_is_relative_price_request(texts[0]),
+            session_price_max=sess_filters.get("price_max"),
+        )
+        ctx.emit("price_bound_provenance", source=source or "unsupported", kept=source is not None)
+        if source is None:
+            a.price_max = None
+
     # === REZOLVARE ÎNAINTE DE CONSTRÂNGERE =====================================================
     # Un filtru SQL nu e o comparație, e o execuție: `WHERE slug = 'ten'` nu întreabă dacă «ten»
     # există, ci întoarce 0 rânduri — același rezultat ca pentru un raft real, dar gol. Din
@@ -1505,6 +1580,17 @@ async def search_products_tool(
     by_provenance = getattr(get_settings(), "search_relax_by_provenance_enabled", False)
     hard_category = getattr(get_settings(), "search_category_hard_enabled", True)
     category_uttered = "category" in inherited or uttered_by_client(ctx, a.category, *category_keys)
+    # NX-319: coroborarea literală nu deosebește un RAFT de un cuvânt obișnuit care îi poartă numele
+    # („crema de fata" ≠ raftul Machiaj > Fata). Un subraft rostit fără rădăcina lui devine ipoteză,
+    # deci îl judecă NX-313 pe date, mai jos. Moștenit din sesiune rămâne rostit (NX-299).
+    if (
+        category_uttered
+        and "category" not in inherited
+        and get_settings().search_subshelf_homograph_guard_enabled
+        and named_only_as_subshelf(vocab, category_keys, client_texts(ctx))
+    ):
+        category_uttered = False
+        ctx.emit("category_subshelf_homograph", category_key=category_keys[0])
     facets_uttered = "concerns" in inherited or uttered_by_client(ctx, *(a.concerns or []))
     ladder = _relax_ladder(
         price_max=price_max_sql,
@@ -1906,14 +1992,14 @@ async def search_products_tool(
     # iar nuanțele și gramajele aceluiași produs îl au identic: pe traficul real 10 din 76 de ture
     # cu ≥2 carduri (13%) arătau două carduri cu același nume, iar turul `bcd8e5c6` avea patru
     # „VILLAGE 11 FACTORY MY Skin Fit BB Cream" din șase. Nu se scoate nimic: repetițiile trec
-    # după toate primele apariții, deci rămân în pool pentru „mai arată-mi". Aceleași condiții ca
-    # diversificarea: pe sort explicit ordinea e a clientului, pe produs numit căutăm exact acel
-    # produs (și nuanța lui).
-    if (
-        get_settings().search_one_card_per_family_enabled
-        and a.sort_mode == "relevance"
-        and a.product_name is None
-    ):
+    # după toate primele apariții, deci rămân în pool pentru „mai arată-mi". Pe produs numit căutăm
+    # exact acel produs (și nuanța lui), deci acolo nu se aplică.
+    #
+    # NX-319: și pe sort EXPLICIT. Condiția de dinainte copia diversificarea („pe sort explicit
+    # ordinea e a clientului"), dar reordonarea asta nu schimbă ordinea dintre produse DIFERITE:
+    # primele apariții rămân exact în ordinea cerută, doar gemenii coboară. Turul real `8aaec031`
+    # («da ceva aparat as vrea», `price_asc`) a arătat cinci role GESKE cu același nume din șase.
+    if get_settings().search_one_card_per_family_enabled and a.product_name is None:
         ranked_final = one_per_family(ranked_final)
 
     # NX-303: coada intră ABIA acum, după ce pagina a fost aleasă. `pool_ids` (mai jos) e tot ce

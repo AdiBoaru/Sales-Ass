@@ -162,6 +162,10 @@
     {
       "path": "scripts/nx302_degraded_probe.py",
       "reason": "sondă de MĂSURARE, ca nx298_recall_probe și nx299_shape_probe: reproduce turul real 57fa9fbe din `conversation_traces` (NX-302), ca să arate ce primea clientul când apelul rich cădea și ce primește după. Fraza clientului e titlul cazului măsurat, nu comportament."
+    },
+    {
+      "path": "scripts/nx319_conversation_replay.py",
+      "reason": "sondă de MĂSURARE, ca nx302_degraded_probe: reproduce turele reale ale conversației 1518d1d9 (NX-319) cu argumentele EXACTE ale modelului și frazele clientului, ca să arate ce servea căutarea înainte și după. Frazele sunt datele replay-ului, nu comportament."
     }
   ]
 }

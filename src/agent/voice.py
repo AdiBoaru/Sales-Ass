@@ -90,6 +90,13 @@ def _semicolon_repl(m: re.Match[str]) -> str:
     return ", "
 
 
+#: NX-319: litere-sosie pe care modelul le scrie în loc de cele românești. `ǎ` (a cu căciulă,
+#: U+01CE) arată aproape ca `ă` (a cu breve), dar e altă literă: turul real `ee1a49f0` a scris
+#: «sonicǎ» de două ori. Doar sosia fără nicio folosință legitimă într-o limbă pe care o servim;
+#: `ş`/`ţ` (cu sedilă) rămân, fiindcă sunt corecte în turcă (P11: nucleul nu presupune româna).
+_LOOKALIKE_LETTERS = str.maketrans({"ǎ": "ă", "Ǎ": "Ă"})
+
+
 def naturalize(text: str | None) -> str | None:
     """Scoate din text semnele care îl fac să sune a AI, fără să atingă faptele.
 
@@ -98,6 +105,7 @@ def naturalize(text: str | None) -> str | None:
     """
     if not text:
         return text
-    out = _PAUSE_DASH.sub(_pause_repl, text)
+    out = text.translate(_LOOKALIKE_LETTERS)
+    out = _PAUSE_DASH.sub(_pause_repl, out)
     out = _EM_TIGHT.sub(", ", out)
     return _SEMICOLON.sub(_semicolon_repl, out)
