@@ -1349,6 +1349,61 @@ async def related_in_stock(
     )
 
 
+async def similar_candidates(
+    conn: asyncpg.Connection,
+    business_id: str,
+    anchor_id: str,
+    *,
+    limit: int = 8,
+) -> list[dict[str, Any]]:
+    """NX-319: candidații pentru «compară-l cu un produs similar», IEFTIN (fără laterale).
+
+    De ce nu ajunge graful: relațiile `substitute` sunt DIRECȚIONATE și rare pe partea de ieșire.
+    Peria GESKE din turul real `ee1a49f0` e substitut pentru 11 produse, dar n-are niciunul al ei,
+    iar căutarea după nume aduce doar gemenii ei de culoare. Deci graful ordonează, raftul decide:
+    același raft (`primary_category_id`, deci aceeași rădăcină, iar comparația trece de garda de
+    coerență), servabil, ordonat după: substitut curatoriat, același `product_type`, asemănarea
+    capului de nume (pg_trgm), apoi distanța de preț. Gemenii NU se scot aici: regula lor e pură și
+    trăiește în apelant (`deterministic.pick_similar_partner`), unde se poate testa fără DB.
+
+    `business_id = $1` pe ancoră, pe candidați și pe relație (P7)."""
+    cs = _content_status_pred()
+    rows = await conn.fetch(
+        "with a as (select id, name, price, brand_id, primary_category_id,"
+        " attributes->>'product_type' as ptype from products"
+        " where business_id = $1 and id = $2::uuid)"
+        " select p.id::text as id, p.name, p.price, p.brand_id::text as brand_id,"
+        " a.name as anchor_name, a.price as anchor_price, a.brand_id::text as anchor_brand_id,"
+        " exists (select 1 from product_relations r where r.business_id = $1"
+        " and r.product_id = a.id and r.related_id = p.id and r.kind = 'substitute')"
+        " as is_substitute,"
+        " (a.ptype is not null and p.attributes->>'product_type' = a.ptype) as same_type,"
+        " similarity(left(p.name, 80), left(a.name, 80)) as sim"
+        " from products p join a on p.primary_category_id = a.primary_category_id"
+        " where p.business_id = $1 and p.id <> a.id"
+        + _SERVABLE_RELATED
+        + (f" and {cs}" if cs else "")
+        + " order by is_substitute desc, same_type desc, sim desc,"
+        " abs(p.price - a.price) nulls last, p.id"
+        " limit $3",
+        business_id,
+        anchor_id,
+        min(max(limit, 1), 20),
+    )
+    return [
+        {
+            "id": r["id"],
+            "name": r["name"],
+            "price": float(r["price"]) if r["price"] is not None else None,
+            "brand_id": r["brand_id"],
+            "anchor_name": r["anchor_name"],
+            "anchor_price": float(r["anchor_price"]) if r["anchor_price"] is not None else None,
+            "anchor_brand_id": r["anchor_brand_id"],
+        }
+        for r in rows
+    ]
+
+
 # NX-292 — candidații fiecărui pas de rutină, IEFTIN: doar `{id, step, price}`, fără laterale.
 #
 # Hidratarea completă (`_DETAIL_SELECT`) aduce imagini, secțiuni, badge-uri, ingrediente și

@@ -763,6 +763,7 @@ async def test_search_progressive_relaxation(monkeypatch):
     monkeypatch.setattr(ct, "has_embeddings", _has_emb_false)
     monkeypatch.setattr(ct, "search_products_lexical", fake_sql)
     ctx = _ctx_beauty()
+    ctx.message.body = "pentru ten gras, sub 50 lei"  # NX-319: marginea are sursă
     res = await run_tool(
         ctx,
         _deps(_LLM()),

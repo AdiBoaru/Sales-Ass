@@ -425,12 +425,27 @@ async def test_spf_sub_prag_nu_ajunge_la_client_iar_necunoscutul_ramane(
 
 async def test_constrangerea_dedusa_de_model_nu_exclude(_on, _no_embeddings, _lexical):
     """Edge 4 — un `price_max` pe care clientul NU l-a rostit rămâne inferență: nu devine
-    constrângere tipizată, deci nu capătă putere de excludere. Bugetul continuă pe calea veche,
-    fiindcă a i-o tăia ar fi o schimbare de comportament străină de card."""
+    constrângere tipizată, deci nu capătă putere de excludere.
+
+    NX-319 a închis și calea veche, pe care cardul ăsta o lăsase deschisă deliberat („a i-o tăia
+    ar fi o schimbare străină de card"): pe turul real `38b47d4a` o margine fără sursă a scos din
+    pagină 666 de produse anti-aging. Fără număr rostit, fără cerere relativă și fără sesiune cu
+    aceeași margine, `price_max` nu mai ajunge în `WHERE`."""
     _lexical["rows"] = [_p("a", 80)]
     ctx = _ctx("caut ceva accesibil pentru ten uscat")
     await run_tool(ctx, _deps(), "search_products", {"query": "crema", "price_max": 100})
     assert _lexical["constraints"] == ()
+    assert _lexical["price_max"] is None
+
+
+async def test_constrangerea_dedusa_pe_calea_veche_cu_nx319_stins(
+    _on, _no_embeddings, _lexical, monkeypatch
+):
+    """Kill-switch-ul NX-319 întoarce contractul de dinainte: marginea curge pe calea veche."""
+    monkeypatch.setattr(get_settings(), "search_price_bound_provenance_enabled", False)
+    _lexical["rows"] = [_p("a", 80)]
+    ctx = _ctx("caut ceva accesibil pentru ten uscat")
+    await run_tool(ctx, _deps(), "search_products", {"query": "crema", "price_max": 100})
     assert _lexical["price_max"] == 100
 
 

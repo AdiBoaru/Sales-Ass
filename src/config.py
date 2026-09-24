@@ -1111,6 +1111,35 @@ class Settings(BaseSettings):
     search_one_card_per_family_enabled: bool = Field(
         default=True, validation_alias="SEARCH_ONE_CARD_PER_FAMILY_ENABLED"
     )
+    # NX-319: `price_max` trimis de model filtrează doar cu SURSĂ. Înainte, o margine pe care
+    # clientul n-a rostit-o niciodată (`model_inferred`, NX-266) pleca oricum în `WHERE`: pe turul
+    # real `38b47d4a` («ai ceva anti aging?») modelul a dus mai departe `price_max=29.99` din
+    # «mai ieftin»-ul de dinainte, iar din cele 666 de produse anti-aging au rămas măștile de 10
+    # lei.
+    # Sursele acceptate: numărul e în mesajul curent sau într-unul ANTERIOR al clientului (un buget
+    # rostit rămâne buget), mesajul curent e o cerere relativă de preț (același detector ca ramura
+    # «mai ieftin»), sau marginea e exact cea a sesiunii active (paginare). Măsurat pe 30 de zile:
+    # 2 margini din 14 fără nicio sursă. OFF → marginea modelului filtrează ca înainte.
+    search_price_bound_provenance_enabled: bool = Field(
+        default=True, validation_alias="SEARCH_PRICE_BOUND_PROVENANCE_ENABLED"
+    )
+    # NX-319: un SUBRAFT numit doar prin numele lui nu e un raft rostit. «Fata» și «Buze» sunt
+    # subrafturi de MACHIAJ, iar „crema de fata" le coroborează literal, deci NX-313 nu judeca
+    # raftul pe date (judecă doar ce e ghicit). Măsurat pe 30 de zile: 6 din 12 rafturi „rostite"
+    # erau rostite doar așa, toate `fata`; pe «crema de fata» 0 din 50 de potriviri deschise stau
+    # pe raftul de machiaj. Raftul rămâne rostit când clientul numește și rădăcina („machiaj pentru
+    # fata") sau când e el însuși rădăcină. OFF → coroborarea literală de dinainte.
+    search_subshelf_homograph_guard_enabled: bool = Field(
+        default=True, validation_alias="SEARCH_SUBSHELF_HOMOGRAPH_GUARD_ENABLED"
+    )
+    # NX-319: «Compară-l cu un produs similar» (chip-ul NOSTRU de sub detaliu) devine comparație
+    # DETERMINISTĂ: produsul afișat + cel mai apropiat înlocuitor în stoc, fără gemenii lui (aceeași
+    # familie afișată, sau același brand la același preț). Înainte chip-ul n-avea executor: turul
+    # real `ee1a49f0` a servit un singur card, aceeași perie în altă culoare. Fără partener → bucla
+    # de model, ca înainte. OFF → chip-ul cade pe model, byte-identic.
+    compare_with_similar_enabled: bool = Field(
+        default=True, validation_alias="COMPARE_WITH_SIMILAR_ENABLED"
+    )
     # NX-302: când apelul rich al căii v1 cade, cardurile se construiesc din CATALOG, nu se pierd.
     #
     # Toată bogăția răspunsului v1 (motiv per card, rating, badge, preț de listă, variante, chips)

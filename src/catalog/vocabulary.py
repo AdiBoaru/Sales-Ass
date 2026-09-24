@@ -55,6 +55,7 @@ __all__ = [
     "VocabEntry",
     "facet_overlays",
     "load_vocabulary",
+    "named_only_as_subshelf",
     "named_topic_roots",
     "resolve",
     "resolve_any",
@@ -665,6 +666,35 @@ def named_topic_roots(vocab: CatalogVocabulary, text: str) -> frozenset[str]:
         if words and words <= tokens:
             roots.add(e.path)
     return frozenset(roots)
+
+
+def named_only_as_subshelf(
+    vocab: CatalogVocabulary, category_keys: Sequence[str], texts: Sequence[str]
+) -> bool:
+    """NX-319: raftul trimis de model e un SUBRAFT a cărui rădăcină clientul n-a numit-o nicăieri?
+
+    Aceeași prudență ca `named_topic_roots`, aplicată pe partea cealaltă: acolo un subraft nu poate
+    ANUNȚA un subiect nou, aici nu poate face un raft ROSTIT. „vreau o crema de fata" coroborează
+    literal `fata`, dar pe catalogul SOLE «Fata» e subraft de MACHIAJ, iar cererea e de îngrijire.
+    Cu `True`, raftul nu devine greșit, devine o IPOTEZĂ: NX-313 îl judecă pe date și îl scoate doar
+    dacă catalogul îl contrazice («subton galben» rămâne pe raftul de machiaj).
+
+    Fail-closed spre comportamentul vechi: o cheie necunoscută vocabularului, o rădăcină sau un
+    subraft a cărui rădăcină apare într-un mesaj al clientului ⇒ `False`. Pură, fără listă de
+    cuvinte: arborele de catalog al tenantului e singura sursă."""
+    if not category_keys or not getattr(vocab, "categories", None):
+        return False
+    named: set[str] = set()
+    for text in texts:
+        named |= named_topic_roots(vocab, text)
+    by_key = {e.key: e for e in vocab.categories}
+    for key in category_keys:
+        entry = by_key.get(key)
+        if entry is None or not entry.path or not entry.depth:
+            return False
+        if entry.path.split("/", 1)[0] in named:
+            return False
+    return True
 
 
 def topic_switched(vocab: CatalogVocabulary, text: str, previous_category_key: str | None) -> bool:

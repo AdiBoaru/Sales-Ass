@@ -601,6 +601,26 @@ byte-identic). Card: [`tasks/stage1/NX-318.md`](tasks/stage1/NX-318.md); probe:
 `pytest tests/test_unique_prefixes.py tests/test_set_relative_badges.py -q` +
 `PYTHONPATH=. python scripts/nx318_display_probe.py`.
 
+**NX-319 — conversația `1518d1d9`: patru mecanisme, fiecare cu executorul lipsă.** Analiza tur cu
+tur (9 ture, release = `main`) a dat 2 corecte, 3 parțiale, 4 greșite. (1) `price_max` al modelului
+filtra FĂRĂ sursă: «ai ceva anti aging?» a plecat cu `29.99` dus din «mai ieftin», deci din 666 de
+produse anti-aging au rămas măștile de 10 lei. Acum marginea cere număr rostit (acum sau ANTERIOR),
+cerere relativă în mesajul curent (`_CHEAPER_RE`, același proprietar) sau aceeași margine ca sesiunea
+activă (`price_bound_source`, pur); măsurat: 2 din 14 fără sursă. (2) «crema de fata» coroborează
+literal SUBRAFTUL Machiaj > Fata, deci NX-313 nu-l judeca; un subraft rostit fără rădăcina lui
+devine ipoteză (`named_only_as_subshelf`), iar pe date e contrazis (0/50), în timp ce «subton galben»
+își păstrează raftul. 6 din 12 rafturi „rostite" erau rostite doar așa. (3) `one_per_family` rula
+doar pe `relevance`: pe `price_asc`, cinci role GESKE cu același nume. (4) chip-ul NOSTRU «Compară-l
+cu un produs similar» n-avea executor; acum e comparație deterministă cu un partener din același
+raft, fără gemeni (aceeași familie afișată sau același brand la același preț). Pe drum: detaliul
+punea numele întreg sub „De ce ți-l recomand" (`ai_summary` e gol pe tot catalogul), acum secțiunea
+`summary` + „Cum se folosește"; `naturalize` înlocuiește sosia `ǎ`. Neacoperit, declarat: rutina
+(flag NX-292 stins), latența, sortarea moștenită. Flaguri `SEARCH_PRICE_BOUND_PROVENANCE_ENABLED`,
+`SEARCH_SUBSHELF_HOMOGRAPH_GUARD_ENABLED`, `COMPARE_WITH_SIMILAR_ENABLED` (ON). Card:
+[`tasks/stage1/NX-319.md`](tasks/stage1/NX-319.md); probe:
+`pytest tests/test_nx319_conversation_1518.py -q` +
+`PYTHONPATH=. python scripts/nx319_conversation_replay.py`.
+
 **NX-315 — forma răspunsului după ce a CERUT clientul (v1, trei flaguri OFF).** Comparația iZi
 pe «vreau o crema de hidratare»: iZi pune o întrebare („ten uscat, mixt/gras sau sensibil?") și un
 paragraf „cum alegi"; la «cum se foloseste prima» răspunde din prima frază. Nativx: nicio
