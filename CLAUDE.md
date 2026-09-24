@@ -518,6 +518,20 @@ cita `avantaje` (0,45), nu `texture`, și nicio regulă pe proză nu o separă d
 [`tasks/stage1/NX-317.md`](tasks/stage1/NX-317.md); probe: `pytest tests/test_comparison_axes_v2.py -q`
 + `PYTHONPATH=. python scripts/nx317_comparison_probe.py --business sole-ro`.
 
+**NX-320 felia 1 — poate gândi modelul când alege filtrele? Se măsoară înainte de a muta bucla.**
+Apelul care alege argumentele căutării (raft, nevoi, `price_max`) rulează fără raționament:
+pe `chat.completions`, `gpt-6-luna` acceptă unelte doar cu `none`. Adaptorul are acum o cale
+`/v1/responses` (`LLMClient.tool_round`, `_respond`), cu gărzile EXTRASE din `_chat` într-un
+singur `_guarded` (retry, buget NX-311, `per_call`, cache key), `store=False` fix și usage citit pe
+ambele scheme (altfel un apel Responses ar costa 0). Bucla live NU o folosește: legarea e felia 2,
+doar după GO. `scripts/nx320_tool_round_replay.py` reface prima rundă pe ture reale prin funcțiile
+producției (`tool_loop_tools`, `tool_loop_user_parts`, extrase din `agent_stage`) pe trei brațe
+(`chat:none`, control `responses:none`, `responses:low`), trece argumentele prin căutarea REALĂ și
+citește verdictele din porțile de producție (NX-313/319, meniul de rafturi). Regula GO e
+pre-înregistrată: greșelile scad cu ≥ 50% și runda crește cu ≤ 3 s la p50. Card:
+[`tasks/stage1/NX-320.md`](tasks/stage1/NX-320.md); probe:
+`pytest tests/test_nx320_responses_tool_loop.py tests/test_nx320_tool_round_replay.py -q`.
+
 **NX-313 — «vreau o cremă de hidratare»: filtrul ghicit se judecă după CERERE.**
 Turul real `bcd8e5c6` (`sole-ro`, 2026-09-23), recidiva lui `f7414c3e` DUPĂ #398: 72,4 s, trei BB-uri
 de machiaj, două cu același nume, motivul primului card lipsă. Modelul a trimis `category="fata"`

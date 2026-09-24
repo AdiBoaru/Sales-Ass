@@ -34,9 +34,20 @@ e ACCEPTAT, nu ce răspunde. Un tur real ar costa ordine de mărime mai mult fă
 Calitatea răspunsurilor sub creierul unic. Aia e a lui `scripts/sim/single_brain_drive.py --live`
 și a gate-ului NX-246. Aici răspundem la o singură întrebare binară: pleacă requestul sau nu.
 
+## Modurile (NX-320)
+
+  * `--mode brain` (implicit): `tools` + `json_schema` pe chat, cererea creierului unic (mai sus);
+  * `--mode loop`: `tools` singure pe chat, cererea buclei v1 de AZI (`none` forțat). E proba care
+    contează la o schimbare de `MODEL_AGENT`, fiindcă asta e calea care servește clienții;
+  * `--mode responses`: `tools` pe `/v1/responses` CU raționament (`--effort`, implicit `low`),
+    cererea pe care o măsoară replay-ul NX-320. Cere un `function_call` real, ca să verifice și că
+    răspunsul se poate citi, nu doar că requestul a trecut.
+
 ## Rulare (consumă credite — câteva sute de tokeni)
 
     python scripts/preflight_structured_tools.py
+    python scripts/preflight_structured_tools.py --mode loop
+    python scripts/preflight_structured_tools.py --mode responses --effort low
     python scripts/preflight_structured_tools.py --model gpt-5.4-nano   # altă familie
     python scripts/preflight_structured_tools.py --dry-run             # $0: doar construiește
 
@@ -114,6 +125,37 @@ async def _probe(model: str) -> tuple[bool, str]:
     return True, f"acceptat, răspuns JSON valid ({len(body)} caractere)"
 
 
+#: NX-320: pentru `loop`/`responses` vrem un `function_call` REAL, ca să verificăm și citirea lui.
+#: Fără vocabular de domeniu (NX-264): proba e despre forma cererii, nu despre un vertical.
+_USER_TOOL = "Caută în catalog cele mai bine cotate produse și arată-mi-le."
+
+
+async def _probe_round(model: str, *, via: str, effort: str) -> tuple[bool, str]:
+    """O rundă prin `LLMClient.tool_round`, adică prin exact calea pe care o folosesc bucla de
+    azi (`via="chat"`, `none` forțat) și replay-ul NX-320 (`via="responses"`)."""
+    llm = get_llm()
+    if llm is None:
+        return False, "fără client LLM (OPENAI_API_KEY lipsă în mediu)"
+    tools = tool_schemas(list(_PROBE_TOOLS))
+    try:
+        rnd = await llm.tool_round(
+            _SYSTEM_TOOL, _USER_TOOL, tools, via=via, effort=effort, model=model
+        )
+    except Exception as e:  # noqa: BLE001 — orice refuz al furnizorului e REZULTATUL probei
+        return False, f"{type(e).__name__}: {e}"
+    if not rnd.calls:
+        return True, f"acceptat, dar modelul n-a cerut nicio unealtă (text: {rnd.text[:120]!r})"
+    name, raw = rnd.calls[0]
+    try:
+        json.loads(raw)
+    except json.JSONDecodeError:
+        return False, f"acceptat, dar argumentele lui {name} NU sunt JSON: {raw[:200]!r}"
+    return True, f"acceptat, {len(rnd.calls)} apel(uri) de unealtă, primul: {name} {raw[:160]}"
+
+
+_SYSTEM_TOOL = "Ești asistentul unui magazin online. Folosește uneltele ca să cauți în catalog."
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -121,6 +163,8 @@ def main() -> int:
         default=None,
         help="modelul de probat (implicit: MODEL_AGENT din config)",
     )
+    parser.add_argument("--mode", choices=("brain", "loop", "responses"), default="brain")
+    parser.add_argument("--effort", default="low", help="doar pentru --mode responses")
     parser.add_argument(
         "--dry-run",
         action="store_true",
@@ -132,11 +176,16 @@ def main() -> int:
     model = args.model or settings.model_agent
     profile = model_profile(model)
 
+    print(
+        f"mod              : {args.mode}"
+        + (f" (effort={args.effort})" if args.mode == "responses" else "")
+    )
     print(f"model            : {model}")
     print(
         "profil           : "
         + (
-            f"params={sorted(profile.params)}, raționează implicit={profile.reasons_by_default}"
+            f"params={sorted(profile.params)}, raționează implicit={profile.reasons_by_default}, "
+            f"responses_tools={profile.responses_tools}"
             if profile
             else "NEDECLARAT în _MODEL_PROFILES (niciun opțional nu se trimite)"
         )
@@ -156,6 +205,19 @@ def main() -> int:
         print(f"DRY-RUN — payload construit, {size} octeți, niciun apel făcut.")
         print("Rulează fără `--dry-run` ca să afli verdictul furnizorului.")
         return 0
+
+    if args.mode != "brain":
+        via = "chat" if args.mode == "loop" else "responses"
+        effort = "none" if args.mode == "loop" else args.effort
+        ok, detail = asyncio.run(_probe_round(model, via=via, effort=effort))
+        print(("PASS — " if ok else "FAIL — ") + detail)
+        if not ok:
+            print()
+            print(
+                "Un 4xx pe calea asta e TERMINAL în `_with_retry`: pe bucla live ar însemna fiecare"
+            )
+            print("tur de vânzare căzut tăcut pe fallback. Nu promova modelul / nu aprinde calea.")
+        return 0 if ok else 1
 
     ok, detail = asyncio.run(_probe(model))
     if ok:

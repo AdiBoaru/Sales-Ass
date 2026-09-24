@@ -63,10 +63,17 @@ părea sănătos. Detalii complete: PR #316. Fixul e în `main` (`6a74cf1`), CI 
       trebuie rollback, alege ținta manual, nu din manifest.
 - [ ] **`gpt-6-luna` (2026-09-24) — rulează ÎNAINTE de deploy (costă câțiva cenți):**
       `python scripts/check_openai.py` și
-      `python scripts/preflight_structured_tools.py --model gpt-6-luna`. Profilul din
+      `python scripts/preflight_structured_tools.py --mode loop --model gpt-6-luna` (bucla care
+      servește clienții; modul implicit `brain` probează creierul unic, stins). Profilul din
       `_MODEL_PROFILES` e scris din documentația OpenAI, nu măsurat pe API; un 400 pe bucla cu
       tool-uri nu degradează, oprește toată calea de vânzare. După deploy, verifică pe câteva ture
       reale `llm_usage.per_call` (durata apelului `schema`) și `rich_downgraded`.
+- [ ] **NX-320 felia 1 — rulează tu (PowerShell, costă puțin: ~40 ture × 3 brațe):**
+      `python scripts/preflight_structured_tools.py --mode responses --effort low` (trebuie PASS),
+      apoi `$env:PYTHONPATH = "."; python scripts/nx320_tool_round_replay.py --yes`.
+      Raportul iese în `reports/nx320/`; verdictul (`GO` / `NO-GO` / `INSUFFICIENT`) decide dacă
+      se construiește felia 2 (bucla live pe Responses). Regula e fixată în card, nu se ajustează
+      după cifre.
 - [ ] **Dacă schimbi vreodată `MODEL_AGENT` sau effortul:** pe VPS NU există niciun `MODEL_*` în
       `.env`, deci default-ul din cod E configul de producție. Orice model nou cere o linie în
       `_MODEL_PROFILES` (`src/agent/llm.py`) — altfel nu primește niciun parametru opțional.

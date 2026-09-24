@@ -439,6 +439,45 @@ async def _recognize_chip_press(ctx: TurnContext, deps: PipelineDeps) -> None:
     ctx.chip_move = move
 
 
+def tool_loop_tools(
+    business: Any, route: str, *, unrouted: bool
+) -> tuple[list[str], list[dict[str, Any]]]:
+    """Uneltele pe care bucla de tool-calling le oferă modelului: (nume, scheme). Publică pentru
+    replay-ul NX-320, care trebuie să ofere EXACT setul de producție, nu o copie rămasă în urmă.
+
+    Pe `unrouted` (NX-297: nimeni nu mai clasifică turul), reuniunea sales+order: fără ea „unde e
+    comanda mea?" ar primi un toolset fără `check_order` și, în lipsa uneltei, o recomandare de
+    produs. `check_order` are zidul lui de login (NX-128/129), deci a-l oferi nu deschide nimic.
+
+    NX-273: descrierile parametrilor primesc exemplele TENANTULUI, iar ENUMURILE lui trec pe
+    aceeași cale. Fără ele, `routine_plan`/`related_products` plecau la furnizor cu `enum: []`:
+    refuzate, 4xx terminal, tot drumul de vânzare mut."""
+    tool_names = enabled_tools(business, route)
+    if unrouted:
+        tool_names = list(dict.fromkeys(tool_names + enabled_tools(business, "order")))
+    pack = getattr(business, "domain_pack", None)
+    examples = vocab_examples.from_pack(pack)
+    return tool_names, tool_schemas(tool_names, examples, **tenant_enum_values(pack))
+
+
+def tool_loop_user_parts(
+    *, language: str, history: str, hints: str, context: str, query: str
+) -> UserParts:
+    """Mesajul de user al buclei de tool-calling, pe părți (NX-275 felia 3). PUR.
+
+    Publică pentru replay-ul NX-320: reface prima rundă pe ture reale, iar dacă și-ar compune
+    singur mesajul, ar compara modelul pe un prompt pe care producția nu-l trimite. `hints` =
+    liniile per-tur deja formatate (categorie probabilă, constrângeri, semnal de cumpărare, lead),
+    în ordinea lor; `context` = `context_blocks` (fără separator, îl pune funcția)."""
+    history_block = f"Conversație până acum:\n{history}\n\n" if history else ""
+    context_block = f"{context}\n\n" if context else ""
+    return UserParts(
+        history=history_block,
+        per_turn=f"Limba clientului: {language}\n{hints}{context_block}",
+        message=f"Mesaj client: {query}",
+    )
+
+
 def _apply_turn_profile(
     ctx: TurnContext, system: str, tools: list[dict[str, Any]]
 ) -> tuple[str, list[dict[str, Any]]]:
@@ -893,29 +932,13 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     ):
         ctx.emit("refinement_over_shortcut", shortcut="show_more")
 
-    tool_names = enabled_tools(ctx.business, route.route.value)
-    if unrouted:
-        # Ruta implicită e SALES, dar fără triaj nimeni n-a stabilit că turul CHIAR e o vânzare:
-        # „unde e comanda mea?" ar primi un toolset fără `check_order` și, în lipsa uneltei, o
-        # recomandare de produs. Brain-ul primește reuniunea și alege el. `check_order` are zidul
-        # lui de login (NX-128/129), deci a-l oferi nu deschide nimic.
-        tool_names = list(dict.fromkeys(tool_names + enabled_tools(ctx.business, "order")))
-    # NX-273: descrierile parametrilor primesc exemplele TENANTULUI. Sunt instrucțiuni pentru
-    # model, nu documentație — vezi `tool_definitions`.
-    #
-    # ENUMURILE tenantului trec pe aceeași cale: `routine_plan`/`related_products` (intrate în
-    # toolsetul v1 la NX-297) au parametri cu valori ÎNCHISE, care vin din pachet. Fără ele, schema
-    # pleca la furnizor cu `enum: []` — refuzată, 4xx terminal, tot drumul de vânzare mut.
-    pack = getattr(ctx.business, "domain_pack", None)
-    tools = tool_schemas(tool_names, vocab_examples.from_pack(pack), **tenant_enum_values(pack))
+    tool_names, tools = tool_loop_tools(ctx.business, route.route.value, unrouted=unrouted)
     # Faza D (NX-143): tool executor cu stare explicită. Acumulatorii (produse/linkuri/sume/…) sunt
     # câmpuri ale lui `run`, nu `nonlocal`; `run.execute` e callback-ul buclei; citim `run.X` după.
     run = ToolRun(ctx, deps)
 
     history = conversation_transcript(ctx.history)
-    history_block = f"Conversație până acum:\n{history}\n\n" if history else ""
     context = context_blocks(ctx, consumer="agent")
-    context_block = f"{context}\n\n" if context else ""
     # `category_key` derivat + validat în triaj → HINT pentru agent (NX-72). NU-l forțăm în tool
     # args din cod (P3: args sunt ale modelului); modelul decide dacă se potrivește cererii.
     cat_hint = f"Categorie probabilă: {route.category_key}\n" if route.category_key else ""
@@ -968,13 +991,12 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     # NX-275 felia 3: aceleași blocuri, ținute SEPARAT ca să poată fi așezate pentru prompt
     # caching (vezi `UserParts`). `user` rămâne compus în ordinea de azi, byte-identic: el
     # alimentează calea v1 și evenimentul `agent_prompt`. Doar brain-ul primește părțile.
-    user_parts = UserParts(
-        history=history_block,
-        per_turn=(
-            f"Limba clientului: {ctx.language}\n{cat_hint}{filters_hint}{purchase_hint}"
-            f"{lead_hint}{context_block}"
-        ),
-        message=f"Mesaj client: {query}",
+    user_parts = tool_loop_user_parts(
+        language=ctx.language,
+        history=history,
+        hints=f"{cat_hint}{filters_hint}{purchase_hint}{lead_hint}",
+        context=context,
+        query=query,
     )
     user = user_parts.legacy()
 
