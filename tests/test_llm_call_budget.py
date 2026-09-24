@@ -25,7 +25,7 @@ from src.observability import turn_latency
 
 #: Modelul REAL din producție. Prefixul decide profilul (`reasons_by_default=True`), deci un nume
 #: inventat ar valida calea de model necunoscut crezând că o validează pe cea normală.
-_PROD_MODEL = "gpt-5.6-luna"
+_PROD_MODEL = "gpt-6-luna"
 
 #: Un tool oarecare: contează DOAR că cererea poartă `tools` (atunci raționamentul e forțat `none`).
 _TOOLS = [{"type": "function", "function": {"name": "search_products", "parameters": {}}}]

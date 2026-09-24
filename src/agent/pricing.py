@@ -49,8 +49,15 @@ class ModelRates:
 #   • `gpt-5.6-terra` s-a IEFTINIT (2,50/15,00 → 2,00/12,00), deci valoarea din iulie era stale.
 # Tarifele de mai jos sunt cele STANDARD (API sincron). Batch/Flex sunt jumătate, Fast Mode e
 # dublu — dacă vreodată rutăm un apel pe alt tier, tierul devine parte din cheie, nu o notă.
+#
+# 2026-09-24: `gpt-6-luna` devine `MODEL_AGENT` (https://developers.openai.com/api/docs/models/
+# gpt-6-luna). Față de `gpt-5.6-luna`: input la jumătate, output de 2,4x mai ieftin. Peste 272K
+# tokeni de input tarifele se dublează (output 1,5x) — nereprezentat, promptul unui tur e de ordinul
+# miilor. NEREPREZENTAT nici aici, nici la 5.6: scrierea în cache (1,25x `input`) — `cost_for`
+# taxează tokenii necached la `input`, deci costul raportat e puțin SUB cel real pe primul apel.
 _DEFAULT_PRICING: dict[str, ModelRates] = {
     "gpt-6-astra": ModelRates(input=10.00, cached_input=1.00, output=50.00),
+    "gpt-6-luna": ModelRates(input=0.10, cached_input=0.01, output=0.50),
     "gpt-5.6-sol": ModelRates(input=4.00, cached_input=0.40, output=20.00),
     "gpt-5.6-terra": ModelRates(input=2.00, cached_input=0.20, output=12.00),
     "gpt-5.6-luna": ModelRates(input=0.20, cached_input=0.02, output=1.20),

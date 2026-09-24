@@ -178,6 +178,24 @@ def test_profilul_declara_daca_familia_rationeaza_implicit():
     assert llm.supported_params("gpt-5.4-mini") == {"temperature", "reasoning_effort"}
 
 
+def test_gpt6_luna_si_sol_rationeaza_implicit_iar_astra_ramane_nedeclarat():
+    """Din documentatia OpenAI (2026-09-24), NU masurat inca pe API: `luna`/`sol` accepta `none`
+    si rationeaza implicit (`medium`). `astra` NU accepta `none`, deci pe `chat.completions` n-ar
+    putea rula bucla cu tool-uri deloc; un prefix `gpt-6-` generic l-ar fi tratat ca pe `luna`."""
+    for model in ("gpt-6-luna", "gpt-6-sol"):
+        assert llm.model_profile(model).reasons_by_default is True
+        assert llm.supported_params(model) == {"temperature", "reasoning_effort"}
+    assert llm.model_profile("gpt-6-astra") is None
+
+
+async def test_gpt6_luna_bucla_cu_tooluri_trimite_none_explicit():
+    """Modelul de productie de la 2026-09-24. Un profil lipsa ar fi lasat cererea fara `none`,
+    iar un model care rationeaza implicit refuza tool-urile cu 400 (pana din 24 aug)."""
+    c, comp = _llm_client([_Resp("gata")], model_agent="gpt-6-luna")
+    await c.run_tool_loop("sys", "usr", _TOOLS, _never_executed)
+    assert comp.calls[0]["reasoning_effort"] == "none"
+
+
 def test_model_necunoscut_nu_primeste_niciun_optional():
     assert llm.model_profile("model-inventat-maine") is None
     assert llm.supported_params("model-inventat-maine") == frozenset()
