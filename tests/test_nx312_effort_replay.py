@@ -182,11 +182,13 @@ async def test_summary_counts_calls_failures_and_cards():
     assert s["low"]["ok"] == 0 and s["low"]["ms_p50"] is None and s["low"]["cards_mean"] is None
 
 
-@pytest.mark.parametrize("raw", ["high", "high,high", "high,none", "high,turbo"])
+@pytest.mark.parametrize("raw", ["high", "high,high", "high,minimal", "high,turbo"])
 def test_bad_effort_lists_are_refused(raw):
+    """`minimal` nu există pe GPT-6: acceptat aici, s-ar fi aflat abia la primul apel plătit."""
     with pytest.raises(SystemExit):
         _parse_efforts(raw)
 
 
 def test_good_effort_list_keeps_order():
     assert _parse_efforts("low, high") == ("low", "high")
+    assert _parse_efforts("none,low,medium") == ("none", "low", "medium")

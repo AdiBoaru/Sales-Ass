@@ -71,10 +71,13 @@ from src.models import (  # noqa: E402
 )
 from src.worker import compose  # noqa: E402
 
-#: Valorile pe care le acceptă `chat.completions` pentru apelul fără tool-uri. `none` nu e aici:
-#: ar schimba și temperatura (raționament oprit ⇒ temperatura se trimite), deci alt experiment.
-EFFORTS = ("minimal", "low", "medium", "high")
-DEFAULT_EFFORTS = ("high", "medium", "low")
+#: Valorile pe care `gpt-6-luna` (MODEL_AGENT din 2026-09-24) le acceptă pentru apelul fără
+#: tool-uri. `minimal` a ieșit: nu există pe familia GPT-6. `none` a intrat, deliberat, deși
+#: schimbă DOUĂ lucruri deodată (raționament oprit ⇒ `_sampling` trimite și temperatura): exact așa
+#: ar pleca cererea în producție cu `LLM_REASONING_EFFORT_AGENT=none`, deci măsurăm configul, nu
+#: un parametru izolat. Rândul `none` trebuie citit ca „efort none + temperatura configurată".
+EFFORTS = ("none", "low", "medium", "high", "xhigh")
+DEFAULT_EFFORTS = ("none", "low", "medium", "high")
 _MAX_PRODUCTS = 12  # două căutări paralele × 6; peste asta turul nu e unul de recomandare obișnuit
 
 
@@ -531,7 +534,12 @@ async def main() -> None:
     queries = {case.turn_id: case.query for _, case, _ in prepared}
     (out_dir / "results.json").write_text(
         json.dumps(
-            {"summary": summary, "entries": entries}, ensure_ascii=False, indent=2, default=str
+            # Modelul intră în raport: aceleași nivele de efort nu înseamnă același lucru pe alt
+            # model, iar un raport fără el nu se mai poate compara cu următorul.
+            {"model": llm.model_agent, "summary": summary, "entries": entries},
+            ensure_ascii=False,
+            indent=2,
+            default=str,
         ),
         encoding="utf-8",
     )
