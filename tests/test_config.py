@@ -37,7 +37,7 @@ def test_defaults(monkeypatch):
     ):
         monkeypatch.delenv(k, raising=False)
     s = _settings(monkeypatch)
-    assert s.model_agent == "gpt-5.6-luna"
+    assert s.model_agent == "gpt-6-luna"
     # Escaladarea la modelul mare e OPRITĂ implicit: se aprinde cu o variabilă, nu din cod.
     assert s.model_agent_complex == ""
     assert s.model_embed == "text-embedding-3-small"

@@ -416,7 +416,13 @@ class ModelProfile:
     reasons_by_default: bool
 
 
+# GPT-6 (2026-09-24, din documentatia OpenAI, NU masurat inca pe API): aceeasi regula a bitului.
+# `luna` si `sol` accepta `none` si rationeaza implicit (`medium`), deci intra ca `gpt-5.6-`.
+# `astra` NU accepta `none`: pe `chat.completions` n-ar putea rula bucla cu tool-uri deloc, deci
+# ramane DELIBERAT nedeclarat (prefix necunoscut ⇒ numarat), nu prins de un prefix `gpt-6-` generic.
 _MODEL_PROFILES: tuple[tuple[str, ModelProfile], ...] = (
+    ("gpt-6-luna", ModelProfile(frozenset({"reasoning_effort", "temperature"}), True)),
+    ("gpt-6-sol", ModelProfile(frozenset({"reasoning_effort", "temperature"}), True)),
     ("gpt-5.6-", ModelProfile(frozenset({"reasoning_effort", "temperature"}), True)),
     ("gpt-5.4-", ModelProfile(frozenset({"reasoning_effort", "temperature"}), False)),
 )

@@ -22,7 +22,7 @@ if sys.platform == "win32":
 load_dotenv()
 
 # Aceleași default-uri ca src/config.py (modelele pe care le folosește botul).
-MODEL_AGENT = os.environ.get("MODEL_AGENT", "gpt-5.6-luna")
+MODEL_AGENT = os.environ.get("MODEL_AGENT", "gpt-6-luna")
 MODEL_EMBED = os.environ.get("MODEL_EMBED", "text-embedding-3-small")
 
 

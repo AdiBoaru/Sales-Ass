@@ -137,7 +137,10 @@ class Settings(BaseSettings):
     openai_api_key: str = Field(default="", validation_alias="OPENAI_API_KEY")
     # Modelul agentului pentru turul OBIȘNUIT. Majoritatea turelor (un răspuns, o recomandare,
     # o clarificare) nu au nevoie de vârful de gamă — plăteau însă ca și cum ar avea.
-    model_agent: str = Field(default="gpt-5.6-luna", validation_alias="MODEL_AGENT")
+    # 2026-09-24: `gpt-5.6-luna` → `gpt-6-luna` (aceeași regulă a bitului de raționament, profil
+    # declarat în `llm._MODEL_PROFILES`, tarife în `pricing`). Pe VPS nu există `MODEL_*` în `.env`,
+    # deci valoarea de aici E configul de producție.
+    model_agent: str = Field(default="gpt-6-luna", validation_alias="MODEL_AGENT")
     # Escaladarea pentru turele COMPLICATE (comparație, mesaj mixt, mutație).
     # GOL IMPLICIT — decizie explicită: totul rulează pe `model_agent`. Mecanismul de selecție
     # rămâne în cod și e testat, dar pornit ar plăti modelul scump pe o BĂNUIALĂ, iar D15 cere ca

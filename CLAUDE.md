@@ -20,7 +20,7 @@ Referință de piață: similar cu iZi (eMAG) și Aura (SOLE), livrat ca servici
 | API | FastAPI (webhook + health) |
 | Coadă | Redis Streams (lock per conversație, debounce) |
 | DB | Postgres **17.6** — Supabase, proiect `NativexSales` eu-west-2 (**o singură schemă `public`**, multi-tenant pe `business_id`). Proiectul vechi (eu-west-1, PG16) e abandonat din 2026-08-28 |
-| LLM sales | OpenAI **`gpt-5.6-luna`** (`MODEL_AGENT`; era `gpt-5.4-mini` până pe 2026-08-24), `reasoning_effort=medium` pe compunere (NX-313; era `high`). Escaladarea `MODEL_AGENT_COMPLEX` e GOALĂ implicit |
+| LLM sales | OpenAI **`gpt-6-luna`** (`MODEL_AGENT`, din 2026-09-24; înainte `gpt-5.6-luna`, iar până pe 2026-08-24 `gpt-5.4-mini`), `reasoning_effort=medium` pe compunere (NX-313; era `high`). Escaladarea `MODEL_AGENT_COMPLEX` e GOALĂ implicit. `gpt-6-astra` NU e declarat: nu acceptă `reasoning_effort=none`, deci n-ar putea rula bucla cu tool-uri pe `chat.completions` |
 | Embeddings | text-embedding-3-small (pgvector în Supabase) |
 | **Web widget** | **SINGURUL canal de lucru (NX-179)** — `/web/chat` sincron + `/web/stream` SSE; widgetul e în repo FE separat (`docs/FRONTEND-CONTRACT-IZI.md`) |
 | Validare | Pydantic v2 |
@@ -1183,11 +1183,11 @@ Orice stagiu poate seta `reply` → early exit direct la Sender (stagiul 9).
     • summarizer conversații lungi (> 20 mesaje → conversation_summaries + ultimele 8)
     • prefix static byte-identic → prompt caching OpenAI (75-90% discount)
 
-[7] AGENT (`gpt-5.6-luna`, vezi tabelul de stack)
+[7] AGENT (`gpt-6-luna`, vezi tabelul de stack)
     • system prompt GENERAT din categories (+ intent_aliases pt rutare), nu hardcodat
     • CE ACCEPTĂ O CERERE ATÂRNĂ DE UN SINGUR BIT: raționează sau nu. Cu raționamentul PORNIT
       (`reasoning_effort` ≠ `none`, SAU parametrul absent pe un model care raționează implicit —
-      `gpt-5.6-*` da, `gpt-5.4-*` nu), furnizorul refuză cu 400 ȘI `temperature` ≠ 1, ȘI
+      `gpt-6-luna`/`gpt-6-sol`/`gpt-5.6-*` da, `gpt-5.4-*` nu), furnizorul refuză cu 400 ȘI `temperature` ≠ 1, ȘI
       function tools pe `chat.completions`. Deci bucla de vânzare FORȚEAZĂ `reasoning_effort=none`
       (`llm._sampling`), iar `LLM_REASONING_EFFORT_AGENT` e INERT pe drumul cu tool-uri și activ
       pe apelurile de text/schemă. Raționament + tool-uri ar cere `/v1/responses` — schimbare

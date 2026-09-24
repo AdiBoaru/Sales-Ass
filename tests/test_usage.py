@@ -70,6 +70,7 @@ def test_published_rates_are_pinned():
     assert _DEFAULT_PRICING["gpt-6-astra"] == ModelRates(
         input=10.00, cached_input=1.00, output=50.00
     )
+    assert _DEFAULT_PRICING["gpt-6-luna"] == ModelRates(input=0.10, cached_input=0.01, output=0.50)
     assert _DEFAULT_PRICING["gpt-5.6-sol"] == ModelRates(
         input=4.00, cached_input=0.40, output=20.00
     )

@@ -61,6 +61,12 @@ părea sănătos. Detalii complete: PR #316. Fixul e în `main` (`6a74cf1`), CI 
       bugul. Un rollback de la un release viitor ar ateriza înapoi în pană, sărind peste fix.
       Se repară singur la prima promovare care trece smoke-ul (după #318) — dar până atunci, dacă
       trebuie rollback, alege ținta manual, nu din manifest.
+- [ ] **`gpt-6-luna` (2026-09-24) — rulează ÎNAINTE de deploy (costă câțiva cenți):**
+      `python scripts/check_openai.py` și
+      `python scripts/preflight_structured_tools.py --model gpt-6-luna`. Profilul din
+      `_MODEL_PROFILES` e scris din documentația OpenAI, nu măsurat pe API; un 400 pe bucla cu
+      tool-uri nu degradează, oprește toată calea de vânzare. După deploy, verifică pe câteva ture
+      reale `llm_usage.per_call` (durata apelului `schema`) și `rich_downgraded`.
 - [ ] **Dacă schimbi vreodată `MODEL_AGENT` sau effortul:** pe VPS NU există niciun `MODEL_*` în
       `.env`, deci default-ul din cod E configul de producție. Orice model nou cere o linie în
       `_MODEL_PROFILES` (`src/agent/llm.py`) — altfel nu primește niciun parametru opțional.
