@@ -119,8 +119,15 @@ class RoutineView:
     def ordinals(self) -> set[str]:
         """Cifrele pe care modelul are voie să le rostească fiindcă le-a atribuit SERVERUL.
 
-        Doar pozițiile sloturilor ACOPERITE, nu `range(1, 10)`: un plafon generos ar deschide
-        poarta pentru orice cifră mică inventată, exact în turul în care listăm prețuri."""
+        Nu `range(1, 10)`: un plafon generos ar deschide poarta pentru orice cifră mică inventată,
+        exact în turul în care listăm prețuri.
+
+        NX-323: numerotarea e cea DENSĂ a pașilor arătați, 1..N, adică exact ce vede clientul pe
+        carduri. Înainte erau pozițiile din ȘABLONUL familiei, iar pe conversația `bc7a356e`
+        pașii acoperiți erau {1, 4, 5, 6}: modelul a scris «1.», «2.», «3.», ca orice om, iar
+        poarta de cifre a aruncat toată rutina. Flag stins ⇒ pozițiile de șablon."""
+        if get_settings().routine_dense_ordinals_enabled:
+            return {str(i) for i in range(1, len(self.steps) + 1)}
         return {str(s.position) for s in self.steps}
 
 
@@ -368,10 +375,14 @@ def _view(
 ) -> str:
     """Vederea pentru MODEL: pașii numerotați, cu pasul numit explicit, și golurile declarate.
 
-    Numerotarea e a serverului. Dacă am lăsa modelul să deducă ordinea din lista de produse, un tur
-    în care un pas lipsește ar renumerota tăcut restul, iar „pasul 3" din conversație n-ar mai fi
-    „pasul 3" la turul următor — exact ancora pe care se sprijină un follow-up."""
+    Numerotarea e a serverului. NX-323: e cea DENSĂ a pașilor acoperiți (1..N), aceeași pe care o
+    vede clientul pe carduri și pe care o citește `reference_resolver` din starea turului, iar
+    golurile stau pe linia lor, fără număr. Ancora stabilă a unui follow-up e ECRANUL, nu
+    șablonul familiei: cu pozițiile de șablon, modelul vedea «1., 2. LIPSĂ, 3. LIPSĂ, 4.»,
+    numerota el 1-2-3, iar clientul vedea încă o numerotare. Flag stins ⇒ forma de dinainte."""
     from src.catalog.render_text import display_name
+
+    dense = get_settings().routine_dense_ordinals_enabled
 
     # Antetul spune ACOPERIT din DECLARAT, nu doar declarat: la un buget strâns, „Rutina fata,
     # 6 pași" urmat de patru LIPSĂ îl invită pe model să anunțe o rutină în șase pași.
@@ -384,17 +395,25 @@ def _view(
     total = len(plan.slots)
     head = f"{total} pași" if covered == total else f"pași acoperiți: {covered} din {total}"
     lines = [f"Rutina {plan.family}, {head}:"]
+    number = 0
+    missing: list[str] = []
     for slot in plan.slots:
         if slot.product_id is None:
-            lines.append(f"{slot.position}. {slot.step} — LIPSĂ ({slot.uncovered_reason})")
+            if dense:
+                missing.append(f"{slot.step} ({slot.uncovered_reason})")
+            else:
+                lines.append(f"{slot.position}. {slot.step} — LIPSĂ ({slot.uncovered_reason})")
             continue
+        number += 1
         row = products.get(slot.product_id) or {}
         price = row.get("sale_price") or row.get("price")
         price_text = f", {amount_text(float(price), language)} lei" if price is not None else ""
         lines.append(
-            f"{slot.position}. {slot.step} — [{slot.product_id}] "
+            f"{number if dense else slot.position}. {slot.step} — [{slot.product_id}] "
             f"{display_name(row.get('name'))}{price_text}"
         )
+    if missing:
+        lines.append("Lipsesc: " + ", ".join(missing) + ".")
 
     # NX-321: fără liniile astea modelul își scrie bugetul în proză („rutina rămâne sub 100 lei")
     # chiar dacă nu l-a aplicat nimeni, iar poarta de cifre aruncă apoi toată fraza. Numărul de
@@ -440,7 +459,10 @@ def _view(
         )
     if plan.uncovered_slots:
         lines.append(
-            "Pașii marcați LIPSĂ nu au produs. Spune-i clientului care lipsește și de ce, "
+            "Pașii de la «Lipsesc» nu au produs. Spune-i clientului care lipsește și de ce, "
+            "nu inventa unul. Numerotează pașii exact ca mai sus."
+            if dense
+            else "Pașii marcați LIPSĂ nu au produs. Spune-i clientului care lipsește și de ce, "
             "nu inventa unul și nu renumerota restul."
         )
     if unresolved:

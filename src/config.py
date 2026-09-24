@@ -1122,6 +1122,12 @@ class Settings(BaseSettings):
     routine_arg_provenance_enabled: bool = Field(
         default=True, validation_alias="ROUTINE_ARG_PROVENANCE_ENABLED"
     )
+    # NX-323: rutina are O numerotare, cea pe care o vede clientul (1..N pașii arătați). Cifrele
+    # permise în proză erau pozițiile din ȘABLONUL familiei ({1,4,5,6} pe `bc7a356e`), modelul a
+    # numerotat 1-2-3, iar poarta de cifre a aruncat tot textul rutinei. OFF → pozițiile de șablon.
+    routine_dense_ordinals_enabled: bool = Field(
+        default=True, validation_alias="ROUTINE_DENSE_ORDINALS_ENABLED"
+    )
     # Conversația `cd98a513`: rafturile se arătau modelului prin NUME, iar 21 din 45 de nume se
     # repetă («Ingrijirea tenului» de 5 ori) sau sunt omografe cu cuvinte obișnuite («Fata» =
     # Machiaj > Fata). Pe 30 de zile, 22 din 72 de categorii trimise erau cheie exactă, restul nume
