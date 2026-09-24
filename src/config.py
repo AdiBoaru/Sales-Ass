@@ -1414,8 +1414,19 @@ class Settings(BaseSettings):
     # 72,4 s, cu 5.068 din 5.624 de tokeni de ieșire în raționament (90%), iar textul vizibil avea
     # ~550. Decizie de produs (Adi, 2026-09-23), luată pe latență; efectul pe calitate se
     # confirmă pe golden înainte de a coborî mai jos (D15).
+    #
+    # 2026-09-24, `medium` → `low`, pe REPLAY, nu pe corelație (`scripts/nx312_rich_effort_replay.py`,
+    # `gpt-6-luna`, același apel de compunere pe 30 de ture reale, 4 eforturi):
+    #   none   5,2 s p50 · refuză ZERO seturi greșite (servește pensule sub „n-am mănușa", 78b347fa)
+    #   low    8,5 s p50 · refuză ACELEAȘI seturi greșite ca `medium` · „cum alegi" pe 10/30
+    #   medium 18,2 s p50 · „cum alegi" pe 18/30
+    #   high   30,8 s p50 · refuză și seturi bune (5 ture fără carduri)
+    # `none` e exclus nu din latență, ci fiindcă refuzul modelului (`no-items-selected`) e semnalul pe
+    # care stă NX-306: fără el, poarta care reține un set greșit nu se mai declanșează. Pierderea
+    # declarată a lui `low` e paragraful de îndrumare; reparația ei e `GUIDANCE_REQUIRED_ENABLED`
+    # (NX-315), care nu depinde de efort. Decizie Adi, 2026-09-24.
     llm_reasoning_effort_agent: str = Field(
-        default="medium", validation_alias="LLM_REASONING_EFFORT_AGENT"
+        default="low", validation_alias="LLM_REASONING_EFFORT_AGENT"
     )
     # Temperatură pe ROL (independentă de corectitudine — aia o asigură validatorul stagiului 8):
     # extracția de fundal (profil/lead, JSON structurat) vrea determinism → mică; agentul (copy
