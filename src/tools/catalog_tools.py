@@ -60,11 +60,13 @@ from src.domain.constraints import (
     BoundConstraint,
     Rejection,
     TypedConstraint,
+    UnitRegistry,
     apply_constraints,
     bind_constraints,
     constraint_from_value,
     extract_constraints,
     merge_constraints,
+    monetary_mentions,
 )
 from src.domain.normalize import normalize
 from src.models import MAX_SEARCH_POOL, Relevance
@@ -741,6 +743,7 @@ def price_bound_source(
     texts: Sequence[str],
     relative_request: bool,
     session_price_max: object,
+    units: UnitRegistry | None = None,
 ) -> str | None:
     """NX-319: are marginea de preț a modelului o SURSĂ? Întoarce sursa sau `None`. PURĂ.
 
@@ -755,10 +758,21 @@ def price_bound_source(
       • mesajul curent e o cerere RELATIVĂ de preț («mai ieftin», «cam scumpe»): marginea e
         derivată de model din setul afișat, iar derivarea e chiar ce a cerut clientul;
       • marginea e identică cu cea a sesiunii active: e aceeași cerere, paginată.
-    Numerele se compară prin `corroborated_by` (aceleași lecturi ale separatorului zecimal)."""
-    if texts and corroborated_by(texts[0], price_max):
+    Numerele se compară prin `corroborated_by` (aceleași lecturi ale separatorului zecimal).
+
+    NX-321: cu `units` (registrul tenantului, nevid), un număr lipit de unitatea ALTEI dimensiuni
+    nu mai coroborează: «crema de 100 ml» nu e un buget de 100. `None` ⇒ comparația de dinainte."""
+
+    def spoken(text: str) -> bool:
+        if units is not None and units.specs:
+            return any(
+                abs(n - float(price_max)) <= 0.005 for n in monetary_mentions(text, units=units)
+            )
+        return corroborated_by(text, price_max)
+
+    if texts and spoken(texts[0]):
         return PRICE_BOUND_SPOKEN_NOW
-    if any(corroborated_by(t, price_max) for t in texts[1:]):
+    if any(spoken(t) for t in texts[1:]):
         return PRICE_BOUND_SPOKEN_EARLIER
     if relative_request:
         return PRICE_BOUND_RELATIVE_REQUEST
@@ -766,6 +780,40 @@ def price_bound_source(
         if abs(float(session_price_max) - float(price_max)) <= 0.005:
             return PRICE_BOUND_SESSION
     return None
+
+
+def price_units(ctx: TurnContext) -> UnitRegistry | None:
+    """Registrul de unități cu care se judecă un buget, sau `None` (comparația de dinainte).
+    Kill-switch `PRICE_BOUND_UNIT_AWARE_ENABLED` (NX-321)."""
+    if not get_settings().price_bound_unit_aware_enabled:
+        return None
+    return getattr(getattr(ctx.business, "domain_pack", None), "units", None)
+
+
+def price_bound_verdict(
+    ctx: TurnContext,
+    price_max: float,
+    *,
+    texts: Sequence[str],
+    relative_request: bool,
+    session_price_max: object,
+) -> tuple[str | None, bool]:
+    """`price_bound_source` cu unitățile tenantului + dacă DOAR unitatea a respins marginea.
+
+    Al doilea element (`unit_rejected`) spune că fără registrul de unități marginea ar fi trecut:
+    exact cazul «100 ml» citit ca buget. Fără el, o regresie a registrului ar arăta în telemetrie
+    ca un „unsupported" oarecare. Un singur proprietar pentru căutare și rutină (NX-321)."""
+    units = price_units(ctx)
+    kwargs = {
+        "texts": texts,
+        "relative_request": relative_request,
+        "session_price_max": session_price_max,
+    }
+    source = price_bound_source(price_max, units=units, **kwargs)
+    unit_rejected = (
+        source is None and units is not None and price_bound_source(price_max, **kwargs) is not None
+    )
+    return source, unit_rejected
 
 
 def _is_relative_price_request(text: str) -> bool:
@@ -1499,13 +1547,19 @@ async def search_products_tool(
     # cerut.
     if a.price_max is not None and get_settings().search_price_bound_provenance_enabled:
         texts = client_texts(ctx)
-        source = price_bound_source(
+        source, unit_rejected = price_bound_verdict(
+            ctx,
             a.price_max,
             texts=texts,
             relative_request=_is_relative_price_request(texts[0]),
             session_price_max=sess_filters.get("price_max"),
         )
-        ctx.emit("price_bound_provenance", source=source or "unsupported", kept=source is not None)
+        ctx.emit(
+            "price_bound_provenance",
+            source=source or "unsupported",
+            kept=source is not None,
+            unit_rejected=unit_rejected,
+        )
         if source is None:
             a.price_max = None
 

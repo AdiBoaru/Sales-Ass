@@ -1109,6 +1109,19 @@ class Settings(BaseSettings):
     search_subshelf_homograph_guard_enabled: bool = Field(
         default=True, validation_alias="SEARCH_SUBSHELF_HOMOGRAPH_GUARD_ENABLED"
     )
+    # NX-321: un număr lipit de unitatea ALTEI dimensiuni nu e buget. `price_bound_source` compara
+    # marginea modelului cu orice număr din mesaj, deci «crema de 100 ml» coroborea `price_max=100`.
+    # Dimensiunea vine din `domain_pack.units` (tenant), nu din cuvinte în cod. OFF → orice număr.
+    price_bound_unit_aware_enabled: bool = Field(
+        default=True, validation_alias="PRICE_BOUND_UNIT_AWARE_ENABLED"
+    )
+    # NX-321: `routine_plan` aplica orbește `budget_max` (taie pași, alege cei mai ieftini) și
+    # `concerns` (WHERE dur). Conversația `bc7a356e`: rutină de 100 lei fix, din produse mini, pe
+    # roșeața pe care o spusese BOTUL. Acum bugetul cere sursă (ca la căutare, NX-319) și nevoia
+    # trebuie rostită de client. OFF → argumentele modelului se aplică ca înainte.
+    routine_arg_provenance_enabled: bool = Field(
+        default=True, validation_alias="ROUTINE_ARG_PROVENANCE_ENABLED"
+    )
     # Conversația `cd98a513`: rafturile se arătau modelului prin NUME, iar 21 din 45 de nume se
     # repetă («Ingrijirea tenului» de 5 ori) sau sunt omografe cu cuvinte obișnuite («Fata» =
     # Machiaj > Fata). Pe 30 de zile, 22 din 72 de categorii trimise erau cheie exactă, restul nume

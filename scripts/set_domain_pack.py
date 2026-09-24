@@ -229,6 +229,10 @@ async def main() -> None:
     ap.add_argument("--check", action="store_true", help="confruntă pachetul din DB, nu un fișier")
     ap.add_argument("--min-products", type=int, default=10, help="pragul sub care se avertizează")
     ap.add_argument("--apply", action="store_true", help="chiar scrie (fără el: doar arată)")
+    ap.add_argument(
+        "--backup",
+        help="cu --apply: salvează întâi pachetul CURENT din DB aici (rollback = --pack el)",
+    )
     args = ap.parse_args()
 
     if not DSN:
@@ -272,6 +276,15 @@ async def main() -> None:
             print(f"\n{problems} problem(e). DRY-RUN: nimic nu s-a scris. Adaugă --apply.")
             sys.exit(1 if problems else 0)
 
+        # NX-321: rollback-ul are nevoie de ce era ÎNAINTE, citit în aceeași rulare cu scrierea.
+        # Fișierul din git nu ajunge: alte scripturi (`derive_concern_overlay.py`) scriu direct în
+        # DB, deci pachetul viu poate să fi divergat de sursa versionată.
+        if args.backup:
+            Path(args.backup).parent.mkdir(parents=True, exist_ok=True)
+            Path(args.backup).write_text(
+                json.dumps(current_json, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            print(f"backup     : {args.backup}")
         result = await conn.execute(_SET_SQL, business_id, json.dumps(pack_json))
         if int(result.split()[-1]) == 0:
             raise RuntimeError(f"0 rânduri actualizate pentru {business_id}")

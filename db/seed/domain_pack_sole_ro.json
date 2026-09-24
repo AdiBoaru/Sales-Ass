@@ -551,6 +551,17 @@
         "l": 1000,
         "litri": 1000
       }
+    },
+    "weight": {
+      "canonical": "g",
+      "default_op": "eq",
+      "factors": {
+        "g": 1,
+        "gr": 1,
+        "grame": 1,
+        "kg": 1000,
+        "kilograme": 1000
+      }
     }
   },
   "_searchable_facets_note": "Cheile ARRAY din `attributes` pe care le poate filtra cautarea de feature («ceva cu niacinamida»). Goale azi — se aprind cu F2.",

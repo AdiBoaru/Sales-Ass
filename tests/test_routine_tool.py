@@ -81,6 +81,17 @@ def _ctx_without_pack() -> TurnContext:
 
 
 @pytest.fixture(autouse=True)
+def _trust_model_args(monkeypatch):
+    """Suita asta testează MECANICA rutinei (sloturi, filtre, buget) pe argumente date. Dacă
+    argumentele au voie să ajungă aici e întrebarea NX-321, testată în
+    `test_routine_arg_provenance.py`; cu poarta aprinsă, un buget de 200 fără «200» în mesaj ar
+    ieși înainte de `_fit_budget` și testele de buget n-ar mai testa bugetul."""
+    from src.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "routine_arg_provenance_enabled", False)
+
+
+@pytest.fixture(autouse=True)
 def _catalog(monkeypatch):
     """Query-urile de catalog, scriptate. `available` e mutabil per test (ca să putem goli pași)."""
     state = {

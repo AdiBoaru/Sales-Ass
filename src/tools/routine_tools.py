@@ -33,6 +33,7 @@ de electrocasnice declară alte familii (pașii de instalare) și tool-ul funcț
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
@@ -42,15 +43,24 @@ from pydantic import BaseModel, Field
 from src.catalog.routine_compose import RoutinePlan, compose
 from src.catalog.vocabulary import facet_overlays, resolve_any
 from src.catalog.vocabulary_cache import get_vocabulary
+from src.config import get_settings
+from src.conversation.needs import corroborated_by
 from src.db.queries.catalog import (
     get_products_by_ids,
     routine_candidates,
     routine_steps_of,
     traverse_relation_chain,
 )
+from src.domain.constraints import UnitRegistry
 from src.domain.routine_steps import SEP
 from src.tools.base import ToolResult, register
-from src.tools.catalog_tools import _safety_gate
+from src.tools.catalog_tools import (
+    _is_relative_price_request,
+    _safety_gate,
+    client_texts,
+    price_bound_source,
+    price_units,
+)
 from src.web.localization import amount_text
 
 if TYPE_CHECKING:
@@ -112,6 +122,55 @@ class RoutineView:
         Doar pozițiile sloturilor ACOPERITE, nu `range(1, 10)`: un plafon generos ar deschide
         poarta pentru orice cifră mică inventată, exact în turul în care listăm prețuri."""
         return {str(s.position) for s in self.steps}
+
+
+@dataclass(frozen=True)
+class RoutineArgVerdict:
+    """NX-321: ce din argumentele modelului are voie să EXCLUDĂ produse din rutină."""
+
+    budget_source: str | None  # PRICE_BOUND_* sau None (bugetul iese)
+    unit_rejected: bool  # bugetul a picat DOAR fiindcă numărul purta altă unitate («100 ml»)
+    kept_needs: tuple[str, ...]  # termeni rostiți de client
+    dropped_needs: tuple[str, ...]  # termeni doar ai modelului
+
+
+def routine_arg_provenance(
+    budget_max: float | None,
+    needs: Sequence[str],
+    *,
+    texts: Sequence[str],
+    relative_request: bool,
+    units: UnitRegistry | None,
+) -> RoutineArgVerdict:
+    """Bugetul și nevoile rutinei au o SURSĂ în ce a scris clientul? PURĂ.
+
+    Conversația `bc7a356e`: la «fa mi o rutina» modelul a trimis un buget de 100 lei pe care
+    clientul nu-l spusese (suma rutinei a ieșit exact 30+10+30+30, cu tonifierea și esența tăiate
+    la buget) și o nevoie de roșeață pe care o scrisese BOTUL cu un tur înainte. `routine_plan` le
+    executa pe amândouă ca `WHERE`. E aceeași regulă ca pe căutare (NX-319, NX-266): o deducție nu
+    are voie să excludă. Bugetul trece prin ACEEAȘI `price_bound_source`; o nevoie trece doar dacă
+    e coroborată de un mesaj al clientului (`corroborated_by`, pe prefix, ca `uttered_by_client`).
+
+    Coroborarea literală e o limită declarată: «mi se usucă pielea» nu coroborează `dry`. De aceea
+    o nevoie scoasă nu devine altceva aici; rezolvarea semantică e a NX-322."""
+    source: str | None = None
+    unit_rejected = False
+    if budget_max is not None:
+        kwargs = {"texts": texts, "relative_request": relative_request, "session_price_max": None}
+        source = price_bound_source(budget_max, units=units, **kwargs)
+        unit_rejected = (
+            source is None
+            and units is not None
+            and price_bound_source(budget_max, **kwargs) is not None
+        )
+    kept: list[str] = []
+    dropped: list[str] = []
+    for term in needs:
+        if any(corroborated_by(text, term) for text in texts):
+            kept.append(term)
+        else:
+            dropped.append(term)
+    return RoutineArgVerdict(source, unit_rejected, tuple(kept), tuple(dropped))
 
 
 class RoutineArgs(BaseModel):
@@ -304,6 +363,8 @@ def _view(
     dropped: dict[str, Decimal] | None = None,
     skipped_for_moment: list[str] | None = None,
     moment: str | None = None,
+    budget_ignored: bool = False,
+    needs_ignored: int = 0,
 ) -> str:
     """Vederea pentru MODEL: pașii numerotați, cu pasul numit explicit, și golurile declarate.
 
@@ -335,6 +396,19 @@ def _view(
             f"{display_name(row.get('name'))}{price_text}"
         )
 
+    # NX-321: fără liniile astea modelul își scrie bugetul în proză („rutina rămâne sub 100 lei")
+    # chiar dacă nu l-a aplicat nimeni, iar poarta de cifre aruncă apoi toată fraza. Numărul de
+    # nevoi, nu fraza: modelul o are deja în argumente, iar aici nu repetăm text al clientului.
+    if budget_ignored:
+        lines.append(
+            "Buget: clientul NU a cerut un plafon de preț, deci rutina nu are unul. "
+            "Nu menționa un buget."
+        )
+    if needs_ignored:
+        lines.append(
+            f"Nevoi ignorate, fiindcă nu le-a spus clientul: {needs_ignored}. "
+            "Nu le prezenta ca fiind ale lui."
+        )
     if moment:
         lines.append(f"Rutina cerută e pentru momentul «{moment}».")
     if skipped_for_moment:
@@ -466,7 +540,36 @@ async def routine_plan_tool(
 
     steps = list(families[a.family])
     values = [f"{a.family}{SEP}{s}" for s in steps]
+
+    # NX-321: argumentele fără sursă ies ÎNAINTE de rezoluție și de buget, deci nu ating nici
+    # `routine_candidates(include_cheapest=…)`, nici `_fit_budget`.
+    provenance: RoutineArgVerdict | None = None
+    if get_settings().routine_arg_provenance_enabled:
+        texts = client_texts(ctx)
+        provenance = routine_arg_provenance(
+            a.budget_max,
+            a.concerns,
+            texts=texts,
+            relative_request=_is_relative_price_request(texts[0]),
+            units=price_units(ctx),
+        )
+        if a.budget_max is not None and provenance.budget_source is None:
+            a.budget_max = None
+        a.concerns = list(provenance.kept_needs)
+
     facet_filters, unresolved = await _resolve_needs(ctx, deps, a.concerns)
+    if provenance is not None:
+        asked_budget = args.get("budget_max") is not None
+        ctx.emit(
+            "routine_arg_provenance",
+            budget_source=provenance.budget_source or ("unsupported" if asked_budget else "none"),
+            budget_kept=a.budget_max is not None,
+            unit_rejected=provenance.unit_rejected,
+            needs_kept=len(provenance.kept_needs),
+            needs_dropped=len(provenance.dropped_needs),
+            # Chei CANONICE ale pachetului (vocabular închis), nu textul clientului (P12).
+            keys=sorted({k for keys in facet_filters.values() for k in keys})[:8],
+        )
 
     async with deps.db("routine_candidates") as conn:
         # Cu buget cerem și cei mai ieftini de pe fiecare pas: un pool ales doar pe rang face
@@ -608,6 +711,10 @@ async def routine_plan_tool(
         "dropped": dropped,
         "skipped_for_moment": skipped_for_moment,
         "moment": moment,
+        "budget_ignored": provenance is not None
+        and args.get("budget_max") is not None
+        and a.budget_max is None,
+        "needs_ignored": len(provenance.dropped_needs) if provenance is not None else 0,
     }
     if not plan.is_routine:
         return ToolResult(

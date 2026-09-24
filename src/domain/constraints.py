@@ -423,6 +423,44 @@ def extract_constraints(
     return tuple(found), tuple(rejected)
 
 
+#: Fațeta de unități care înseamnă BANI. E cheia din `domain_pack.units`, nu un cuvânt al limbii:
+#: aliasurile ei (lei, ron, bani, eur…) sunt ale tenantului.
+MONEY_UNIT_FACET = "price"
+
+
+def monetary_mentions(message: str, *, units: UnitRegistry) -> set[float]:
+    """Numerele din mesaj care POT fi o sumă de bani. PURĂ, agnostică de limbă (NX-321).
+
+    `price_bound_source` (NX-319) compara marginea de preț a modelului cu ORICE număr din mesaj,
+    deci «vreau crema de 100 ml» coroborea un `price_max=100` pe care clientul nu-l spusese. Aici
+    numărul își păstrează dimensiunea, citită din registrul de unități al tenantului (același
+    `_unit_near` ca extractorul de constrângeri):
+
+    • lipit de o unitate de BANI ⇒ sumă;
+    • lipit de unitatea ALTEI dimensiuni (100 ml, SPF 50) ⇒ nu e sumă, avem dovada că e altceva;
+    • fără unitate recunoscută, sau cu un alias ambiguu ⇒ sumă POSIBILĂ. «ceva sub 100» e forma
+      cea mai des întâlnită de buget, iar a o respinge ar strica exact ce a reparat NX-319.
+
+    Fiecare număr intră în ambele lecturi ale separatorului, ca `needs._message_numbers`: poarta
+    confirmă că numărul a fost ROSTIT, nu care e valoarea lui."""
+    out: set[float] = set()
+    if not message:
+        return out
+    text = fold(message)
+    for match in _NUMBER_RE.finditer(text):
+        alias, _ambiguous = _unit_near(text, match.start(), match.end(), match.start(), units)
+        facet = units.facet_for_unit(alias) if alias else None
+        if facet is not None and facet != MONEY_UNIT_FACET:
+            continue
+        raw = match.group(0)
+        for candidate in (raw.replace(",", "."), raw.replace(",", "").replace(".", "")):
+            try:
+                out.add(float(candidate))
+            except ValueError:
+                continue
+    return out
+
+
 def constraint_from_value(
     facet: str,
     op: str,
