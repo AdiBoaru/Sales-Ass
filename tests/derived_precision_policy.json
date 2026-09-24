@@ -58,8 +58,17 @@
       "min_sample": 120,
       "min_precision": 0.95,
       "promise": "partitioning"
+    },
+    "skin_type.oily": {
+      "sample_size": 150,
+      "min_sample": 120,
+      "min_precision": 0.95,
+      "promise": "partitioning",
+      "max_unsure_share": 0.3,
+      "min_kappa": 0.6
     }
   },
+  "_nx322b": "NX-322b — `skin_type.oily` e cheie de VALOARE, nu de fateta: excluderea anti-potrivire (`dry` → scoate produsele marcate DOAR `oily`) sta pe precizia etichetei `oily`, nu pe media fatetei. Tierul e `partitioning` (95%, 150/120), nu `rank_signal` ca fateta `skin_type`, fiindca aici valoarea EXCLUDE: exact argumentul NX-271, o excludere gresita e tacuta. Doua garzi in plus, tot preinregistrate: peste 30% `?` verdictul e INSUFFICIENT (sursa nu spune tipul de ten, deci nu poate justifica o excludere), iar sub kappa 0,6 intre cei doi etichetatori tot INSUFFICIENT (instrumentul, nu produsele, e problema). Scris INAINTE de audit, pe zero esantioane etichetate. Pe ANUA Heartleaf (turul real `b5d86b1a`) eticheta `oily` exista, dar descrierea comerciantului nu contine «gras»: motivul pentru care excluderea nu se aprinde fara audit.",
   "_nx269": "NX-269 — `shade` are prag de PROMISIUNE (95%): nuanta e vizibila pe card, cerulata la telefon si comparata intre magazine, deci o nuanta gresita e o eroare pe care clientul o vede imediat. Esantionul e 60, nu 100, fiindca acoperirea masurata e 601 de produse si cardul cere exact 60. `finish` e tot claim, dar la 90%: e o afirmatie, insa una pe care clientul o verifica mai greu si care nu blocheaza o comanda.",
   "_nx271": "NX-271 — `product_type` intra in politica cu prag de 95%, PESTE tierul de `claim`, si motivul e ce face fateta, nu cat de greu e s-o derivi. Ea nu ordoneaza si nu afirma: PARTITIONEAZA, adica sub enforcement decide cine INTRA in raspuns. O valoare gresita face doua rele deodata: produsul corect DISPARE (clientul nu are cum sa-l recupereze, nu stie ca exista) si unul de alt tip ii ia locul. Niciun gate din aval nu prinde asta, fiindca validatorul si `grounding_guard` verifica ADEVARUL, nu POTRIVIREA: un pret real al produsului gresit trece. Un `claim` fals (`fragrance_free`) e cel putin vizibil pe card si contestabil; o excludere e tacuta. De aceea pragul nu poate fi mai mic decat al promisiunilor. Esantion 100, minim 60 decise: valoarea se judeca fata de NUMELE produsului, deci `?` ar trebui sa fie rar. Scris INAINTE de audit, pe zero esantioane etichetate.",
   "_nx271_aritmetica": "NX-271 — gasit verificand propria munca: pragul se judeca pe limita de JOS Wilson, care depinde de n. La 95%, n=100 tolereaza ZERO greseli, iar la n<73 pragul e matematic IMPOSIBIL de atins, oricat de buna ar fi derivarea. Cum `unsure` nu intra in numitor, un audit cu cateva `?` aluneca spre `min_sample` — deci `shade` (60/40), `spf` (100/40) si `fragrance_free` (100/40) erau porti care nu puteau fi castigate niciodata: labelezi cat sa fii `sufficient` si tot nu treci. Invariantul lipsa, acum testat: la `min_sample`, pragul trebuie sa fie atingibil cu cel putin o greseala tolerata. Reparatia schimba EXCLUSIV `n` (150/120 pentru pragurile de 95%, 100/60 pentru 90%): a cobori un prag ar fi mutarea portii, a mari esantionul e doar a aduna destule dovezi ca sa poti demonstra pragul declarat. Costa mai multa adnotare, nu mai putina rigoare."
