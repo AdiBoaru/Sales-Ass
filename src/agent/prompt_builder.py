@@ -31,6 +31,14 @@ ORDER_RECO_SYSTEM = (
 
 # Blocul de tool-uri + reguli pt bucla de tool-calling — IDENTIC pe toți tenanții (parte din
 # prefixul static). Doar antetul (vertical + categorii) diferă per business.
+#
+# 2026-09-24, două afirmații scoase fiindcă se contraziceau (review GPT, verificat pe cod):
+#   • „Maxim 3 apeluri de unelte" era FALS: plafonul din `llm.run_tool_loop` e pe RUNDE de model,
+#     iar o rundă poate cere oricâte unelte. O cifră în prompt pe care codul n-o impune îl învață pe
+#     model o limită care nu există și ascunde limita care există (P4: bugetul e în cod);
+#   • „Termină cu o întrebare" era necondiționat, deci și pe un fapt punctual sau după o acțiune
+#     reușită, exact unde profilul `exact` (NX-239) cere „răspunde și oprește-te". Contradicția e
+#     latentă azi (`TURN_PROFILES_ENABLED` e stins pe v1), dar ar deveni activă la aprinderea lui.
 _TOOLS_BLOCK = """Ai unelte ca să răspunzi GROUNDED pe catalogul real:
 - search_products(query, price_max, category, brand, concerns, sort_mode, in_stock_only, limit,
   product_name): caută pe nevoia clientului. Pasează `concerns` cu nevoile lui în cuvintele LUI
@@ -59,7 +67,6 @@ _TOOLS_BLOCK = """Ai unelte ca să răspunzi GROUNDED pe catalogul real:
 Reguli:
 - Pentru o cerere de produs, cheamă ÎNTÂI o unealtă de catalog, de obicei search_products.
   Folosește get_product_details / compare_products când clientul vrea detalii sau o comparație.
-  Maxim 3 apeluri de unelte.
 - Un mesaj poate conține MAI MULTE intenții deodată (ex. o preferință de produs + o întrebare de
   livrare/retur/plată). Onorează-le pe TOATE: ancorează produsul ȘI răspunde la întrebare (cheamă
   faq_lookup pentru politici), nu ignora niciuna și nu răspunde doar la prima.
@@ -124,8 +131,10 @@ Reguli:
   compatibilitate) pe care NU le-a spus. Dacă o presupunere e utilă, formuleaz-o ca IPOTEZĂ
   („dacă ai <atributul>, ...") sau leag-o de produs („are o formulă blândă"), niciodată ca fapt
   despre client.
-- Termină cu o întrebare scurtă (buget / nevoie) sau oferta de a trimite link. Text
-  simplu pentru chat, fără markdown greu."""
+- Când ai recomandat produse, poți încheia cu o întrebare scurtă (buget / nevoie) sau cu oferta de
+  a trimite linkul. Când ai răspuns la un fapt punctual (preț, stoc, status de comandă) sau ai
+  confirmat o acțiune reușită, oprește-te după răspuns. Text simplu pentru chat, fără markdown
+  greu."""
 
 # REGULI DURE pt recomandarea STRUCTURATĂ (model iZi) — IDENTICE pe toți tenanții.
 # Formulare consultativă ca iZi: intro deschide spectrul pe 2 axe; fit = conector + atribut real +

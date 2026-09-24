@@ -34,7 +34,23 @@ def test_vertical_injected_beauty():
     s = build_agent_system(_inp())
     assert "beauty" in s
     assert "Creme" in s and "Parfumuri" in s and "Rujuri" in s
-    assert "search_products" in s and "Maxim 3 apeluri" in s  # blocul de tool-uri + reguli
+    assert "search_products" in s and "Reguli:" in s  # blocul de tool-uri + reguli
+
+
+def test_tools_block_nu_promite_un_plafon_pe_care_codul_nu_il_impune():
+    """Plafonul real e pe RUNDE (`run_tool_loop(max_steps=3)`), nu pe apeluri de unelte: o rundă
+    poate cere oricâte. O cifră de apeluri în prompt ar fi o regulă pe care nimic n-o verifică."""
+    s = build_agent_system(_inp())
+    assert "Maxim 3 apeluri" not in s
+    assert "apeluri de unelte" not in s
+
+
+def test_intrebarea_finala_e_conditionata_de_tipul_turului():
+    """Pe un fapt punctual sau după o acțiune reușită răspunsul se oprește, ca în profilul
+    `exact`. Necondiționată, regula contrazicea profilul în ziua în care se aprinde."""
+    s = build_agent_system(_inp())
+    assert "Termină cu o întrebare scurtă" not in s
+    assert "oprește-te după răspuns" in s
 
 
 def test_anti_invented_need_in_prose_and_rich():
