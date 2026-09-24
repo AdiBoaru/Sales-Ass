@@ -75,6 +75,41 @@ def identifier_tokens(*texts: str | None) -> frozenset[str]:
     return frozenset(out)
 
 
+_WORD = re.compile(r"\w+")
+
+
+def labeled_quantities(*texts: str | None) -> frozenset[str]:
+    """Perechile ETICHETĂ + NUMĂR din textele date („spf 30", „30 ml"), pliate. PURĂ.
+
+    Completează `identifier_tokens` pe singura formă de cantitate pe care o poate verifica o
+    fișă: numărul împreună cu eticheta lui. Obiecția NX-313 („50 ml" din nume ar lăsa să treacă
+    „50 lei") nu se aplică, fiindcă se compară PERECHEA, iar „50 lei" nu e pe fișă. Pe 30 de zile,
+    majoritatea motivelor de card aruncate pentru o cifră spuneau „SPF 30/40/50", scris exact
+    așa în numele și în ingredientele produsului."""
+    out: set[str] = set()
+    for t in texts:
+        toks = _WORD.findall(fold_text(t or ""))
+        for i, tok in enumerate(toks):
+            if not tok.isdigit():
+                continue
+            if i > 0 and _LETTER.search(toks[i - 1]):
+                out.add(f"{toks[i - 1]} {tok}")
+            if i + 1 < len(toks) and _LETTER.search(toks[i + 1]):
+                out.add(f"{tok} {toks[i + 1]}")
+    return frozenset(out)
+
+
+def _grounded_number(toks: list[str], i: int, grounded: frozenset[str]) -> bool:
+    """Tokenul `i` (cu cifre) e un fapt de pe fișă: identificator (NX-313) sau număr cu eticheta
+    lui (`labeled_quantities`)."""
+    tok = toks[i]
+    if _LETTER.search(tok):
+        return tok in grounded
+    return (i > 0 and f"{toks[i - 1]} {tok}" in grounded) or (
+        i + 1 < len(toks) and f"{tok} {toks[i + 1]}" in grounded
+    )
+
+
 def has_unverifiable_claim(text: str | None, grounded: frozenset[str] = frozenset()) -> bool:
     """Toată proza neverificabilă a căii BOGATE: cifre + procente + claim + superlativ. Paritate
     EXACTĂ cu vechiul `scrub_prose` (NU include stoc → zero regresie pe calea bogată).
@@ -87,10 +122,11 @@ def has_unverifiable_claim(text: str | None, grounded: frozenset[str] = frozense
     if not text:
         return False
     if grounded:
+        toks = _WORD.findall(fold_text(text))
         loose = [
             tok
-            for tok in _DIGIT_TOKEN.findall(fold_text(text))
-            if not (_LETTER.search(tok) and tok in grounded)
+            for i, tok in enumerate(toks)
+            if _DIGIT.search(tok) and not _grounded_number(toks, i, grounded)
         ]
         return bool(loose) or has_marketing_claim(text)
     return bool(_DIGIT.search(text)) or has_marketing_claim(text)

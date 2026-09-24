@@ -318,6 +318,9 @@ class PromptInputs:
     # ce se caută acolo, iar calitatea ar fi scăzut fără ca nimic să pice. Tuple → hashabil, deci
     # tot cheie de `lru_cache`, deci prefixul rămâne byte-identic pentru același pachet.
     need_examples: tuple[str, ...] = ()
+    #: `categories` poartă CHEI de raft (`list_category_menu`), nu nume: antetul le prezintă ca
+    #: meniu închis din care `category` alege exact. False → numele de dinainte, byte-identic.
+    shelf_menu: bool = False
 
     @classmethod
     def build(
@@ -330,6 +333,7 @@ class PromptInputs:
         currency: str = "RON",
         response_style: dict[str, str] | None = None,
         need_examples: tuple[str, ...] = (),
+        shelf_menu: bool = False,
     ) -> PromptInputs:
         """Constructor tolerant: normalizează la tuple + sortează DETERMINIST (chiar dacă DB
         n-ar fi sortat) → același set ⇒ prefix byte-identic indiferent de ordinea rândurilor."""
@@ -360,6 +364,7 @@ class PromptInputs:
             # fel de deterministă ca sortarea, dar alege exemplele reprezentative, nu pe cele care
             # se întâmplă să fie primele alfabetic.
             need_examples=tuple(need_examples),
+            shelf_menu=shelf_menu,
         )
 
 
@@ -403,12 +408,28 @@ def _store_header(inp: PromptInputs) -> str:
         # dintr-un catalog care avea 518 candidați. Cifra e aproximativă prin proiectare
         # (`_shelf_size`) și e declarată ca atare, ca să nu fie citită drept stoc sau inventar.
         shown = ", ".join(f"{c} ({n})" if n else c for c, n in inp.categories)
-        lines.append(
-            "Vinzi din aceste categorii, cu numărul aproximativ de produse din fiecare: "
-            + shown
-            + ". Cifra spune cât poate servi raftul: nu alege un raft mic doar fiindcă numele "
-            "lui sună potrivit, dacă unul mare acoperă aceeași cerere."
-        )
+        if inp.shelf_menu:
+            # Cheia începe cu raftul părinte, deci modelul vede că un subraft cu nume de cuvânt
+            # obișnuit („fata") stă sub machiaj. O valoare din afara listei se numără
+            # (`category_off_menu`) și cade pe rezolvarea liberă, cu gărzile ei.
+            lines.append(
+                "Rafturile magazinului, ca listă ÎNCHISĂ de chei, cu numărul aproximativ de "
+                "produse din fiecare: "
+                + shown
+                + ". Cheia începe cu raftul părinte. În `category` pui EXACT una dintre aceste "
+                "chei, și doar când raftul e clar din ce a cerut clientul, altfel nimic. Un "
+                "cuvânt din cerere care seamănă cu "
+                "numele unui subraft nu e raftul (verifică părintele). Cifra spune cât poate "
+                "servi raftul: nu alege un raft mic doar fiindcă numele lui sună potrivit, dacă "
+                "unul mare acoperă aceeași cerere."
+            )
+        else:
+            lines.append(
+                "Vinzi din aceste categorii, cu numărul aproximativ de produse din fiecare: "
+                + shown
+                + ". Cifra spune cât poate servi raftul: nu alege un raft mic doar fiindcă numele "
+                "lui sună potrivit, dacă unul mare acoperă aceeași cerere."
+            )
     if inp.aliases:
         hints = "; ".join(f"„{p}” = {t}" if t else f"„{p}”" for p, t in inp.aliases)
         lines.append("Indicii de rutare (cum cer clienții anumite lucruri): " + hints + ".")

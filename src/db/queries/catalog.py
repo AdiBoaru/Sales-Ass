@@ -2022,6 +2022,21 @@ async def list_category_names(conn: asyncpg.Connection, business_id: str) -> lis
     return [(r["name"], int(r["n"])) for r in rows]
 
 
+async def list_category_menu(conn: asyncpg.Connection, business_id: str) -> list[tuple[str, int]]:
+    """Meniul de rafturi al modelului: CHEIA fiecărui raft servabil, cu mărimea lui.
+
+    Aceeași mulțime ca `list_category_names`, alt identificator. Numele nu identifică un raft:
+    pe `sole-ro` 21 din 45 se repetă («Ingrijirea tenului» sub Ten, Barbati, Electrica, Dermato),
+    iar «Fata» e Machiaj > Fata, deci „crema de fata" îl alegea firesc. Cheia e unică și poartă
+    raftul părinte în ea. Ordinea pe cheie ține copiii lângă părinte și e stabilă la drift."""
+    rows = await conn.fetch(
+        f"select c.slug, c.n from ({servable_subtree_counts_sql()}) c "
+        "where c.n > 0 order by c.slug",
+        business_id,
+    )
+    return [(r["slug"], int(r["n"])) for r in rows]
+
+
 async def list_routing_aliases(
     conn: asyncpg.Connection, business_id: str, *, limit: int = 20
 ) -> list[tuple[str, str]]:

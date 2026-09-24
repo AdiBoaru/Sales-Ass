@@ -1136,6 +1136,26 @@ class Settings(BaseSettings):
     search_subshelf_homograph_guard_enabled: bool = Field(
         default=True, validation_alias="SEARCH_SUBSHELF_HOMOGRAPH_GUARD_ENABLED"
     )
+    # Conversația `cd98a513`: rafturile se arătau modelului prin NUME, iar 21 din 45 de nume se
+    # repetă («Ingrijirea tenului» de 5 ori) sau sunt omografe cu cuvinte obișnuite («Fata» =
+    # Machiaj > Fata). Pe 30 de zile, 22 din 72 de categorii trimise erau cheie exactă, restul nume
+    # sau fragmente rezolvate de vocabular, iar `fata` singur a fost 13 din 72. Cu flagul, promptul
+    # arată CHEIA (care poartă raftul părinte: `machiaj-fata`, `ten-ingrijirea-tenului`). O valoare
+    # din afara meniului NU se blochează (măsurat: ar fi stricat numele unice, «buze», «styling»),
+    # ci cade pe rezolvarea liberă și se numără (`category_off_menu`). OFF → numele în prompt,
+    # byte-identic.
+    search_category_menu_enabled: bool = Field(
+        default=True, validation_alias="SEARCH_CATEGORY_MENU_ENABLED"
+    )
+    # Conversația `cd98a513`: motivul de card «cu pigmenți corectori și SPF 40» era aruncat ÎNTREG
+    # (cardul rămânea fără motiv), fiindcă orice număr care nu e identificator lipit („v11") era
+    # tratat drept cantitate inventată. Pe 30 de zile, 19 din 276 de motive aveau cifre, iar cele
+    # care nu erau coduri de nuanță spuneau aproape toate „SPF N", scris exact așa pe fișă. Cu
+    # flagul, perechea etichetă + număr de pe fișa PRODUSULUI trece („50 lei" tot nu, nu e pe fișă).
+    # OFF → doar identificatorii NX-313.
+    labeled_quantity_grounding_enabled: bool = Field(
+        default=True, validation_alias="LABELED_QUANTITY_GROUNDING_ENABLED"
+    )
     # NX-319: «Compară-l cu un produs similar» (chip-ul NOSTRU de sub detaliu) devine comparație
     # DETERMINISTĂ: produsul afișat + cel mai apropiat înlocuitor în stoc, fără gemenii lui (aceeași
     # familie afișată, sau același brand la același preț). Înainte chip-ul n-avea executor: turul

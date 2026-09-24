@@ -45,6 +45,7 @@ from src.worker.text_scrub import (
     has_stock_claim,
     has_unverifiable_claim,
     identifier_tokens,
+    labeled_quantities,
 )
 
 if TYPE_CHECKING:
@@ -157,7 +158,11 @@ def grounded_identifiers(p: dict[str, Any]) -> frozenset[str]:
     for k, v in p.items():
         if k not in _NOT_GROUNDING:
             walk(v)
-    return identifier_tokens(*texts)
+    grounded = identifier_tokens(*texts)
+    # „SPF 30" pe fișă ⇒ „SPF 30" în motiv e fapt, nu cantitate inventată (`labeled_quantities`).
+    if getattr(get_settings(), "labeled_quantity_grounding_enabled", False):
+        grounded |= labeled_quantities(*texts)
+    return grounded
 
 
 def scrub_prose(s: str | None, grounded: frozenset[str] = frozenset()) -> str | None:

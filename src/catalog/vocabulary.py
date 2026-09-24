@@ -56,6 +56,7 @@ __all__ = [
     "facet_overlays",
     "load_vocabulary",
     "named_only_as_subshelf",
+    "category_on_menu",
     "named_topic_roots",
     "resolve",
     "resolve_any",
@@ -473,6 +474,34 @@ def _best(entries: list[VocabEntry]) -> list[VocabEntry]:
     """Dintre potriviri egale textual, preferă nodul cel mai SPECIFIC (adâncime mare), iar la
     egalitate pe cel cu mai multe produse. Determinist: tie-break final pe cheie."""
     return sorted(entries, key=lambda e: (-e.depth, -e.count, e.key))
+
+
+def category_on_menu(vocab: CatalogVocabulary, term: str | None) -> Resolution:
+    """Meniul ÎNCHIS de rafturi: valoarea e EXACT cheia unui raft servabil, sau nu filtrează. PURĂ.
+
+    Spre deosebire de `resolve`, nu caută nimic: nici etichete, nici cuvinte comune. Pe rafturi,
+    orice potrivire în afara cheii e o ghicitură, fiindcă numele nu identifică (pe `sole-ro`
+    21 din 45 se repetă, iar «Fata» e Machiaj > Fata). Ce nu e în meniu iese
+    `UNKNOWN(off_menu)`: n-ajunge în `WHERE`, iar modelul primește motivul și cheile corecte în
+    prompt. Vocabular indisponibil ⇒ `unknown_dimension`, ca la `resolve` (n-am putut judeca)."""
+    wanted = (term or "").strip().casefold()
+    entries = vocab.categories
+    if not entries:
+        return Resolution(
+            status=ResolutionStatus.UNKNOWN,
+            term=wanted,
+            dimension=CATEGORY_DIMENSION,
+            reason="unknown_dimension",
+        )
+    for e in entries:
+        if e.key.casefold() == wanted:
+            return _from_hits([e], wanted, CATEGORY_DIMENSION, "menu")
+    return Resolution(
+        status=ResolutionStatus.UNKNOWN,
+        term=wanted,
+        dimension=CATEGORY_DIMENSION,
+        reason="off_menu",
+    )
 
 
 def resolve(

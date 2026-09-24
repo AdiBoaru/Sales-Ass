@@ -47,6 +47,7 @@ def _stub_prompt_inputs(monkeypatch):
         return []
 
     monkeypatch.setattr(agent_mod, "list_category_names", _cats)
+    monkeypatch.setattr(agent_mod, "list_category_menu", _cats)
     monkeypatch.setattr(agent_mod, "list_routing_aliases", _aliases)
     monkeypatch.setattr(planner_mod, "get_complementary_products", _no_complementary)
 
@@ -639,6 +640,7 @@ async def test_db_failure_loading_prompt_falls_back_to_echo(monkeypatch):
         raise RuntimeError("DB down")
 
     monkeypatch.setattr(agent_mod, "list_category_names", boom)
+    monkeypatch.setattr(agent_mod, "list_category_menu", boom)
     ctx = _ctx()
     llm = FakeLLM(tool_calls=[], final="orice")
     await agent_stage(ctx, _deps(llm))
