@@ -200,8 +200,12 @@ def check_contract(a: Audit, scenario: str, t: Turn) -> None:
                 json.dumps(p, ensure_ascii=False)[:160],
             )
     # Chips-urile sunt ETICHETE tappabile, nu propoziții: un chip lung rupe UI-ul widgetului.
+    # Plafonul e al CONTRACTULUI (`models.MAX_CHIP_LEN`, 56 din NX-296), nu o cifră locală: pragul
+    # vechi de 40 semnala ca P1 chips-uri pe care producătorul le emite legitim („Compara X cu Y").
+    from src.models import MAX_CHIP_LEN
+
     for s in t.suggestions:
-        if len(s) > 40:
+        if len(s) > MAX_CHIP_LEN:
             a.flag(
                 scenario,
                 "P1",
