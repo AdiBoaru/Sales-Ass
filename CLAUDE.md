@@ -20,7 +20,7 @@ Referință de piață: similar cu iZi (eMAG) și Aura (SOLE), livrat ca servici
 | API | FastAPI (webhook + health) |
 | Coadă | Redis Streams (lock per conversație, debounce) |
 | DB | Postgres **17.6** — Supabase, proiect `NativexSales` eu-west-2 (**o singură schemă `public`**, multi-tenant pe `business_id`). Proiectul vechi (eu-west-1, PG16) e abandonat din 2026-08-28 |
-| LLM sales | OpenAI **`gpt-6-luna`** (`MODEL_AGENT`, din 2026-09-24; înainte `gpt-5.6-luna`, iar până pe 2026-08-24 `gpt-5.4-mini`), `reasoning_effort=medium` pe compunere (NX-313; era `high`). Escaladarea `MODEL_AGENT_COMPLEX` e GOALĂ implicit. `gpt-6-astra` NU e declarat: nu acceptă `reasoning_effort=none`, deci n-ar putea rula bucla cu tool-uri pe `chat.completions` |
+| LLM sales | OpenAI **`gpt-6-luna`** (`MODEL_AGENT`, din 2026-09-24; înainte `gpt-5.6-luna`, iar până pe 2026-08-24 `gpt-5.4-mini`), `reasoning_effort=low` pe compunere (2026-09-24, pe replay: `low` refuză aceleași seturi greșite ca `medium` în jumătate din timp, 8,5 s față de 18,2 s p50; `none` nu mai refuză nimic, deci NX-306 ar rămâne fără semnal. NX-313 coborâse deja `high` → `medium`). Escaladarea `MODEL_AGENT_COMPLEX` e GOALĂ implicit. `gpt-6-astra` NU e declarat: nu acceptă `reasoning_effort=none`, deci n-ar putea rula bucla cu tool-uri pe `chat.completions` |
 | Embeddings | text-embedding-3-small (pgvector în Supabase) |
 | **Web widget** | **SINGURUL canal de lucru (NX-179)** — `/web/chat` sincron + `/web/stream` SSE; widgetul e în repo FE separat (`docs/FRONTEND-CONTRACT-IZI.md`) |
 | Validare | Pydantic v2 |
