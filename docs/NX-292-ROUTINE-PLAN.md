@@ -2,7 +2,7 @@
 
 **Status:** DESIGN · **Depinde de:** NX-280 (fațeta `routine_step`), NX-261/262 (graful de relații),
 NX-236 (acțiuni opace), NX-237 (`CartService` ca șablon), NX-240 (grounding + projector)
-**Migrare:** 052 · **Flag:** `ROUTINE_ENABLED` (default OFF)
+**Migrare:** 052 · **Flag:** `ROUTINE_ENABLED` (default **ON** din 2026-09-24, vezi §10.2)
 
 ---
 
@@ -278,7 +278,22 @@ Un slot neacoperit nu produce linie și **se spune** în confirmare.
 unealta lui, nu toate cele 5 profile — restul traficului (`exact`/`recommend`/`compare`/`mutation`)
 rămâne pe drumul de azi, deci aprinderea nu poate regresa ce merge acum.
 
-Cere `SINGLE_BRAIN_ENABLED` (validat la boot, ca celelalte lanțuri de flaguri).
+~~Cere `SINGLE_BRAIN_ENABLED`~~: poarta de boot a căzut la NX-297 felia 5, iar NX-304 a legat profilul și pe calea v1.
+
+### 10.2 Aprinderea implicită (2026-09-24)
+
+Pe 30 de zile de trafic `sole-ro`, **7 din 118 ture** (6%) cer o rutină și **niciuna** n-a primit
+una: `routine_plan` chemat de zero ori, liste de creme și seruri, un tur cu zero carduri (turul 2 al
+conversației `1518d1d9`: două creme hidratante, fără curățare, fără SPF). Pe catalogul real, aceeași
+cerere prin unealtă dă 6 pași (curățare → tonifiere → esență → tratament → hidratare → protecție),
+iar cu `moment=pm` protecția iese corect. Deci default-ul trece pe ON, după precedentul NX-311/312.
+
+**Defectul găsit la aprindere:** NX-297 felia 5 pusese `routine_plan` în `_SALES_TOOLS`, deci cu
+flagul aprins unealta ar fi fost oferită pe FIECARE tur de vânzare (schema ei în fiecare apel, plus
+tentația de a compune o secvență la „vreau un ruj"). Două teste se contraziceau pe exact asta și
+coexistau doar cât timp flagul era stins. Unealta o aduce acum DOAR profilul `routine`.
+
+Verificarea prin model (credite) e scenariul `routine_face` din `scripts/sim/web_audit.py`.
 
 ### 10.1 Defectul găsit la prima aprindere (2026-09-16)
 

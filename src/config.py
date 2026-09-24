@@ -941,7 +941,11 @@ class Settings(BaseSettings):
     # atinge exclusiv turele care CER o secvență, unde azi răspunsul e garantat degradat: poarta
     # `routine_evidence_required` e aprinsă, dar unealta care poate produce dovada nu se oferă.
     # OFF = byte-identic (niciun sufix, nicio unealtă în plus).
-    routine_enabled: bool = Field(default=False, validation_alias="ROUTINE_ENABLED")
+    # Implicit ON din 2026-09-24, pe măsurătoare: pe 30 de zile de trafic `sole-ro`, 7 din 118 ture
+    # cer o rutină și NICIUNA n-a primit una (`routine_plan` chemat de zero ori; liste de creme,
+    # un tur cu zero carduri). Același argument ca NX-311/312: răspunsul de azi e garantat degradat
+    # pe exact turele pe care flagul le atinge, iar restul traficului rămâne byte-identic.
+    routine_enabled: bool = Field(default=True, validation_alias="ROUTINE_ENABLED")
     # NX-307: instrucțiunile de folosire vin din CATALOG, nu din memoria modelului. Flag PROPRIU,
     # din același motiv ca `routine_enabled`, și pentru aceeași clasă de tur: una în care răspunsul
     # de azi e garantat degradat. Măsurat pe conversația reală `70da107c`, turele 2 și 3 („pai si

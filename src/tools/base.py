@@ -77,11 +77,15 @@ _SALES_TOOLS = (
     "subscribe_back_in_stock",  # NX-80: notificare la restock (WRITE; citit de proactiv NX-70)
     "faq_lookup",
     "clarify_options",  # NX-297: opțiunile oferibile, înaintea unei întrebări (gated, vezi mai jos)
-    # NX-297 felia 5: două unelte care erau ÎNREGISTRATE dar pe care modelul nu le putea chema,
-    # fiindcă niciun toolset nu le numea. `routine_plan` (NX-292) și `related_products` (NX-275
-    # felia 5) au existat luni de zile ca decor: graful de relații al tenantului (37.082 de muchii
-    # măsurate pe SOLE) era inert nu din lipsă de date, ci fiindcă nimeni nu-l putea interoga.
-    "routine_plan",
+    # NX-297 felia 5: `related_products` (NX-275 felia 5) era ÎNREGISTRATĂ dar niciun toolset n-o
+    # numea, deci graful de relații al tenantului (37.082 de muchii măsurate pe SOLE) era inert nu
+    # din lipsă de date, ci fiindcă nimeni nu-l putea interoga.
+    #
+    # `routine_plan` NU stă aici, deliberat (NX-319/rutina, 2026-09-24). Felia 5 o pusese în nucleu,
+    # deci cu `ROUTINE_ENABLED` aprins ar fi fost oferită pe FIECARE tur de vânzare: schema ei în
+    # fiecare apel și o unealtă de secvență la îndemână pe „vreau un ruj". O aduce DOAR profilul
+    # `routine` (`turn_profile._ROUTINE.extra_tools`), pe turele care cer o rutină — exact ce
+    # promite flagul și ce pinuiește `test_un_profil_adauga_dar_nu_scade_niciodata`.
     "related_products",
 )
 # `faq_lookup` și pe ORDER: o întrebare de PROCES/POLITICĂ rutată aici (cum comand, ce retur, cât e
@@ -96,7 +100,6 @@ _ORDER_TOOLS = ("check_order", "faq_lookup")
 #: OFERI.
 _FLAGGED_TOOLS: dict[str, str] = {
     "clarify_options": "clarify_tool_enabled",
-    "routine_plan": "routine_enabled",
     "related_products": "relation_traversal_enabled",
 }
 
