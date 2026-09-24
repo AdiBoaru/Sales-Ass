@@ -200,8 +200,12 @@ def check_contract(a: Audit, scenario: str, t: Turn) -> None:
                 json.dumps(p, ensure_ascii=False)[:160],
             )
     # Chips-urile sunt ETICHETE tappabile, nu propoziții: un chip lung rupe UI-ul widgetului.
+    # Plafonul e al CONTRACTULUI (`models.MAX_CHIP_LEN`, 56 din NX-296), nu o cifră locală: pragul
+    # vechi de 40 semnala ca P1 chips-uri pe care producătorul le emite legitim („Compara X cu Y").
+    from src.models import MAX_CHIP_LEN
+
     for s in t.suggestions:
-        if len(s) > 40:
+        if len(s) > MAX_CHIP_LEN:
             a.flag(
                 scenario,
                 "P1",
@@ -350,6 +354,51 @@ async def sc_routine(a: Audit, mk) -> None:
         )
 
 
+def _check_routine_sequence(a: Audit, scenario: str, t: Turn) -> None:
+    """O rutină e o SECVENȚĂ: ≥3 carduri, fiecare cu eticheta pasului lui (badge-ul pe care
+    `compose` îl pune din `routine_plan`), fără doi pași identici. O listă de creme nu trece."""
+    steps = [str(p.get("badge") or "") for p in t.products]
+    distinct = {s for s in steps if s}
+    if len(t.products) < 3 or len(distinct) < 3:
+        a.flag(
+            scenario,
+            "P1",
+            "cerere de rutină → listă de produse, nu secvență de pași (NX-292)",
+            f"carduri={len(t.products)} pași={steps}",
+        )
+    elif len(distinct) != len([s for s in steps if s]):
+        a.flag(scenario, "P2", "rutina repetă un pas", str(steps))
+
+
+async def sc_routine_face(a: Audit, mk) -> None:
+    """NX-292 pe traficul REAL: 7 din 118 ture (30 de zile) cer o rutină și niciuna n-a primit una.
+    Două forme: cererea directă și cea din conversația `1518d1d9`, după două ture de creme.
+
+    Rulează cu `ROUTINE_ENABLED` aprins DOAR pe durata scenariului, ca auditul să poată decide
+    aprinderea pe VPS fără să schimbe celelalte scenarii."""
+    from src.config import get_settings
+
+    settings = get_settings()
+    before = settings.routine_enabled
+    settings.routine_enabled = True
+    try:
+        c = await mk("routine_face_direct")
+        t = await c.say("vreau o rutina pentru ten uscat")
+        _show(t)
+        check_contract(a, "routine_face_direct", t)
+        _check_routine_sequence(a, "routine_face_direct", t)
+
+        c = await mk("routine_face_1518")
+        for msg in ("vreau o crema de fata", "pai mi se usuca peilea dupa ce fac dus"):
+            _show(await c.say(msg))
+        t = await c.say("poti sa mi faci si o rutina ?")
+        _show(t)
+        check_contract(a, "routine_face_1518", t)
+        _check_routine_sequence(a, "routine_face_1518", t)
+    finally:
+        settings.routine_enabled = before
+
+
 async def sc_safety(a: Audit, mk) -> None:
     """NX-173 pe WEB (a fost verificat doar prin harness-ul de simulare!)."""
     c = await mk("safety")
@@ -415,6 +464,7 @@ SCENARIOS = {
     "diacritice": sc_diacritics,
     "compare": sc_compare,
     "routine": sc_routine,
+    "routine_face": sc_routine_face,
     "safety": sc_safety,
     "link": sc_link,
     "order": sc_order_anon,

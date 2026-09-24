@@ -528,28 +528,48 @@ def test_routine_enabled_nu_mai_cere_single_brain():
     assert Settings._web_turn_relations(on_brain) is on_brain
 
 
-def test_routine_plan_e_chemabil_de_model_cand_flagul_e_aprins():
-    """Gaura pe care felia o închide: unealta era ÎNREGISTRATĂ, dar niciun toolset n-o numea, deci
-    modelul n-o putea chema deloc. Aceeași clasă cu `related_products`."""
+def test_routine_plan_se_ofera_doar_pe_turul_care_cere_o_rutina(monkeypatch):
+    """Gaura închisă de NX-297 felia 5 rămâne închisă (unealta ajunge la model), dar pe DRUMUL
+    potrivit: profilul `routine`, nu nucleul. Felia 5 o pusese în `_SALES_TOOLS`, deci cu flagul
+    aprins ar fi fost în schema FIECĂRUI tur de vânzare. Testul ăsta și
+    `test_un_profil_adauga_dar_nu_scade_niciodata` se contraziceau, și au putut coexista doar cât
+    timp flagul era stins; aprinderea lui (2026-09-24) le-a pus față în față."""
     from src.config import get_settings
+    from src.domain.routine_steps import build_spec
+    from src.models import BusinessConfig, Contact, InboundMessage, TurnContext
     from src.tools.base import enabled_tools
+    from src.worker.stages.agent import _apply_turn_profile
 
     settings = get_settings()
-    before_routine = settings.routine_enabled
-    before_relations = settings.relation_traversal_enabled
-    try:
-        object.__setattr__(settings, "routine_enabled", False)
-        object.__setattr__(settings, "relation_traversal_enabled", False)
-        offered = enabled_tools(None)
-        assert "routine_plan" not in offered and "related_products" not in offered
+    monkeypatch.setattr(settings, "routine_enabled", True, raising=False)
+    monkeypatch.setattr(settings, "turn_profiles_enabled", False, raising=False)
+    monkeypatch.setattr(settings, "relation_traversal_enabled", True, raising=False)
+    assert "routine_plan" not in enabled_tools(None)
+    assert "related_products" in enabled_tools(None)
 
-        object.__setattr__(settings, "routine_enabled", True)
-        object.__setattr__(settings, "relation_traversal_enabled", True)
-        offered = enabled_tools(None)
-        assert "routine_plan" in offered and "related_products" in offered
-    finally:
-        object.__setattr__(settings, "routine_enabled", before_routine)
-        object.__setattr__(settings, "relation_traversal_enabled", before_relations)
+    def offered_on(body: str) -> set[str]:
+        business = BusinessConfig(id="b", slug="d", name="D", vertical="ecommerce")
+        business.domain_pack = DomainPack(
+            vertical="ecommerce",
+            routine_steps=build_spec(
+                {
+                    "families": {"fata": ["curatare", "hidratare"]},
+                    "by_product_type": {"gel de curatare": "fata:curatare"},
+                }
+            ),
+        )
+        ctx = TurnContext(
+            turn_id="t",
+            business=business,
+            contact=Contact(id="c", business_id="b"),
+            message=InboundMessage(provider_msg_id="m", body=body, channel_kind="webchat"),
+            conversation_id="conv",
+        )
+        _, tools = _apply_turn_profile(ctx, "S", [])
+        return {t["function"]["name"] for t in tools}
+
+    assert "routine_plan" in offered_on("poti sa mi faci si o rutina ?")
+    assert "routine_plan" not in offered_on("vreau un ruj rosu")
 
 
 # ── Ancora de graf ──────────────────────────────────────────────────────────────────────────────
