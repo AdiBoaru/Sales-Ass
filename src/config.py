@@ -1152,6 +1152,19 @@ class Settings(BaseSettings):
     skin_type_anti_fit_enabled: bool = Field(
         default=False, validation_alias="SKIN_TYPE_ANTI_FIT_ENABLED"
     )
+    # NX-324: modelul alege produsele compunerii bogate prin handle-uri scurte (`P1`…`Pk`, enum
+    # închis), nu copiind UUID-uri. Pe `0d8a3541` un UUID copiat greșit a scos un card, iar textul
+    # care îl numea a plecat neatins. Schema depinde doar de numărul de produse, deci rămâne
+    # cache-uibilă. OFF → UUID-urile de azi, schema byte-identică.
+    rich_item_handles_enabled: bool = Field(
+        default=True, validation_alias="RICH_ITEM_HANDLES_ENABLED"
+    )
+    # NX-324: textul se aliniază la setul AFIȘAT. O propoziție din intro/education care numește un
+    # produs retrievat dar fără card cade, `pick` pe un produs neafișat devine None, iar sugestiile
+    # modelului care numesc unul se scot. OFF → textul pleacă neatins, ca înainte.
+    rich_card_reconcile_enabled: bool = Field(
+        default=True, validation_alias="RICH_CARD_RECONCILE_ENABLED"
+    )
     # Conversația `cd98a513`: motivul de card «cu pigmenți corectori și SPF 40» era aruncat ÎNTREG
     # (cardul rămânea fără motiv), fiindcă orice număr care nu e identificator lipit („v11") era
     # tratat drept cantitate inventată. Pe 30 de zile, 19 din 276 de motive aveau cifre, iar cele

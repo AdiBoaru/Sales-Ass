@@ -21,7 +21,7 @@ from scripts.nx312_rich_effort_replay import (
     replay,
     summarize,
 )
-from src.agent.finalize import _rich_schema, rich_user_message
+from src.agent.finalize import _rich_schema, item_handles, rich_user_message
 from src.agent.prompt_builder import build_rich_system
 from src.config import get_settings
 from src.models import BusinessConfig
@@ -104,8 +104,11 @@ def test_the_call_is_built_by_production_functions():
     system, user, schema = build_call(ctx, INP, case, frozenset())
     assert system == build_rich_system(INP)
     ctx2 = make_ctx(_business(), case)
-    assert user == rich_user_message(ctx2, case.query, [dict(p) for p in VARIED], case.history)
-    assert schema is _rich_schema()
+    products = [dict(p) for p in VARIED]
+    # NX-324: cu handle-uri (implicit), replay-ul trebuie să ceară EXACT ce cere `_finalize_rich`.
+    handles = item_handles(products)
+    assert user == rich_user_message(ctx2, case.query, products, case.history, handles=handles)
+    assert schema is _rich_schema(frozenset(), n_items=len(handles))
     assert "Conversație până acum:\nClient: salut" in user
 
 

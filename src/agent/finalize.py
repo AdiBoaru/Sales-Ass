@@ -151,11 +151,45 @@ def rich_omissions(settings: Any = None) -> frozenset[str]:
     return out
 
 
-@lru_cache(maxsize=16)
-def _rich_schema(omit: frozenset[str] = frozenset(), *, question: bool = False) -> dict[str, Any]:
+def item_handles(products: list[dict[str, Any]]) -> dict[str, str]:
+    """NX-324: `P1`…`Pk` → `product_id`, în ordinea listei trimise modelului. PURĂ.
+
+    Pe turul real `0d8a3541` modelul a copiat greșit un UUID de 36 de caractere
+    (`…-8062-dc2bb…` → `…-806c-d2bb…`): cardul a căzut la apartenență, iar textul care îl numea a
+    plecat neatins. Un handle scurt, ales dintr-un `enum`, nu se poate copia greșit sub `strict`."""
+    return {f"P{i}": str(p["id"]) for i, p in enumerate(products, start=1) if p.get("id")}
+
+
+def _with_item_enum(base: dict[str, Any], n_items: int) -> dict[str, Any]:
+    """Schema cu `product_id` restrâns la `P1`…`Pn`, pe `items` și pe `pick`. Copie, nu mutație:
+    baza e o constantă de modul folosită concurent de toate turele."""
+    enum = {"type": "string", "enum": [f"P{i}" for i in range(1, n_items + 1)]}
+    body = base["schema"]
+    props = dict(body["properties"])
+    item = props["items"]["items"]
+    props["items"] = {
+        **props["items"],
+        "items": {**item, "properties": {**item["properties"], "product_id": enum}},
+    }
+    if "pick" in props:
+        pick = props["pick"]
+        props["pick"] = {**pick, "properties": {**pick["properties"], "product_id": enum}}
+    return {**base, "schema": {**body, "properties": props}}
+
+
+@lru_cache(maxsize=64)
+def _rich_schema(
+    omit: frozenset[str] = frozenset(), *, question: bool = False, n_items: int | None = None
+) -> dict[str, Any]:
     """Schema apelului de compunere, fără câmpurile din `omit`. Fără omisiuni întoarce CHIAR
     constantele de modul (identitate, nu doar egalitate). Cache-uit: aceleași omisiuni ⇒ același
-    obiect, deci nimeni nu construiește o schemă nouă pe fiecare tur."""
+    obiect, deci nimeni nu construiește o schemă nouă pe fiecare tur.
+
+    NX-324: `n_items` (handle-urile `P1`…`Pn`) depinde doar de NUMĂRUL de produse, nu de
+    id-urile lor, deci schema rămâne cache-uibilă (câteva variante, nu una pe tur). `None` ⇒ schema
+    de azi."""
+    if n_items:
+        return _with_item_enum(_rich_schema(omit, question=question), n_items)
     drop = omit & _RICH_SCHEMA_FIELDS
     if not drop:
         return _RICH_SCHEMA_WITH_QUESTION if question else _RICH_SCHEMA
@@ -320,7 +354,10 @@ def _rich_facets(ctx: TurnContext) -> tuple:
 
 
 def _rich_bundle(
-    products: list[dict[str, Any]], facets: tuple = (), language: str | None = None
+    products: list[dict[str, Any]],
+    facets: tuple = (),
+    language: str | None = None,
+    handles: dict[str, str] | None = None,
 ) -> str:
     """Lista de produse pentru apelul structurat: id + preț + rating + avantaje INDEXATE
     (pentru `pro_index`) + DESCRIERE (ai_summary) + FAȚETE (Tier 2b). Modelul VEDE prețul (ca să
@@ -334,6 +371,8 @@ def _rich_bundle(
     din ai_summary („ingrediente TIPICE precum") → fit grounded pe ce e REAL în formulă. GENERIC pe
     vertical (config DomainPack). Gol (date sărace / fără fațete) → degradare lină."""
     lines = []
+    # NX-324: cu handle-uri, modelul vede `[P1]`, nu UUID-ul, și alege dintr-un `enum` închis.
+    handle_of = {pid: h for h, pid in (handles or {}).items()}
     for p in products:
         raw = p.get("top_pros") or ([p["review_pro"]] if p.get("review_pro") else [])
         pros = [s.strip() for s in raw if isinstance(s, str) and s.strip()][:3]
@@ -349,8 +388,9 @@ def _rich_bundle(
         desc_str = f" | descriere: {desc}" if desc else ""
         fac = compose.facet_summary(p, facets, language) if facets else ""
         fac_str = f" | fațete: {fac}" if fac else ""
+        ref = handle_of.get(str(p["id"]), p["id"])
         lines.append(
-            f"[{p['id']}] {p['name']} | preț {amount_text(p['price'], language)} lei | "
+            f"[{ref}] {p['name']} | preț {amount_text(p['price'], language)} lei | "
             f"rating {rating} | avantaje: {pros_str}{cons_str}{desc_str}{fac_str}"
         )
     return "\n".join(lines)
@@ -845,8 +885,16 @@ async def _finalize_rich(
     context per-tur din bucla de tool-uri (NX-137: ex. checkout eșuat → fără chips de coș).
     Întoarce `_RichOutcome`; `reply is None` → fallback pe proză."""
     shape = shape or _TurnShape()
-    user = rich_user_message(ctx, query, products, history, notes=notes, shape=shape)
-    schema = _rich_schema(rich_omissions(), question=shape.offer is not None)
+    # NX-324: handle-uri scurte în loc de UUID-uri (kill-switch `RICH_ITEM_HANDLES_ENABLED`).
+    handles = item_handles(products) if get_settings().rich_item_handles_enabled else None
+    user = rich_user_message(
+        ctx, query, products, history, notes=notes, shape=shape, handles=handles
+    )
+    schema = _rich_schema(
+        rich_omissions(),
+        question=shape.offer is not None,
+        n_items=len(handles) if handles else None,
+    )
     trace = getattr(ctx, "trace", None)  # fake-urile din teste n-au câmpul nou (tiparul aftercare)
     try:
         j = await llm.complete_schema(rich_system, user, schema)
@@ -861,6 +909,10 @@ async def _finalize_rich(
     # `ctx.trace` (→ `conversation_traces`, sub flag), NU în analytics (P12: acolo contoare).
     if trace is not None:
         trace["rich_raw"] = j
+        if handles:
+            trace["rich_handles"] = handles  # fără mapare, `rich_raw` n-ar mai putea fi citit
+    if handles:
+        j = _resolve_handles(j, handles)
     emitted = [it for it in (j.get("items") or []) if isinstance(it, dict) and it.get("product_id")]
     rich = compose.assemble(ctx, j, products, grounded_numbers=shape.grounded_numbers)
     if rich.items:
@@ -868,6 +920,26 @@ async def _finalize_rich(
         # a raporta acolo un „cum alegi" lipsă ar număra un eșec care nu i-a fost arătat nimănui.
         _apply_turn_shape(ctx, rich, j, shape)
     return _RichOutcome(reply=rich, model_items=len(emitted))
+
+
+def _resolve_handles(j: dict[str, Any], handles: dict[str, str]) -> dict[str, Any]:
+    """`P3` → `product_id`, pe `items` și pe `pick`, ÎNAINTE de `compose.assemble`. Copie, nu
+    mutație (`j` e și diagnoza brută din `ctx.trace`). Un handle necunoscut (imposibil sub
+    `strict`, dar defensiv) rămâne ca atare și cade la apartenență, ca un id străin azi."""
+    out = dict(j)
+    out["items"] = [
+        {**it, "product_id": handles.get(it.get("product_id"), it.get("product_id"))}
+        if isinstance(it, dict)
+        else it
+        for it in (j.get("items") or [])
+    ]
+    pick = j.get("pick")
+    if isinstance(pick, dict):
+        out["pick"] = {
+            **pick,
+            "product_id": handles.get(pick.get("product_id"), pick.get("product_id")),
+        }
+    return out
 
 
 def rich_user_message(
@@ -878,6 +950,7 @@ def rich_user_message(
     *,
     notes: str = "",
     shape: _TurnShape | None = None,
+    handles: dict[str, str] | None = None,
 ) -> str:
     """Mesajul de USER al apelului de compunere bogată. Extras din `_finalize_rich` ca să aibă UN
     singur autor: replay-ul de raționament (NX-312 felia 5) îl reface pe ture reale prin aceeași
@@ -906,7 +979,7 @@ def rich_user_message(
         f"Limba clientului: {ctx.language}\n{notes_block}{history_block}"
         f"Nevoia clientului: {query}\n{axes_block}{shape.block}\n"
         f"Produse disponibile (alege dintre acestea):\n"
-        f"{_rich_bundle(products, _rich_facets(ctx), ctx.language)}"
+        f"{_rich_bundle(products, _rich_facets(ctx), ctx.language, handles)}"
     )
     return user
 
