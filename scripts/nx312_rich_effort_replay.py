@@ -334,6 +334,43 @@ def pairs_markdown(pairs: list[dict[str, Any]], queries: dict[str, str]) -> str:
 # --- DB: ture reale (read-only, tenant-scoped) ---------------------------------------------------
 
 
+async def history_at(conn: Any, bid: str, conversation_id: str, at: Any) -> list[Message]:
+    """Ultimele 8 mesaje ale conversației, așa cum le-a văzut turul de la `at` (inclusiv mesajul
+    curent al clientului, ca `get_recent_messages` după insert). Publică: o refolosește și
+    replay-ul NX-320, ca istoricul să fie reconstruit o singură dată, într-un singur fel."""
+    rows = await conn.fetch(
+        """
+        select direction, author, body, content_type, created_at
+        from (
+          select direction, author, body, content_type, created_at
+          from messages
+          where business_id = $1::uuid and conversation_id = $2::uuid
+            and created_at <= (
+              select max(created_at) from messages
+              where business_id = $1::uuid and conversation_id = $2::uuid
+                and direction = 'inbound' and created_at <= $3
+            )
+          order by created_at desc
+          limit 8
+        ) recent
+        order by created_at asc
+        """,
+        bid,
+        conversation_id,
+        at,
+    )
+    return [
+        Message(
+            direction=Direction(r["direction"]),
+            author=Author(r["author"]),
+            body=r["body"],
+            content_type=r["content_type"] or "text",
+            created_at=r["created_at"],
+        )
+        for r in rows
+    ]
+
+
 async def load_cases(
     business: Any, conn: Any, admin: Any, *, days: int, limit: int
 ) -> list[ReplayCase]:
@@ -389,37 +426,7 @@ async def load_cases(
             products += await get_products_by_ids(conn, bid, ids[i : i + 6], limit=6)
         if not products:
             continue
-        rows = await conn.fetch(
-            """
-            select direction, author, body, content_type, created_at
-            from (
-              select direction, author, body, content_type, created_at
-              from messages
-              where business_id = $1::uuid and conversation_id = $2::uuid
-                and created_at <= (
-                  select max(created_at) from messages
-                  where business_id = $1::uuid and conversation_id = $2::uuid
-                    and direction = 'inbound' and created_at <= $3
-                )
-              order by created_at desc
-              limit 8
-            ) recent
-            order by created_at asc
-            """,
-            bid,
-            t["conversation_id"],
-            t["created_at"],
-        )
-        history = [
-            Message(
-                direction=Direction(r["direction"]),
-                author=Author(r["author"]),
-                body=r["body"],
-                content_type=r["content_type"] or "text",
-                created_at=r["created_at"],
-            )
-            for r in rows
-        ]
+        history = await history_at(conn, bid, t["conversation_id"], t["created_at"])
         cases.append(
             ReplayCase(
                 turn_id=t["turn_id"],

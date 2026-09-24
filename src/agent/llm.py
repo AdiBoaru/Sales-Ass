@@ -414,6 +414,9 @@ class ModelProfile:
 
     params: frozenset[str]
     reasons_by_default: bool
+    # NX-320: familia accepta function tools pe `/v1/responses` CU rationament. Declarat, nu dedus:
+    # un model nou fara linia asta nu primeste calea noua, deci un 400 nu poate aparea din tacere.
+    responses_tools: bool = False
 
 
 # GPT-6 (2026-09-24, din documentatia OpenAI, NU masurat inca pe API): aceeasi regula a bitului.
@@ -421,8 +424,8 @@ class ModelProfile:
 # `astra` NU accepta `none`: pe `chat.completions` n-ar putea rula bucla cu tool-uri deloc, deci
 # ramane DELIBERAT nedeclarat (prefix necunoscut ⇒ numarat), nu prins de un prefix `gpt-6-` generic.
 _MODEL_PROFILES: tuple[tuple[str, ModelProfile], ...] = (
-    ("gpt-6-luna", ModelProfile(frozenset({"reasoning_effort", "temperature"}), True)),
-    ("gpt-6-sol", ModelProfile(frozenset({"reasoning_effort", "temperature"}), True)),
+    ("gpt-6-luna", ModelProfile(frozenset({"reasoning_effort", "temperature"}), True, True)),
+    ("gpt-6-sol", ModelProfile(frozenset({"reasoning_effort", "temperature"}), True, True)),
     ("gpt-5.6-", ModelProfile(frozenset({"reasoning_effort", "temperature"}), True)),
     ("gpt-5.4-", ModelProfile(frozenset({"reasoning_effort", "temperature"}), False)),
 )
@@ -468,6 +471,62 @@ def _note_truncation(resp: Any, *, cap: int | None) -> None:
         )
     except Exception:  # noqa: BLE001 — observabilitatea nu are voie să rupă un apel reușit (P6)
         return
+
+
+def _note_incomplete(resp: Any) -> None:
+    """NX-320 — echivalentul lui `_note_truncation` pe `/v1/responses`: acolo nu există
+    `finish_reason`, ci `status="incomplete"` + `incomplete_details.reason`. Același motiv de a
+    exista: un răspuns gol din cauza plafonului arată altfel ca un succes curat."""
+    try:
+        if getattr(resp, "status", None) != "incomplete":
+            return
+        details = getattr(resp, "incomplete_details", None)
+        reason = getattr(details, "reason", None) if details is not None else None
+        turn_latency.degrade("llm_responses_incomplete")
+        log.warning("llm: răspuns Responses incomplet (motiv=%s)", reason)
+    except Exception:  # noqa: BLE001 — observabilitatea nu are voie să rupă un apel reușit (P6)
+        return
+
+
+def responses_tools(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Schemele de chat → forma PLATĂ de pe `/v1/responses` (NX-320). PUR.
+
+    Chat: `{"type": "function", "function": {name, description, parameters, strict}}`.
+    Responses: `{"type": "function", name, description, parameters, strict}`. Aceleași scheme,
+    aceeași sursă (`tool_definitions`); aici se schimbă doar ambalajul, deci o unealtă nu poate
+    arăta altfel pe cele două căi."""
+    out: list[dict[str, Any]] = []
+    for t in tools:
+        fn = t.get("function") if t.get("type") == "function" else None
+        out.append({"type": "function", **fn} if isinstance(fn, dict) else dict(t))
+    return out
+
+
+@dataclass(frozen=True)
+class ToolRound:
+    """NX-320: ce a cerut modelul într-o rundă, independent de endpoint. `calls` = (nume, argumente
+    JSON ca string, exact cum le-a emis modelul); `text` = ce a scris în loc de unelte."""
+
+    calls: tuple[tuple[str, str], ...]
+    text: str
+
+
+def _tool_round_from(resp: Any, *, via: str) -> ToolRound:
+    """Normalizează răspunsul unei runde pe ambele endpointuri (NX-320)."""
+    if via == "chat":
+        msg = resp.choices[0].message
+        calls = tuple(
+            (tc.function.name, tc.function.arguments or "{}")
+            for tc in (getattr(msg, "tool_calls", None) or [])
+        )
+        return ToolRound(calls=calls, text=(msg.content or "").strip())
+    items = getattr(resp, "output", None) or []
+    calls = tuple(
+        (getattr(o, "name", ""), getattr(o, "arguments", None) or "{}")
+        for o in items
+        if getattr(o, "type", None) == "function_call"
+    )
+    return ToolRound(calls=calls, text=(getattr(resp, "output_text", "") or "").strip())
 
 
 #: Cheia de rutare a cache-ului de prompt pentru turul curent (NX-275 felia 3). ContextVar, ca
@@ -624,6 +683,21 @@ class LLMClient:
             agent=agent, model=kwargs["model"], has_tools=bool(kwargs.get("tools"))
         )
         kwargs.update(sampling.params)
+        resp = await self._guarded(
+            self._client.chat.completions.create, kwargs, reasoning_on=sampling.reasoning_on
+        )
+        _note_truncation(resp, cap=kwargs.get("max_completion_tokens"))
+        return resp
+
+    async def _guarded(
+        self, create: Callable[..., Awaitable[Any]], kwargs: dict[str, Any], *, reasoning_on: bool
+    ) -> Any:
+        """Gărzile COMUNE ale oricărui apel de generare, indiferent de endpoint (NX-320).
+
+        Extrase din `_chat`, nu copiate în `_respond`: cheia de cache, bugetul pe apel (NX-311),
+        retry-ul (NX-126), rândul din `per_call` (NX-312) și atributul de cache de pe span. Două
+        copii ar fi divergat tăcut la prima reparație, exact cum NX-300 a găsit apeluri fără span.
+        `kwargs` e deja complet (sampling aplicat); aici se adaugă doar ce e al gărzilor."""
         s = get_settings()
         # NX-275 felia 3: sub același flag ca layoutul, fiindcă amândouă sunt inutile una fără
         # cealaltă (un prefix stabil pe care ruterul îl trimite în altă parte nu se cache-uiește,
@@ -631,15 +705,13 @@ class LLMClient:
         cache_key = _prompt_cache_key.get()
         if cache_key and getattr(s, "prompt_cache_layout_enabled", False):
             kwargs["prompt_cache_key"] = cache_key
-        budget = call_budget(s, reasoning_on=sampling.reasoning_on)
+        budget = call_budget(s, reasoning_on=reasoning_on)
         # NX-312: forma se citește ÎNAINTE de apel, din cererea care chiar pleacă pe sârmă.
         shape = usage.request_shape(kwargs)
         started = perf_counter()
         try:
             resp = await _with_retry(
-                lambda t: self._client.chat.completions.create(
-                    **(kwargs if t is None else {**kwargs, "timeout": t})
-                ),
+                lambda t: create(**(kwargs if t is None else {**kwargs, "timeout": t})),
                 max_retries=s.llm_retry_max,
                 cap_ms=budget.cap_ms,
                 attempt_timeout_s=budget.attempt_timeout_s,
@@ -649,12 +721,91 @@ class LLMClient:
         except BaseException:
             # Și apelul EȘUAT e un rând: timpul lui a fost plătit de tur. Re-ridicăm neatins —
             # măsurătoarea nu are voie să schimbe ce vede apelantul (P6, P10).
-            _note_call(shape, sampling.reasoning_on, started, None, ok=False)
+            _note_call(shape, reasoning_on, started, None, ok=False)
             raise
-        _note_call(shape, sampling.reasoning_on, started, resp, ok=True)
-        _note_truncation(resp, cap=kwargs.get("max_completion_tokens"))
+        _note_call(shape, reasoning_on, started, resp, ok=True)
         _note_cache_on_span(resp)
         return resp
+
+    def _responses_sampling(self, *, model: str, effort: str) -> Sampling:
+        """NX-320 — parametrii opționali pe `/v1/responses`, aceeași regulă a bitului.
+
+        Diferența e UNA, și e motivul întregului card: aici uneltele NU forțează `none`. Efortul e
+        cel cerut de apelant. Restul urmează exact regula de pe chat: `temperature` doar cu
+        raționamentul oprit, plafonul de output doar dacă e configurat (`max_output_tokens`, numele
+        de pe Responses). `store=False` e fix, nu config (P12: conversațiile clienților nu rămân la
+        furnizor), iar cu raționament pornit se cere conținutul criptat al raționamentului: e
+        singura cale, fără stare la furnizor, prin care o rundă următoare ar continua gândul."""
+        s = get_settings()
+        profile = model_profile(model)
+        if profile is None or not profile.responses_tools:
+            # Nu inventăm capabilități (ca la `_sampling`), dar aici nici nu degradăm pe tăcute:
+            # singurul apelant e o cale NOUĂ, deci un refuz zgomotos e ieftin și corect.
+            raise ValueError(f"modelul {model!r} nu e declarat cu `responses_tools`")
+        effort = (effort or "").strip() or _NO_REASONING
+        out: dict[str, Any] = {"reasoning": {"effort": effort}, "store": False}
+        reasoning_on = effort != _NO_REASONING
+        if reasoning_on:
+            out["include"] = ["reasoning.encrypted_content"]
+        if s.llm_max_tokens_agent > 0:
+            out["max_output_tokens"] = s.llm_max_tokens_agent
+        if s.llm_sampling_enabled and not reasoning_on and "temperature" in profile.params:
+            out["temperature"] = s.llm_temperature_agent
+        return Sampling(out, reasoning_on=reasoning_on)
+
+    async def _respond(self, *, effort: str, **kwargs: Any) -> Any:
+        """NX-320 — geamănul lui `_chat` pe `/v1/responses`: același `_guarded`, alt `create`."""
+        sampling = self._responses_sampling(model=kwargs["model"], effort=effort)
+        kwargs.update(sampling.params)
+        resp = await self._guarded(
+            self._client.responses.create, kwargs, reasoning_on=sampling.reasoning_on
+        )
+        _note_incomplete(resp)
+        return resp
+
+    async def tool_round(
+        self,
+        system: str,
+        user: str,
+        tools: list[dict[str, Any]],
+        *,
+        via: str,
+        effort: str = _NO_REASONING,
+        model: str | None = None,
+    ) -> "ToolRound":
+        """NX-320 felia 1 — O rundă de tool-calling care NU execută uneltele: întoarce ce a cerut
+        modelul. Există pentru replay-ul care compară `none` (chat, calea de azi) cu raționamentul
+        pe Responses, pe ACELAȘI input.
+
+        `via="chat"` trece prin `_chat`, deci primește exact cererea buclei de producție (inclusiv
+        `none` forțat). `via="responses"` trece prin `_respond` cu `effort`. Bucla live
+        (`run_tool_loop`) NU folosește metoda asta: legarea ei e felia 2, doar după verdictul GO."""
+        mdl = model or self.model_agent
+        with turn_latency.span("model"):
+            if via == "chat":
+                resp = await self._chat(
+                    agent=True,
+                    model=mdl,
+                    messages=[
+                        {"role": "system", "content": system},
+                        {"role": "user", "content": user},
+                    ],
+                    tools=tools,
+                    tool_choice="auto",
+                )
+            elif via == "responses":
+                resp = await self._respond(
+                    effort=effort,
+                    model=mdl,
+                    instructions=system,
+                    input=[{"role": "user", "content": user}],
+                    tools=responses_tools(tools),
+                    tool_choice="auto",
+                )
+            else:
+                raise ValueError(f"via necunoscut: {via!r}")
+        usage.record_chat(resp, mdl)
+        return _tool_round_from(resp, via=via)
 
     async def classify_json(self, system: str, user: str, *, model: str | None = None) -> dict:
         """Apel chat cu răspuns JSON forțat (`response_format=json_object`).

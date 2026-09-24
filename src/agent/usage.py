@@ -31,8 +31,9 @@ MAX_CALL_ROWS = 8
 
 #: Forma unui apel, derivată din CEREREA care pleacă pe sârmă (vezi `request_shape`). Vocabular
 #: ÎNCHIS: `tools` = rundă de tool-calling, `schema` = răspuns JSON forțat (json_schema SAU
-#: json_object), `text` = răspuns liber.
-CALL_SHAPES = ("tools", "schema", "text")
+#: json_object), `text` = răspuns liber, `responses_tools` = rundă de tool-calling pe
+#: `/v1/responses` (NX-320: singura formă în care uneltele pot raționa).
+CALL_SHAPES = ("tools", "schema", "text", "responses_tools")
 
 
 def request_shape(kwargs: dict[str, Any]) -> str:
@@ -42,9 +43,12 @@ def request_shape(kwargs: dict[str, Any]) -> str:
     proprietate care decide legalitatea cererii: un apel cu `tools` nu poate raționa pe
     `chat.completions`, deci forma e și cea care separă cele două populații de durată (NX-311).
     `tools` bate `response_format`: bucla structurată a creierului unic le trimite pe amândouă, iar
-    ce o face lentă sau rapidă e bitul de raționament, pe care îl dictează uneltele."""
+    ce o face lentă sau rapidă e bitul de raționament, pe care îl dictează uneltele.
+
+    NX-320: pe `/v1/responses` (recunoscut după `input`, cheia care nu există pe chat) uneltele POT
+    raționa, deci e o a treia populație de durată și nu are voie să se amestece cu `tools`."""
     if kwargs.get("tools"):
-        return "tools"
+        return "responses_tools" if "input" in kwargs else "tools"
     if kwargs.get("response_format"):
         return "schema"
     return "text"
@@ -140,11 +144,23 @@ def current() -> "UsageAccumulator | None":
     return _current.get()
 
 
+def _attr(obj: Any, name: str) -> Any:
+    """Câmpul `name` de pe un obiect SDK SAU dict, `None` dacă lipsește."""
+    return obj.get(name) if isinstance(obj, dict) else getattr(obj, name, None)
+
+
+def _details(usage: Any, chat_name: str, responses_name: str) -> Any:
+    """NX-320: aceeași defalcare poartă alt nume pe `/v1/responses` (`input_tokens_details` în loc
+    de `prompt_tokens_details`). Numele de chat are prioritate, deci pe răspunsurile de chat
+    citirea e byte-identică cu cea de dinainte."""
+    details = _attr(usage, chat_name)
+    return details if details is not None else _attr(usage, responses_name)
+
+
 def _cached_from(usage: Any) -> int:
-    """`prompt_tokens_details.cached_tokens` — tolerează obiect SDK SAU dict SAU lipsă."""
-    details = getattr(usage, "prompt_tokens_details", None)
-    if details is None and isinstance(usage, dict):
-        details = usage.get("prompt_tokens_details")
+    """`prompt_tokens_details.cached_tokens` (chat) sau `input_tokens_details.cached_tokens`
+    (Responses) — tolerează obiect SDK SAU dict SAU lipsă."""
+    details = _details(usage, "prompt_tokens_details", "input_tokens_details")
     if details is None:
         return 0
     if isinstance(details, dict):
@@ -174,10 +190,10 @@ def _reasoning_from(usage: Any) -> int | None:
     grațioasă e o minciună. „Câmp absent" (nu știm) și „zero tokeni de gândire" (știm, și e zero)
     sunt afirmații opuse, dar arată identic dacă le colapsezi în `0` — iar cea greșită e liniștitor
     de plauzibilă: te-ai uita la un raport care spune „raționamentul nu costă nimic" și ai închide
-    ancheta. Distincția o folosește `record_chat`, care numără cazul nedeclarat."""
-    details = getattr(usage, "completion_tokens_details", None)
-    if details is None and isinstance(usage, dict):
-        details = usage.get("completion_tokens_details")
+    ancheta. Distincția o folosește `record_chat`, care numără cazul nedeclarat.
+
+    NX-320: pe Responses defalcarea se cheamă `output_tokens_details`."""
+    details = _details(usage, "completion_tokens_details", "output_tokens_details")
     if details is None:
         return None
     raw = (
@@ -217,6 +233,16 @@ def _field(usage: Any, name: str) -> int:
     return int(val or 0)
 
 
+def _tokens(usage: Any, chat_name: str, responses_name: str) -> int:
+    """NX-320: `prompt_tokens`/`completion_tokens` pe chat, `input_tokens`/`output_tokens` pe
+    Responses. Fără asta un apel Responses s-ar număra cu 0 tokeni, deci cost 0: plafonul zilnic
+    de cost nu s-ar mai declanșa, iar raportul ar spune că apelul a fost gratis."""
+    val = _attr(usage, chat_name)
+    if val is None:
+        val = _attr(usage, responses_name)
+    return int(val or 0)
+
+
 def record_chat(resp: Any, model: str) -> None:
     """Raportează usage-ul unui apel chat (best-effort). Fără acumulator activ sau fără `usage`
     pe răspuns (ex. fake-uri din teste) → no-op, nu rupe turul."""
@@ -226,8 +252,8 @@ def record_chat(resp: Any, model: str) -> None:
     usage = getattr(resp, "usage", None)
     if usage is None:
         return
-    tokens_in = _field(usage, "prompt_tokens")
-    tokens_out = _field(usage, "completion_tokens")
+    tokens_in = _tokens(usage, "prompt_tokens", "input_tokens")
+    tokens_out = _tokens(usage, "completion_tokens", "output_tokens")
     cached = _cached_from(usage)
     reasoning = _reasoning_from(usage)
     if reasoning is None:
@@ -262,9 +288,13 @@ def record_call(resp: Any, *, shape: str, reasoning: bool, ms: float, ok: bool) 
             "reasoning": bool(reasoning),
             "ok": bool(ok),
             "ms": round(float(ms), 1),
-            "tokens_in": _field(usage, "prompt_tokens") if usage is not None else 0,
+            "tokens_in": _tokens(usage, "prompt_tokens", "input_tokens")
+            if usage is not None
+            else 0,
             "cached": _cached_from(usage) if usage is not None else 0,
-            "tokens_out": _field(usage, "completion_tokens") if usage is not None else 0,
+            "tokens_out": (
+                _tokens(usage, "completion_tokens", "output_tokens") if usage is not None else 0
+            ),
             "reasoning_tokens": _reasoning_from(usage) if usage is not None else None,
         }
     )
