@@ -44,9 +44,9 @@ flowchart TD
   AFAQ["Servim răspunsul pregătit dinainte (:64-72)"]:::free
   AROUTE["Știm doar ÎNCOTRO merge (ruta),<br/>nu și răspunsul (:73-82)"]:::stage
   SKIPS["Sărim cache / FAQ / triaj —<br/>ruta e deja știută<br/>(cache.py:93 · faq.py:49 · triage.py:214)"]:::stage
-  CACHE{"6 · Am mai răspuns la o întrebare<br/>aproape identică? (cache semantic)<br/>preț/stoc se re-verifică, nu se servesc orb<br/>(cache.py:46-100)"}:::dec
+  CACHE{"6 · Am mai răspuns la EXACT aceeași întrebare?<br/>(potrivire exactă; fără embeddings din 2026-09-24)<br/>preț/stoc se re-verifică, nu se servesc orb<br/>(cache.py:52-89)"}:::dec
   CHIT["Servim răspunsul din memorie — fără AI"]:::free
-  FAQ{"7 · Se potrivește cu o întrebare<br/>frecventă? (prag + rerank) (faq.py:45-101)"}:::dec
+  FAQ{"7 · SCOS 2026-09-24: FAQ-ul nu mai are strat<br/>propriu, e unealta agentului (faq_lookup)"}:::dec
   FHIT["Servim răspunsul din FAQ"]:::free
 
   TRI["8 · AI-ul MIC clasifică mesajul:<br/>vânzare / comandă / simplu / neclar<br/>(triage.py:293)"]:::llm

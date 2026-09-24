@@ -147,44 +147,29 @@ async def test_guard_allows_external_await_between_checkouts():
 # --------------------------------------------------------------------------- #
 
 
-async def test_cache_stage_releases_conn_before_embedding(monkeypatch):
-    """Cache-ul rulează pe TOT traficul și avea un embed între două query-uri. Dacă ăla se face
-    cu conexiunea în mână, stratul cel mai ieftin devine cel mai scump sub concurență."""
+async def test_cache_stage_uses_one_short_checkout(monkeypatch):
+    """Cache-ul rulează pe TOT traficul. Fără strat semantic (2026-09-24) e un singur checkout
+    scurt, fără niciun apel extern între query-uri."""
     from src.worker.stages import cache as cache_stage_mod
 
     db = GuardedProvider()
 
     class _LLM:
-        async def embed(self, texts):
-            await db.external_call("embed")
-            return [[0.0] * 4]
+        async def embed(self, texts):  # pragma: no cover - nu trebuie chemat
+            raise AssertionError("cache-ul nu mai cheamă niciun model")
 
     async def _exact(conn, *a, **k):
         await conn.fetchrow("select exact")
         return None
 
-    async def _semantic(conn, *a, **k):
-        await conn.fetchrow("select semantic")
-        return None
-
-    # NX-291: sonda de candidați decide dacă L2 mai rulează. Aici măsurăm CICLUL DE VIAȚĂ al
-    # conexiunii peste un embed, nu sonda — deci îi dăm răspunsul care duce testul pe drumul lung.
-    # Cu ea „goală", n-ar mai exista embed, iar testul ar trece degeaba: ar verifica un drum pe
-    # care apelul extern nici nu se face.
-    async def _has_candidates(conn, *a, **k):
-        await conn.fetchval("select exists")
-        return True
-
     monkeypatch.setattr(cache_stage_mod, "exact_lookup", _exact)
-    monkeypatch.setattr(cache_stage_mod, "semantic_candidates_exist", _has_candidates)
-    monkeypatch.setattr(cache_stage_mod, "semantic_lookup", _semantic)
 
     ctx = _ctx()
     deps = PipelineDeps(db=db, llm=_LLM())
     await cache_stage_mod.cache_stage(ctx, deps)  # nu trebuie să ridice
 
     assert db.max_open == 1
-    assert db.operations == ["cache_exact_lookup", "cache_semantic_lookup"]
+    assert db.operations == ["cache_exact_lookup"]
     assert all(c.closed for c in db.issued)
 
 

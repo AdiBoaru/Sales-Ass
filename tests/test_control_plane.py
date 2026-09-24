@@ -61,7 +61,7 @@ def test_the_never_complete_set_is_empty_but_declared():
     # Golirea mulțimii nu slăbește poarta: un stagiu cu conținut canonic tot nu finalizează un
     # mesaj MIXT — regula aia e separată (`_SINGLE_OBLIGATION_ONLY`) și trebuie să rămână în
     # picioare singură.
-    mixed = control_plane.decide(_ctx("vreau o cremă și cât costă livrarea?"), "faq_stage")
+    mixed = control_plane.decide(_ctx("vreau o cremă și cât costă livrarea?"), "cache_stage")
     assert not mixed.complete and mixed.reason == "mixed_intent"
 
 
@@ -73,13 +73,13 @@ def test_gates_and_terminal_stages_always_finalize():
 def test_faq_incomplete_on_safety_context():
     ctx = _ctx("cât costă livrarea?")
     ctx.state.safety = {"contexts": ["pregnancy"]}
-    decision = control_plane.decide(ctx, "faq_stage")
+    decision = control_plane.decide(ctx, "cache_stage")
     assert not decision.complete
     assert decision.reason in ("safety_context", "mixed_intent")
 
 
 def test_decision_carries_version():
-    decision = control_plane.decide(_ctx(), "faq_stage")
+    decision = control_plane.decide(_ctx(), "cache_stage")
     assert decision.version == control_plane.CONTROL_PLANE_VERSION
 
 
@@ -89,11 +89,11 @@ def test_decision_carries_version():
 def test_gate_demotes_incomplete_reply_to_signal():
     ctx = _ctx("cât costă livrarea? și vreau o cremă hidratantă")
     ctx.set_reply("Livrarea costă 20 lei.", cacheable=False)
-    decision = control_plane.gate_early_exit(ctx, "faq_stage")
+    decision = control_plane.gate_early_exit(ctx, "cache_stage")
     assert not decision.complete
     assert ctx.reply is None  # reply-ul nu iese la client
     assert len(ctx.brain_signals) == 1
-    assert ctx.brain_signals[0].stage == "faq_stage"
+    assert ctx.brain_signals[0].stage == "cache_stage"
     assert "Livrarea" in ctx.brain_signals[0].text
     assert ctx.fast_path is decision
     events = {e.type for e in ctx.events}
@@ -104,7 +104,7 @@ def test_gate_demotes_incomplete_reply_to_signal():
 def test_gate_keeps_complete_reply():
     ctx = _ctx("cât costă livrarea?")
     ctx.set_reply("Livrarea costă 20 lei.")
-    decision = control_plane.gate_early_exit(ctx, "faq_stage")
+    decision = control_plane.gate_early_exit(ctx, "cache_stage")
     assert decision.complete
     assert ctx.reply is not None
     assert ctx.brain_signals == []
@@ -114,7 +114,7 @@ def test_gate_drops_pending_question_proposal_on_demote():
     ctx = _ctx("vreau o cremă și cât costă livrarea?")
     ctx.state_proposals.append(SimpleNamespace(op="set_pending_question", key="intent"))
     ctx.set_clarify("Pentru cine e cadoul?", field="intent", resume_route="sales")
-    control_plane.gate_early_exit(ctx, "faq_stage")
+    control_plane.gate_early_exit(ctx, "cache_stage")
     assert ctx.reply is None
     assert all(p.op != "set_pending_question" for p in ctx.state_proposals)
 
@@ -122,11 +122,11 @@ def test_gate_drops_pending_question_proposal_on_demote():
 # --- runner: OFF = byte-identic; ON = mesajul mixt trece de FAQ -----------------
 
 
-async def _faq_like_stage(ctx, deps):
+async def _cache_like_stage(ctx, deps):
     ctx.set_reply("Livrarea costă 20 lei.")
 
 
-_faq_like_stage.__name__ = "faq_stage"
+_cache_like_stage.__name__ = "cache_stage"
 
 
 async def _brain_like_stage(ctx, deps):
@@ -147,7 +147,7 @@ def _settings(single_brain: bool) -> SimpleNamespace:
 async def test_runner_flag_off_first_reply_wins(monkeypatch):
     monkeypatch.setattr(rnr, "get_settings", lambda: _settings(False))
     ctx = _ctx("cât costă livrarea? și vreau o cremă hidratantă")
-    await run_pipeline(ctx, PipelineDeps(conn=None), [_faq_like_stage, _brain_like_stage])
+    await run_pipeline(ctx, PipelineDeps(conn=None), [_cache_like_stage, _brain_like_stage])
     assert ctx.reply.text == "Livrarea costă 20 lei."  # comportamentul de azi, neatins
     assert ctx.brain_signals == []
 
@@ -155,7 +155,7 @@ async def test_runner_flag_off_first_reply_wins(monkeypatch):
 async def test_runner_flag_on_mixed_message_reaches_brain(monkeypatch):
     monkeypatch.setattr(rnr, "get_settings", lambda: _settings(True))
     ctx = _ctx("cât costă livrarea? și vreau o cremă hidratantă")
-    await run_pipeline(ctx, PipelineDeps(conn=None), [_faq_like_stage, _brain_like_stage])
+    await run_pipeline(ctx, PipelineDeps(conn=None), [_cache_like_stage, _brain_like_stage])
     assert "recomand" in ctx.reply.text  # brain-ul acoperă AMBELE obligații
     assert len(ctx.brain_signals) == 1  # răspunsul FAQ a devenit semnal, nu s-a pierdut
 
@@ -169,7 +169,7 @@ async def test_runner_flag_on_exact_faq_still_fast(monkeypatch):
         calls.append("brain")
 
     _spy_brain.__name__ = "agent_stage"
-    await run_pipeline(ctx, PipelineDeps(conn=None), [_faq_like_stage, _spy_brain])
+    await run_pipeline(ctx, PipelineDeps(conn=None), [_cache_like_stage, _spy_brain])
     assert ctx.reply.text == "Livrarea costă 20 lei."
     assert calls == []  # fast path exact: brain-ul nici nu rulează
 

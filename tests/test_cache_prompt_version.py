@@ -41,14 +41,15 @@ def test_read_and_write_use_the_same_version_source():
     assert "cache_prompt_version(" in inspect.getsource(aftercare)
 
 
-def test_queries_accept_prompt_version_on_all_three_paths():
-    """Cele DOUĂ citiri + scrierea sunt parametrizate. Dacă una lipsește, izolarea e falsă:
-    scrii în namespace-ul corect dar citești din altul (sau invers)."""
+def test_queries_accept_prompt_version_on_read_and_write():
+    """Citirea + scrierea sunt parametrizate. Dacă una lipsește, izolarea e falsă: scrii în
+    namespace-ul corect dar citești din altul (sau invers). Din 2026-09-24 citirea e una singură
+    (exactă): lookup-ul pe vectori a plecat odată cu embeddings."""
     import inspect
 
-    from src.db.queries.semantic_cache import exact_lookup, semantic_lookup, upsert_entry
+    from src.db.queries.semantic_cache import exact_lookup, upsert_entry
 
-    for fn in (exact_lookup, semantic_lookup, upsert_entry):
+    for fn in (exact_lookup, upsert_entry):
         assert "prompt_version" in inspect.signature(fn).parameters, fn.__name__
 
 
@@ -101,7 +102,6 @@ async def test_v1_and_vnext_coexist_without_overwrite_or_cross_read(pool):
     cu promptul vechi (și invers) — motivul pentru care coloana există."""
     from src.db.queries.semantic_cache import exact_lookup, upsert_entry
 
-    emb = [0.013] * 1536
     h = "nx216-probe-hash"
 
     async with pool.acquire() as conn:
@@ -114,9 +114,7 @@ async def test_v1_and_vnext_coexist_without_overwrite_or_cross_read(pool):
             common = dict(
                 canonical_str="proba nx216 namespace",
                 canonical_hash=h,
-                embedding=emb,
                 volatility_class="static",
-                embedding_model="text-embedding-3-small",
                 quality_score=1.0,
                 ttl_days=1,
             )

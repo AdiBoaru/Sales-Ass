@@ -117,10 +117,6 @@ CHIP_PRODUCERS: dict[str, str] = {
         "(intrarea NEANCORATĂ de mai jos), deci gaura nu e închisă, e OCOLITĂ sub flag."
     ),
     # ── ancorate prin CONSTRUCȚIE: textul vine din date reale ───────────────────────────────
-    "src/worker/stages/faq.py::faq_stage": (
-        "Chips-urile SUNT întrebările FAQ candidate, citite din `faqs`. Nu pot numi ceva ce "
-        "magazinul nu are, fiindcă textul lor e chiar rândul din DB."
-    ),
     "src/agent/deterministic.py::_handle_review_intent": (
         "`_review_choice_chips(refs)` numește produse tocmai AFIȘATE (setul afișat + produsul "
         "paginii, NX-234). Ancora e o referință la ce s-a arătat, nu o promisiune nouă."

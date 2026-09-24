@@ -23,7 +23,6 @@
         "recommend"
       ],
       "fast_path": {
-        "faq_stage": false,
         "cache_stage": false
       }
     },
@@ -37,7 +36,6 @@
         ]
       ],
       "fast_path": {
-        "faq_stage": true,
         "cache_stage": true
       }
     },
@@ -49,7 +47,6 @@
         "recommend"
       ],
       "fast_path": {
-        "faq_stage": false,
         "cache_stage": false
       }
     },
@@ -60,7 +57,7 @@
         "recommend"
       ],
       "fast_path": {
-        "faq_stage": true
+        "cache_stage": true
       }
     },
     {
@@ -73,7 +70,7 @@
         ]
       ],
       "fast_path": {
-        "faq_stage": true
+        "cache_stage": true
       }
     },
     {
@@ -83,7 +80,7 @@
         "answer"
       ],
       "fast_path": {
-        "faq_stage": true
+        "cache_stage": true
       }
     },
     {
@@ -94,7 +91,6 @@
         "answer"
       ],
       "fast_path": {
-        "faq_stage": false,
         "cache_stage": false
       }
     },
@@ -106,7 +102,6 @@
         "safety"
       ],
       "fast_path": {
-        "faq_stage": false,
         "cache_stage": false
       }
     },

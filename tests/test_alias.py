@@ -12,10 +12,8 @@ from src.models import BusinessConfig, Contact, InboundMessage, Route, RouteDeci
 from src.worker.runner import DEFAULT_STAGES, PipelineDeps, run_pipeline
 from src.worker.stages import alias as alias_mod
 from src.worker.stages import cache as cache_mod
-from src.worker.stages import faq as faq_mod
 from src.worker.stages.alias import alias_stage
 from src.worker.stages.cache import cache_stage
-from src.worker.stages.faq import faq_stage
 
 
 class _LLM:
@@ -246,32 +244,27 @@ async def test_route_hit_pipeline_continues_to_next_stage(monkeypatch):
     assert ctx.route.route == Route.SALES and ctx.reply is None
 
 
-async def test_route_hit_preempts_cache_and_faq(monkeypatch):
-    # FIX review NX-73: cache/FAQ RESPECTĂ ctx.route → nu deflectează rutarea deterministă de alias.
-    # Contoare (nu `raise`): cache/faq prind Exception, deci un boom ar fi înghițit (false conf).
+async def test_route_hit_preempts_cache(monkeypatch):
+    # FIX review NX-73: cache-ul RESPECTĂ ctx.route → nu deflectează rutarea deterministă de alias.
+    # Contor (nu `raise`): cache-ul prinde Exception, deci un boom ar fi înghițit (false conf).
     _patch_lookup(monkeypatch, _alias("category", target_value="creme"))
-    cache_calls, faq_calls, reached = [], [], []
+    cache_calls, reached = [], []
 
     async def track_cache(*a, **k):
         cache_calls.append(1)
-        return None
-
-    async def track_faq(*a, **k):
-        faq_calls.append(1)
         return None
 
     async def agent_sentinel(ctx, deps):
         reached.append(1)
 
     monkeypatch.setattr(cache_mod, "exact_lookup", track_cache)
-    monkeypatch.setattr(faq_mod, "semantic_lookup", track_faq)
     ctx = _ctx("creme hidratante")
     await run_pipeline(
         ctx,
         PipelineDeps(conn=None, llm=_LLM()),
-        [alias_stage, cache_stage, faq_stage, agent_sentinel],
+        [alias_stage, cache_stage, agent_sentinel],
     )
-    assert cache_calls == [] and faq_calls == []  # ghidate de ctx.route → niciun lookup/embed
+    assert cache_calls == []  # ghidat de ctx.route → niciun lookup
     assert reached == [1] and ctx.reply is None and ctx.route.route == Route.SALES
 
 

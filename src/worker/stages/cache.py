@@ -1,9 +1,10 @@
-"""Stagiul 4 — Cache semantic (G5b). Răspunde din cache la query-uri repetate,
-ÎNAINTE de triaj/agent → early-exit fără apel LLM de generare.
+"""Stagiul 4 — Cache de răspunsuri (G5b). Răspunde din cache la query-uri repetate,
+ÎNAINTE de agent → early-exit fără apel de model.
 
-Două straturi (precision-first):
-  • L1 exact: canonical_hash → O(1), zero false-positive.
-  • L2 semantic: embed(canonical) → HNSW cosine, auto-accept DOAR la ≥ τ_high.
+Un singur strat: potrivire EXACTĂ pe `canonical_hash` (O(1), zero false-positive). Stratul
+semantic (embed + cosine) a fost scos odată cu embeddings (2026-09-24): pe 30 de zile servise
+0 răspunsuri din 92 de încercări, iar singurul hit al perioadei fusese EXACT. Costa în schimb un
+apel de rețea pe fiecare tur.
 
 Tiere de volatilitate (canonical.classify_volatility):
   • `static` (FAQ/generic) — servit/scris în G5b-1.
@@ -13,8 +14,7 @@ Tiere de volatilitate (canonical.classify_volatility):
     învechit, evict lazy + tratează ca MISS (pipeline-ul regenerează cu preț proaspăt).
   • `realtime` (comandă/personal) — bypass (răspuns specific userului, niciodată cache).
 
-Folosește DOAR `embed()` (embeddings), nu generare (principiul 2). Câmpuri TurnContext
-scrise: `ctx.reply`, `ctx.from_cache`.
+Niciun apel de model. Câmpuri TurnContext scrise: `ctx.reply`, `ctx.from_cache`.
 """
 
 from __future__ import annotations
@@ -30,8 +30,6 @@ from src.db.queries.semantic_cache import (
     current_prices,
     delete_entry,
     exact_lookup,
-    semantic_candidates_exist,
-    semantic_lookup,
     touch_hit,
 )
 from src.models import TurnContext
@@ -71,29 +69,6 @@ async def _is_fresh_dynamic(ctx: TurnContext, conn: Any, entry: dict[str, Any]) 
     return True
 
 
-async def _has_semantic_candidates(
-    conn: Any, ctx: TurnContext, *, volatility: str, prompt_version: str
-) -> bool:
-    """Sonda de dinaintea embed-ului, cu eșec FAIL-OPEN.
-
-    O optimizare a unei optimizări n-are voie să stingă stratul pe care îl servește: dacă sonda
-    pică (migrare, DB, permisiune), răspundem „poate există" și plătim embed-ul, adică exact
-    comportamentul de dinainte. Invers ar fi mult mai rău și complet tăcut — un cache care nu mai
-    servește niciodată nu se vede în niciun răspuns, doar în factură."""
-    try:
-        return await semantic_candidates_exist(
-            conn,
-            ctx.business.id,
-            ctx.language,
-            volatility_class=volatility,
-            embedding_model=get_settings().model_embed,
-            prompt_version=prompt_version,
-        )
-    except Exception as e:  # noqa: BLE001 — vezi docstring: dubiul se rezolvă în favoarea lui L2
-        log.debug("cache: sonda de candidați a eșuat (%s) → continuăm cu embed", type(e).__name__)
-        return True
-
-
 async def _serve(
     ctx: TurnContext,
     conn: Any,
@@ -101,7 +76,6 @@ async def _serve(
     volatility: str,
     *,
     layer: str,
-    similarity: float | None = None,
 ) -> bool:
     """Servește un candidat de hit. Pe `dynamic` aplică price-check ÎNAINTE: dacă e
     învechit → evict lazy + emit `stale_evict` + întoarce False (tratat ca miss).
@@ -113,10 +87,7 @@ async def _serve(
     await touch_hit(conn, ctx.business.id, entry["id"])
     ctx.from_cache = True
     ctx.set_reply(entry["answer"])
-    props: dict[str, Any] = {"layer": layer, "volatility": volatility}
-    if similarity is not None:
-        props["similarity"] = round(similarity, 4)
-    ctx.emit("cache_lookup", **props)
+    ctx.emit("cache_lookup", layer=layer, volatility=volatility)
     return True
 
 
@@ -154,15 +125,14 @@ async def cache_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     if not canonical:
         return
 
-    # Cache-ul e o OPTIMIZARE — orice eroare (migrare neaplicată, DB, embed) →
+    # Cache-ul e o OPTIMIZARE — orice eroare (migrare neaplicată, DB) →
     # degradează la „miss", NU rupe turul (principiul 6).
     # NX-216: namespace-ul de prompt e dimensiune de cheie. Se determină ÎNAINTE de lookup și e
     # ACEEAȘI sursă ca la write-back (aftercare) → nu servim un răspuns compus cu alt prompt.
     prompt_version = cache_prompt_version(ctx.business)
 
-    similarity = 0.0
     try:
-        # L1 exact (O(1), zero false-positive). Checkout scurt: lookup + price-check + touch.
+        # Checkout scurt: lookup + price-check + touch sunt aceeași operație.
         async with deps.db("cache_exact_lookup") as conn:
             hit = await exact_lookup(
                 conn,
@@ -174,48 +144,7 @@ async def cache_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
             )
             if hit is not None and await _serve(ctx, conn, hit, volatility, layer="exact"):
                 return
-            # NX-291: are L2 pe ce opera? Sonda rulează în ACELAȘI checkout (verificare pe index,
-            # zero conexiune în plus) și folosește exact filtrul lui `semantic_lookup`.
-            has_candidates = await _has_semantic_candidates(
-                conn, ctx, volatility=volatility, prompt_version=prompt_version
-            )
-
-        # Mulțime servibilă goală ⇒ `semantic_lookup` NU poate întoarce nimic, deci embed-ul ar fi
-        # un apel extern plătit pentru un rezultat imposibil. E starea normală a unui tenant nou
-        # (cache-ul se umple din write-back, adică din trafic care încă n-a existat), nu o excepție.
-        if not has_candidates:
-            ctx.emit("cache_lookup", layer="miss", volatility=volatility, reason="no_candidates")
-            return
-
-        # L2 semantic (paraphrase). Fără LLM → nu putem embed → miss grațios.
-        if deps.llm is None:
-            ctx.emit("cache_lookup", layer="miss", volatility=volatility)
-            return
-        # NX-231: embed-ul rulează ÎNTRE cele două checkout-uri, cu conexiunea eliberată. Înainte,
-        # cache-ul (stagiul 4, pe TOT traficul) ținea o conexiune peste un apel la OpenAI.
-        embedding = (await deps.llm.embed([canonical]))[0]
-        async with deps.db("cache_semantic_lookup") as conn:
-            cand = await semantic_lookup(
-                conn,
-                ctx.business.id,
-                ctx.language,
-                embedding,
-                volatility_class=volatility,
-                embedding_model=settings.model_embed,
-                prompt_version=prompt_version,
-            )
-            similarity = float(cand["similarity"]) if cand else 0.0
-            if (
-                cand is not None
-                and similarity >= settings.cache_tau_high
-                and await _serve(
-                    ctx, conn, cand, volatility, layer="semantic", similarity=similarity
-                )
-            ):
-                return
-        # sub prag SAU evict pe price-check → miss (gray-zone verify = faza 2).
-        ctx.emit(
-            "cache_lookup", layer="miss", similarity=round(similarity, 4), volatility=volatility
-        )
+        # Lipsă SAU evict pe price-check → miss.
+        ctx.emit("cache_lookup", layer="miss", volatility=volatility)
     except Exception as e:  # noqa: BLE001 — cache best-effort: orice eroare → miss
         log.warning("cache: lookup eșuat (%s) → miss", type(e).__name__)

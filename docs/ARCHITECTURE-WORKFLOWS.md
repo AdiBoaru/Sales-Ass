@@ -413,9 +413,9 @@ flowchart TD
   AFAQ["Servim răspunsul pregătit dinainte (:64-72)"]:::free
   AROUTE["Știm doar ÎNCOTRO merge (ruta),<br/>nu și răspunsul (:73-82)"]:::stage
   SKIPS["Sărim cache / FAQ / triaj —<br/>ruta e deja știută<br/>(cache.py:93 · faq.py:49 · triage.py:214)"]:::stage
-  CACHE{"6 · Am mai răspuns la o întrebare<br/>aproape identică? (cache semantic)<br/>preț/stoc se re-verifică, nu se servesc orb<br/>(cache.py:46-100)"}:::dec
+  CACHE{"6 · Am mai răspuns la EXACT aceeași întrebare?<br/>(potrivire exactă; fără embeddings din 2026-09-24)<br/>preț/stoc se re-verifică, nu se servesc orb<br/>(cache.py:52-89)"}:::dec
   CHIT["Servim răspunsul din memorie — fără AI"]:::free
-  FAQ{"7 · Se potrivește cu o întrebare<br/>frecventă? (prag + rerank) (faq.py:45-101)"}:::dec
+  FAQ{"7 · SCOS 2026-09-24: FAQ-ul nu mai are strat<br/>propriu, e unealta agentului (faq_lookup)"}:::dec
   FHIT["Servim răspunsul din FAQ"]:::free
 
   TRI["8 · AI-ul MIC clasifică mesajul:<br/>vânzare / comandă / simplu / neclar<br/>(triage.py:293)"]:::llm
@@ -1325,7 +1325,7 @@ flowchart TD
 
   subgraph InfraErr["Infra failures"]
     I1["Redis down la accept → 503, clientul reîncearcă<br/>webhook/app.py:112-113"]:::err
-    I2["cache/FAQ error → miss, turn continues<br/>cache.py:169"]:::deg
+    I2["cache error → miss, turn continues<br/>cache.py:149"]:::deg
     I3["analytics fail → log only<br/>aftercare.py:86"]:::deg
     I4["conv lock busy → requeue capped<br/>consumer.py:96-102"]:::deg
     I5["consumer crash mid-turn → un-ACKed<br/>reaper XAUTOCLAIM re-claims :293"]:::ok
@@ -1681,7 +1681,6 @@ clarify_resume_stage
 greeting_stage
 alias_stage
 cache_stage
-faq_stage
 agent_stage
 fallback_stage
 ```
@@ -1795,8 +1794,6 @@ embed_job_enabled = true
 facet_search_enabled = true
 faq_enabled = true
 faq_locale_fallback_enabled = false
-faq_policy_gate_on_faq_kind = true
-faq_rerank_enabled = true
 fast_path_exact_enabled = false
 guidance_required_enabled = false
 howto_from_catalog_enabled = false
@@ -1963,6 +1960,7 @@ welcome_enabled = true
 049_search_tsv_product_type.sql
 050_review_summary_provenance.sql
 051_drop_frozen_channels.sql
+052_embeddings_optional.sql
 ```
 
 

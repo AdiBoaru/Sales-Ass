@@ -65,12 +65,12 @@ class _ScriptedLLM:
         raise AssertionError("calea legacy nu trebuie chemată sub single-brain")
 
 
-async def _faq_hit_stage(ctx, deps):
+async def _cache_hit_stage(ctx, deps):
     """Simulează un hit FAQ canonic (conținut authored din DB), fără DB reală."""
     ctx.set_reply("Livrarea costă 20 lei prin curier.")
 
 
-_faq_hit_stage.__name__ = "faq_stage"
+_cache_hit_stage.__name__ = "cache_stage"
 
 
 def _wire(monkeypatch, *, flag: bool, port: _FakePort | None = None) -> None:
@@ -90,7 +90,7 @@ def _wire(monkeypatch, *, flag: bool, port: _FakePort | None = None) -> None:
         monkeypatch.setattr(brain_mod, "build_port", lambda ctx, deps, sel, **kw: port)
 
 
-_STAGES = [greeting_stage, _faq_hit_stage, agent_stage, fallback_stage]
+_STAGES = [greeting_stage, _cache_hit_stage, agent_stage, fallback_stage]
 
 
 async def test_flag_off_first_reply_wins_byte_identical(monkeypatch):
@@ -123,7 +123,7 @@ async def test_flag_on_mixed_faq_plus_recommendation_reaches_brain(monkeypatch):
     # FAQ-ul NU a închis turul: reply-ul lui a devenit semnal pentru brain
     assert len(ctx.brain_signals) == 1
     assert "Livrarea costă 20 lei" in ctx.brain_signals[0].text
-    assert "[context faq_stage]" in llm.captured_user
+    assert "[context cache_stage]" in llm.captured_user
     # brain-ul a acoperit AMBELE obligații într-un singur răspuns
     assert "Comanda ajunge prin curier" in ctx.reply.text
     assert "LumaDerm" in ctx.reply.text
@@ -131,7 +131,9 @@ async def test_flag_on_mixed_faq_plus_recommendation_reaches_brain(monkeypatch):
     # căutarea a mers prin portul NX-238 (fals aici), nu direct prin tool
     assert port.calls == 1
     demote = [e for e in ctx.events if e.type == "control_plane_decision"]
-    assert any(e.properties["path"] == "faq_stage" and not e.properties["complete"] for e in demote)
+    assert any(
+        e.properties["path"] == "cache_stage" and not e.properties["complete"] for e in demote
+    )
 
 
 async def test_flag_on_pure_greeting_stays_fast_path(monkeypatch):

@@ -227,8 +227,8 @@ def test_faq_si_cache_nu_pot_incheia_un_tur_de_rutina():
         emit=lambda *a, **k: None,
         events=[],
     )
-    assert control_plane.decide(ctx, "faq_stage").complete is False
+    assert control_plane.decide(ctx, "cache_stage").complete is False
     # Contra-proba: aceeași cale, o întrebare obișnuită — FAQ-ul ARE voie s-o încheie. Fără ea,
     # testul ar trece și dacă `decide` ar refuza tot, adică fără să demonstreze nimic.
     ctx.message = SimpleNamespace(body="cat costa transportul?")
-    assert control_plane.decide(ctx, "faq_stage").complete is True
+    assert control_plane.decide(ctx, "cache_stage").complete is True
