@@ -111,6 +111,11 @@ class TypedFacet:
     # iar la excludere doar a doua contează: un filtru dur peste un atribut cu precizie 70% șterge
     # TĂCUT produse corecte, iar clientul nu vede o eroare, vede mai puține opțiuni și pleacă.
     enforce_ready: bool = False
+    #: NX-322b: valoare → valorile care o CONTRAZIC pe aceeași fațetă (`dry` → `oily`). Doar pe o
+    #: fațetă `partitioning` (pe una aditivă „și uscat și gras" e o descriere legitimă). Folosit
+    #: DOAR sub `SKIN_TYPE_ANTI_FIT_ENABLED` și doar pe o nevoie `hard` (citat + alias, NX-322):
+    #: dreptul de a exclude cere auditul de precizie al valorii excluse, nu acoperirea ei.
+    anti_fit: dict[str, tuple[str, ...]] = field(default_factory=dict)
     labels: dict[str, str] = field(
         default_factory=dict
     )  # locale → etichetă display (absoarbe NX-182)
@@ -200,6 +205,19 @@ def _build_one(raw: dict[str, Any]) -> TypedFacet:
     list_sem = raw.get("list_semantics", "any")
     if list_sem not in ("any", "all"):
         raise FacetConfigError(f"list_semantics invalid pt {key!r}: {list_sem!r}")
+    anti_raw = raw.get("anti_fit") or {}
+    if not isinstance(anti_raw, dict):
+        raise FacetConfigError(f"anti_fit nu e dict pt {key!r}")
+    if anti_raw and binding != "partitioning":
+        raise FacetConfigError(f"anti_fit cere binding `partitioning` pt {key!r}")
+    anti_fit: dict[str, tuple[str, ...]] = {}
+    for val, against in anti_raw.items():
+        if not isinstance(val, str) or not isinstance(against, list):
+            raise FacetConfigError(f"anti_fit invalid pt {key!r}: {val!r}")
+        declared = {val, *(a for a in against if isinstance(a, str))}
+        if values and not declared <= set(values):
+            raise FacetConfigError(f"anti_fit numește valori nedeclarate pt {key!r}")
+        anti_fit[val] = tuple(a for a in against if isinstance(a, str) and a != val)
     labels_raw = raw.get("labels") or {}
     if not isinstance(labels_raw, dict):
         raise FacetConfigError(f"labels nu e dict pt {key!r}")
@@ -223,6 +241,7 @@ def _build_one(raw: dict[str, Any]) -> TypedFacet:
         min_coverage=min_cov,
         binding=binding,
         enforce_ready=enforce_ready,
+        anti_fit=anti_fit,
         labels=labels,
     )
 

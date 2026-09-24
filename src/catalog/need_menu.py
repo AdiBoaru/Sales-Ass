@@ -228,3 +228,35 @@ def split_args(raw: Iterable[Any] | None) -> tuple[list[str], list[NeedArg]]:
         elif isinstance(item, str) and item.strip():
             legacy.append(item)
     return legacy, needs
+
+
+def anti_fit_for(facets: Iterable[Any], hard: Mapping[str, Sequence[str]]) -> dict[str, list[str]]:
+    """NX-322b: nevoile `hard` → `dimensiune → valorile de EXCLUS`, din `TypedFacet.anti_fit`.
+
+    Doar pe nevoi `hard`: o cheie aleasă semantic de model (`soft`) nu capătă dreptul de a scoate
+    produse. Pachet fără `anti_fit` ⇒ gol, adică nicio excludere (fail-open). PURĂ."""
+    by_key = {f.key: f for f in facets or ()}
+    out: dict[str, list[str]] = {}
+    for dim, keys in hard.items():
+        facet = by_key.get(dim)
+        against = getattr(facet, "anti_fit", None) or {}
+        for key in keys:
+            for value in against.get(key, ()):
+                if value not in keys and value not in out.setdefault(dim, []):
+                    out[dim].append(value)
+    return {dim: vals for dim, vals in out.items() if vals}
+
+
+def anti_fit_hit(attributes: Any, anti: Mapping[str, Sequence[str]]) -> bool:
+    """Produsul e marcat DOAR pentru valori care contrazic nevoia? PURĂ.
+
+    „Doar": un produs declarat pentru mai multe tipuri, printre care și cel cerut, rămâne. Un
+    produs fără atribut rămâne (necunoscut ≠ nepotrivit, UNKNOWN ≠ MISMATCH)."""
+    if not anti or not isinstance(attributes, Mapping):
+        return False
+    for dim, against in anti.items():
+        raw = attributes.get(dim)
+        values = {str(v) for v in raw} if isinstance(raw, list) else ({str(raw)} if raw else set())
+        if values and values <= set(against):
+            return True
+    return False

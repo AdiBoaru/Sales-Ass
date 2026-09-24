@@ -21,7 +21,15 @@ from pydantic import BaseModel, Field
 
 from src.analytics.demand import product_ids_from_dicts
 from src.catalog.folding import fold_text
-from src.catalog.need_menu import NeedArg, build_menu, need_verdict, split_args, split_needs
+from src.catalog.need_menu import (
+    NeedArg,
+    anti_fit_for,
+    anti_fit_hit,
+    build_menu,
+    need_verdict,
+    split_args,
+    split_needs,
+)
 from src.catalog.query_terms import content_terms
 from src.catalog.render_text import cut_at_sentence, display_name
 from src.catalog.vocabulary import (
@@ -2104,6 +2112,23 @@ async def search_products_tool(
                 unknown=counts[UNKNOWN],
                 dropped_total=before - len(ranked_final),
             )
+
+    # NX-322b: anti-potrivirea, în aceeași plasă de după fuziune și din același motiv (pool-ul
+    # sesiunii se seamănă din `ranked_final`, deci un produs scos mai târziu ar reapărea la
+    # „arată-mi altele"). Doar pe nevoi `hard` și doar cu flagul, aprins după auditul de precizie.
+    if hard_needs and get_settings().skin_type_anti_fit_enabled:
+        anti = anti_fit_for(getattr(ctx.business.domain_pack, "facets", ()), hard_needs)
+        if anti:
+            before = len(ranked_final)
+            ranked_final = [p for p in ranked_final if not anti_fit_hit(p.get("attributes"), anti)]
+            for dim, values in anti.items():
+                ctx.emit(
+                    "anti_fit_excluded",
+                    dimension=dim,
+                    values=values,
+                    n_excluded=before - len(ranked_final),
+                    consumer="search_products",
+                )
 
     # NX-134: diversificare sortiment — reordonează pool-ul ca prima pagină să acopere scara de preț
     # + branduri (nu top-N clone). DOAR pe `relevance` (sort explicit = ordinea cerută de client,

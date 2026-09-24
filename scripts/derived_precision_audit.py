@@ -124,6 +124,36 @@ def _audit_path(business_id: str, facet: str) -> pathlib.Path:
     return AUDIT_DIR / f"{business_id[:8]}-{facet}.json"
 
 
+def _manifest_path(business_id: str, key: str) -> pathlib.Path:
+    return AUDIT_DIR / f"{business_id[:8]}-{key}.manifest.json"
+
+
+def _split_key(key: str) -> tuple[str, str | None]:
+    """NX-322b: cheia de politică poate fi o fațetă (`skin_type`) sau O VALOARE a ei
+    (`skin_type.oily`). A doua există fiindcă dreptul de a EXCLUDE e al unei valori: un filtru
+    care scoate produsele `oily` stă pe precizia etichetei `oily`, nu pe media fațetei."""
+    facet, _, value = key.partition(".")
+    return facet, (value or None)
+
+
+def _sample_hash(ids: list[str]) -> str:
+    return hashlib.sha256("\n".join(sorted(ids)).encode("utf-8")).hexdigest()
+
+
+def _cohen_kappa(pairs: list[tuple[bool, bool]]) -> float | None:
+    """Acordul dintre doi etichetatori peste acordul întâmplător. `None` fără perechi."""
+    n = len(pairs)
+    if not n:
+        return None
+    po = sum(1 for a, b in pairs if a == b) / n
+    p1 = sum(1 for a, _ in pairs if a) / n
+    p2 = sum(1 for _, b in pairs if b) / n
+    pe = p1 * p2 + (1 - p1) * (1 - p2)
+    if pe >= 1:
+        return 1.0 if po >= 1 else 0.0
+    return (po - pe) / (1 - pe)
+
+
 def _require_uuid(business_id: str) -> str:
     """`--business` TREBUIE să fie UUID, nu slug.
 
@@ -255,11 +285,20 @@ async def _derive_all(business_id: str) -> tuple[dict[str, dict], dict[str, dict
     return derived, context
 
 
-def _sample(derived: dict[str, dict], facet: str, size: int, seed: str) -> list[str]:
-    """Eșantion ALEATOR, dar reproductibil: sămânța e `business_id + fațetă`, deci două rulări
+def _sample(derived: dict[str, dict], key: str, size: int, seed: str) -> list[str]:
+    """Eșantion ALEATOR, dar reproductibil: sămânța e `business_id + cheie`, deci două rulări
     aleg aceleași produse și auditul se poate relua. Un eșantion care se schimbă la fiecare rulare
-    n-ar fi reluabil, iar unul ordonat (primele 100) ar măsura ordinea catalogului, nu fațeta."""
-    eligible = sorted(pid for pid, facets in derived.items() if facet in facets)
+    n-ar fi reluabil, iar unul ordonat (primele 100) ar măsura ordinea catalogului, nu fațeta.
+
+    NX-322b: pe o cheie de VALOARE, eligibile sunt produsele cu EXACT acea valoare (singura), adică
+    cele pe care catalogul le marchează așa: `derive_product_attributes` scrie o fațetă cu o singură
+    valoare doar când a potrivit una singură."""
+    facet, value = _split_key(key)
+    eligible = sorted(
+        pid
+        for pid, facets in derived.items()
+        if facet in facets and (value is None or facets[facet] == [value])
+    )
     rng = random.Random(seed)
     rng.shuffle(eligible)
     return eligible[:size]
@@ -276,8 +315,18 @@ async def _annotate(args) -> int:
         print(f"niciun produs cu `{args.facet}` derivat — nu e nimic de auditat")
         return 1
 
+    facet, _ = _split_key(args.facet)
     data = _load_audit(args.business, args.facet)
     todo = [pid for pid in sample if pid not in data["verdicts"]]
+    if args.revisit_disagreements:
+        # NX-322b: adjudecarea. Dezacordurile cu al doilea etichetator se revăd, iar verdictul
+        # revăzut e cel care intră în precizie.
+        second = data.get("second") or {}
+        todo = [
+            pid
+            for pid, v in data["verdicts"].items()
+            if pid in second and {v["verdict"], second[pid]["verdict"]} == {"correct", "wrong"}
+        ]
     print(
         f"fațeta `{args.facet}` · eșantion {len(sample)} · rămase {len(todo)}\n"
         f"prag preînregistrat: {spec['min_precision']:.0%} (limita de jos Wilson)\n"
@@ -285,9 +334,9 @@ async def _annotate(args) -> int:
     )
     for i, pid in enumerate(todo, 1):
         info = context[pid]
-        values = derived[pid][args.facet]
+        values = derived[pid][facet]
         print(f"\n[{i}/{len(todo)}] {info['name'][:100]}")
-        print(f"  derivat: {args.facet} = {values}")
+        print(f"  derivat: {facet} = {values}")
         for key in values:
             if ev := info["evidence"].get(key):
                 print(f"    {key:20} ← {ev}")
@@ -322,8 +371,32 @@ def _report(args) -> int:
         correct = sum(1 for v in decided if v["verdict"] == "correct")
         n = len(decided)
         lower = _wilson_lower(correct, n)
-        if n < spec["min_sample"]:
+        unsure_n = len(verdicts) - n
+        # NX-322b: gărzile OPȚIONALE ale unei chei, declarate în politică (deci preînregistrate).
+        # Fără ele verdictul se calculează exact ca înainte pentru fațetele deja auditate.
+        manifest = _manifest_path(args.business, facet)
+        outside: list[str] = []
+        if manifest.exists():
+            sealed = set(json.loads(manifest.read_text(encoding="utf-8"))["ids"])
+            outside = sorted(set(verdicts) - sealed)
+        second = data.get("second") or {}
+        pairs = [
+            (verdicts[pid]["verdict"] == "correct", second[pid]["verdict"] == "correct")
+            for pid in verdicts
+            if pid in second
+            and verdicts[pid]["verdict"] in ("correct", "wrong")
+            and second[pid]["verdict"] in ("correct", "wrong")
+        ]
+        kappa = _cohen_kappa(pairs)
+        max_unsure = spec.get("max_unsure_share")
+        if outside:
+            verdict = "INVALID"  # verdicte în afara eșantionului sigilat
+        elif n < spec["min_sample"]:
             verdict = "INSUFFICIENT"
+        elif max_unsure is not None and verdicts and unsure_n / len(verdicts) > max_unsure:
+            verdict = "INSUFFICIENT"  # sursa nu spune destul ca să justifice o excludere
+        elif "min_kappa" in spec and (kappa is None or kappa < spec["min_kappa"]):
+            verdict = "INSUFFICIENT"  # instrumentul, nu produsele, e problema
         elif lower >= spec["min_precision"]:
             verdict = "ENFORCE_READY"
         else:
@@ -336,7 +409,10 @@ def _report(args) -> int:
         rows[facet] = {
             "n_decided": n,
             "correct": correct,
-            "unsure": len(verdicts) - n,
+            "unsure": unsure_n,
+            "kappa": round(kappa, 4) if kappa is not None else None,
+            "pairs": len(pairs),
+            "outside_manifest": outside,
             "precision": round(precision, 4),
             "wilson_lower": round(lower, 4),
             "min_precision": spec["min_precision"],
@@ -405,7 +481,9 @@ async def _blind_out(args) -> int:
             {
                 "business_id": args.business,
                 "facet": args.facet,
-                "allowed_keys": sorted(_allowed_keys(args.business, derived, args.facet)),
+                "allowed_keys": sorted(
+                    _allowed_keys(args.business, derived, _split_key(args.facet)[0])
+                ),
                 "skipped_seen": sorted(seen & set(sample)),
                 "skipped_no_merchant_text": (
                     spec["sample_size"] - len(items) - len(seen & set(sample))
@@ -430,16 +508,54 @@ def _allowed_keys(business_id: str, derived: dict, facet: str) -> set[str]:
     return {vals[0] for f in derived.values() if (vals := f.get(facet))}
 
 
+async def _manifest(args) -> int:
+    """NX-322b: SIGILEAZĂ eșantionul înainte de etichetare. Lista de id-uri + SHA-256 peste ele,
+    sortate. Hash-ul intră în mesajul commitului; raportul refuză verdictele din afara listei."""
+    policy = _policy()
+    spec = policy["facets"].get(args.facet)
+    if spec is None:
+        raise SystemExit(f"cheia {args.facet!r} nu e în politica preînregistrată")
+    derived, _ = await _derive_all(args.business)
+    sample = _sample(derived, args.facet, spec["sample_size"], f"{args.business}:{args.facet}")
+    out = _manifest_path(args.business, args.facet)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    digest = _sample_hash(sample)
+    out.write_text(
+        json.dumps(
+            {
+                "business_id": args.business,
+                "key": args.facet,
+                "policy_fingerprint": _policy_fingerprint(policy),
+                "sha256": digest,
+                "ids": sorted(sample),
+            },
+            ensure_ascii=False,
+            indent=1,
+        ),
+        encoding="utf-8",
+    )
+    print(f"manifest: {out} · {len(sample)} produse · sha256 {digest}")
+    return 0
+
+
 async def _blind_in(args) -> int:
     """Ingerează răspunsurile în orb și scrie verdictele. COMPARAȚIA O FACE CODUL, nu judecătorul:
     el a spus doar ce crede că e produsul, fără să știe ce zisese regula."""
     derived, _ = await _derive_all(args.business)
     answers = json.loads(pathlib.Path(args.blind_in).read_text(encoding="utf-8"))
     data = _load_audit(args.business, args.facet)
-    data["labeled_by"] = "model_blind"  # proveniența stă pe fața artefactului, ca la NX-203
+    facet, _ = _split_key(args.facet)
+    # NX-322b: ca AL DOILEA etichetator, răspunsurile oarbe nu suprascriu verdictele omului: stau
+    # alături, iar raportul calculează acordul și kappa între cele două.
+    if args.as_second:
+        target = data.setdefault("second", {})
+        data["second_labeled_by"] = "model_blind"
+    else:
+        target = data["verdicts"]
+        data["labeled_by"] = "model_blind"  # proveniența stă pe fața artefactului, ca la NX-203
     agree = disagree = unsure = 0
     for pid, said in answers.items():
-        truth = (derived.get(pid) or {}).get(args.facet, [None])[0]
+        truth = (derived.get(pid) or {}).get(facet, [None])[0]
         if truth is None:
             continue
         if said in (None, "", "?"):
@@ -448,7 +564,7 @@ async def _blind_in(args) -> int:
             verdict, agree = "correct", agree + 1
         else:
             verdict, disagree = "wrong", disagree + 1
-        data["verdicts"][pid] = {"verdict": verdict, "values": [truth], "blind_said": said}
+        target[pid] = {"verdict": verdict, "values": [truth], "blind_said": said}
     _save_audit(data)
     print(
         f"acord {agree} · dezacord {disagree} · nedecis {unsure} → "
@@ -465,12 +581,25 @@ async def main() -> int:
     ap.add_argument("--blind-out", help="scrie foaia de lucru ÎN ORB (fără nume, fără valoare)")
     ap.add_argument("--blind-in", help="ingerează răspunsurile în orb și scrie verdictele")
     ap.add_argument("--exclude-seen", help="JSON cu id-uri deja văzute (contaminate)")
+    ap.add_argument("--manifest", action="store_true", help="sigilează eșantionul (id + sha256)")
+    ap.add_argument(
+        "--as-second",
+        action="store_true",
+        help="cu --blind-in: răspunsurile sunt al DOILEA etichetator (nu suprascriu verdictele)",
+    )
+    ap.add_argument(
+        "--revisit-disagreements",
+        action="store_true",
+        help="adnotare: revezi doar dezacordurile cu al doilea etichetator (adjudecare)",
+    )
     args = ap.parse_args()
     _require_uuid(args.business)
     if args.report:
         return _report(args)
     if not args.facet:
         raise SystemExit("dă --facet <nume> ca să adnotezi, sau --report ca să vezi verdictele")
+    if args.manifest:
+        return await _manifest(args)
     if args.blind_out:
         return await _blind_out(args)
     if args.blind_in:

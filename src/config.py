@@ -1145,6 +1145,13 @@ class Settings(BaseSettings):
     # ORDONEAZĂ; filtrează numai când citatul conține un alias al tenantului (D7). OFF până la
     # replay + golden (D15), fiindcă schimbă ce scrie modelul. OFF → schema de azi, byte-identică.
     need_menu_enabled: bool = Field(default=False, validation_alias="NEED_MENU_ENABLED")
+    # NX-322b: o nevoie `hard` (citat + alias) scoate produsele marcate DOAR pentru o valoare care o
+    # contrazice (`dry` → `oily`, din `TypedFacet.anti_fit`). Pe `bc7a356e` primul card al rutinei
+    # era un ulei de curățare `oily` pentru un client cu pielea uscată. Excluderea cere auditul de
+    # precizie al valorii excluse (NX-268, `skin_type.oily`); se aprinde DOAR cu verdict PASS.
+    skin_type_anti_fit_enabled: bool = Field(
+        default=False, validation_alias="SKIN_TYPE_ANTI_FIT_ENABLED"
+    )
     # Conversația `cd98a513`: motivul de card «cu pigmenți corectori și SPF 40» era aruncat ÎNTREG
     # (cardul rămânea fără motiv), fiindcă orice număr care nu e identificator lipit („v11") era
     # tratat drept cantitate inventată. Pe 30 de zile, 19 din 276 de motive aveau cifre, iar cele
