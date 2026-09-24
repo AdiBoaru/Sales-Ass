@@ -13,6 +13,7 @@ ghicitură): pe `strict`, ghiciturile corecte stau la 0,16 și peste, iar cea di
 
 from __future__ import annotations
 
+from src.config import get_settings
 from src.tools.catalog_tools import (
     guessed_filter_verdict,
     one_per_family,
@@ -156,8 +157,14 @@ def test_the_real_reason_survives() -> None:
     assert scrub_prose(fit, grounded_identifiers(_VILLAGE)) is not None
 
 
-def test_quantities_are_still_rejected_even_when_on_the_record() -> None:
-    """„50 ml" nu e un nume: o cifră fără literă rămâne cantitate neverificabilă."""
+def test_quantities_are_still_rejected_even_when_on_the_record(monkeypatch) -> None:
+    """O cifră fără literă nu e un nume. Decizia NX-313 („50 ml" de pe fișă tot respins) a fost
+    luată fiindcă altfel ar fi trecut și „50 lei". Conversația `cd98a513` a inversat-o pe jumătate:
+    PERECHEA de pe fișă („50 ml", „SPF 40") e fapt, iar numărul cu ALTĂ etichetă rămâne respins
+    (`tests/test_labeled_quantities.py`). Cu flagul stins, NX-313 byte-identic."""
+    g = grounded_identifiers({**_VILLAGE, "name": "X Cream 50 ml"})
+    assert scrub_prose("Cu complex v11, la 50 lei.", g) is None
+    monkeypatch.setattr(get_settings(), "labeled_quantity_grounding_enabled", False)
     g = grounded_identifiers({**_VILLAGE, "name": "X Cream 50 ml"})
     assert scrub_prose("Cu complex v11, 50 ml.", g) is None
 

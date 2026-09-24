@@ -554,6 +554,26 @@ noapte); (3) `subject_match` citea tipul de pe cardurile compacte ale căii boga
 `pytest tests/test_rejected_shelf_not_learned.py tests/test_chip_press.py
 tests/test_conversation_subject.py tests/test_text_gate_redundancy.py -q`.
 
+**Fix 2026-09-24 — conversația `cd98a513`: modelul nu ghicea raftul, noi îl păcăleam.**
+«vreau o crema de fata» → `category="fata"` (Machiaj > Fata), iar la «Caut ceva pentru calmare» 6
+produse de MACHIAJ, deși raftul de îngrijire are 130 de creme cu nevoia asta. Cauza: promptul
+arăta rafturile prin NUME, într-o listă plată, iar pe `sole-ro` **21 din 45 de nume se repetă**
+(«Ingrijirea tenului» de 5 ori) sau sunt omografe. Pe 30 de zile, doar 21 din 66 de categorii
+trimise erau chei. Acum promptul arată CHEIA (`machiaj-fata`, `ten-ingrijirea-tenului`, poartă
+părintele) ca meniu închis (`list_category_menu`). O valoare din afara meniului NU se blochează:
+măsurat, blocarea strica numele unice («si ceva de volum ?» → plumpere de buze), deci cade pe
+rezolvarea liberă cu gărzile NX-319/NX-313 și se numără (`category_off_menu`, rata de adopție).
+Al doilea defect al turului: motivul de card «…și SPF 40…» era aruncat întreg (cardul rămânea fără
+motiv), fiindcă orice număr era „cantitate inventată”. Acum perechea etichetă + număr de pe fișa
+PRODUSULUI trece (`labeled_quantities`), „50 lei” tot nu. Decizia NX-313 („50 ml” de pe fișă
+respins) e inversată pe jumătate, deliberat. **Neacoperit, declarat:** NX-313 tot nu judecă un raft
+ghicit pe treapta `relaxed` (o cheie greșită aleasă de model trece), modelul își poate lua propriile
+recomandări drept preferințe ale clientului în `query` (1 din 25 de query-uri), chip-ul «Caut ceva
+pentru X» nu poartă tipul produsului, iar turele 3-4 au murit la accept cu poolerul Supabase plin
+(15/15). Flaguri `SEARCH_CATEGORY_MENU_ENABLED`, `LABELED_QUANTITY_GROUNDING_ENABLED` (ON). Probe:
+`pytest tests/test_shelf_menu.py tests/test_labeled_quantities.py -q` +
+`PYTHONPATH=. python scripts/shelf_menu_probe.py [--replay]`.
+
 **NX-314 — subiectul conversației: «mai ieftin» servea benzi de nas la o cerere de cremă.**
 Conversația `f4e1431e` (`sole-ro`, 2026-09-23): după SOME BY MI Yuja Niacin (110 lei), «si ceva mai
 ieftin» a adus o bandă de nas de 3 lei și cinci măști sheet de 10 lei. `search_cheaper_than`

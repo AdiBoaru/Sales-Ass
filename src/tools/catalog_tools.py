@@ -27,6 +27,8 @@ from src.catalog.vocabulary import (
     CATEGORY_DIMENSION,
     CatalogVocabulary,
     Resolution,
+    ResolutionStatus,
+    category_on_menu,
     facet_overlays,
     named_only_as_subshelf,
     resolve,
@@ -991,7 +993,24 @@ def _resolve_search_terms(
     category_keys: tuple[str, ...] = ()
     category_verdict: Resolution | None = None
     if a.category:
+        # Modelul alege raftul dintr-un meniu de CHEI (conversația `cd98a513`: «Fata» = Machiaj >
+        # Fata la o cerere de cremă de față). O valoare din afara meniului cade pe rezolvarea
+        # liberă de dinainte, cu gărzile ei (NX-319 omograf, NX-313 ghicit), și se NUMĂRĂ: blocată,
+        # ar fi stricat mai mult decât repară. Măsurat cu `scripts/shelf_menu_probe.py` pe 66 de
+        # căutări reale: fără raft, «si ceva de volum ?» (păr) aducea plumpere de buze, iar
+        # numele unice («buze», «styling») erau corecte. Rata `category_off_menu` spune dacă
+        # modelul a adoptat cheile.
         r = resolve(vocab, a.category, CATEGORY_DIMENSION)
+        if getattr(get_settings(), "search_category_menu_enabled", False):
+            on_menu = category_on_menu(vocab, a.category)
+            if on_menu.reason == "off_menu":
+                ctx.emit(
+                    "category_off_menu",
+                    value=str(a.category)[:_VARIANT_ATTR_MAX],
+                    resolved=r.status.value,
+                )
+            elif on_menu.status is ResolutionStatus.KNOWN:
+                r = on_menu
         emitted.append(r)
         category_keys = r.constraint_keys
         category_verdict = r

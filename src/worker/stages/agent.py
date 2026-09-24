@@ -91,6 +91,7 @@ from src.conversation.subject import (
 )
 from src.db.queries.catalog import (
     get_products_by_ids,
+    list_category_menu,
     list_category_names,
     list_routing_aliases,
 )
@@ -132,7 +133,9 @@ async def _load_prompt_inputs(deps: PipelineDeps, ctx: TurnContext) -> PromptInp
     (NX-78). Determinist (query-uri `order by`) → prefix de cache stabil. Ridicarea unei
     excepții de DB se propagă în `try`-ul din `agent_stage` (→ echo fallback, P6)."""
     async with deps.db("prompt_inputs") as conn:
-        categories = await list_category_names(conn, ctx.business.id)
+        shelf_menu = getattr(get_settings(), "search_category_menu_enabled", False)
+        list_shelves = list_category_menu if shelf_menu else list_category_names
+        categories = await list_shelves(conn, ctx.business.id)
         aliases = await list_routing_aliases(conn, ctx.business.id)
     # NX-159 felia 3 / NX-165: profilul de STIL (DomainPack) intră în TOATE system-urile de
     # compunere (buclă/retry/rich). Gated; pack absent / OFF → None → prefix byte-identic.
@@ -150,6 +153,7 @@ async def _load_prompt_inputs(deps: PipelineDeps, ctx: TurnContext) -> PromptInp
         aliases,
         response_style=style,
         need_examples=examples.needs,
+        shelf_menu=shelf_menu,
     )
 
 

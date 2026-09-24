@@ -52,6 +52,7 @@ def _stub_agent_prompt_inputs(monkeypatch):
         return []
 
     monkeypatch.setattr(agent_mod, "list_category_names", _no_categories, raising=False)
+    monkeypatch.setattr(agent_mod, "list_category_menu", _no_categories, raising=False)
     monkeypatch.setattr(agent_mod, "list_routing_aliases", _no_aliases, raising=False)
 
 
