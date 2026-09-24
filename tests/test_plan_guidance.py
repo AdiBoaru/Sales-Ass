@@ -118,6 +118,7 @@ def all_off(monkeypatch):
     monkeypatch.setattr(s, "guidance_required_enabled", False)
     monkeypatch.setattr(s, "narrowing_question_enabled", False)
     monkeypatch.setattr(s, "howto_from_catalog_enabled", False)
+    monkeypatch.setattr(s, "rich_item_handles_enabled", False)  # NX-324: și el schimbă schema
 
 
 @pytest.mark.parametrize("body", [QUERY, "cum se foloseste prima"])

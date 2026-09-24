@@ -23,7 +23,13 @@ from typing import TYPE_CHECKING, Any
 from src.agent import answer_shape
 from src.agent.fallbacks import _card_variants
 from src.agent.voice import naturalize
-from src.catalog.render_text import display_name, size_label, unique_prefixes, word_key
+from src.catalog.render_text import (
+    display_name,
+    name_keys,
+    size_label,
+    unique_prefixes,
+    word_key,
+)
 from src.config import card_slots, chip_slots, get_settings
 from src.domain.normalize import normalize
 from src.models import (
@@ -823,9 +829,17 @@ def assemble(
         )
         pick = None
         intro = _off_category_intro(ctx.language)
+        education = scrub_education(j.get("education"), stock_present, allowed_numbers)
+        suggestions = list(j.get("suggestions") or [])
     else:
         pick = _select_pick(j, facts, items, stock_present, deterministic)
         intro = _drop_unfounded_stock(scrub_intro(j.get("intro"), allowed_numbers), stock_present)
+        education = scrub_education(j.get("education"), stock_present, allowed_numbers)
+        suggestions = list(j.get("suggestions") or [])
+        if getattr(get_settings(), "rich_card_reconcile_enabled", False):
+            intro, education, pick, suggestions = _reconcile_with_cards(
+                ctx, facts, items, intro, education, pick, suggestions
+            )
         if intro is None and getattr(get_settings(), "answer_shape_enabled", False):
             # NX-299 — slotul de ÎNCADRARE are o rezervă a serverului. Nu e un al doilea writer
             # semantic și nu costă o rundă: nu afirmă nimic despre produse, doar NUMEȘTE clasele
@@ -838,22 +852,111 @@ def assemble(
             # canonică («creme» pentru `crema de fata`), iar o poartă strictă nemăsurată ar
             # înlocui proză bună cu șablon. Se decide pe date, nu în trecere (D15).
             shown = [facts[it.product_id] for it in items if it.product_id in facts]
-            intro = answer_shape.framing_text(
-                getattr(ctx.business, "domain_pack", None),
-                ctx.language,
-                answer_shape.distinct_types(shown),
-            )
+            pack = getattr(ctx.business, "domain_pack", None)
+            types = answer_shape.distinct_types(shown)
+            source = "types"
+            if getattr(get_settings(), "framing_labels_enabled", False):
+                # NX-325: pe o rutină, pașii (etichete localizate, ordinea sloturilor); altfel
+                # tipurile, cu eticheta din pachet în loc de cheia de catalog.
+                intro = None
+                if routine is not None:
+                    shown_steps = [s for s in routine.steps if s.product_id in facts]
+                    intro = answer_shape.routine_framing_text(
+                        pack, ctx.language, [s.label for s in shown_steps]
+                    )
+                    source = "routine" if intro else source
+                if intro is None:
+                    types, missing = answer_shape.type_labels(pack, ctx.language, types)
+                    if missing:
+                        ctx.emit("framing_label_missing", n=missing)
+                    intro = answer_shape.framing_text(pack, ctx.language, types)
+            else:
+                intro = answer_shape.framing_text(pack, ctx.language, types)
             if intro:
-                ctx.emit("answer_shape_filled", slot=answer_shape.SLOT_FRAMING)
+                ctx.emit("answer_shape_filled", slot=answer_shape.SLOT_FRAMING, source=source)
 
     return RichReply(
         intro=intro,
         items=items,
         pick=pick,
-        education=scrub_education(j.get("education"), stock_present, allowed_numbers),
-        chips=_suggestion_chips(j.get("suggestions") or []),
+        education=education,
+        chips=_suggestion_chips(suggestions),
         disclaimer=disclaimer(ctx.language) if get_settings().ai_disclaimer_enabled else None,
     )
+
+
+def _named_ids(text: str, prefixes: dict[str, tuple[str, ...]]) -> set[str]:
+    """Produsele pe care `text` le NUMEȘTE: prefixul unic al numelui (NX-318), ca șir de cuvinte
+    întregi consecutive. PURĂ."""
+    words = name_keys(text)
+    hits: set[str] = set()
+    for pid, prefix in prefixes.items():
+        n = len(prefix)
+        if n and any(words[i : i + n] == prefix for i in range(len(words) - n + 1)):
+            hits.add(pid)
+    return hits
+
+
+def drop_sentences_naming(
+    text: str | None, unshown: set[str], prefixes: dict[str, tuple[str, ...]]
+) -> tuple[str | None, int]:
+    """NX-324: scoate propozițiile care numesc un produs FĂRĂ card. PURĂ.
+
+    Granularitatea e propoziția, deliberat: pe turul real `0d8a3541` propoziția le numea pe toate
+    trei („HARUHARU oferă…, REAL BARRIER…, iar MIZON…"), iar tăierea pe sub-propoziții (enumerări
+    cu «iar», «și») ar fi fragilă. Costul e o frază onestă mai scurtă; alternativa e un text care
+    trimite clientul la un produs care nu e pe ecran."""
+    if not text or not unshown:
+        return text, 0
+    kept: list[str] = []
+    dropped = 0
+    for sentence in _sentences(" ".join(text.split())):
+        if _named_ids(sentence, prefixes) & unshown:
+            dropped += 1
+        else:
+            kept.append(sentence)
+    return (" ".join(kept) or None), dropped
+
+
+def _reconcile_with_cards(
+    ctx: TurnContext,
+    facts: dict[str, dict[str, Any]],
+    items: list[RichItem],
+    intro: str | None,
+    education: str | None,
+    pick: tuple[str, str] | None,
+    suggestions: list[str],
+) -> tuple[str | None, str | None, tuple[str, str] | None, list[str]]:
+    """NX-324: textul se aliniază la setul AFIȘAT, nu invers (P8).
+
+    Un card poate lipsi din mai multe motive (id străin la apartenență, siguranță NX-173,
+    off-category, plafonul `card_slots`), iar textul modelului e scris înainte de toate. Numele se
+    recunoaște prin prefixul UNIC peste tot retrievalul turului (NX-318), nu prin `_mention_index`,
+    care cere două cuvinte: «HARUHARU» e scris singur. Un prefix care nu e unic nu declanșează
+    nimic, deci un brand cu două produse în retrieval nu taie nicio frază (conservator)."""
+    shown = {it.product_id for it in items}
+    unshown = {pid for pid in facts if pid not in shown}
+    if not unshown:
+        return intro, education, pick, suggestions
+    prefixes = unique_prefixes(
+        {pid: display_name(p.get("name")) for pid, p in facts.items()},
+        locale=getattr(ctx, "language", None),
+    )
+    intro, n_intro = drop_sentences_naming(intro, unshown, prefixes)
+    education, n_edu = drop_sentences_naming(education, unshown, prefixes)
+    kept_chips = [c for c in suggestions if not (_named_ids(c, prefixes) & unshown)]
+    pick_dropped = pick is not None and pick[0] not in shown
+    emit = getattr(ctx, "emit", None)
+    if emit is not None:
+        for field, n in (
+            ("intro", n_intro),
+            ("education", n_edu),
+            ("chips", len(suggestions) - len(kept_chips)),
+            ("pick", int(pick_dropped)),
+        ):
+            if n:
+                emit("rich_text_reconciled", field=field, n_dropped=n, n_unshown=len(unshown))
+    return intro, education, (None if pick_dropped else pick), kept_chips
 
 
 def card_products(items: list[RichItem]) -> list[dict[str, Any]]:

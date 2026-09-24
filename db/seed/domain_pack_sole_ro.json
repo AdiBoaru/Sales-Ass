@@ -551,6 +551,17 @@
         "l": 1000,
         "litri": 1000
       }
+    },
+    "weight": {
+      "canonical": "g",
+      "default_op": "eq",
+      "factors": {
+        "g": 1,
+        "gr": 1,
+        "grame": 1,
+        "kg": 1000,
+        "kilograme": 1000
+      }
     }
   },
   "_searchable_facets_note": "Cheile ARRAY din `attributes` pe care le poate filtra cautarea de feature («ceva cu niacinamida»). Goale azi — se aprind cu F2.",
@@ -698,6 +709,174 @@
       "labels": {
         "ro": "SPF",
         "en": "SPF"
+      }
+    },
+    {
+      "key": "product_type",
+      "in_comparison": false,
+      "value_labels": {
+        "balsam": {
+          "ro": "balsam"
+        },
+        "balsam de buze": {
+          "ro": "balsam de buze"
+        },
+        "balsam de curatare": {
+          "ro": "balsam de curățare"
+        },
+        "balsam pentru corp": {
+          "ro": "balsam pentru corp"
+        },
+        "benzi pentru ochi": {
+          "ro": "benzi pentru ochi"
+        },
+        "corector": {
+          "ro": "corector"
+        },
+        "creion contur buze": {
+          "ro": "creion contur buze"
+        },
+        "crema coloranta de fata": {
+          "ro": "cremă colorantă de față"
+        },
+        "crema contur ochi": {
+          "ro": "cremă contur ochi"
+        },
+        "crema de corp": {
+          "ro": "cremă de corp"
+        },
+        "crema de curatare": {
+          "ro": "cremă de curățare"
+        },
+        "crema de fata": {
+          "ro": "cremă de față"
+        },
+        "crema de maini": {
+          "ro": "cremă de mâini"
+        },
+        "crema de ochi": {
+          "ro": "cremă de ochi"
+        },
+        "crema de par": {
+          "ro": "cremă de păr"
+        },
+        "cushion": {
+          "ro": "cushion"
+        },
+        "esenta": {
+          "ro": "esență"
+        },
+        "exfoliant": {
+          "ro": "exfoliant"
+        },
+        "exfoliant de corp": {
+          "ro": "exfoliant de corp"
+        },
+        "fard de obraz": {
+          "ro": "fard de obraz"
+        },
+        "fard de pleoape": {
+          "ro": "fard de pleoape"
+        },
+        "fond de ten": {
+          "ro": "fond de ten"
+        },
+        "gel autobronzant": {
+          "ro": "gel autobronzant"
+        },
+        "gel de curatare": {
+          "ro": "gel de curățare"
+        },
+        "gel de dus": {
+          "ro": "gel de duș"
+        },
+        "gel de fata": {
+          "ro": "gel de față"
+        },
+        "gel de sprancene": {
+          "ro": "gel de sprâncene"
+        },
+        "lotiune de corp": {
+          "ro": "loțiune de corp"
+        },
+        "lotiune de fata": {
+          "ro": "loțiune de față"
+        },
+        "luciu de buze": {
+          "ro": "luciu de buze"
+        },
+        "manusa pentru demachiere": {
+          "ro": "mănușă pentru demachiere"
+        },
+        "masca de fata": {
+          "ro": "mască de față"
+        },
+        "masca de par": {
+          "ro": "mască de păr"
+        },
+        "mist facial": {
+          "ro": "mist facial"
+        },
+        "mist pentru par": {
+          "ro": "mist pentru păr"
+        },
+        "nuantator pentru buze": {
+          "ro": "nuanțator pentru buze"
+        },
+        "pasta de dinti": {
+          "ro": "pastă de dinți"
+        },
+        "plasturi": {
+          "ro": "plasturi"
+        },
+        "pudra de fata": {
+          "ro": "pudră de față"
+        },
+        "ruj": {
+          "ro": "ruj"
+        },
+        "sampon": {
+          "ro": "șampon"
+        },
+        "sapun lichid": {
+          "ro": "săpun lichid"
+        },
+        "ser de fata": {
+          "ro": "ser de față"
+        },
+        "ser de par": {
+          "ro": "ser de păr"
+        },
+        "set": {
+          "ro": "set"
+        },
+        "spray pentru par": {
+          "ro": "spray pentru păr"
+        },
+        "spuma autobronzanta": {
+          "ro": "spumă autobronzantă"
+        },
+        "spuma de curatare": {
+          "ro": "spumă de curățare"
+        },
+        "stick pentru fata": {
+          "ro": "stick pentru față"
+        },
+        "toner de fata": {
+          "ro": "toner de față"
+        },
+        "tonic": {
+          "ro": "tonic"
+        },
+        "ulei de buze": {
+          "ro": "ulei de buze"
+        },
+        "ulei de curatare": {
+          "ro": "ulei de curățare"
+        },
+        "ulei de par": {
+          "ro": "ulei de păr"
+        }
       }
     }
   ],

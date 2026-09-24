@@ -57,7 +57,13 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
 from src.agent import usage  # noqa: E402
-from src.agent.finalize import _rich_schema, rich_omissions, rich_user_message  # noqa: E402
+from src.agent.finalize import (  # noqa: E402
+    _resolve_handles,
+    _rich_schema,
+    item_handles,
+    rich_omissions,
+    rich_user_message,
+)
 from src.agent.prompt_builder import PromptInputs, build_rich_system  # noqa: E402
 from src.config import get_settings  # noqa: E402
 from src.models import (  # noqa: E402
@@ -131,8 +137,14 @@ def build_call(
     """(system, user, schema) — exact ce ar trimite `_finalize_rich` pentru turul ăsta."""
     products = [dict(p) for p in case.products]
     system = build_rich_system(inp, omit=omit)
-    user = rich_user_message(ctx, case.query, products, case.history)
-    return system, user, _rich_schema(omit)
+    # NX-324: aceleași handle-uri ca `_finalize_rich`, ca replay-ul să măsoare cererea producției.
+    handles = _handles_for(products)
+    user = rich_user_message(ctx, case.query, products, case.history, handles=handles)
+    return system, user, _rich_schema(omit, n_items=len(handles) if handles else None)
+
+
+def _handles_for(products: list[dict[str, Any]]) -> dict[str, str] | None:
+    return item_handles(products) if get_settings().rich_item_handles_enabled else None
 
 
 def visible_text(rich: Any) -> str:
@@ -148,6 +160,8 @@ def visible_text(rich: Any) -> str:
 def served_summary(ctx: TurnContext, j: dict[str, Any], products: list[dict[str, Any]]) -> tuple:
     """Trece JSON-ul prin `compose.assemble`, ca pe drumul real: câte carduri rămân după
     apartenență, dacă intro-ul și education au trecut de scrub."""
+    if handles := _handles_for(products):
+        j = _resolve_handles(j, handles)
     emitted = [it for it in (j.get("items") or []) if isinstance(it, dict) and it.get("product_id")]
     rich = compose.assemble(ctx, j, products)
     return (

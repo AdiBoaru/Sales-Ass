@@ -32,6 +32,10 @@ class FacetSpec:
     key: str
     labels: dict[str, str] = field(default_factory=dict)  # locale → eticheta rândului
     value_labels: dict[str, dict[str, str]] = field(default_factory=dict)  # cod → locale → text
+    #: NX-325: `False` ⇒ intrarea poartă DOAR etichete de valori (ex. `product_type`), fără rând
+    #: în tabelul de comparație și fără loc în bundle-ul modelului. O singură listă în pachet, un
+    #: singur proprietar al etichetelor; loaderul o împarte în cele două vederi.
+    in_comparison: bool = True
 
 
 @dataclass(frozen=True)
@@ -90,6 +94,10 @@ class DomainPack:
     # tabelul are doar rândurile generice (preț/rating/avantaje/brand) ca azi. Auto-scalează: când
     # `attributes` crește, rândurile apar fără schimbare de cod. Per-vertical (defaults JSON).
     comparison_facets: tuple[FacetSpec, ...] = ()
+    #: NX-325: TOATE intrările din `comparison_facets` ale pachetului, inclusiv cele cu
+    #: `in_comparison: false`. Citit doar de `value_label`; gol ⇒ `value_label` citește
+    #: `comparison_facets` (pachete construite direct, în teste).
+    facet_labels: tuple[FacetSpec, ...] = ()
     # Secțiunile de fișă pe care le vede modelul la detaliu, în ordine, cu plafon per secțiune.
     # Gol → lista istorică din cod (`_detail_view`), ca verticalele fără declarație să rămână
     # byte-identice. Per-vertical (defaults JSON) + override per-tenant.
@@ -153,3 +161,18 @@ class DomainPack:
     # pașii de instalare la electrocasnice), iar codul definește doar ce E un pas. Gol → niciun
     # produs n-are pas, adică exact comportamentul de dinaintea NX-280.
     routine_steps: RoutineSpec = EMPTY_ROUTINE_STEPS
+
+    def value_label(self, facet_key: str, code: str, locale: str | None) -> str | None:
+        """Eticheta localizată a unei VALORI de fațetă, sau `None` dacă pachetul n-o declară.
+
+        UN proprietar: `FacetSpec.value_labels` din `comparison_facets` (același pe care îl citește
+        `compose._facet_value_label` când randează tabelul de comparație). Meniul de nevoi (NX-322)
+        și încadrarea serverului (NX-325) citesc de aici, ca să nu apară o a doua tabelă de
+        etichete care să divergă tăcut de prima. Fallback pe `ro` e al pachetului, nu al codului:
+        lipsa unei traduceri întoarce `None`, iar apelantul decide (de obicei, cheia)."""
+        for spec in self.facet_labels or self.comparison_facets:
+            if spec.key != facet_key:
+                continue
+            trans = spec.value_labels.get(code) or {}
+            return trans.get(locale or "") or None
+        return None

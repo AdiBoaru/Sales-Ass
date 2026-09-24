@@ -625,6 +625,30 @@ def _facet_filter_clause(filters: Mapping[str, Sequence[str]], placeholder: Any)
     return " and ".join(parts)
 
 
+def _facet_prefer_rank(prefer: Mapping[str, Sequence[str]], placeholder: Any) -> str:
+    """NX-322: expresia de ORDONARE după nevoile `soft`, fără să excludă nimic.
+
+    Pe fiecare dimensiune: potrivire 0, atribut lipsă 1, altă valoare 2, iar dimensiunile se adună.
+    `case` explicit, nu `(expr) desc nulls last`: acela ar pune produsele fără atribut ULTIMELE,
+    sub cele care contrazic, iar un produs fără tip de ten declarat nu e unul nepotrivit
+    (UNKNOWN ≠ MISMATCH). Aceeași formă ca `_facet_filter_clause`: cheia e PARAMETRIZATĂ,
+    niciodată interpolată, iar fațetele-listă și fațetele-scalar merg amândouă."""
+    parts: list[str] = []
+    for key in sorted(prefer):
+        values = [v for v in prefer[key] if v]
+        if not values:
+            continue
+        kp = placeholder(key)
+        vp = placeholder(list(values))
+        parts.append(
+            f"(case when p.attributes->{kp} is null then 1 "
+            f"when jsonb_typeof(p.attributes->{kp}) = 'array' "
+            f"then (case when (p.attributes->{kp}) ?| {vp}::text[] then 0 else 2 end) "
+            f"when (p.attributes->>{kp}) = any({vp}::text[]) then 0 else 2 end)"
+        )
+    return " + ".join(parts)
+
+
 def _variant_label_clause(label: str, placeholder: Any) -> str:
     """NX-135: produsul are o VARIANTĂ cu eticheta cerută (nuanță/mărime) — filtru DUR pentru
     fallback-ul gradat („alte game care CHIAR au Warm Beige"). Match NORMALIZAT (lower + strip
@@ -1423,7 +1447,8 @@ _ROUTINE_CANDIDATES_SQL = """
                coalesce(p.sale_price, p.price) as price,
                row_number() over (
                    partition by p.attributes->>'routine_step'
-                   order by (p.review_count * p.rating + 30 * 4.0) / (p.review_count + 30) desc,
+                   order by {prefer}
+                            (p.review_count * p.rating + 30 * 4.0) / (p.review_count + 30) desc,
                             p.id
                ) as rn,
                row_number() over (
@@ -1451,6 +1476,7 @@ async def routine_candidates(
     facet_filters: Mapping[str, Sequence[str]] | None = None,
     per_step: int = 8,
     include_cheapest: bool = False,
+    prefer: Mapping[str, Sequence[str]] | None = None,
 ) -> list[dict[str, Any]]:
     """Candidații vandabili ai fiecărui pas, ordonați după rang, cel mult `per_step` pe pas.
 
@@ -1491,7 +1517,11 @@ async def routine_candidates(
     facets = ""
     if facet_filters and (fc := _facet_filter_clause(facet_filters, placeholder)):
         facets = f"and {fc}"
+    # NX-322: nevoile `soft` (alese de model, necoroborate de un alias) ORDONEAZĂ în interiorul
+    # pasului, înaintea rangului. Gol ⇒ șirul gol, deci SQL-ul e byte-identic cu cel de azi.
+    rank = _facet_prefer_rank(prefer, placeholder) if prefer else ""
     sql = _ROUTINE_CANDIDATES_SQL.format(
+        prefer=f"{rank}, " if rank else "",
         facets=facets,
         per_step=placeholder(min(per_step, 12)),
         cheapest=placeholder(include_cheapest),

@@ -33,24 +33,36 @@ de electrocasnice declară alte familii (pașii de instalare) și tool-ul funcț
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field
 
+from src.catalog.need_menu import NeedArg, split_args
 from src.catalog.routine_compose import RoutinePlan, compose
 from src.catalog.vocabulary import facet_overlays, resolve_any
 from src.catalog.vocabulary_cache import get_vocabulary
+from src.config import get_settings
+from src.conversation.needs import corroborated_by
 from src.db.queries.catalog import (
     get_products_by_ids,
     routine_candidates,
     routine_steps_of,
     traverse_relation_chain,
 )
+from src.domain.constraints import UnitRegistry
 from src.domain.routine_steps import SEP
 from src.tools.base import ToolResult, register
-from src.tools.catalog_tools import _safety_gate
+from src.tools.catalog_tools import (
+    _is_relative_price_request,
+    _safety_gate,
+    apply_need_menu,
+    client_texts,
+    price_bound_source,
+    price_units,
+)
 from src.web.localization import amount_text
 
 if TYPE_CHECKING:
@@ -109,9 +121,65 @@ class RoutineView:
     def ordinals(self) -> set[str]:
         """Cifrele pe care modelul are voie să le rostească fiindcă le-a atribuit SERVERUL.
 
-        Doar pozițiile sloturilor ACOPERITE, nu `range(1, 10)`: un plafon generos ar deschide
-        poarta pentru orice cifră mică inventată, exact în turul în care listăm prețuri."""
+        Nu `range(1, 10)`: un plafon generos ar deschide poarta pentru orice cifră mică inventată,
+        exact în turul în care listăm prețuri.
+
+        NX-323: numerotarea e cea DENSĂ a pașilor arătați, 1..N, adică exact ce vede clientul pe
+        carduri. Înainte erau pozițiile din ȘABLONUL familiei, iar pe conversația `bc7a356e`
+        pașii acoperiți erau {1, 4, 5, 6}: modelul a scris «1.», «2.», «3.», ca orice om, iar
+        poarta de cifre a aruncat toată rutina. Flag stins ⇒ pozițiile de șablon."""
+        if get_settings().routine_dense_ordinals_enabled:
+            return {str(i) for i in range(1, len(self.steps) + 1)}
         return {str(s.position) for s in self.steps}
+
+
+@dataclass(frozen=True)
+class RoutineArgVerdict:
+    """NX-321: ce din argumentele modelului are voie să EXCLUDĂ produse din rutină."""
+
+    budget_source: str | None  # PRICE_BOUND_* sau None (bugetul iese)
+    unit_rejected: bool  # bugetul a picat DOAR fiindcă numărul purta altă unitate («100 ml»)
+    kept_needs: tuple[str, ...]  # termeni rostiți de client
+    dropped_needs: tuple[str, ...]  # termeni doar ai modelului
+
+
+def routine_arg_provenance(
+    budget_max: float | None,
+    needs: Sequence[str],
+    *,
+    texts: Sequence[str],
+    relative_request: bool,
+    units: UnitRegistry | None,
+) -> RoutineArgVerdict:
+    """Bugetul și nevoile rutinei au o SURSĂ în ce a scris clientul? PURĂ.
+
+    Conversația `bc7a356e`: la «fa mi o rutina» modelul a trimis un buget de 100 lei pe care
+    clientul nu-l spusese (suma rutinei a ieșit exact 30+10+30+30, cu tonifierea și esența tăiate
+    la buget) și o nevoie de roșeață pe care o scrisese BOTUL cu un tur înainte. `routine_plan` le
+    executa pe amândouă ca `WHERE`. E aceeași regulă ca pe căutare (NX-319, NX-266): o deducție nu
+    are voie să excludă. Bugetul trece prin ACEEAȘI `price_bound_source`; o nevoie trece doar dacă
+    e coroborată de un mesaj al clientului (`corroborated_by`, pe prefix, ca `uttered_by_client`).
+
+    Coroborarea literală e o limită declarată: «mi se usucă pielea» nu coroborează `dry`. De aceea
+    o nevoie scoasă nu devine altceva aici; rezolvarea semantică e a NX-322."""
+    source: str | None = None
+    unit_rejected = False
+    if budget_max is not None:
+        kwargs = {"texts": texts, "relative_request": relative_request, "session_price_max": None}
+        source = price_bound_source(budget_max, units=units, **kwargs)
+        unit_rejected = (
+            source is None
+            and units is not None
+            and price_bound_source(budget_max, **kwargs) is not None
+        )
+    kept: list[str] = []
+    dropped: list[str] = []
+    for term in needs:
+        if any(corroborated_by(text, term) for text in texts):
+            kept.append(term)
+        else:
+            dropped.append(term)
+    return RoutineArgVerdict(source, unit_rejected, tuple(kept), tuple(dropped))
 
 
 class RoutineArgs(BaseModel):
@@ -120,7 +188,8 @@ class RoutineArgs(BaseModel):
     decât ca enum."""
 
     family: str
-    concerns: list[str] = Field(default_factory=list)
+    #: NX-322: string-uri (schema de azi) sau `{key, quote}` din meniul de nevoi.
+    concerns: list[str | NeedArg] = Field(default_factory=list)
     budget_max: float | None = None
     anchor_id: str | None = None
     #: Momentul zilei, dacă clientul l-a spus. Validat contra `time_markers` în handler, ca
@@ -304,13 +373,19 @@ def _view(
     dropped: dict[str, Decimal] | None = None,
     skipped_for_moment: list[str] | None = None,
     moment: str | None = None,
+    budget_ignored: bool = False,
+    needs_ignored: int = 0,
 ) -> str:
     """Vederea pentru MODEL: pașii numerotați, cu pasul numit explicit, și golurile declarate.
 
-    Numerotarea e a serverului. Dacă am lăsa modelul să deducă ordinea din lista de produse, un tur
-    în care un pas lipsește ar renumerota tăcut restul, iar „pasul 3" din conversație n-ar mai fi
-    „pasul 3" la turul următor — exact ancora pe care se sprijină un follow-up."""
+    Numerotarea e a serverului. NX-323: e cea DENSĂ a pașilor acoperiți (1..N), aceeași pe care o
+    vede clientul pe carduri și pe care o citește `reference_resolver` din starea turului, iar
+    golurile stau pe linia lor, fără număr. Ancora stabilă a unui follow-up e ECRANUL, nu
+    șablonul familiei: cu pozițiile de șablon, modelul vedea «1., 2. LIPSĂ, 3. LIPSĂ, 4.»,
+    numerota el 1-2-3, iar clientul vedea încă o numerotare. Flag stins ⇒ forma de dinainte."""
     from src.catalog.render_text import display_name
+
+    dense = get_settings().routine_dense_ordinals_enabled
 
     # Antetul spune ACOPERIT din DECLARAT, nu doar declarat: la un buget strâns, „Rutina fata,
     # 6 pași" urmat de patru LIPSĂ îl invită pe model să anunțe o rutină în șase pași.
@@ -323,18 +398,39 @@ def _view(
     total = len(plan.slots)
     head = f"{total} pași" if covered == total else f"pași acoperiți: {covered} din {total}"
     lines = [f"Rutina {plan.family}, {head}:"]
+    number = 0
+    missing: list[str] = []
     for slot in plan.slots:
         if slot.product_id is None:
-            lines.append(f"{slot.position}. {slot.step} — LIPSĂ ({slot.uncovered_reason})")
+            if dense:
+                missing.append(f"{slot.step} ({slot.uncovered_reason})")
+            else:
+                lines.append(f"{slot.position}. {slot.step} — LIPSĂ ({slot.uncovered_reason})")
             continue
+        number += 1
         row = products.get(slot.product_id) or {}
         price = row.get("sale_price") or row.get("price")
         price_text = f", {amount_text(float(price), language)} lei" if price is not None else ""
         lines.append(
-            f"{slot.position}. {slot.step} — [{slot.product_id}] "
+            f"{number if dense else slot.position}. {slot.step} — [{slot.product_id}] "
             f"{display_name(row.get('name'))}{price_text}"
         )
+    if missing:
+        lines.append("Lipsesc: " + ", ".join(missing) + ".")
 
+    # NX-321: fără liniile astea modelul își scrie bugetul în proză („rutina rămâne sub 100 lei")
+    # chiar dacă nu l-a aplicat nimeni, iar poarta de cifre aruncă apoi toată fraza. Numărul de
+    # nevoi, nu fraza: modelul o are deja în argumente, iar aici nu repetăm text al clientului.
+    if budget_ignored:
+        lines.append(
+            "Buget: clientul NU a cerut un plafon de preț, deci rutina nu are unul. "
+            "Nu menționa un buget."
+        )
+    if needs_ignored:
+        lines.append(
+            f"Nevoi ignorate, fiindcă nu le-a spus clientul: {needs_ignored}. "
+            "Nu le prezenta ca fiind ale lui."
+        )
     if moment:
         lines.append(f"Rutina cerută e pentru momentul «{moment}».")
     if skipped_for_moment:
@@ -366,7 +462,10 @@ def _view(
         )
     if plan.uncovered_slots:
         lines.append(
-            "Pașii marcați LIPSĂ nu au produs. Spune-i clientului care lipsește și de ce, "
+            "Pașii de la «Lipsesc» nu au produs. Spune-i clientului care lipsește și de ce, "
+            "nu inventa unul. Numerotează pașii exact ca mai sus."
+            if dense
+            else "Pașii marcați LIPSĂ nu au produs. Spune-i clientului care lipsește și de ce, "
             "nu inventa unul și nu renumerota restul."
         )
     if unresolved:
@@ -466,7 +565,46 @@ async def routine_plan_tool(
 
     steps = list(families[a.family])
     values = [f"{a.family}{SEP}{s}" for s in steps]
+    legacy_needs, need_args = split_args(a.concerns)
+    a.concerns = legacy_needs
+
+    # NX-321: argumentele fără sursă ies ÎNAINTE de rezoluție și de buget, deci nu ating nici
+    # `routine_candidates(include_cheapest=…)`, nici `_fit_budget`.
+    provenance: RoutineArgVerdict | None = None
+    if get_settings().routine_arg_provenance_enabled:
+        texts = client_texts(ctx)
+        provenance = routine_arg_provenance(
+            a.budget_max,
+            a.concerns,
+            texts=texts,
+            relative_request=_is_relative_price_request(texts[0]),
+            units=price_units(ctx),
+        )
+        if a.budget_max is not None and provenance.budget_source is None:
+            a.budget_max = None
+        a.concerns = list(provenance.kept_needs)
+
     facet_filters, unresolved = await _resolve_needs(ctx, deps, a.concerns)
+    # NX-322: nevoile alese din meniu. `hard` (citat + alias al tenantului) filtrează ca orice
+    # nevoie rezolvată; `soft` doar ordonează candidații în interiorul pasului.
+    prefer: dict[str, list[str]] | None = None
+    if need_args:
+        vocab = await get_vocabulary(deps, ctx.business.id)
+        prefer, hard = apply_need_menu(ctx, need_args, vocab, consumer="routine_plan")
+        for dim, keys in hard.items():
+            facet_filters[dim] = sorted({*facet_filters.get(dim, []), *keys})
+    if provenance is not None:
+        asked_budget = args.get("budget_max") is not None
+        ctx.emit(
+            "routine_arg_provenance",
+            budget_source=provenance.budget_source or ("unsupported" if asked_budget else "none"),
+            budget_kept=a.budget_max is not None,
+            unit_rejected=provenance.unit_rejected,
+            needs_kept=len(provenance.kept_needs),
+            needs_dropped=len(provenance.dropped_needs),
+            # Chei CANONICE ale pachetului (vocabular închis), nu textul clientului (P12).
+            keys=sorted({k for keys in facet_filters.values() for k in keys})[:8],
+        )
 
     async with deps.db("routine_candidates") as conn:
         # Cu buget cerem și cei mai ieftini de pe fiecare pas: un pool ales doar pe rang face
@@ -479,6 +617,7 @@ async def routine_plan_tool(
             facet_filters=facet_filters or None,
             per_step=CANDIDATES_PER_STEP,
             include_cheapest=a.budget_max is not None,
+            prefer=prefer,
         )
         by_step: dict[str, list[dict[str, Any]]] = {}
         for row in rows:
@@ -608,6 +747,10 @@ async def routine_plan_tool(
         "dropped": dropped,
         "skipped_for_moment": skipped_for_moment,
         "moment": moment,
+        "budget_ignored": provenance is not None
+        and args.get("budget_max") is not None
+        and a.budget_max is None,
+        "needs_ignored": len(provenance.dropped_needs) if provenance is not None else 0,
     }
     if not plan.is_routine:
         return ToolResult(

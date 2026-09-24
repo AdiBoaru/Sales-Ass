@@ -65,12 +65,37 @@ def _trunc(v: Any) -> Any:
     return v  # int / float / bool / None — neschimbat
 
 
+def _routine_plan_args(args: dict[str, Any]) -> dict[str, Any]:
+    """NX-321: STRUCTURA argumentelor `routine_plan`, niciodată textul nevoilor.
+
+    Până acum unealta nu era în whitelist, deci evenimentul purta `args: {}` și un buget inventat
+    de model (conversația `bc7a356e`) se putea doar DEDUCE din suma rutinei. Nevoile însă nu se
+    loghează ca text, nici trunchiate: pot conține sănătate, alergii, sarcină sau ce a scris
+    clientul din greșeală, iar tăierea la 64 de caractere nu le face anonime (P12). Cheile canonice
+    rezolvate pleacă separat, în `routine_arg_provenance`. `family` e enum din pachet, `moment` e
+    validat contra pachetului în handler; ambele sunt tăiate scurt, defensiv."""
+    concerns = args.get("concerns")
+    budget = args.get("budget_max")
+    moment = args.get("moment")
+    return {
+        "family": str(args.get("family") or "")[:24] or None,
+        "moment": str(moment)[:16] if isinstance(moment, str) and moment else None,
+        "has_anchor": bool(args.get("anchor_id")),
+        "budget_max": budget
+        if isinstance(budget, (int, float)) and not isinstance(budget, bool)
+        else None,
+        "n_needs": len(concerns) if isinstance(concerns, list) else 0,
+    }
+
+
 def _safe_tool_args(name: str, args: dict[str, Any]) -> dict[str, Any]:
     """NX-122: args sanitizate pentru event-ul `tool_call` (whitelist per tool, fără PII — P12).
     `check_order` → DOAR `{has_arg}` (numărul/contactul nu ajung niciodată în analytics); tool
     necunoscut / fără chei whitelisted → `{}`."""
     if name == "check_order":
         return {"has_arg": bool(args)}
+    if name == "routine_plan":
+        return _routine_plan_args(args)
     allowed = _TOOL_ARG_WHITELIST.get(name)
     if not allowed:
         return {}
@@ -78,8 +103,17 @@ def _safe_tool_args(name: str, args: dict[str, Any]) -> dict[str, Any]:
     for k in allowed:
         val = args.get(k)
         if val is not None:
-            out[k] = _trunc(val)
+            out[k] = _trunc(_without_quotes(val) if k == "concerns" else val)
     return out
+
+
+def _without_quotes(concerns: Any) -> Any:
+    """NX-322: cu meniul de nevoi, `concerns` poartă `{key, quote}`, iar citatul e textul
+    CLIENTULUI. În analytics pleacă doar cheia (vocabular închis al pachetului), niciodată citatul
+    (P12). String-urile schemei de azi rămân cum erau logate."""
+    if not isinstance(concerns, list):
+        return concerns
+    return [c.get("key") if isinstance(c, dict) else c for c in concerns]
 
 
 @dataclass

@@ -9,6 +9,7 @@ ordinea de preț construită determinist în SQL). Tot ce e aici e testabil făr
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 # Constanta RRF standard (Cormack 2009). k mare → rangurile mici contează aproape egal, k mic →
@@ -30,6 +31,11 @@ RANK_WEIGHTS: dict[str, float] = {
     "availability": 0.15,  # in_stock (1/0)
     "sale": 0.08,  # la reducere (1/0)
     "concern": 0.20,  # fracția de concerns cerute care apar pe produs
+    # NX-322: potrivirea cu nevoile ALESE de model din meniu, dar necoroborate de un alias al
+    # tenantului (`need_menu`, `soft`). Ordonează, nu exclude: potrivire 1, necunoscut 0,5, altă
+    # valoare 0. Prima calibrare, peste `concern` (e o afirmație a clientului, citată) și mult sub
+    # relevanță. Se ajustează pe replay, nu din intuiție.
+    "need_preference": 0.25,
 }
 
 
@@ -136,6 +142,7 @@ def deterministic_rerank(
     scores: dict[str, float],
     *,
     concerns: list[str] | None = None,
+    prefer: Mapping[str, Sequence[str]] | None = None,
 ) -> list[dict[str, Any]]:
     """Rerank DETERMINIST (P2, ZERO LLM): la scor RRF EGAL, ridică produsele in-stock / la reducere
     / cu concern-overlap; tie-break final stabil pe id.
@@ -155,7 +162,16 @@ def deterministic_rerank(
             b += len(cset & _product_concerns(p))
         return b
 
-    return sorted(products, key=lambda p: (-scores.get(_pid(p), 0.0), -_boost(p), _pid(p)))
+    # NX-322: preferința e tot departajare la egalitate de relevanță, înaintea boost-ului de azi.
+    return sorted(
+        products,
+        key=lambda p: (
+            -scores.get(_pid(p), 0.0),
+            -preference_level(p, prefer),
+            -_boost(p),
+            _pid(p),
+        ),
+    )
 
 
 def _minmax_norm(values: dict[str, float]) -> dict[str, float]:
@@ -179,12 +195,43 @@ def _concern_fraction(p: dict[str, Any], cset: set[str]) -> float:
     return len(cset & _product_concerns(p)) / len(cset)
 
 
+def preference_level(p: dict[str, Any], prefer: Mapping[str, Sequence[str]] | None) -> float:
+    """NX-322: cât de bine se potrivește produsul cu nevoile `soft` (media pe dimensiuni). PUR.
+
+    Tri-valent pe fiecare dimensiune: valoarea produsului e printre cele preferate ⇒ 1, produsul
+    n-are atributul ⇒ 0,5, are altă valoare ⇒ 0. Necunoscutul stă la MIJLOC, nu jos: un produs
+    fără tip de ten declarat nu e unul nepotrivit (UNKNOWN ≠ MISMATCH), deci nu coboară sub cel
+    marcat pentru alt tip. Fără preferințe ⇒ 0 pentru toți, deci ordinea nu se schimbă."""
+    if not prefer:
+        return 0.0
+    attrs = p.get("attributes")
+    if isinstance(attrs, str):
+        try:
+            attrs = json.loads(attrs)
+        except ValueError:
+            attrs = None
+    if not isinstance(attrs, dict):
+        attrs = {}
+    levels: list[float] = []
+    for dim, wanted in prefer.items():
+        if not wanted:
+            continue
+        raw = attrs.get(dim)
+        values = {str(v) for v in raw} if isinstance(raw, list) else ({str(raw)} if raw else set())
+        if not values:
+            levels.append(0.5)
+        else:
+            levels.append(1.0 if values & set(wanted) else 0.0)
+    return sum(levels) / len(levels) if levels else 0.0
+
+
 def blended_rerank(
     products: list[dict[str, Any]],
     scores: dict[str, float],
     *,
     weights: dict[str, float] | None = None,
     concerns: list[str] | None = None,
+    prefer: Mapping[str, Sequence[str]] | None = None,
 ) -> list[dict[str, Any]]:
     """Rerank pe un SCOR BLENDED determinist (ARCH-2026 P0, ZERO LLM): relevanța (RRF) dominantă +
     social proof (rating shrunk) + disponibilitate + reducere + concern-overlap, fiecare
@@ -208,6 +255,7 @@ def blended_rerank(
             + w["availability"] * (1.0 if p.get("availability") in _IN_STOCK else 0.0)
             + w["sale"] * (1.0 if p.get("on_sale") else 0.0)
             + w["concern"] * _concern_fraction(p, cset)
+            + w.get("need_preference", 0.0) * preference_level(p, prefer)
         )
 
     return sorted(products, key=lambda p: (-_score(p), _pid(p)))
@@ -247,6 +295,7 @@ def fuse_candidates(
     concerns: list[str] | None = None,
     k: int = RRF_K,
     weights: dict[str, float] | None = None,
+    prefer: Mapping[str, Sequence[str]] | None = None,
 ) -> list[dict[str, Any]]:
     """Fuzionează cele două pool-uri într-o listă ordonată de produse (dict-uri).
 
@@ -266,6 +315,8 @@ def fuse_candidates(
         products = list(by_id.values())
         scores = demote_out_of_stock(products, scores, k=k)
         if weights is not None:
-            return blended_rerank(products, scores, weights=weights, concerns=concerns)
-        return deterministic_rerank(products, scores, concerns=concerns)
+            return blended_rerank(
+                products, scores, weights=weights, concerns=concerns, prefer=prefer
+            )
+        return deterministic_rerank(products, scores, concerns=concerns, prefer=prefer)
     return _merge_by_sort(lexical, vector, sort_mode=sort_mode)

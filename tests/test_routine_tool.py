@@ -81,6 +81,17 @@ def _ctx_without_pack() -> TurnContext:
 
 
 @pytest.fixture(autouse=True)
+def _trust_model_args(monkeypatch):
+    """Suita asta testează MECANICA rutinei (sloturi, filtre, buget) pe argumente date. Dacă
+    argumentele au voie să ajungă aici e întrebarea NX-321, testată în
+    `test_routine_arg_provenance.py`; cu poarta aprinsă, un buget de 200 fără «200» în mesaj ar
+    ieși înainte de `_fit_budget` și testele de buget n-ar mai testa bugetul."""
+    from src.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "routine_arg_provenance_enabled", False)
+
+
+@pytest.fixture(autouse=True)
 def _catalog(monkeypatch):
     """Query-urile de catalog, scriptate. `available` e mutabil per test (ca să putem goli pași)."""
     state = {
@@ -90,9 +101,17 @@ def _catalog(monkeypatch):
     }
 
     async def fake_candidates(
-        conn, business_id, *, values, facet_filters=None, per_step=8, include_cheapest=False
+        conn,
+        business_id,
+        *,
+        values,
+        facet_filters=None,
+        per_step=8,
+        include_cheapest=False,
+        prefer=None,
     ):
         state["seen_filters"].append(facet_filters)
+        state["prefer"] = prefer
         pool = state["concern_only"] if facet_filters else state["available"]
         rows = [
             {"id": pid, "step": step, "price": price}
@@ -148,9 +167,10 @@ async def test_pasul_fara_produs_e_declarat_nu_sarit(_catalog):
     result = await _run(_ctx())
 
     assert result.ok  # 3 din 4 pași: se poate prezenta onest
-    assert "2. tonifiere — LIPSĂ" in result.llm_view
-    assert "3. tratament" in result.llm_view  # restul NU se renumerotează
-    assert "nu inventa unul și nu renumerota restul" in result.llm_view
+    # NX-323: golul stă pe linia lui, iar pașii arătați au numerotarea DENSĂ a ecranului.
+    assert "Lipsesc: tonifiere (" in result.llm_view
+    assert "2. tratament" in result.llm_view
+    assert "Numerotează pașii exact ca mai sus" in result.llm_view
 
 
 async def test_vederea_numeste_pasul_nu_doar_produsul():
@@ -172,7 +192,7 @@ async def test_nevoia_care_goleste_un_pas_da_filtered(_catalog):
 
     result = await _run(_ctx(), concerns=["hydration"])
 
-    assert "2. tonifiere — LIPSĂ (filtered)" in result.llm_view
+    assert "Lipsesc: tonifiere (filtered)" in result.llm_view
 
 
 async def test_pasul_inexistent_in_catalog_da_no_candidate(_catalog):
@@ -181,7 +201,7 @@ async def test_pasul_inexistent_in_catalog_da_no_candidate(_catalog):
 
     result = await _run(_ctx(), concerns=["hydration"])
 
-    assert "2. tonifiere — LIPSĂ (no_candidate)" in result.llm_view
+    assert "Lipsesc: tonifiere (no_candidate)" in result.llm_view
 
 
 async def test_sonda_de_motiv_nu_relaxeaza_nevoia(_catalog):
@@ -307,7 +327,7 @@ async def test_bugetul_scurteaza_rutina_in_ordinea_declarata():
     result = await _run(_ctx(priority=_PRIORITY), budget_max=150)
 
     assert result.ok
-    assert "3. tratament — LIPSĂ (budget)" in result.llm_view
+    assert "tratament (budget)" in result.llm_view
     assert sum(CATALOG[p["id"]][1] for p in result.products) <= 150
     assert "Am scurtat rutina ca să încapă în buget" in result.llm_view
     # „de la", nu „+": cifra e cel mai MIC preț de pe pasul scos, deci un prag inferior. Un „ar
@@ -385,7 +405,7 @@ async def test_pasul_din_alt_moment_nu_apare_ca_lipsa():
 
     assert result.ok
     assert "tonifiere" not in [CATALOG[p["id"]][0].partition(":")[2] for p in result.products]
-    assert "LIPSĂ" not in result.llm_view
+    assert "Lipsesc" not in result.llm_view
     assert "NU se aplică în momentul cerut, deci nu lipsesc: tonifiere" in result.llm_view
     # Pozițiile rămân consecutive: „pasul 3" din conversație trebuie să însemne ceva la turul
     # următor, iar o filtrare de după compunere ar fi lăsat 1, 3, 4.
@@ -502,7 +522,7 @@ async def test_pasul_ramane_gol_daca_si_inlocuitorul_cade(monkeypatch, _catalog)
     result = await _run(_ctx())
 
     assert all(not p["id"].startswith("r") for p in result.products)
-    assert "3. tratament — LIPSĂ" in result.llm_view
+    assert "Lipsesc: tratament (" in result.llm_view
 
 
 # ── Poarta de boot ──────────────────────────────────────────────────────────────────────────────

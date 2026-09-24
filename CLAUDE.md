@@ -588,6 +588,37 @@ pentru X» nu poartă tipul produsului, iar turele 3-4 au murit la accept cu poo
 `pytest tests/test_shelf_menu.py tests/test_labeled_quantities.py -q` +
 `PYTHONPATH=. python scripts/shelf_menu_probe.py [--replay]`.
 
+**NX-321 → NX-325 — conversația `bc7a356e`: rutina pentru pielea uscată, construită din ce spusese
+BOTUL.** «vreau o crema de fata» → «pai mi se usuca pielea dupa dus» → «fa mi o rutina»: la final,
+patru produse mini de 10-30 lei (sumă exact 100 lei), filtrate pe roșeață, cu un ulei de curățare
+`oily` pe primul loc, iar textul rutinei scris de model a dispărut. Cinci mecanisme, fiecare cu
+cardul lui. **NX-321:** `routine_plan` executa orbește `budget_max` și `concerns`. Acum bugetul trece
+prin ACEEAȘI `price_bound_source` ca la căutare (NX-319), iar o nevoie trebuie coroborată de un mesaj
+al clientului. Un număr lipit de unitatea ALTEI dimensiuni (100 ml, SPF 50) nu mai e buget, pe ambele
+unelte (`monetary_mentions`, unitățile din `domain_pack.units`, kill-switch propriu
+`PRICE_BOUND_UNIT_AWARE_ENABLED`). `tool_call` pentru rutină loghează STRUCTURĂ, nu textul nevoilor
+(P12). **NX-323:** cifrele permise în rutină erau pozițiile din șablonul familiei ({1,4,5,6}), modelul
+numerota 1-2-3, iar poarta arunca tot textul. Acum există o singură numerotare, cea de pe ecran (1..N),
+cu golurile pe linia lor. **NX-322** (flag `NEED_MENU_ENABLED`, OFF până la golden): nevoia se ALEGE
+dintr-un meniu închis al tenantului și vine cu CITATUL clientului. Citat absent ⇒ respinsă; alias al
+altei valori partiționante ⇒ contradicție; alias al cheii ⇒ filtru; altfel doar ORDONARE (`prefer`
+în fuziune și în SQL-ul rutinei, necunoscutul la mijloc). Linia de bază pe 30 de zile: 45/105
+rezoluții `unknown`, 71/128 termeni trimiși de model nerostiți de client. **NX-322b** (flag OFF):
+anti-potrivirea (`TypedFacet.anti_fit`: `dry` scoate produsele DOAR `oily`), doar pe căutare și doar
+pe nevoi `hard`. Se aprinde după auditul preînregistrat `skin_type.oily` (tier `partitioning`, 95%,
+kappa ≥ 0,6), fiindcă eticheta `oily` a lui ANUA nu apare în textul comerciantului. **NX-324:**
+compunerea bogată alege produsele prin handle-uri `P1…Pk` (enum), nu copiind UUID-uri. Pe turul 2
+un UUID copiat greșit scosese un card, iar textul îl numea în continuare. Plasa: propozițiile care
+numesc un produs fără card cad. **NX-325:** rezerva de încadrare numește PAȘII rutinei și folosește
+etichete cu diacritice (`in_comparison: false` în `comparison_facets`, un singur proprietar);
+pe SOLE 54/54 de tipuri etichetate. Aplicarea pachetului în DB e separată
+(`set_domain_pack.py --apply --backup`). Carduri:
+[`tasks/stage1/NX-321.md`](tasks/stage1/NX-321.md) … [`NX-325.md`](tasks/stage1/NX-325.md); probe:
+`pytest tests/test_routine_arg_provenance.py tests/test_monetary_mentions.py
+tests/test_routine_dense_ordinals.py tests/test_need_menu.py tests/test_need_menu_tools.py
+tests/test_skin_anti_fit.py tests/test_card_reconcile.py tests/test_framing_labels.py -q` +
+`PYTHONPATH=. python scripts/need_menu_probe.py`.
+
 **NX-314 — subiectul conversației: «mai ieftin» servea benzi de nas la o cerere de cremă.**
 Conversația `f4e1431e` (`sole-ro`, 2026-09-23): după SOME BY MI Yuja Niacin (110 lei), «si ceva mai
 ieftin» a adus o bandă de nas de 3 lei și cinci măști sheet de 10 lei. `search_cheaper_than`

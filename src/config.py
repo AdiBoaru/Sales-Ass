@@ -1109,6 +1109,25 @@ class Settings(BaseSettings):
     search_subshelf_homograph_guard_enabled: bool = Field(
         default=True, validation_alias="SEARCH_SUBSHELF_HOMOGRAPH_GUARD_ENABLED"
     )
+    # NX-321: un număr lipit de unitatea ALTEI dimensiuni nu e buget. `price_bound_source` compara
+    # marginea modelului cu orice număr din mesaj, deci «crema de 100 ml» coroborea `price_max=100`.
+    # Dimensiunea vine din `domain_pack.units` (tenant), nu din cuvinte în cod. OFF → orice număr.
+    price_bound_unit_aware_enabled: bool = Field(
+        default=True, validation_alias="PRICE_BOUND_UNIT_AWARE_ENABLED"
+    )
+    # NX-321: `routine_plan` aplica orbește `budget_max` (taie pași, alege cei mai ieftini) și
+    # `concerns` (WHERE dur). Conversația `bc7a356e`: rutină de 100 lei fix, din produse mini, pe
+    # roșeața pe care o spusese BOTUL. Acum bugetul cere sursă (ca la căutare, NX-319) și nevoia
+    # trebuie rostită de client. OFF → argumentele modelului se aplică ca înainte.
+    routine_arg_provenance_enabled: bool = Field(
+        default=True, validation_alias="ROUTINE_ARG_PROVENANCE_ENABLED"
+    )
+    # NX-323: rutina are O numerotare, cea pe care o vede clientul (1..N pașii arătați). Cifrele
+    # permise în proză erau pozițiile din ȘABLONUL familiei ({1,4,5,6} pe `bc7a356e`), modelul a
+    # numerotat 1-2-3, iar poarta de cifre a aruncat tot textul rutinei. OFF → pozițiile de șablon.
+    routine_dense_ordinals_enabled: bool = Field(
+        default=True, validation_alias="ROUTINE_DENSE_ORDINALS_ENABLED"
+    )
     # Conversația `cd98a513`: rafturile se arătau modelului prin NUME, iar 21 din 45 de nume se
     # repetă («Ingrijirea tenului» de 5 ori) sau sunt omografe cu cuvinte obișnuite («Fata» =
     # Machiaj > Fata). Pe 30 de zile, 22 din 72 de categorii trimise erau cheie exactă, restul nume
@@ -1120,6 +1139,36 @@ class Settings(BaseSettings):
     search_category_menu_enabled: bool = Field(
         default=True, validation_alias="SEARCH_CATEGORY_MENU_ENABLED"
     )
+    # NX-322: nevoile clientului, ca la rafturi, din meniu ÎNCHIS + citatul care le susține. Pe
+    # `bc7a356e` schema cerea „cuvintele clientului", modelul a transcris «se usucă după duș», iar
+    # rezoluția pe frază exactă n-a găsit `dry`, deși pachetul îl avea. Cheia aleasă semantic doar
+    # ORDONEAZĂ; filtrează numai când citatul conține un alias al tenantului (D7). OFF până la
+    # replay + golden (D15), fiindcă schimbă ce scrie modelul. OFF → schema de azi, byte-identică.
+    need_menu_enabled: bool = Field(default=False, validation_alias="NEED_MENU_ENABLED")
+    # NX-322b: o nevoie `hard` (citat + alias) scoate produsele marcate DOAR pentru o valoare care o
+    # contrazice (`dry` → `oily`, din `TypedFacet.anti_fit`). Pe `bc7a356e` primul card al rutinei
+    # era un ulei de curățare `oily` pentru un client cu pielea uscată. Excluderea cere auditul de
+    # precizie al valorii excluse (NX-268, `skin_type.oily`); se aprinde DOAR cu verdict PASS.
+    skin_type_anti_fit_enabled: bool = Field(
+        default=False, validation_alias="SKIN_TYPE_ANTI_FIT_ENABLED"
+    )
+    # NX-324: modelul alege produsele compunerii bogate prin handle-uri scurte (`P1`…`Pk`, enum
+    # închis), nu copiind UUID-uri. Pe `0d8a3541` un UUID copiat greșit a scos un card, iar textul
+    # care îl numea a plecat neatins. Schema depinde doar de numărul de produse, deci rămâne
+    # cache-uibilă. OFF → UUID-urile de azi, schema byte-identică.
+    rich_item_handles_enabled: bool = Field(
+        default=True, validation_alias="RICH_ITEM_HANDLES_ENABLED"
+    )
+    # NX-324: textul se aliniază la setul AFIȘAT. O propoziție din intro/education care numește un
+    # produs retrievat dar fără card cade, `pick` pe un produs neafișat devine None, iar sugestiile
+    # modelului care numesc unul se scot. OFF → textul pleacă neatins, ca înainte.
+    rich_card_reconcile_enabled: bool = Field(
+        default=True, validation_alias="RICH_CARD_RECONCILE_ENABLED"
+    )
+    # NX-325: încadrarea de rezervă (NX-299) numește PAȘII pe o rutină și etichete localizate în
+    # rest. Pe `b5d86b1a` clientul a citit „Ți-am ales ulei de curatare, masca de fata și crema de
+    # fata": chei de catalog fără diacritice, iar protecția solară lipsea. OFF → fraza de dinainte.
+    framing_labels_enabled: bool = Field(default=True, validation_alias="FRAMING_LABELS_ENABLED")
     # Conversația `cd98a513`: motivul de card «cu pigmenți corectori și SPF 40» era aruncat ÎNTREG
     # (cardul rămânea fără motiv), fiindcă orice număr care nu e identificator lipit („v11") era
     # tratat drept cantitate inventată. Pe 30 de zile, 19 din 276 de motive aveau cifre, iar cele

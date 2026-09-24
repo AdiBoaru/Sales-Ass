@@ -46,6 +46,8 @@ def slim_on(monkeypatch):
 @pytest.fixture
 def slim_off(monkeypatch):
     monkeypatch.setattr(get_settings(), "rich_schema_slim_enabled", False)
+    # NX-324: handle-urile schimbă și ele schema (enum pe `product_id`); „stins" = ambele stinse.
+    monkeypatch.setattr(get_settings(), "rich_item_handles_enabled", False)
 
 
 # --- flagul stins: nimic nu se schimbă ---------------------------------------------------------

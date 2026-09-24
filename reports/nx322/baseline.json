@@ -1,0 +1,109 @@
+{
+  "business": "sole-ro",
+  "days": 30,
+  "vocabulary_resolved_concerns": {
+    "routine_plan:known": 1,
+    "routine_plan:unknown": 1,
+    "search:known": 60,
+    "search:unknown": 45
+  },
+  "search_concern_terms": {
+    "sent": 128,
+    "spoken_by_client": 57
+  },
+  "menu": [
+    {
+      "dimension": "concerns",
+      "key": "acne",
+      "label": "acnee si imperfectiuni"
+    },
+    {
+      "dimension": "concerns",
+      "key": "anti_aging",
+      "label": "riduri si fermitate"
+    },
+    {
+      "dimension": "concerns",
+      "key": "barrier",
+      "label": "bariera cutanata"
+    },
+    {
+      "dimension": "concerns",
+      "key": "dandruff",
+      "label": "matreata"
+    },
+    {
+      "dimension": "concerns",
+      "key": "dark_circles",
+      "label": "cearcane"
+    },
+    {
+      "dimension": "concerns",
+      "key": "dullness",
+      "label": "ten tern"
+    },
+    {
+      "dimension": "concerns",
+      "key": "hair_damage",
+      "label": "par deteriorat"
+    },
+    {
+      "dimension": "concerns",
+      "key": "hair_dryness",
+      "label": "par uscat"
+    },
+    {
+      "dimension": "concerns",
+      "key": "hair_loss",
+      "label": "par subtire"
+    },
+    {
+      "dimension": "concerns",
+      "key": "hydration",
+      "label": "hidratare"
+    },
+    {
+      "dimension": "concerns",
+      "key": "hyperpigmentation",
+      "label": "pete pigmentare"
+    },
+    {
+      "dimension": "concerns",
+      "key": "pores",
+      "label": "pori dilatati"
+    },
+    {
+      "dimension": "concerns",
+      "key": "redness",
+      "label": "roseata si calmare"
+    },
+    {
+      "dimension": "concerns",
+      "key": "scalp_care",
+      "label": "ingrijirea scalpului"
+    },
+    {
+      "dimension": "concerns",
+      "key": "sun_protection",
+      "label": "protectie solara"
+    },
+    {
+      "dimension": "skin_type",
+      "key": "dry",
+      "label": "ten uscat"
+    },
+    {
+      "dimension": "skin_type",
+      "key": "oily",
+      "label": "ten gras"
+    },
+    {
+      "dimension": "skin_type",
+      "key": "sensitive",
+      "label": "ten sensibil"
+    }
+  ],
+  "partitioning": [
+    "skin_type"
+  ]
+}
