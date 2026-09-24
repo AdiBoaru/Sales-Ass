@@ -190,6 +190,43 @@ def _enumerate(values: Sequence[str], glue: str) -> str:
     return f"{', '.join(values[:-1])}{glue}{values[-1]}"
 
 
+def type_labels(pack: object, locale: str, product_types: Sequence[str]) -> tuple[list[str], int]:
+    """NX-325: cheile `product_type` → etichetele lor localizate, plus câte n-au etichetă.
+
+    Cheile sunt derivate din nume de catalog fără diacritice («ulei de curatare»), deci puse direct
+    într-o frază către client arată a bază de date. Eticheta vine din pachet (`value_label`, un
+    singur proprietar); lipsa ei lasă cheia, dar se NUMĂRĂ, ca golul de date să se vadă."""
+    out: list[str] = []
+    missing = 0
+    getter = getattr(pack, "value_label", None)
+    for key in product_types:
+        label = getter("product_type", key, locale) if callable(getter) else None
+        if not label:
+            missing += 1
+        out.append(label or key)
+    return out, missing
+
+
+def routine_framing_text(pack: object, locale: str, step_labels: Sequence[str]) -> str | None:
+    """NX-325: încadrarea unei RUTINE numește PAȘII, în ordine, nu clasele de produs.
+
+    Pe turul real `b5d86b1a` rezerva spunea „Ți-am ales ulei de curatare, masca de fata și crema de
+    fata": fără diacritice (chei de catalog) și fără protecția solară (IUNIK SPF are tipul „crema de
+    fata", deci s-a comasat cu crema). Clientul ceruse pași, iar pașii au deja etichete localizate
+    în pachet. Fără șablon ⇒ `None` (fail-open, ca `framing_text`)."""
+    labels = [label for label in step_labels if label]
+    if not labels:
+        return None
+    template = _template(pack, "routine_framing", locale)
+    glue = _template(pack, "list_glue", locale)
+    if template is None or glue is None:
+        return None
+    try:
+        return template.format(steps=_enumerate(labels, glue))
+    except (KeyError, IndexError):
+        return None
+
+
 def framing_text(
     pack: object,
     locale: str,

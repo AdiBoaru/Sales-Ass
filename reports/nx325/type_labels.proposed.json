@@ -1,0 +1,594 @@
+{
+  "business": "sole-ro",
+  "proposal": {
+    "crema de fata": {
+      "label": "cremă de față",
+      "count": 1402,
+      "variants": {
+        "cremă de față": 1402,
+        "crema de fata": 147,
+        "crema de față": 130
+      }
+    },
+    "ser de fata": {
+      "label": "ser de față",
+      "count": 1266,
+      "variants": {
+        "ser de față": 1266,
+        "ser de fata": 41
+      }
+    },
+    "masca de fata": {
+      "label": "mască de față",
+      "count": 1071,
+      "variants": {
+        "mască de față": 1071,
+        "masca de fata": 160,
+        "masca de față": 121
+      }
+    },
+    "toner de fata": {
+      "label": "toner de față",
+      "count": 426,
+      "variants": {
+        "toner de față": 426,
+        "toner de fata": 5
+      }
+    },
+    "nuantator pentru buze": {
+      "label": "nuanțator pentru buze",
+      "count": 414,
+      "variants": {
+        "nuanțator pentru buze": 414,
+        "nuantator pentru buze": 24
+      }
+    },
+    "fond de ten": {
+      "label": "fond de ten",
+      "count": 2669,
+      "variants": {
+        "fond de ten": 2669
+      }
+    },
+    "luciu de buze": {
+      "label": "luciu de buze",
+      "count": 722,
+      "variants": {
+        "luciu de buze": 722
+      }
+    },
+    "sampon": {
+      "label": "șampon",
+      "count": 1054,
+      "variants": {
+        "șampon": 1054,
+        "sampon": 389
+      }
+    },
+    "spuma de curatare": {
+      "label": "spumă de curățare",
+      "count": 640,
+      "variants": {
+        "spumă de curățare": 640,
+        "spuma de curatare": 119,
+        "spuma de curățare": 49
+      }
+    },
+    "cushion": {
+      "label": "cushion",
+      "count": 2800,
+      "variants": {
+        "cushion": 2800
+      }
+    },
+    "lotiune de corp": {
+      "label": "loțiune de corp",
+      "count": 293,
+      "variants": {
+        "loțiune de corp": 293,
+        "lotiune de corp": 109
+      }
+    },
+    "gel de curatare": {
+      "label": "gel de curățare",
+      "count": 479,
+      "variants": {
+        "gel de curățare": 479,
+        "gel de curatare": 135
+      }
+    },
+    "gel de dus": {
+      "label": "gel de duș",
+      "count": 421,
+      "variants": {
+        "gel de duș": 421,
+        "gel de dus": 139
+      }
+    },
+    "set": {
+      "label": "set",
+      "count": 878,
+      "variants": {
+        "set": 878
+      }
+    },
+    "balsam": {
+      "label": "balsam",
+      "count": 2116,
+      "variants": {
+        "balsam": 2116
+      }
+    },
+    "ruj": {
+      "label": "ruj",
+      "count": 1527,
+      "variants": {
+        "ruj": 1527
+      }
+    },
+    "balsam de curatare": {
+      "label": "balsam de curățare",
+      "count": 170,
+      "variants": {
+        "balsam de curățare": 170,
+        "balsam de curatare": 44
+      }
+    },
+    "crema contur ochi": {
+      "label": "cremă contur ochi",
+      "count": 119,
+      "variants": {
+        "cremă contur ochi": 119,
+        "crema contur ochi": 62
+      }
+    },
+    "masca de par": {
+      "label": "mască de păr",
+      "count": 146,
+      "variants": {
+        "mască de păr": 146,
+        "masca de par": 28,
+        "masca de păr": 22
+      }
+    },
+    "plasturi": {
+      "label": "plasturi",
+      "count": 596,
+      "variants": {
+        "plasturi": 596
+      }
+    },
+    "ulei de curatare": {
+      "label": "ulei de curățare",
+      "count": 247,
+      "variants": {
+        "ulei de curățare": 247,
+        "ulei de curatare": 61
+      }
+    },
+    "balsam de buze": {
+      "label": "balsam de buze",
+      "count": 371,
+      "variants": {
+        "balsam de buze": 371
+      }
+    },
+    "fard de obraz": {
+      "label": "fard de obraz",
+      "count": 441,
+      "variants": {
+        "fard de obraz": 441
+      }
+    },
+    "esenta": {
+      "label": "esență",
+      "count": 1187,
+      "variants": {
+        "esenta": 1309,
+        "esență": 1187,
+        "esența": 396,
+        "esentă": 19
+      }
+    },
+    "crema coloranta de fata": {
+      "label": "cremă colorantă de față",
+      "count": 24,
+      "variants": {
+        "cremă colorantă de față": 24
+      }
+    },
+    "fard de pleoape": {
+      "label": "fard de pleoape",
+      "count": 343,
+      "variants": {
+        "fard de pleoape": 343
+      }
+    },
+    "lotiune de fata": {
+      "label": "loțiune de față",
+      "count": 99,
+      "variants": {
+        "loțiune de față": 99,
+        "lotiune de fata": 18
+      }
+    },
+    "crema de corp": {
+      "label": "cremă de corp",
+      "count": 118,
+      "variants": {
+        "cremă de corp": 118,
+        "crema de corp": 19
+      }
+    },
+    "gel de fata": {
+      "label": "gel de față",
+      "count": 83,
+      "variants": {
+        "gel de față": 83
+      }
+    },
+    "benzi pentru ochi": {
+      "label": "benzi pentru ochi",
+      "count": 14,
+      "variants": {
+        "benzi pentru ochi": 14
+      }
+    },
+    "exfoliant de corp": {
+      "label": "exfoliant de corp",
+      "count": 86,
+      "variants": {
+        "exfoliant de corp": 86
+      }
+    },
+    "exfoliant": {
+      "label": "exfoliant",
+      "count": 1049,
+      "variants": {
+        "exfoliant": 1049
+      }
+    },
+    "corector": {
+      "label": "corector",
+      "count": 397,
+      "variants": {
+        "corector": 397
+      }
+    },
+    "stick pentru fata": {
+      "label": "stick pentru față",
+      "count": 9,
+      "variants": {
+        "stick pentru față": 9,
+        "stick pentru fata": 1
+      }
+    },
+    "crema de maini": {
+      "label": "cremă de mâini",
+      "count": 163,
+      "variants": {
+        "cremă de mâini": 163,
+        "crema de maini": 31,
+        "crema de mâini": 18
+      }
+    },
+    "crema de ochi": {
+      "label": "cremă de ochi",
+      "count": 129,
+      "variants": {
+        "cremă de ochi": 129,
+        "crema de ochi": 49
+      }
+    },
+    "ser de par": {
+      "label": "ser de păr",
+      "count": 44,
+      "variants": {
+        "ser de păr": 44,
+        "ser de par": 2
+      }
+    },
+    "ulei de buze": {
+      "label": "ulei de buze",
+      "count": 151,
+      "variants": {
+        "ulei de buze": 151
+      }
+    },
+    "ulei de par": {
+      "label": "ulei de păr",
+      "count": 85,
+      "variants": {
+        "ulei de păr": 85,
+        "ulei de par": 21
+      }
+    },
+    "spray pentru par": {
+      "label": "spray pentru păr",
+      "count": 39,
+      "variants": {
+        "spray pentru păr": 39,
+        "spray pentru par": 1
+      }
+    },
+    "pasta de dinti": {
+      "label": "pastă de dinți",
+      "count": 70,
+      "variants": {
+        "pasta de dinti": 71,
+        "pastă de dinți": 70,
+        "pasta de dinți": 5
+      }
+    },
+    "pudra de fata": {
+      "label": "pudră de față",
+      "count": 32,
+      "variants": {
+        "pudră de față": 32,
+        "pudra de față": 5,
+        "pudra de fata": 2
+      }
+    },
+    "gel autobronzant": {
+      "label": "gel autobronzant",
+      "count": 84,
+      "variants": {
+        "gel autobronzant": 84
+      }
+    },
+    "crema de par": {
+      "label": "cremă de păr",
+      "count": 14,
+      "variants": {
+        "cremă de păr": 14,
+        "crema de par": 1
+      }
+    },
+    "tonic": {
+      "label": "tonic",
+      "count": 158,
+      "variants": {
+        "tonic": 158
+      }
+    },
+    "crema de curatare": {
+      "label": "cremă de curățare",
+      "count": 55,
+      "variants": {
+        "cremă de curățare": 55,
+        "crema de curatare": 9,
+        "crema de curățare": 3
+      }
+    },
+    "sapun lichid": {
+      "label": "săpun lichid",
+      "count": 76,
+      "variants": {
+        "săpun lichid": 76,
+        "sapun lichid": 8
+      }
+    },
+    "gel de sprancene": {
+      "label": "gel de sprâncene",
+      "count": 12,
+      "variants": {
+        "gel de sprâncene": 12
+      }
+    },
+    "mist pentru par": {
+      "label": "mist pentru păr",
+      "count": 15,
+      "variants": {
+        "mist pentru păr": 15
+      }
+    },
+    "balsam pentru corp": {
+      "label": "balsam pentru corp",
+      "count": 12,
+      "variants": {
+        "balsam pentru corp": 12
+      }
+    },
+    "spuma autobronzanta": {
+      "label": "spumă autobronzantă",
+      "count": 76,
+      "variants": {
+        "spumă autobronzantă": 76,
+        "spuma autobronzantă": 27,
+        "spuma autobronzanta": 12
+      }
+    },
+    "creion contur buze": {
+      "label": "creion contur buze",
+      "count": 30,
+      "variants": {
+        "creion contur buze": 30
+      }
+    },
+    "mist facial": {
+      "label": "mist facial",
+      "count": 60,
+      "variants": {
+        "mist facial": 60
+      }
+    },
+    "manusa pentru demachiere": {
+      "label": "mănușă pentru demachiere",
+      "count": 4,
+      "variants": {
+        "mănușă pentru demachiere": 4,
+        "manusa pentru demachiere": 3,
+        "mănușa pentru demachiere": 1
+      }
+    }
+  },
+  "missing": [],
+  "entry": {
+    "key": "product_type",
+    "in_comparison": false,
+    "value_labels": {
+      "balsam": {
+        "ro": "balsam"
+      },
+      "balsam de buze": {
+        "ro": "balsam de buze"
+      },
+      "balsam de curatare": {
+        "ro": "balsam de curățare"
+      },
+      "balsam pentru corp": {
+        "ro": "balsam pentru corp"
+      },
+      "benzi pentru ochi": {
+        "ro": "benzi pentru ochi"
+      },
+      "corector": {
+        "ro": "corector"
+      },
+      "creion contur buze": {
+        "ro": "creion contur buze"
+      },
+      "crema coloranta de fata": {
+        "ro": "cremă colorantă de față"
+      },
+      "crema contur ochi": {
+        "ro": "cremă contur ochi"
+      },
+      "crema de corp": {
+        "ro": "cremă de corp"
+      },
+      "crema de curatare": {
+        "ro": "cremă de curățare"
+      },
+      "crema de fata": {
+        "ro": "cremă de față"
+      },
+      "crema de maini": {
+        "ro": "cremă de mâini"
+      },
+      "crema de ochi": {
+        "ro": "cremă de ochi"
+      },
+      "crema de par": {
+        "ro": "cremă de păr"
+      },
+      "cushion": {
+        "ro": "cushion"
+      },
+      "esenta": {
+        "ro": "esență"
+      },
+      "exfoliant": {
+        "ro": "exfoliant"
+      },
+      "exfoliant de corp": {
+        "ro": "exfoliant de corp"
+      },
+      "fard de obraz": {
+        "ro": "fard de obraz"
+      },
+      "fard de pleoape": {
+        "ro": "fard de pleoape"
+      },
+      "fond de ten": {
+        "ro": "fond de ten"
+      },
+      "gel autobronzant": {
+        "ro": "gel autobronzant"
+      },
+      "gel de curatare": {
+        "ro": "gel de curățare"
+      },
+      "gel de dus": {
+        "ro": "gel de duș"
+      },
+      "gel de fata": {
+        "ro": "gel de față"
+      },
+      "gel de sprancene": {
+        "ro": "gel de sprâncene"
+      },
+      "lotiune de corp": {
+        "ro": "loțiune de corp"
+      },
+      "lotiune de fata": {
+        "ro": "loțiune de față"
+      },
+      "luciu de buze": {
+        "ro": "luciu de buze"
+      },
+      "manusa pentru demachiere": {
+        "ro": "mănușă pentru demachiere"
+      },
+      "masca de fata": {
+        "ro": "mască de față"
+      },
+      "masca de par": {
+        "ro": "mască de păr"
+      },
+      "mist facial": {
+        "ro": "mist facial"
+      },
+      "mist pentru par": {
+        "ro": "mist pentru păr"
+      },
+      "nuantator pentru buze": {
+        "ro": "nuanțator pentru buze"
+      },
+      "pasta de dinti": {
+        "ro": "pastă de dinți"
+      },
+      "plasturi": {
+        "ro": "plasturi"
+      },
+      "pudra de fata": {
+        "ro": "pudră de față"
+      },
+      "ruj": {
+        "ro": "ruj"
+      },
+      "sampon": {
+        "ro": "șampon"
+      },
+      "sapun lichid": {
+        "ro": "săpun lichid"
+      },
+      "ser de fata": {
+        "ro": "ser de față"
+      },
+      "ser de par": {
+        "ro": "ser de păr"
+      },
+      "set": {
+        "ro": "set"
+      },
+      "spray pentru par": {
+        "ro": "spray pentru păr"
+      },
+      "spuma autobronzanta": {
+        "ro": "spumă autobronzantă"
+      },
+      "spuma de curatare": {
+        "ro": "spumă de curățare"
+      },
+      "stick pentru fata": {
+        "ro": "stick pentru față"
+      },
+      "toner de fata": {
+        "ro": "toner de față"
+      },
+      "tonic": {
+        "ro": "tonic"
+      },
+      "ulei de buze": {
+        "ro": "ulei de buze"
+      },
+      "ulei de curatare": {
+        "ro": "ulei de curățare"
+      },
+      "ulei de par": {
+        "ro": "ulei de păr"
+      }
+    }
+  }
+}

@@ -852,13 +852,28 @@ def assemble(
             # canonică («creme» pentru `crema de fata`), iar o poartă strictă nemăsurată ar
             # înlocui proză bună cu șablon. Se decide pe date, nu în trecere (D15).
             shown = [facts[it.product_id] for it in items if it.product_id in facts]
-            intro = answer_shape.framing_text(
-                getattr(ctx.business, "domain_pack", None),
-                ctx.language,
-                answer_shape.distinct_types(shown),
-            )
+            pack = getattr(ctx.business, "domain_pack", None)
+            types = answer_shape.distinct_types(shown)
+            source = "types"
+            if getattr(get_settings(), "framing_labels_enabled", False):
+                # NX-325: pe o rutină, pașii (etichete localizate, ordinea sloturilor); altfel
+                # tipurile, cu eticheta din pachet în loc de cheia de catalog.
+                intro = None
+                if routine is not None:
+                    shown_steps = [s for s in routine.steps if s.product_id in facts]
+                    intro = answer_shape.routine_framing_text(
+                        pack, ctx.language, [s.label for s in shown_steps]
+                    )
+                    source = "routine" if intro else source
+                if intro is None:
+                    types, missing = answer_shape.type_labels(pack, ctx.language, types)
+                    if missing:
+                        ctx.emit("framing_label_missing", n=missing)
+                    intro = answer_shape.framing_text(pack, ctx.language, types)
+            else:
+                intro = answer_shape.framing_text(pack, ctx.language, types)
             if intro:
-                ctx.emit("answer_shape_filled", slot=answer_shape.SLOT_FRAMING)
+                ctx.emit("answer_shape_filled", slot=answer_shape.SLOT_FRAMING, source=source)
 
     return RichReply(
         intro=intro,

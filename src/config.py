@@ -1165,6 +1165,10 @@ class Settings(BaseSettings):
     rich_card_reconcile_enabled: bool = Field(
         default=True, validation_alias="RICH_CARD_RECONCILE_ENABLED"
     )
+    # NX-325: încadrarea de rezervă (NX-299) numește PAȘII pe o rutină și etichete localizate în
+    # rest. Pe `b5d86b1a` clientul a citit „Ți-am ales ulei de curatare, masca de fata și crema de
+    # fata": chei de catalog fără diacritice, iar protecția solară lipsea. OFF → fraza de dinainte.
+    framing_labels_enabled: bool = Field(default=True, validation_alias="FRAMING_LABELS_ENABLED")
     # Conversația `cd98a513`: motivul de card «cu pigmenți corectori și SPF 40» era aruncat ÎNTREG
     # (cardul rămânea fără motiv), fiindcă orice număr care nu e identificator lipit („v11") era
     # tratat drept cantitate inventată. Pe 30 de zile, 19 din 276 de motive aveau cifre, iar cele

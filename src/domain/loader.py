@@ -204,6 +204,7 @@ def _norm_comparison_facets(raw: Any) -> tuple[FacetSpec, ...]:
                 key=key,
                 labels=_norm_str_map(item.get("labels")),
                 value_labels={c: v for c, v in value_labels.items() if v},
+                in_comparison=item.get("in_comparison", True) is not False,
             )
         )
     return tuple(out)
@@ -240,7 +241,10 @@ def load_domain_pack(business: BusinessConfig) -> DomainPack | None:
         currency=str(currency),
         badge_rules=_norm_numeric_map(merged.get("badge_rules")),
         rank_weights=_norm_numeric_map(merged.get("rank_weights")),
-        comparison_facets=_norm_comparison_facets(merged.get("comparison_facets")),
+        comparison_facets=tuple(
+            s for s in _norm_comparison_facets(merged.get("comparison_facets")) if s.in_comparison
+        ),
+        facet_labels=_norm_comparison_facets(merged.get("comparison_facets")),
         detail_sections=_norm_detail_sections(merged.get("detail_sections")),
         howto_sections=tuple(
             dict.fromkeys(
