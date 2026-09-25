@@ -1186,6 +1186,26 @@ class Settings(BaseSettings):
     compare_with_similar_enabled: bool = Field(
         default=True, validation_alias="COMPARE_WITH_SIMILAR_ENABLED"
     )
+    # NX-326 (kernel v1.0, pasul 0): scurtăturile de link și comparație servesc produsele NUMITE în
+    # mesaj (`reference_resolver.named_targets`), nu tot ecranul (B1) și nici primele două carduri
+    # (B2). NX-316 o făcea doar pentru chip-urile recunoscute; aceeași frază tastată servea
+    # linkurile tuturor produselor afișate. OFF → porțile de dinainte, byte-identic.
+    named_shortcut_targets_enabled: bool = Field(
+        default=True, validation_alias="NAMED_SHORTCUT_TARGETS_ENABLED"
+    )
+    # NX-326: un tur care n-a atins catalogul și nu e o clarificare („cât durează livrarea?",
+    # „mersi") nu mai golește `active_search`, deci „mai arată-mi" de după el paginează căutarea de
+    # dinainte. Prospețimea (`fp`) rămâne verificată la paginare. OFF → orice răspuns fără produse
+    # golește sesiunea, ca înainte.
+    aside_keeps_search_session_enabled: bool = Field(
+        default=True, validation_alias="ASIDE_KEEPS_SEARCH_SESSION_ENABLED"
+    )
+    # NX-326: argumentele de tool respinse la validare se întorc la model ca listă de CÂMPURI
+    # (cale + tip + constrângerea schemei, niciodată valoarea), nu ca „Unealta a eșuat.", și nu
+    # mai ajung în stiva de constrângeri. OFF → mesajul generic, byte-identic.
+    tool_field_errors_enabled: bool = Field(
+        default=True, validation_alias="TOOL_FIELD_ERRORS_ENABLED"
+    )
     # NX-302: când apelul rich al căii v1 cade, cardurile se construiesc din CATALOG, nu se pierd.
     #
     # Toată bogăția răspunsului v1 (motiv per card, rating, badge, preț de listă, variante, chips)

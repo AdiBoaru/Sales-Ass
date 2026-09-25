@@ -588,6 +588,27 @@ pentru X» nu poartă tipul produsului, iar turele 3-4 au murit la accept cu poo
 `pytest tests/test_shelf_menu.py tests/test_labeled_quantities.py -q` +
 `PYTHONPATH=. python scripts/shelf_menu_probe.py [--replay]`.
 
+**NX-326 — pasul 0 al kernelului `kernel.v1.0`: trei defecte ale căii de azi, reparate înaintea
+kernelului.** (1) **B1/B2:** «trimite-mi linkul la Yuja Niacin» cu cinci carduri servea linkurile
+TUTUROR, iar «compară Wishtrend Vitamin cu Yuja Niacin» compara primele două carduri afișate. NX-316
+reparase asta doar pentru chip-urile recunoscute. Acum un producător PUR
+(`reference_resolver.named_targets`) întoarce toate produsele numite în mesaj: numele întreg, un
+cuvânt DISTINCTIV (prezent în numele unui singur produs de pe ecran; prefixul unic NX-318 nu ajunge,
+fiindcă prefixul lui SOME BY MI e „some", iar clienții scriu cuvintele din mijloc) și ordinalele, în
+ordinea din mesaj. Un cuvânt comun mai multor produse e ambiguitate: linkul servește candidații
+(act read-only), comparația pleacă la model, iar o singură țintă la comparație la fel. Fără nicio
+țintă numită rămâne comportamentul de dinainte («compară primele două»). (2) **Paranteza:** un tur
+care n-a citit catalogul (`RetrievalResult.catalog_read`, din `ToolRun.called` ×
+`tools.base.CATALOG_READ_TOOLS`) și nu e o clarificare nu mai golește `active_search`, pe v1 și pe
+propunerile v2, deci «cât durează livrarea?» între două pagini lasă «mai arată-mi» să continue.
+(3) **Erorile tool-urilor:** un `ValidationError` se întoarce modelului pe CÂMP (cale + tip +
+constrângerea schemei, niciodată valoarea, P12), se numără (`tool_arg_invalid`) și nu mai ajunge
+în stiva de constrângeri. **Neacoperit, declarat:** un nume care nu e pe ecran («linkul la Cerave»)
+tot servește toate ancorele; se numără ca `shortcut_targets{outcome: unnamed_with_residue}` și e al
+resolverului v2 (pasul 2). Flaguri `NAMED_SHORTCUT_TARGETS_ENABLED`,
+`ASIDE_KEEPS_SEARCH_SESSION_ENABLED`, `TOOL_FIELD_ERRORS_ENABLED` (ON; OFF = byte-identic). Card:
+[`tasks/stage1/NX-326.md`](tasks/stage1/NX-326.md); probe: `pytest tests/test_nx326_*.py -q`.
+
 **NX-321 → NX-325 — conversația `bc7a356e`: rutina pentru pielea uscată, construită din ce spusese
 BOTUL.** «vreau o crema de fata» → «pai mi se usuca pielea dupa dus» → «fa mi o rutina»: la final,
 patru produse mini de 10-30 lei (sumă exact 100 lei), filtrate pe roșeață, cu un ulei de curățare

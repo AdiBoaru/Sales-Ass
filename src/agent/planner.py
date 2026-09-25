@@ -827,7 +827,12 @@ async def build_plan(
     # potrivire are voie să schimbe setul. Shadow-ul rămâne pur observabil (vezi funcția).
     _match_gate_shadow(ctx, products, query)
     products = _apply_relevance_mask(ctx, products)
-    ctx.retrieval = RetrievalResult(products=products, source="tools", relevance=relevance)
+    ctx.retrieval = RetrievalResult(
+        products=products,
+        source="tools",
+        relevance=relevance,
+        catalog_read=bool(products) or run.read_catalog or rehydrated or cheaper_intent,
+    )
 
     return ResponsePlan(
         handled=False,
