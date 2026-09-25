@@ -33,7 +33,9 @@ from src.agent.fallbacks import (
 from src.agent.reference_resolver import (
     ANY_ORDINAL_RE,
     ActionAnchor,
+    NamedTargets,
     ReferenceRequest,
+    named_targets,
     normalize_for_match,
     page_anchor_from_snapshot,
     resolve_from_displayed,
@@ -985,7 +987,11 @@ async def try_pre_intents(ctx: TurnContext, deps: PipelineDeps) -> bool:
         and _CHEAPER_RE.search(query) is None
     )
     if link_intent:
-        await _handle_link_intent(ctx, deps)
+        ids = _link_targets(ctx, query, anchorable)
+        if ids is None:
+            await _handle_link_intent(ctx, deps)  # apelul de dinainte, neschimbat
+        else:
+            await _handle_link_intent(ctx, deps, ids)
         return True
 
     # IZI-parity G2: COMPARAȚIE pe setul afișat → tabel structurat determinist, fără să depindem de
@@ -998,9 +1004,58 @@ async def try_pre_intents(ctx: TurnContext, deps: PipelineDeps) -> bool:
         and _COMPARE_RE.search(query) is not None
         and _CHEAPER_RE.search(query) is None
     )
-    if compare_intent and await _handle_compare_intent(ctx, deps, query):
-        return True
-    return False
+    if not compare_intent:
+        return False
+    if getattr(get_settings(), "named_shortcut_targets_enabled", False):
+        displayed_refs = list(ctx.state.displayed_products)
+        targets = named_targets(query, displayed_refs, locale=ctx.language)
+        if targets.source == "named" and len(targets.indices) >= 2:
+            ids = [displayed_refs[i].product_id for i in targets.indices][:4]
+            _emit_shortcut_targets(ctx, "compare", targets, outcome="served")
+            return await serve_comparison(ctx, deps, ids)
+        if targets.source != "none":
+            # O singură țintă («compară X cu celelalte») sau un cuvânt comun mai multor produse: nu
+            # există un set sigur de comparat, iar „primele două" ar fi exact defectul B2.
+            _emit_shortcut_targets(ctx, "compare", targets, outcome="model")
+            return False
+        _emit_shortcut_targets(ctx, "compare", targets, outcome="fallback")
+    return await _handle_compare_intent(ctx, deps, query)
+
+
+def _emit_shortcut_targets(
+    ctx: TurnContext, gate: str, targets: NamedTargets, *, outcome: str
+) -> None:
+    ctx.emit(
+        "shortcut_targets",
+        gate=gate,
+        source=targets.source,
+        n=len(targets.candidates or targets.indices),
+        outcome=outcome,
+    )
+
+
+def _link_targets(ctx: TurnContext, query: str, refs: list[ProductRef]) -> list[str] | None:
+    """NX-326 (B1): produsele pe care cererea de link le NUMEȘTE, sau None = toate ancorele.
+
+    Un cuvânt comun mai multor produse („The Fresh") servește candidații, nu tot ecranul: e un act
+    read-only, deci răspunsul despre toți candidații bate o întrebare (designul kernelului, §D).
+    Fără nicio țintă numită rămâne comportamentul de dinainte. Acolo se numără separat mesajele
+    care aveau totuși cuvinte în plus (`unnamed_with_residue`): un nume care nu e pe ecran («linkul
+    la Cerave») arată exact așa, iar rezolvarea lui în catalog e a resolverului v2 (pasul 2)."""
+    if not getattr(get_settings(), "named_shortcut_targets_enabled", False):
+        return None
+    targets = named_targets(query, refs, locale=ctx.language)
+    if targets.source == "named":
+        _emit_shortcut_targets(ctx, "link", targets, outcome="served")
+        return [refs[i].product_id for i in targets.indices]
+    if targets.source == "ambiguous":
+        _emit_shortcut_targets(ctx, "link", targets, outcome="served")
+        return [refs[i].product_id for i in targets.candidates]
+    residue = _shortcut_residue(query, _LINK_RE, ctx.language)
+    _emit_shortcut_targets(
+        ctx, "link", targets, outcome="unnamed_with_residue" if residue else "fallback"
+    )
+    return None
 
 
 def is_show_more(ctx: TurnContext) -> bool:
