@@ -1727,7 +1727,14 @@ nativx-assistant/
 │   ├── release/                 ← NX-248: build_manifest · preflight · verify_manifest · rollback
 │   │                              (dry-run implicit) · smoke_web_v2 · migration_drill · image_contract
 │   │                              · evidence · deploy.sh (digest + host key pin-uit)
-│   └── dr/restore_verify.py     ← NX-248: verifică un restore IZOLAT (read-only, refuză producția)
+│   ├── dr/restore_verify.py     ← NX-248: verifică un restore IZOLAT (read-only, refuză producția)
+│   └── state_writers.py         ← NX-327 (kernel.v1.0, pasul 0.5): inventarul MECANIC (AST, nu
+│                                    grep) al scriitorilor stării conversației v1/v2, pe cele 5
+│                                    forme din card + `unresolved` pt acces dinamic; generează
+│                                    docs/STATE-WRITERS.md (`--check` ca la NX-247); soarta fiecărui
+│                                    scriitor e DECLARATĂ în scripts/state_writers_fate.json
+│                                    (executor_output/becomes_proposal/retired/stays) — pregătește
+│                                    I3/I20 pentru pasul 3 (reducer = singurul scriitor)
 ├── db/
 │   └── seed/                    ← seed.ts + embed.ts (Supabase JS client, tsx)
 ├── src/
