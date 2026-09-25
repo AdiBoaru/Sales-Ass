@@ -1,0 +1,516 @@
+{
+  "$comment": "NX-327 pasul 0.5: soarta declarata, de OM, pentru fiecare (fisier, functie, camp) gasit de scripts/state_writers.py. fate in {executor_output, becomes_proposal, retired, stays}.",
+  "entries": [
+    {
+      "file": "src/agent/action_kernel.py",
+      "function": "_handle_answer_clarification",
+      "field": "clarification",
+      "why": "Dual-write: `ctx.state.pending_question = None` + `ctx.state.asked_intents.append(...)` (v1, direct) ALATURI de `StateUpdateProposal(\"resolve_question\", ...)` (v2), in ACEEASI functie. Jumatatea v1 e deja redundanta -- propunerea are toata informatia. Cand reducerul devine singurul scriitor (I3), scrierea directa dispare si ramane doar propunerea deja emisa aici.",
+      "fate": "becomes_proposal"
+    },
+    {
+      "file": "src/agent/action_kernel.py",
+      "function": "_handle_answer_clarification",
+      "field": "needs_topic",
+      "why": "Acelasi dual-write: `ctx.state.constraints[field] = answer` (v1) langa `StateUpdateProposal(\"set_need\", key=field, value=answer, ...)` (v2), scrise UNA langa alta. Sursa e solida (raspuns la o intrebare cu `question_id` verificat -- `user_explicit` legitim), doar mecanismul de scriere e dublu. Jumatatea v1 devine inutila odata ce reducerul e singurul scriitor.",
+      "fate": "becomes_proposal"
+    },
+    {
+      "file": "src/agent/action_kernel.py",
+      "function": "_handle_commerce",
+      "field": "cart",
+      "why": "`cart_ref` scris prin `state_patch` dupa o mutatie de cos (NX-237, CartService) -- starea coșului e explicit AFARA din contractul kernelului (Out of Scope al cardului); ramane owner-ul ei propriu.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/agent/action_kernel.py",
+      "function": "_handle_compare",
+      "field": "references",
+      "why": "`StateUpdateProposal(\"set_references\", payload={compared_products,last_action})` dupa o comparatie declansata de buton -- deja proposal-based (v2), fara nicio scriere v1 echivalenta de retras. Nu exista mecanism v1 de \"produse comparate\".",
+      "fate": "stays"
+    },
+    {
+      "file": "src/agent/action_kernel.py",
+      "function": "_handle_product_action",
+      "field": "focus",
+      "why": "Apel indirect catre `_select` (vezi mai jos) -- acelasi verdict: mecanism v2-only, nimic de mutat.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/agent/action_kernel.py",
+      "function": "_handle_product_action",
+      "field": "references",
+      "why": "Apel indirect catre `_select`, jumatatea `last_action` -- v2-only (vezi `_select`).",
+      "fate": "stays"
+    },
+    {
+      "file": "src/agent/action_kernel.py",
+      "function": "_select",
+      "field": "focus",
+      "why": "O actiune (click) e o selectie EXPLICITA (`source=\"action\"`) -- trece deja prin reducer ca orice alta propunere (`set_references`, payload `selected_product`). Nu exista o forma v1 a acestui concept (v1 nu are `selected_product`), deci nu e nimic de migrat.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/agent/action_kernel.py",
+      "function": "_select",
+      "field": "references",
+      "why": "Aceeasi propunere, jumatatea `last_action` -- concept introdus direct pe v2 (NX-236), fara corespondent v1.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/agent/action_kernel.py",
+      "function": "dispatch",
+      "field": "clarification",
+      "why": "Router-ul actiunilor -- apeleaza handlerul potrivit (`_handle_answer_clarification`); verdictul de fond e la handler (`becomes_proposal`), `dispatch` insusi ramane doar cablajul.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/agent/action_kernel.py",
+      "function": "dispatch",
+      "field": "needs_topic",
+      "why": "Idem, pentru ramura `set_need` din `_handle_answer_clarification`.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/agent/action_kernel.py",
+      "function": "dispatch",
+      "field": "references",
+      "why": "Idem, pentru ramurile `_handle_compare`/`_select` (ambele deja v2-only).",
+      "fate": "stays"
+    },
+    {
+      "file": "src/agent/brain.py",
+      "function": "_persist_clarification",
+      "field": "clarification",
+      "why": "Pe calea creierului unic (NX-239, flag OFF), clarificarea e NATIV v2: emite doar `StateUpdateProposal(\"set_pending_question\", ...)`, fara nicio scriere v1 in aceeasi functie. Nimic de migrat -- e deja forma tinta.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/agent/brain.py",
+      "function": "_remember_offered",
+      "field": "references",
+      "why": "Scrie `state_patch[\"offered_chips\"]` -- camp fara slot in `ConversationStateV2.References` (nu e in tabelul cardului), deci ramane pass-through pe AMBELE forme de stare; nu e o migrare de facut, doar o clasa de camp diferita (P3, nu I3/I20 al kernelului).",
+      "fate": "stays"
+    },
+    {
+      "file": "src/agent/brain.py",
+      "function": "_state_proposals_from_plan",
+      "field": "needs_topic",
+      "why": "Puntea planului creierului unic (`AnswerPlanV2.state_update_proposals`) spre reducer -- sursa e deja planul MODELULUI, validat de `to_v1()`/grounding inainte sa ajunga aici, iar iesirea e deja `StateUpdateProposal`. Ramura cu `op` dinamic (necunoscut static) e listata separat in `unresolved`; ramura `set_topic` (literala) e deja pe forma tinta.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/agent/brain.py",
+      "function": "run_main_brain",
+      "field": "clarification",
+      "why": "Apel indirect catre `_persist_clarification` -- deja v2-only (vezi mai sus).",
+      "fate": "stays"
+    },
+    {
+      "file": "src/agent/brain.py",
+      "function": "run_main_brain",
+      "field": "needs_topic",
+      "why": "Apel indirect catre `_state_proposals_from_plan` -- deja proposal-based.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/agent/deterministic.py",
+      "function": "_handle_detail_intent",
+      "field": "focus",
+      "why": "Apel indirect catre `_resolve_anchor` -- vezi mai jos, mecanism v2-only.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/agent/deterministic.py",
+      "function": "_handle_review_intent",
+      "field": "focus",
+      "why": "Idem, acelasi apel indirect catre `_resolve_anchor`.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/agent/deterministic.py",
+      "function": "_resolve_anchor",
+      "field": "focus",
+      "why": "Rezolvarea de referinte v2 (`reference_precedence_v2_enabled`, NX-235/236): o referinta REZOLVATA explicit e memorata prin `StateUpdateProposal(\"set_references\", payload={\"selected_product\":...})`. Conceptul de \"produs selectat\" nu exista in v1 -- nimic de migrat, mecanismul e nascut deja pe forma tinta.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/agent/finalize.py",
+      "function": "_apply_move_chips",
+      "field": "references",
+      "why": "Acelasi camp `offered_chips` ca `_remember_offered` (brain.py) -- pass-through fara slot in reducer, nu e in domeniul I3/I20 al kernelului.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/agent/finalize.py",
+      "function": "_apply_turn_shape",
+      "field": "clarification",
+      "why": "`ctx.state.asked_intents[:] = [*asked, offer.facet][-8:]` marcheaza fateta intrebarii de ingustare (NX-315) ca deja-intrebata -- SINGURA scriere pe acest drum, fara nicio propunere v2 echivalenta azi (nu exista `resolve_question`/`set_pending_question` emisa de aici). Spre deosebire de `becomes_proposal` din clarify.py (unde propunerea deja exista alaturi), aici I3 cere ca pasul 3 sa ADAUGE o propunere noua pentru fapta asta -- nu doar sa retraga jumatatea v1 a unui dual-write existent, ci sa creeze mecanismul.",
+      "fate": "becomes_proposal"
+    },
+    {
+      "file": "src/conversation/state_reducer.py",
+      "function": "_handle_confirm",
+      "field": "needs_topic",
+      "why": "Handler intern al reducerului (NX-235) -- `state_reducer.py` E deja implementarea invariantei I3 (\"SINGURUL loc care are voie sa schimbe starea\", cf. docstring-ul modulului). Pasul 3 al kernelului EXTINDE acest modul (provenance checker, delta mapper, park/resume), nu il inlocuieste -- fiecare handler ramane exact aici.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/conversation/state_reducer.py",
+      "function": "_handle_resolve_question",
+      "field": "clarification",
+      "why": "Handler intern al reducerului -- vezi `_handle_confirm`.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/conversation/state_reducer.py",
+      "function": "_handle_revoke",
+      "field": "needs_topic",
+      "why": "Handler intern al reducerului -- vezi `_handle_confirm`.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/conversation/state_reducer.py",
+      "function": "_handle_set_active_search",
+      "field": "active_search",
+      "why": "Handler intern al reducerului -- vezi `_handle_confirm`.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/conversation/state_reducer.py",
+      "function": "_handle_set_cart_ref",
+      "field": "cart",
+      "why": "Handler intern al reducerului pentru `cart_ref` -- coșul ramane in afara contractului kernelului (Out of Scope), dar reducerul insusi nu se muta.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/conversation/state_reducer.py",
+      "function": "_handle_set_need",
+      "field": "needs_topic",
+      "why": "Handler intern al reducerului -- vezi `_handle_confirm`.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/conversation/state_reducer.py",
+      "function": "_handle_set_pending_question",
+      "field": "clarification",
+      "why": "Handler intern al reducerului -- vezi `_handle_confirm`.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/conversation/state_reducer.py",
+      "function": "_handle_set_references",
+      "field": "references",
+      "why": "Handler intern al reducerului -- vezi `_handle_confirm`.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/conversation/state_reducer.py",
+      "function": "_handle_set_topic",
+      "field": "clarification",
+      "why": "Efect colateral al schimbarii de subiect: cere clarificare noua (`pending_clarification`=None la topic reset) -- tot in interiorul reducerului, vezi `_handle_confirm`.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/conversation/state_reducer.py",
+      "function": "_handle_set_topic",
+      "field": "needs_topic",
+      "why": "Handler intern al reducerului -- vezi `_handle_confirm`.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/conversation/state_reducer.py",
+      "function": "reduce_all",
+      "field": "other",
+      "why": "Incrementeaza `revision` la finalul unui lot de propuneri -- contabilitatea reducerului insusi, ramane exact aici.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/conversation/state_v2.py",
+      "function": "enforce_caps",
+      "field": "active_search",
+      "why": "Degradarea de buget (I17): taie in ordinea declarata (referinte afisate -> intrebari -> tombstone-uri -> nevoi soft -> sesiune/cos), NICIODATA hard/sensibile. Mecanismul de buget al reducerului -- pasul 3 il extinde (thresholds), nu-l muta.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/conversation/state_v2.py",
+      "function": "enforce_caps",
+      "field": "clarification",
+      "why": "Acelasi mecanism de degradare -- vezi active_search.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/conversation/state_v2.py",
+      "function": "enforce_caps",
+      "field": "needs_topic",
+      "why": "Acelasi mecanism de degradare -- vezi active_search.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/conversation/state_v2.py",
+      "function": "enforce_caps",
+      "field": "references",
+      "why": "Acelasi mecanism de degradare -- vezi active_search.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/conversation/state_v2.py",
+      "function": "hydrate_state_v2",
+      "field": "other",
+      "why": "Hidratare: `revision` se ia din documentul persistat (nu din coloana DB `state_version`) -- parte din contractul de citire/scriere al reducerului insusi.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/conversation/state_v2.py",
+      "function": "serialize",
+      "field": "active_search",
+      "why": "Lista de `shrink` din `serialize()` (I17): taie `active_search`/`cart_ref` cand starea depaseste bugetul de 6KB -- ultimele sacrificate, dupa nevoi soft. Mecanism al reducerului, nu se muta.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/conversation/state_v2.py",
+      "function": "serialize",
+      "field": "cart",
+      "why": "Acelasi `shrink`, jumatatea `cart_ref` -- vezi active_search. `cart` ramane oricum in afara contractului kernelului.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/conversation/state_v2.py",
+      "function": "serialize",
+      "field": "clarification",
+      "why": "Acelasi `shrink`: `asked_questions` taiate la ultimele 3 cand bugetul e depasit.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/conversation/state_v2.py",
+      "function": "serialize",
+      "field": "needs_topic",
+      "why": "Acelasi `shrink`: nevoile non-hard/non-sensibile sunt primele taiate.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/conversation/state_v2.py",
+      "function": "serialize",
+      "field": "other",
+      "why": "Acelasi `shrink`, jumatatea `passthrough` (coșul e ultimul sacrificat, `safety` niciodata singur) -- mecanism de buget al reducerului.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/conversation/state_v2.py",
+      "function": "serialize",
+      "field": "references",
+      "why": "Acelasi `shrink`: `displayed_products` sunt PRIMELE taiate (valoarea lor de afisare scade cel mai repede) -- mecanism de buget al reducerului.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/evals/golden.py",
+      "function": "advance_turn",
+      "field": "active_search",
+      "why": "Harness de teste (`ScriptedLLM`/golden): re-implementeaza DELIBERAT merge-ul lui `processor._build_new_state`/`_turn_proposals` ca sa avanseze starea intre ture scriptate, fara DB/worker real. Nu ruleaza in pipeline-ul de productie -- invariantele I3/I20 vizeaza pipeline-ul, nu dublura de test; daca productia isi schimba mecanismul de scriere, harness-ul se actualizeaza separat, dar nu e el insusi o tinta a pasului 3.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/evals/golden.py",
+      "function": "advance_turn",
+      "field": "cart",
+      "why": "Acelasi harness -- vezi active_search. `cart` oricum in afara contractului kernelului.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/evals/golden.py",
+      "function": "advance_turn",
+      "field": "clarification",
+      "why": "Acelasi harness -- vezi active_search.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/evals/golden.py",
+      "function": "advance_turn",
+      "field": "references",
+      "why": "Acelasi harness -- vezi active_search.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/tools/catalog_tools.py",
+      "function": "continue_search_session",
+      "field": "active_search",
+      "why": "Tool-ul de paginare scrie `ctx.state_patch[\"active_search\"]` cu cursorul/pagina noua -- rezultatul executiei unei cautari, nu o interpretare a mesajului. I20 permite explicit `active_search` ca iesire de executor.",
+      "fate": "executor_output"
+    },
+    {
+      "file": "src/tools/catalog_tools.py",
+      "function": "search_products_tool",
+      "field": "active_search",
+      "why": "Tool-ul de cautare scrie/sterge `ctx.state_patch[\"active_search\"]` (sesiunea de paginare) ca parte din executia cautarii -- iesire de executor, permisa explicit de I20.",
+      "fate": "executor_output"
+    },
+    {
+      "file": "src/tools/commerce_tools.py",
+      "function": "_cart_add_v2",
+      "field": "cart",
+      "why": "`ToolResult(state_patch={\"cart_ref\":...})` dupa o mutatie prin CartService (NX-237) -- coșul e explicit AFARA din contractul kernelului (Out of Scope al cardului).",
+      "fate": "stays"
+    },
+    {
+      "file": "src/tools/commerce_tools.py",
+      "function": "cart_add_tool",
+      "field": "cart",
+      "why": "Calea LEGACY (pre-CartService) a lui `cart_add`, `state_patch={\"cart\":cart}` -- tot coș, tot in afara contractului kernelului.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/worker/processor.py",
+      "function": "_build_new_state",
+      "field": "active_search",
+      "why": "`_turn_proposals` (in ACELASI fisier) construieste deja `StateUpdateProposal(\"set_active_search\", ...)` din EXACT aceleasi surse (`ctx.state_patch[\"active_search\"]` sau `None` cand turul nu e o cautare) -- docstringul functiei o spune explicit: \"aceleasi delte pe care _build_new_state le scrie in v1, doar exprimate in vocabularul reducerului\". Scrierea-dict-literal v1 devine redundanta cand v2 e autoritar.",
+      "fate": "becomes_proposal"
+    },
+    {
+      "file": "src/worker/processor.py",
+      "function": "_build_new_state",
+      "field": "clarification",
+      "why": "Scrie `pending_question`/`asked_intents` in dict-ul persistat v1, din ce au mutat deja IN-PLACE alte stagii (clarify/action_kernel) pe `ctx.state`. Acele stagii emit deja propuneri echivalente (`resolve_question`/`set_pending_question`) in `ctx.state_proposals`, consumate de `_build_state_v2` -> `reduce_all`. Scrierea v1 e write-back-ul legacy, nu o sursa noua de adevar -- dispare cand v2 e singura forma persistata.",
+      "fate": "becomes_proposal"
+    },
+    {
+      "file": "src/worker/processor.py",
+      "function": "_build_new_state",
+      "field": "needs_topic",
+      "why": "Scrie `constraints`/`search_constraints` in dict-ul persistat v1, din ce a mutat deja IN-PLACE `agent_stage`/`clarify_resume_stage` pe `ctx.state`. Aceleasi stagii populeaza `ctx.state_proposals` (set_need/set_topic), consumate de `_build_state_v2`. E write-back-ul v1, nu sursa -- dispare odata cu retragerea formei v1.",
+      "fate": "becomes_proposal"
+    },
+    {
+      "file": "src/worker/processor.py",
+      "function": "_build_new_state",
+      "field": "references",
+      "why": "`_turn_proposals` (in ACELASI fisier) produce deja `StateUpdateProposal(\"set_references\", payload={\"displayed_products\": ...})` din EXACT aceleasi surse (`ctx.reply.products` / `ctx.state_patch[\"displayed_products\"]`) -- docstringul o declara textual. Dict-ul-literal v1 e redundant cand v2 e autoritar.",
+      "fate": "becomes_proposal"
+    },
+    {
+      "file": "src/worker/processor.py",
+      "function": "_build_state_v2",
+      "field": "active_search",
+      "why": "Constructia stariii v2 la commit: reduce propunerile turului (inclusiv `_turn_proposals`) peste starea hidratata proaspat -- funcția PURA care implementeaza \"retry re-aplica ACELEASI propuneri\" (P6). Chiar mecanismul pe care pasul 3 il extinde.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/worker/processor.py",
+      "function": "_build_state_v2",
+      "field": "cart",
+      "why": "Acelasi `_build_state_v2`: `cart_ref` cărat din `ctx.state_patch` direct in `ConversationStateV2` (NX-237 il modeleaza explicit, spre deosebire de `cart`/`safety` care raman passthrough) -- coșul e oricum in afara contractului kernelului.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/worker/processor.py",
+      "function": "_build_state_v2",
+      "field": "other",
+      "why": "Acelasi `_build_state_v2`: `passthrough` carata verbatim din starea de baza + `state_patch` pentru cheile nemodelate de v2 (`cart` legacy, `safety`) -- mecanismul care garanteaza ca o migrare de format nu rescrie date pe care cardul asta nu le detine (P3).",
+      "fate": "stays"
+    },
+    {
+      "file": "src/worker/processor.py",
+      "function": "_build_state_v2",
+      "field": "references",
+      "why": "Acelasi `_build_state_v2` -- reduce propunerile de `references` (din `_turn_proposals`) peste starea hidratata. Parte din mecanismul-tinta.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/worker/processor.py",
+      "function": "_turn_proposals",
+      "field": "active_search",
+      "why": "\"Deltele turului, ca PROPUNERI typed -- aceleasi delte pe care _build_new_state le scrie in v1, doar exprimate in vocabularul reducerului\" (docstring-ul functiei). Exact forma pe care pasul 3 o vrea peste tot -- Sender-ul (P3) emite deja propuneri, nu scrie direct.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/worker/processor.py",
+      "function": "_turn_proposals",
+      "field": "references",
+      "why": "Acelasi `_turn_proposals`, jumatatea `displayed_products` -- vezi active_search.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/worker/stages/agent.py",
+      "function": "_filter_proposals",
+      "field": "needs_topic",
+      "why": "Traduce `RouteDecision.filters`/`category_key` in propuneri typed -- deja proposal-based (v2), fara nicio scriere v1 in ACEEASI functie de retras. (Observatie separata, nu schimba verdictul: `route.filters` ramane gol pe majoritatea turelor post-NX-297, caile care il populeaza azi fiind doar `alias.py` -- deci codul e corect, dar rar exercitat.)",
+      "fate": "stays"
+    },
+    {
+      "file": "src/worker/stages/agent.py",
+      "function": "_learn_constraints",
+      "field": "needs_topic",
+      "why": "Scrie stiva `search_constraints` din ce a CAUTAT agentul (`observed_constraints`), nu dintr-o interpretare a mesajului -- exact mecanismul pe care cardul il declara `retired` explicit (NX-297). I20 cere ca nevoile/subiectul sa fie o functie PURA a interpretarii turului; un semnal derivat din argumentele de tool e un ocolis pe care kernelul il inchide. Dispare cand pasul 5 (turn_interpreter) preia sursa nevoilor.",
+      "fate": "retired"
+    },
+    {
+      "file": "src/worker/stages/agent.py",
+      "function": "_learn_subject",
+      "field": "needs_topic",
+      "why": "Aceeasi familie NX-314: deriva subiectul din `run.retrieved` (ce a adus cautarea), nu din ce a spus clientul. Chemata EXCLUSIV din `_learn_constraints` (deja `retired`); scrie AMBELE forme (`ctx.state.search_constraints` direct + `StateUpdateProposal(\"set_topic\")`), dar proveniet dintr-un semnal de executie, nu de interpretare (I20) -- propunerea trece mecanic prin reducer, dar sursa ei e exact ce pasul 5 inlocuieste.",
+      "fate": "retired"
+    },
+    {
+      "file": "src/worker/stages/agent.py",
+      "function": "_need_proposals",
+      "field": "needs_topic",
+      "why": "Traducator PUR, agnostic de sursa: `dict de sloturi -> StateUpdateProposal(set_need)`. Chemat atat din `_filter_proposals` (stays) cat si din `_learn_constraints` (retired) -- functia insasi nu presupune nimic despre provenienta, deci ramane utila si dupa ce pasul 5 schimba sursa reala a sloturilor.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/worker/stages/agent.py",
+      "function": "_persist_safety_context",
+      "field": "safety",
+      "why": "Contextul de siguranta (NX-173, P0) e explicit AFARA din contractul kernelului -- propriul lui gate, propriul lui owner, neatins de I3/I20.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/worker/stages/agent.py",
+      "function": "_prune_displayed",
+      "field": "references",
+      "why": "Scoate din `displayed_products` produsele devenite contraindicate cand un context de siguranta (NX-173) tocmai a devenit activ -- un semnal DETERMINIST, derivat din catalog + politica, nu din interpretarea mesajului. Exact clasa pe care I20 o declara permisa ca iesire de executor (\"referinte\"): kernelul nu muta asta, doar o recunoaste ca atare.",
+      "fate": "executor_output"
+    },
+    {
+      "file": "src/worker/stages/agent.py",
+      "function": "_v2_constraints",
+      "field": "needs_topic",
+      "why": "Previzualizare PURA: ruleaza `_filter_proposals` + `reduce_all` peste starea curenta, ca sa dea un rezultat identic cu ce se va persista la commit (docstring: \"nu poate diverge de adevar, e aceeasi functie rulata mai devreme\"). Deja aliniat cu directia kernelului.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/worker/stages/agent.py",
+      "function": "agent_stage",
+      "field": "needs_topic",
+      "why": "Punctul unde rezultatul lui `merge_constraints` (explicit `retired` in card) chiar ATERIZEAZA pe stare: `ctx.state.search_constraints = merged_constraints`. Cu v2 pornit, `_v2_constraints` poate suprascrie preview-ul, dar scrierea-v1 ramane owner-ul de fapt pentru cititorii legacy (`_filters_hint`, `state_block`). Dispare cand v2 devine singura forma persistata si acesti cititori trec pe `state_v2`.",
+      "fate": "retired"
+    },
+    {
+      "file": "src/worker/stages/clarify.py",
+      "function": "_propose_resume",
+      "field": "clarification",
+      "why": "Construieste `StateUpdateProposal(\"resolve_question\", ...)` -- deja forma tinta.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/worker/stages/clarify.py",
+      "function": "_propose_resume",
+      "field": "needs_topic",
+      "why": "Construieste `StateUpdateProposal(\"set_need\", ...)` din raspunsul la clarificare -- deja forma tinta (sursa `user_explicit`, legitima).",
+      "fate": "stays"
+    },
+    {
+      "file": "src/worker/stages/clarify.py",
+      "function": "clarify_resume_stage",
+      "field": "clarification",
+      "why": "Acelasi tipar ca la `_handle_answer_clarification`: `ctx.state.asked_intents.append(...)` (v1) langa apelul la `_propose_resume` (v2, `resolve_question`). Cand v2 devine autoritar, scrierea v1 e cea care dispare -- propunerea are deja tot ce trebuie.",
+      "fate": "becomes_proposal"
+    },
+    {
+      "file": "src/worker/stages/clarify.py",
+      "function": "clarify_resume_stage",
+      "field": "needs_topic",
+      "why": "`ctx.state.constraints[field] = answer` (v1, linia 121) scrisa CHIAR INAINTE de `_propose_resume(ctx, field, answer, pq)` (v2, `set_need`), din ACELASI raspuns al clientului la o clarificare -- sursa e `user_explicit` legitima, doar mecanismul de scriere e dublu. Jumatatea v1 devine inutila cand reducerul ramane singurul scriitor.",
+      "fate": "becomes_proposal"
+    }
+  ]
+}
