@@ -63,6 +63,22 @@ gate-ul NX-210**. Direcția aprobată către care migrăm:
 
 **Înghețate până la GO-ul de la NX-210:** enforcement-ul QuerySpec/Match Gate (NX-188, NX-189).
 
+**Kernelul conversațional — contractul `kernel.v1.0` (înghețat 2026-09-25, NORMATIV).**
+Sursa: [`docs/KERNEL-CONTRACT-v1.md`](docs/KERNEL-CONTRACT-v1.md); designul din care vine, ca
+referință: [`docs/KERNEL-DESIGN.md`](docs/KERNEL-DESIGN.md). Modelul scrie O interpretare a turului
+(`TurnInterpretation`: acte, schimbări de stare adresate prin handle, referințe, ambiguități); codul
+decide tot ce e fapt, identificator, filtru sau schimbare de stare: proveniența (`explicit` /
+`implicit` / `inferred`) se calculează din citat + vocabular, nu se declară; doar `explicit` produce
+filtru dur; `SearchArgs` îl scrie doar plannerul; starea o scrie doar reducerul. 26 de invarianți,
+fiecare cu testul sau poarta care pică atunci când e încălcat. Schimbările de contract trec prin PR:
+**minor** = câmpuri/valori aditive, **major** = sens, invariant, proprietar sau semantică de stare
+(cere gate-ul de replay). Ordinea de implementare e strictă, un pas per PR, niciunul înainte ca cel
+dinainte să fie în `main` cu testele verzi: 0 (NX-326, calea de azi) și 0.5 (NX-327, inventarul
+scriitorilor de stare) în paralel, apoi 1 → 6. **Regula de reparație de acum încolo:** o conversație
+proastă intră în corpusul de replay și se repară în stratul pe care îl arată traceul (date de pachet,
+o regulă din contract, sau un bug într-o componentă). O reparație care ramifică pe textul brut al
+clientului într-un modul de kernel e respinsă de poartă.
+
 **NX-238 — retrievalul trece printr-un PORT, iar candidatul e inert (verdict `NOT-READY`).**
 `src/retrieval/` e contractul stabil pe care îl consumă NX-239: `RetrievalPort` + `RetrievalBundle`
 (candidați = REFERINȚE + verdicte tri-state + evidence + degradări cu cod fix), cu două
