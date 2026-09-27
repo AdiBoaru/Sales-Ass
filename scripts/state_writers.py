@@ -750,7 +750,9 @@ def generate_doc(
         # registrului de soartă. Cu linii, orice modificare într-un fișier cu scriitori (un
         # `processor.py` atins de alt card) făcea docul „depășit" fără ca vreun scriitor să se fi
         # schimbat, și a roșit `main` la primul merge de după NX-327.
-        rows = sorted(by_field[field_id], key=lambda w: (w.path, w.file, w.function, w.form))
+        rows = sorted(
+            by_field[field_id], key=lambda w: (w.path, w.file, w.function, w.form, w.raw_key)
+        )
         for w in rows:
             entry = fate.get(w.fate_key)
             why = entry.why if entry else "**LIPSEȘTE din state_writers_fate.json**"
