@@ -81,7 +81,8 @@
           "prietena": "ea",
           "frate": "el",
           "tata": "el"
-        }
+        },
+        "scope": "conversation"
       },
       {
         "key": "occasion",
@@ -104,7 +105,8 @@
         "aliases": {
           "ziua ei": "zi de nastere",
           "ziua lui": "zi de nastere"
-        }
+        },
+        "scope": "conversation"
       }
     ],
     "units": {

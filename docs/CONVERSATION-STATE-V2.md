@@ -59,11 +59,17 @@ ConversationStateV2
 │                          asked_at_revision, expires_after_turns, attempts, resume_route}
 ├── asked_questions[] {key, revision, attempts}
 ├── references {selected_product, page_product, displayed_products[],
-│               displayed_revision, compared_products[], last_action}
+│               displayed_revision, compared_products[], last_action,
+│               recent_sets[][]}  # NX-331: seturile de DINAINTEA celui curent, recent întâi (≤2)
+├── parked {topic, needs[], shown[], parked_at_revision}   # NX-331: UN slot, nu o stivă (I19)
 ├── active_search                  # ref-uri/cursor/fingerprint, mărginit
 ├── cart_ref {ref, version}        # DOAR referința; liniile rămân NX-237
 └── cart / safety                  # passthrough — proprietari NX-237 / NX-173
 ```
+
+`recent_sets` și `parked` sunt chei **aditive** (NX-331): un document v2 scris înainte le citește
+goale (`()` / `None`), iar `schema_version` rămâne 2. `project_v1` nu le proiectează: cititorii v1
+nu le cunosc, deci proiecția e byte-identică.
 
 ### Semantica nevoilor
 
@@ -74,11 +80,40 @@ ConversationStateV2
   valoare canonică nu produce constrângere de căutare, nu filtrează nimic și nu e o negație.
 - `scope` = categoria sub care a fost declarată. Un topic switch retrage **doar** nevoile cu
   `scope == categoria veche`; faptele despre om (mărime, restricție, destinatar) supraviețuiesc.
+  Dacă o cheie e a subiectului sau a persoanei e **dată**: `NeedSpec.scoped` pe nucleul universal
+  și `TypedFacet.scope` (`topic` | `conversation`, implicit `topic`) pe fațete (NX-331). Aceeași
+  culoare e a persoanei la modă și a subiectului la mobilă. **Bugetul e al conversației** (NX-331,
+  runda 3 a contractului, inversează NX-235): «cremă de față sub 100 lei» → «arată-mi ce ai la
+  corp» păstrează plafonul, iar un buget nou explicit îl înlocuiește.
 - O corecție lasă **tombstone** (`revocations[]`, amprentă — nu valoarea). O cheie cu tombstone
   poate fi reafirmată **doar** de `user_explicit`/`action`. Aici se închide bucla „revocarea
   revine din rezumat".
 - Siguranța (`sensitive_class` sau `source='policy'`) nu se revocă și nu se rescrie decât la
   cererea EXPLICITĂ a clientului. Nici topic switch, nici model.
+
+### Parcarea, reluarea și corecția (NX-331, `kernel.v1.0` pasul 3b)
+
+- **Schimbarea de subiect parchează:** subiectul curent, nevoile lui active cu scope pe el și
+  ultimul set arătat se copiază în `parked`, apoi nevoile se retrag ca înainte (`superseded` +
+  tombstone `topic_reset`). Un `parked` existent e evacuat (`topic_parked{outcome=evicted}`).
+  Pe propunerile interpretării (`origin=interpretation`) subiectul e PERECHEA (raft, tip); pe cele
+  vechi ale lui `_learn_subject` tipul se schimbă fără parcare, iar resetul pornește doar pe raft.
+- **`resume`** (`TurnDelta.thread`) face SCHIMBUL cu `parked`: nevoile parcate revin exact cum
+  erau (tărie, sursă, `confirmed`), fără regula de înviere (au fost parcate de cod, nu revocate de
+  client), dar o cheie retrasă de client DUPĂ parcare rămâne retrasă (I6). Fără parcat: no-op,
+  `topic_resumed{outcome=not_available}`.
+- **`aside`** e identitatea pe stare (I5), inclusiv pe `active_search`.
+- **`recent_sets`:** un `set_references` cu un set NOU împinge setul curent (deduplicat pe mulțimea
+  de id-uri); prune-ul de siguranță (`source=policy`) nu împinge nimic.
+- **Corecția (I21):** `corrects_previous_turn` e doar dovadă. Numai o schimbare care CONTRAZICE
+  turul anterior (`updated_revision == revizia de dinainte`) retrage, cu `correction`, nevoile
+  neexplicite ale acelui tur pe aceeași dimensiune; altfel `correction{outcome=unconfirmed}`.
+- **I20:** în `reduce_turn`, ieșirea executorilor poate propune doar `set_references` /
+  `set_active_search`; restul e respins `executor_state_scope`.
+- **Op-uri noi:** `clear_topic`, `clear_all` (doar de la client), `note_asked` (întrebarea de
+  îngustare NX-315). `unmapped` e cheie universală soft, cel mult 3 pe subiect.
+- `reduce_all` rămâne calea de azi; `reduce_turn` e intrarea turului interpretat (fără apelant în
+  producție până la pasul 6).
 
 ### Subiectul conversației (NX-314)
 
@@ -139,7 +174,9 @@ răspunde onest și oferă relaxarea unei nevoi `soft` (`relaxation_candidates`)
 ## 4. Caps și bugetul de 8KB
 
 `MAX_NEEDS=16 · MAX_REVOCATIONS=12 · MAX_ASKED_QUESTIONS=8 · MAX_DISPLAYED=8 · MAX_COMPARED=4 ·
-MAX_NAME_CHARS=80`.
+MAX_NAME_CHARS=80 · MAX_RECENT_SETS=2 · MAX_PARKED_NEEDS=8` (NX-331). La plafonul de nevoi o nevoie
+ACTIVĂ bate orice intrare retrasă (NX-331, I4): altfel un șir de corecții ar împinge afară o nevoie
+activă mai veche.
 
 CHECK-ul din DB e `pg_column_size(state) < 8192` (migrarea 003) — pe reprezentarea **binară**
 jsonb, care are overhead per intrare (JEntry + aliniere + numele cheii stocat în FIECARE obiect,
@@ -152,9 +189,13 @@ buget și cere `pg_column_size < 8192`), ca să rămână o măsurătoare, nu o 
 îmbătrânește. `to_jsonb()` omite și câmpurile care ar fi oricum default la citire: cu 16 nevoi ×
 11 câmpuri, cheile nule erau o parte reală din document.
 
-`serialize()` verifică bugetul **înainte** de commit și degradează în ordinea inversă a valorii:
-referințe afișate → întrebări puse → tombstone-uri → nevoi `soft` → sesiune/coș_ref → `cart`.
-**Nevoile `hard`/sensibile nu se sacrifică niciodată** (bugetul de memorie n-are voie să devină o
+`serialize()` verifică bugetul **înainte** de commit și degradează în ordinea inversă a valorii
+(I17, declarată în contract): **`recent_sets` (primele)** → setul parcatului (`parked.shown`) →
+referințe afișate → întrebări puse → tombstone-uri → nevoi `soft` (active și parcate, la același
+pas) → sesiune/coș_ref → `cart`. **Nevoile `hard`/sensibile nu se sacrifică niciodată**, nici cele
+ale subiectului parcat. Măsurat (NX-331): un document la plafoane cu nume de produs de 80 de
+caractere are ≈ 6,3 KB chiar fără seturile recente, deci degradarea merge mai departe pe ordinea
+de mai sus (bugetul de memorie n-are voie să devină o
 portiță de relaxare a constrângerilor), iar `safety` (NX-173, gate P0) pleacă ultimul. Alternativa
 la a sacrifica ceva ar fi un `UPDATE` care eșuează, adică pierderea RĂSPUNSULUI din cauza memoriei
 — exact ce se întâmplă azi pe calea v1 cu un `cart` corupt.
@@ -192,6 +233,9 @@ pornească. Rollback = stinge flagul de scriere; rândurile deja v2 rămân citi
 `conversation_state_serialized{schema,state_size_bytes_bucket,degraded,needs}` ·
 `need_update{operation,strength,source,outcome}` · `need_update_rejected{reason,operation}` ·
 `constraint_revoked{reason}` · `topic_reset{scope}` · `subject_match{path,...}` (NX-314) ·
+`topic_parked{outcome}` · `topic_resumed{outcome}` · `correction{outcome}` ·
+`constraints_cleared{scope}` (NX-331: contoarele
+`parked_evicted`, `resume_not_available`, `correction_unconfirmed` sunt valorile lui `outcome`) ·
 `clarification_decision{decision,reason,information_gain_bucket}` · `clarify_skipped{field}` ·
 `clarify_suppressed{field,reason}` · `web_reference_resolved{source,outcome,reason}`.
 
@@ -204,7 +248,7 @@ persistent (upgrade care nu se produce), `degraded=true` (stare la limită).
 ```bash
 pytest tests/test_conversation_state_v2.py tests/test_state_reducer.py \
        tests/test_clarification_policy_v2.py tests/test_reference_resolver_v2.py \
-       tests/test_conversation_state_v2_fixtures.py tests/test_conversation_state_v2_pipeline.py -q
+       tests/test_conversation_state_v2_fixtures.py tests/test_conversation_state_v2_pipeline.py        tests/test_state_reducer_park.py tests/test_state_writes_parity.py -q   # NX-331
 
 pytest tests/test_conversation_state_v2_db.py -q -m integration   # Postgres real
 

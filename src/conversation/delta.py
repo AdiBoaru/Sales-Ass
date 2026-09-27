@@ -26,7 +26,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from src.conversation.interpretation import CheckedChange, ResolvedRef, TurnInterpretation
-from src.conversation.needs import NeedKind, NeedVocabulary
+from src.conversation.needs import UNMAPPED_KEY, NeedKind, NeedVocabulary
 from src.conversation.provenance import (
     MAX_ACTS,
     MAX_CHANGES,
@@ -41,7 +41,6 @@ from src.conversation.state_reducer import StateUpdateProposal
 CATEGORY = "category"
 #: Cheia universală a unei excluderi, când fațeta nu are propriul operator `not_contains`.
 RESTRICTION_KEY = "restriction"
-UNMAPPED_KEY = "unmapped"
 
 _SOURCE_BY_PROVENANCE: Mapping[str, str] = {
     "explicit": "user_explicit",
@@ -86,9 +85,12 @@ def _relative_price(
 
 
 def _common(c: CheckedChange, source: str, turn_id: str) -> dict[str, Any]:
-    """Câmpurile comune ale unei propuneri (sursă, tur, tărie)."""
+    """Câmpurile comune ale unei propuneri (sursă, tur, tărie, origine). `origin` (NX-331) spune
+    reducerului că propunerea vine din interpretare: acolo o schimbare a perechii (raft, tip)
+    parchează subiectul, pe când propunerile vechi ale lui `_learn_subject` actualizează tipul fără
+    parcare."""
     strength = c.strength if c.strength in ("hard", "soft") else None
-    return {"source": source, "turn_id": turn_id, "strength": strength}
+    return {"source": source, "turn_id": turn_id, "strength": strength, "origin": "interpretation"}
 
 
 def _need_proposals(
@@ -117,20 +119,32 @@ def _need_proposals(
     return [StateUpdateProposal("set_need", key=c.dimension, value=value, **common)]
 
 
-def _structural_proposal(
-    c: CheckedChange, source: str, turn_id: str, handle: Handle | None
-) -> StateUpdateProposal:
-    """`clear` / `remove` / `replace`: operațiile pe handle-uri sau pe tot subiectul."""
+def _structural_proposals(
+    c: CheckedChange, source: str, turn_id: str, handle: Handle | None, needs: NeedVocabulary
+) -> list[StateUpdateProposal]:
+    """`clear` / `remove` / `replace`: operațiile pe handle-uri sau pe tot subiectul.
+
+    `replace cN` pe o cheie de LISTĂ (NX-331) înseamnă „ACEA valoare, nu alta": retragerea valorii
+    din handle, apoi valoarea nouă. Un `supersede` ar purta doar valoarea nouă, iar pe o listă
+    reducerul ar ADĂUGA-o lângă cea veche (două nevoi de ten coexistă). Pe o cheie scalară
+    `supersede` înlocuiește deja, atomic."""
     common = _common(c, source, turn_id)
     op = c.change.op
     if op == "clear" and c.change.target == "topic":
-        return StateUpdateProposal("clear_topic", **common)
+        return [StateUpdateProposal("clear_topic", **common)]
     if op == "clear":
-        return StateUpdateProposal("clear_all", **common)
+        return [StateUpdateProposal("clear_all", **common)]
     assert handle is not None  # validarea a respins deja un handle necunoscut (`unknown_handle`)
+    removed = StateUpdateProposal("revoke", key=handle.key, value=handle.value, **common)
     if op == "remove":
-        return StateUpdateProposal("revoke", key=handle.key, value=handle.value, **common)
-    return StateUpdateProposal("supersede", key=handle.key, value=c.canonical_value, **common)
+        return [removed]
+    spec = needs.spec_for(handle.key)
+    if spec is not None and spec.kind is NeedKind.LIST:
+        return [
+            removed,
+            StateUpdateProposal("set_need", key=handle.key, value=c.canonical_value, **common),
+        ]
+    return [StateUpdateProposal("supersede", key=handle.key, value=c.canonical_value, **common)]
 
 
 def to_delta(
@@ -182,7 +196,7 @@ def to_delta(
         source = _SOURCE_BY_PROVENANCE[c.provenance]
         if c.change.op in ("clear", "remove", "replace"):
             handle = by_handle.get(c.change.target or "")
-            proposals.append(_structural_proposal(c, source, turn_id, handle))
+            proposals += _structural_proposals(c, source, turn_id, handle, needs)
             continue
         if c.dimension == CATEGORY:
             proposals.append(
@@ -212,4 +226,4 @@ def to_delta(
     )
 
 
-__all__ = ["RankingSignal", "TurnDelta", "to_delta"]
+__all__ = ["UNMAPPED_KEY", "RankingSignal", "TurnDelta", "to_delta"]

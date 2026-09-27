@@ -1,0 +1,431 @@
+{
+  "schema_version": "kernel-journey.v1",
+  "_note": "NX-331 (kernel v1.0, pasul 3b): journey-uri etichetate pe stratul `reducer`. Turele rulează ÎN LANȚ de la starea goală: validatorul de proveniență, resolverul (pe sursele din starea redusă: ecran, seturi de mai devreme, parcat), `to_delta` și `reduce_turn`. `shown` = ce a arătat executorul turului. Eticheta `reducer` e forma compactă din `fixture_catalog.state_view`: nevoile ACTIVE ca „cheie operator valoare”, iar câmpurile goale lipsesc.",
+  "journeys": [
+    {
+      "journey_id": "k01-electronics-park-and-resume",
+      "pack": "electronics",
+      "family": [
+        "subject_change",
+        "resume",
+        "extreme"
+      ],
+      "source": "NX-331 Business Context: telefoane → tablete → «înapoi la telefoane, cel mai ieftin»",
+      "turns": [
+        {
+          "user_input": "Arată-mi telefoane Samsung sub 3000 de lei.",
+          "shown": [
+            "el-01",
+            "el-07"
+          ],
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find",
+                  "query": "telefoane Samsung"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "set",
+                  "dimension": "category",
+                  "relation": "eq",
+                  "value": "telefoane",
+                  "quote": "telefoane"
+                },
+                {
+                  "op": "add",
+                  "dimension": "brand",
+                  "relation": "eq",
+                  "value": "Samsung",
+                  "quote": "Samsung"
+                },
+                {
+                  "op": "set",
+                  "dimension": "price",
+                  "relation": "lte",
+                  "number": 3000,
+                  "unit": "lei",
+                  "quote": "sub 3000 de lei"
+                }
+              ]
+            },
+            "checked": [
+              {
+                "dimension": "category",
+                "canonical_value": "telefoane",
+                "provenance": "explicit",
+                "strength": "soft"
+              },
+              {
+                "dimension": "brand",
+                "canonical_value": "Samsung",
+                "provenance": "explicit",
+                "strength": "soft"
+              },
+              {
+                "dimension": "price",
+                "canonical_value": 3000.0,
+                "provenance": "explicit",
+                "strength": "hard"
+              }
+            ],
+            "reducer": {
+              "topic": "telefoane",
+              "needs": [
+                "brand eq samsung",
+                "budget_max lte 3000"
+              ],
+              "shown": [
+                "el-01",
+                "el-07"
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "Acum arată-mi niște tablete.",
+          "shown": [
+            "el-15",
+            "el-11"
+          ],
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find",
+                  "query": "tablete"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "set",
+                  "dimension": "category",
+                  "relation": "eq",
+                  "value": "tablete",
+                  "quote": "tablete"
+                }
+              ]
+            },
+            "checked": [
+              {
+                "dimension": "category",
+                "canonical_value": "tablete",
+                "provenance": "explicit",
+                "strength": "soft"
+              }
+            ],
+            "reducer": {
+              "topic": "tablete",
+              "needs": [
+                "budget_max lte 3000"
+              ],
+              "shown": [
+                "el-15",
+                "el-11"
+              ],
+              "parked": {
+                "topic": "telefoane",
+                "needs": [
+                  "brand eq samsung"
+                ],
+                "shown": [
+                  "el-01",
+                  "el-07"
+                ]
+              },
+              "recent": [
+                [
+                  "el-01",
+                  "el-07"
+                ]
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "Hai înapoi la telefoane, arată-mi cel mai ieftin.",
+          "shown": [
+            "el-01"
+          ],
+          "expect": {
+            "interpretation": {
+              "thread": "resume",
+              "acts": [
+                {
+                  "kind": "detail",
+                  "targets": [
+                    "r1"
+                  ]
+                }
+              ],
+              "references": [
+                {
+                  "id": "r1",
+                  "text": "cel mai ieftin",
+                  "kind": "extreme",
+                  "dimension": "price",
+                  "direction": "min"
+                }
+              ]
+            },
+            "resolver": [
+              {
+                "ref_id": "r1",
+                "kind": "extreme",
+                "outcome": "exact",
+                "product_ids": [
+                  "el-01"
+                ],
+                "source": "parked",
+                "reason": "extreme"
+              }
+            ],
+            "reducer": {
+              "topic": "telefoane",
+              "needs": [
+                "brand eq samsung",
+                "budget_max lte 3000"
+              ],
+              "shown": [
+                "el-01"
+              ],
+              "parked": {
+                "topic": "tablete",
+                "needs": [],
+                "shown": [
+                  "el-15",
+                  "el-11"
+                ]
+              },
+              "recent": [
+                [
+                  "el-01",
+                  "el-07"
+                ]
+              ],
+              "selected": "el-01"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "k02-fashion-person-facts-stay-subject-facts-park",
+      "pack": "fashion",
+      "family": [
+        "subject_change",
+        "resume",
+        "scope"
+      ],
+      "source": "NX-331: la modă mărimea și culoarea sunt ale PERSOANEI (scope conversation), materialul e al subiectului",
+      "turns": [
+        {
+          "user_input": "Caut rochii negre din bumbac, mărimea M.",
+          "shown": [
+            "fa-05",
+            "fa-07"
+          ],
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find",
+                  "query": "rochii"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "set",
+                  "dimension": "category",
+                  "relation": "eq",
+                  "value": "rochii",
+                  "quote": "rochii"
+                },
+                {
+                  "op": "add",
+                  "dimension": "color",
+                  "relation": "eq",
+                  "value": "negru",
+                  "quote": "negre"
+                },
+                {
+                  "op": "add",
+                  "dimension": "material",
+                  "relation": "eq",
+                  "value": "bumbac",
+                  "quote": "bumbac"
+                },
+                {
+                  "op": "set",
+                  "dimension": "size",
+                  "relation": "eq",
+                  "value": "M",
+                  "quote": "mărimea M"
+                }
+              ]
+            },
+            "checked": [
+              {
+                "dimension": "category",
+                "canonical_value": "rochii",
+                "provenance": "explicit",
+                "strength": "soft"
+              },
+              {
+                "dimension": "color",
+                "canonical_value": "negru",
+                "provenance": "implicit",
+                "strength": "soft"
+              },
+              {
+                "dimension": "material",
+                "canonical_value": "bumbac",
+                "provenance": "explicit",
+                "strength": "soft"
+              },
+              {
+                "dimension": "size",
+                "canonical_value": "M",
+                "provenance": "explicit",
+                "strength": "hard"
+              }
+            ],
+            "reducer": {
+              "topic": "rochii",
+              "needs": [
+                "color eq negru",
+                "material eq bumbac",
+                "size eq m"
+              ],
+              "shown": [
+                "fa-05",
+                "fa-07"
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "Arată-mi și pantofi.",
+          "shown": [
+            "fa-22",
+            "fa-23"
+          ],
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find",
+                  "query": "pantofi"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "set",
+                  "dimension": "category",
+                  "relation": "eq",
+                  "value": "pantofi",
+                  "quote": "pantofi"
+                }
+              ]
+            },
+            "checked": [
+              {
+                "dimension": "category",
+                "canonical_value": "pantofi",
+                "provenance": "explicit",
+                "strength": "soft"
+              }
+            ],
+            "reducer": {
+              "topic": "pantofi",
+              "needs": [
+                "color eq negru",
+                "size eq m"
+              ],
+              "shown": [
+                "fa-22",
+                "fa-23"
+              ],
+              "parked": {
+                "topic": "rochii",
+                "needs": [
+                  "material eq bumbac"
+                ],
+                "shown": [
+                  "fa-05",
+                  "fa-07"
+                ]
+              },
+              "recent": [
+                [
+                  "fa-05",
+                  "fa-07"
+                ]
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "Înapoi la rochii, care era cea mai ieftină?",
+          "expect": {
+            "interpretation": {
+              "thread": "resume",
+              "acts": [
+                {
+                  "kind": "detail",
+                  "targets": [
+                    "r1"
+                  ]
+                }
+              ],
+              "references": [
+                {
+                  "id": "r1",
+                  "text": "cea mai ieftină",
+                  "kind": "extreme",
+                  "dimension": "price",
+                  "direction": "min"
+                }
+              ]
+            },
+            "resolver": [
+              {
+                "ref_id": "r1",
+                "kind": "extreme",
+                "outcome": "exact",
+                "product_ids": [
+                  "fa-05"
+                ],
+                "source": "parked",
+                "reason": "extreme"
+              }
+            ],
+            "reducer": {
+              "topic": "rochii",
+              "needs": [
+                "color eq negru",
+                "material eq bumbac",
+                "size eq m"
+              ],
+              "shown": [
+                "fa-05",
+                "fa-07"
+              ],
+              "parked": {
+                "topic": "pantofi",
+                "needs": [],
+                "shown": [
+                  "fa-22",
+                  "fa-23"
+                ]
+              },
+              "selected": "fa-05"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

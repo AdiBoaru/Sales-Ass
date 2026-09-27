@@ -84,6 +84,10 @@ class JourneyTurn:
     # cu id-uri de fixture — `shown_now`, `shown_earlier` (listă de seturi, recent întâi),
     # `parked`, `page`, `focus`, `thread`. Hrănește stratul `resolver`.
     sources: dict[str, Any] = field(default_factory=dict)
+    # NX-331 (aditiv): ce a arătat EXECUTORUL turului (id-uri de fixture). Stratul `reducer`
+    # rulează turele în lanț, deci setul arătat devine sursa turelor de după (ecran, seturi de mai
+    # devreme, parcat) fără să fie scris de mână în `sources`.
+    shown: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -140,6 +144,7 @@ def load_journeys(directory: Path = JOURNEYS_DIR) -> list[Journey]:
                     expect=_parse_expect(t.get("expect", {})),
                     state_before=t.get("state_before", {}),
                     sources=t.get("sources", {}),
+                    shown=tuple(t.get("shown", ())),
                 )
                 for t in raw["turns"]
             )
@@ -205,8 +210,9 @@ def label_problems(journey: Journey) -> list[str]:
 
 # --- replay --------------------------------------------------------------------------------------
 
-#: Ce rulează straturile: (journey, indexul turului) → traceul turului. În pasul 1 nu există încă
-#: un astfel de producător; pașii 2-6 îl construiesc strat cu strat.
+#: Ce rulează straturile: (journey, indexul turului) → traceul turului. Pașii 2-6 îl construiesc
+#: strat cu strat (`tests/kernel/fixture_catalog.py`: `resolver_trace`, `checked_trace`,
+#: `reducer_trace`).
 TracePipeline = Callable[[Journey, int], KernelTrace]
 
 

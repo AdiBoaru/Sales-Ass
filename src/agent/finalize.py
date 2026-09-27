@@ -40,10 +40,13 @@ from src.agent.validator import (
 )
 from src.analytics.demand import clean_ids, product_ids_from_dicts
 from src.config import card_slots, chip_slots, get_settings
+from src.conversation.state_reducer import StateUpdateProposal
+from src.conversation.state_v2 import ConversationStateV2
 from src.models import MAX_OFFERED_CHIPS, Offer, RichReply, TurnContext
 from src.web.localization import amount_text
 from src.worker import compose
 from src.worker.order_gate import login_required_for_ctx, web_unidentified
+from src.worker.state_writes import apply_v1_view
 
 if TYPE_CHECKING:
     from src.agent.planner import ResponsePlan
@@ -610,8 +613,12 @@ def _apply_turn_shape(
         intro = compose.strip_questions(rich.intro)
         rich.intro = f"{intro} {question}" if intro else question
         rich.education = compose.strip_questions(rich.education)
-        asked = [k for k in (ctx.state.asked_intents or []) if k != offer.facet]
-        ctx.state.asked_intents[:] = [*asked, offer.facet][-8:]
+        # NX-331: „am întrebat fațeta asta" e o PROPUNERE (reducerul o scrie în `asked_questions`
+        # pe v2); vederea v1 (`asked_intents`, fațeta la coadă) se derivă din ea.
+        noted = StateUpdateProposal("note_asked", key=offer.facet, turn_id=ctx.turn_id)
+        apply_v1_view(ctx, noted)
+        if isinstance(ctx.state_v2, ConversationStateV2):  # ca la `clarify`: fără stare v2, nimic
+            ctx.state_proposals.append(noted)
     ctx.emit(
         "narrowing_offer",
         facet=offer.facet,

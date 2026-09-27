@@ -409,6 +409,17 @@ def _emit_state_v2_events(ctx: TurnContext, reduced, doc: dict, size: int, degra
             ctx.emit("constraint_revoked", reason=record.source)
         elif record.op == "set_topic" and record.outcome == "reset":
             ctx.emit("topic_reset", scope="category")
+        # NX-331: parcarea, reluarea și corecția. Contoarele din contract (`parked_evicted`,
+        # `resume_not_available`, `correction_unconfirmed`) sunt valorile `outcome` de aici.
+        elif record.op == "park":
+            ctx.emit("topic_parked", outcome=record.outcome)
+        elif record.op == "resume":
+            ctx.emit("topic_resumed", outcome=record.outcome)
+        elif record.op == "correction":
+            ctx.emit("correction", outcome=record.outcome)
+        elif record.op in ("clear_topic", "clear_all"):
+            # Clientul a cerut să uităm criteriile: se numără, ca `topic_reset`.
+            ctx.emit("constraints_cleared", scope="topic" if record.op == "clear_topic" else "all")
     for rejected in reduced.rejected:
         ctx.emit("need_update_rejected", reason=rejected.reason, operation=rejected.op)
     ctx.emit(

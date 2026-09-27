@@ -18,10 +18,12 @@ from functools import lru_cache
 from typing import Any
 
 from src.catalog.folding import fold_text
-from src.catalog.vocabulary import CatalogVocabulary, VocabEntry
+from src.catalog.vocabulary import CATEGORY_DIMENSION, CatalogVocabulary, VocabEntry
+from src.conversation.delta import to_delta
 from src.conversation.interpretation import KERNEL_CONTRACT_VERSION, AmbiguityDecision, TurnPlan
 from src.conversation.kernel_trace import KernelTrace
-from src.conversation.provenance import UserWords, check_changes
+from src.conversation.needs import NeedVocabulary
+from src.conversation.provenance import UserWords, check_changes, need_handles
 from src.conversation.references import (
     CatalogLookup,
     ProductFacts,
@@ -32,6 +34,8 @@ from src.conversation.references import (
     plan_lookup,
     resolve_references,
 )
+from src.conversation.state_reducer import ReducerPolicy, StateUpdateProposal, reduce_turn
+from src.conversation.state_v2 import ConversationStateV2, Need
 from src.domain.loader import load_domain_pack
 from src.domain.pack import DomainPack
 from src.models import BusinessConfig
@@ -143,6 +147,17 @@ def vocabulary(name: str) -> CatalogVocabulary:
         key: tuple(VocabEntry(key=v, label=v, count=n) for v, n in sorted(c.items()))
         for key, c in counts.items()
     }
+    # NX-331: rafturile, ca în `load_vocabulary` (`CATEGORY_DIMENSION`, doar cele cu produse). Fără
+    # ele o schimbare de subiect pe un pachet de fixture ieșea `unmapped`, deci stratul `reducer`
+    # n-ar fi avut ce parca.
+    shelves = Counter(p.get("category") for p in products(name).values() if p.get("category"))
+    categories = tuple(
+        VocabEntry(key=c["key"], label=c.get("name") or c["key"], count=shelves[c["key"]])
+        for c in _doc(name).get("categories", [])
+        if shelves[c["key"]] > 0
+    )
+    if categories:
+        dimensions[CATEGORY_DIMENSION] = categories
     return CatalogVocabulary(business_id=f"b-{name}", dimensions=dimensions)
 
 
@@ -211,6 +226,133 @@ def checked_trace(journey: replay.Journey, index: int) -> KernelTrace:
     return resolver_trace(journey, index).model_copy(update={"checked_changes": checked})
 
 
+def _need_label(need: Need) -> str:
+    value = need.normalized_value
+    shown_value = f"{value:g}" if isinstance(value, float) else value
+    return f"{need.key} {need.operator} {shown_value}"
+
+
+def state_view(state: ConversationStateV2) -> dict[str, Any]:
+    """Forma COMPACTĂ a stării pentru eticheta stratului `reducer`: subiectul, nevoile ACTIVE ca
+    „cheie operator valoare", ecranul, parcatul, seturile de mai devreme și focusul. Câmpurile goale
+    lipsesc, ca un om să poată scrie eticheta fără să le repete."""
+    view: dict[str, Any] = {
+        "topic": state.topic.category_key,
+        "needs": sorted(_need_label(n) for n in state.active_needs()),
+        "shown": [d.product_id for d in state.references.displayed_products],
+    }
+    if state.parked is not None:
+        view["parked"] = {
+            "topic": state.parked.topic.category_key,
+            "needs": sorted(_need_label(n) for n in state.parked.needs),
+            "shown": [d.product_id for d in state.parked.shown],
+        }
+    if state.references.recent_sets:
+        view["recent"] = [[d.product_id for d in s] for s in state.references.recent_sets]
+    if state.references.selected_product:
+        view["selected"] = state.references.selected_product
+    return view
+
+
+def _sources_from_state(state: ConversationStateV2, thread: str) -> ReferenceSources:
+    """Sursele resolverului din starea REDUSĂ, exact ce face `deterministic._state_v2_sources`
+    pe calea v2: ecranul, seturile de mai devreme, parcatul și focusul."""
+
+    def items(refs) -> tuple[ShownItem, ...]:
+        return tuple(ShownItem(d.product_id, d.name, d.price) for d in refs)
+
+    return ReferenceSources(
+        shown_now=items(state.references.displayed_products),
+        shown_earlier=tuple(items(s) for s in state.references.recent_sets),
+        parked=items(state.parked.shown) if state.parked else (),
+        focus=state.references.selected_product,
+        thread=thread,  # type: ignore[arg-type]
+    )
+
+
+def _shown_proposal(name: str, ids: tuple[str, ...]) -> StateUpdateProposal:
+    catalog = products(name)
+    return StateUpdateProposal(
+        "set_references",
+        source="catalog",
+        payload={
+            "displayed_products": [
+                {"product_id": pid, "name": catalog[pid]["name"], "price": catalog[pid]["price"]}
+                for pid in ids
+            ]
+        },
+    )
+
+
+def reducer_trace(journey: replay.Journey, index: int) -> KernelTrace:
+    """Pipeline-ul pentru stratul `reducer` (NX-331), cu `checked` și `resolver` pe drum: turele
+    journey-ului rulează ÎN LANȚ de la starea goală, fiecare prin validatorul de proveniență, prin
+    resolver (pe sursele din starea redusă, nu din `sources`), prin `to_delta` și prin
+    `reduce_turn`, cu ce a arătat executorul turului (`shown`). Straturile de după reducer au valori
+    neutre până la pașii 4-6."""
+    loaded = pack(journey.pack)
+    vocab = vocabulary(journey.pack)
+    needs = NeedVocabulary.from_pack(loaded)
+    policy = ReducerPolicy(vocabulary=needs)
+    state = ConversationStateV2()
+    trace: KernelTrace | None = None
+    for i, turn in enumerate(journey.turns[: index + 1]):
+        interpretation = turn.expect["interpretation"]
+        handles = need_handles(state.needs)
+        checked = check_changes(
+            interpretation,
+            words=UserWords(turn.user_input, tuple(t.user_input for t in journey.turns[:i])[::-1]),
+            handles=handles,
+            vocab=vocab,
+            pack=loaded,
+            locale=journey.locale,
+        )
+        sources = _sources_from_state(state, interpretation.thread)
+        refs = interpretation.references
+        lookup = plan_lookup(refs, sources, pack=loaded, locale=journey.locale)
+        known = facts(journey.pack, lookup)
+        resolved = resolve_references(
+            refs, sources, known, vocab=vocab, pack=loaded, locale=journey.locale
+        )
+        delta = to_delta(
+            interpretation, checked, resolved, known, handles=handles, needs=needs, turn_id=f"t{i}"
+        )
+        executor = (_shown_proposal(journey.pack, turn.shown),) if turn.shown else ()
+        primary = (
+            interpretation.acts[-1].targets[0]
+            if interpretation.acts and (interpretation.acts[-1].targets)
+            else None
+        )
+        before = state
+        reduced = reduce_turn(
+            state,
+            delta,
+            executor,
+            resolved,
+            primary,
+            interpretation.corrects_previous_turn,
+            policy,
+        )
+        state = reduced.state
+        trace = KernelTrace(
+            contract_version=KERNEL_CONTRACT_VERSION,
+            vocabulary_snapshot=f"fixture:{journey.pack}",
+            interpretation=interpretation,
+            checked_changes=checked,
+            resolved_refs=resolved,
+            state_before=state_view(before),
+            proposals=[{"op": p.op, "key": p.key or p.category_key} for p in delta.proposals],
+            rejected=[{"op": r.op, "reason": r.reason} for r in reduced.rejected],
+            state_after=state_view(state),
+            ambiguity=AmbiguityDecision(verdict="act", reason="step-3", question=None),
+            plan=TurnPlan(executor="reply_only", product_ids=[], search_args=None, depends_on=None),
+            executor="none",
+            answer_policy=None,
+        )
+    assert trace is not None
+    return trace
+
+
 __all__ = [
     "checked_trace",
     "facts",
@@ -218,8 +360,10 @@ __all__ = [
     "named_in_catalog",
     "pack",
     "products",
+    "reducer_trace",
     "resolver_trace",
     "shown",
     "sources_of",
+    "state_view",
     "vocabulary",
 ]

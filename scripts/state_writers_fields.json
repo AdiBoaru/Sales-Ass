@@ -7,7 +7,7 @@
       "card_rows": ["nevoi", "subiect / raft"],
       "v1_attrs": ["constraints", "search_constraints"],
       "v2_ops": ["set_need", "confirm", "revoke", "supersede", "set_topic", "clear_topic", "clear_all"],
-      "v2_state_fields": ["needs", "revocations", "topic"]
+      "v2_state_fields": ["needs", "revocations", "topic", "parked"]
     },
     {
       "field": "focus",
@@ -40,7 +40,7 @@
       "label_ro": "clarificare",
       "card_rows": ["clarificare"],
       "v1_attrs": ["pending_question", "asked_intents"],
-      "v2_ops": ["set_pending_question", "resolve_question"],
+      "v2_ops": ["set_pending_question", "resolve_question", "note_asked"],
       "v2_state_fields": ["pending_clarification", "asked_questions"]
     },
     {
@@ -78,6 +78,7 @@
     "clear_all": "needs_topic",
     "set_pending_question": "clarification",
     "resolve_question": "clarification",
+    "note_asked": "clarification",
     "set_references": "references",
     "set_active_search": "active_search",
     "set_cart_ref": "cart"

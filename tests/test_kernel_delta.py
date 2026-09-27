@@ -145,14 +145,17 @@ def test_remove_and_replace_act_on_the_handle():
         )
     )
     assert (removed.op, removed.key, removed.value) == ("revoke", "concerns", "redness")
-    replaced = only(
-        delta_for(
-            ch(op="replace", target="c1", value="hydration", quote="hidratare"),
-            said="de fapt vreau hidratare",
-            handles=handles,
-        )
+    replaced = delta_for(
+        ch(op="replace", target="c1", value="hydration", quote="hidratare"),
+        said="de fapt vreau hidratare",
+        handles=handles,
     )
-    assert (replaced.op, replaced.key, replaced.value) == ("supersede", "concerns", "hydration")
+    # NX-331: `concerns` e o LISTĂ. Un `supersede` doar cu valoarea nouă ar fi ADĂUGAT hidratarea
+    # lângă roșeață; „replace c1" retrage valoarea handle-ului, apoi o pune pe cea nouă.
+    assert [(p.op, p.key, p.value) for p in replaced.proposals] == [
+        ("revoke", "concerns", "redness"),
+        ("set_need", "concerns", "hydration"),
+    ]
 
 
 def test_clear_topic_and_clear_all_are_their_own_proposals():

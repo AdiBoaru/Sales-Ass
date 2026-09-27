@@ -134,8 +134,8 @@ class ActionRef:
 
 @dataclass(frozen=True)
 class ReferenceSources:
-    """Unde poate trăi un produs la care se referă clientul. Pe calea v1 `shown_earlier` și
-    `parked` sunt goale: `recent_sets` și `parked_topic` le adaugă reducerul la pasul 3."""
+    """Unde poate trăi un produs la care se referă clientul. `shown_earlier` și `parked` vin din
+    starea v2 (`references.recent_sets`, `parked.shown`, NX-331); pe calea v1 sunt goale."""
 
     shown_now: tuple[ShownItem, ...] = ()
     shown_earlier: tuple[tuple[ShownItem, ...], ...] = ()  # cel mai recent primul
@@ -175,7 +175,9 @@ class ReferenceSources:
             ids.append(self.page.product_id)
         if self.focus:
             ids.append(self.focus)
-        for items in (self.shown_now, *self.shown_earlier, self.parked):
+        # Seturile în ordinea căutării (focusul întâi): peste `MAX_LOOKUP_IDS` se taie ce e mai
+        # departe de focus. Pe `resume` focusul e setul PARCAT (NX-331), deci nu el cade primul.
+        for _, items in self.sets_in_order():
             ids += [it.product_id for it in items]
         return list(dict.fromkeys(i for i in ids if i))
 

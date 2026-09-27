@@ -115,8 +115,8 @@ oricât de scurte („Phone 9" ≠ „Phone 3"). Scurtăturile de link/comparaț
 `query_terms` (markeri, conectori, fillerii formulei, mutați din `deterministic`), iar
 `deterministic.decide_shortcut` servește doar ținte `exact` (la link și candidații ambigui de pe
 ecran); orice alt verdict pleacă la model, deci «linkul la Cerave» nu mai servește toate linkurile.
-Fapte necitibile ⇒ calea NX-326 (P6). `recent_sets`/`parked_topic` nu există încă (pasul 3): pe v1
-sursele respective vin goale. Stratul `resolver` rulează în replay pe `resolver_kinds.json`.
+Fapte necitibile ⇒ calea NX-326 (P6). Seturile de mai devreme și parcatul vin din starea v2
+(NX-331); fără ea sursele respective sunt goale, ca pe v1. Stratul `resolver` rulează în replay pe `resolver_kinds.json`.
 **PR-ul B (aprinderea)** a trecut pe `scripts/nx329_shortcut_probe.py`: decizia NX-326 vs v2 pe
 fiecare tur real și pe fiecare chip de link/comparație OFERIT (134 de texte, 16-25 sep, singura
 fereastră cu `conversation_traces`), prin funcțiile producției, zero model. Prima rulare a picat, iar
@@ -150,6 +150,27 @@ dată, la construcția dovezii (`_read_quote`); deciziile de după ramifică pe 
 ca tip; reducerul le implementează la NX-331. Stratul `checked` rulează în replay pe
 `provenance_levels.json`. Probă: `pytest tests/test_kernel_provenance.py tests/test_kernel_delta.py
 tests/test_kernel_replay.py tests/test_kernel_contract.py -q`.
+**Pasul 3b (NX-331) — reducerul parchează, reia și corectează; scriitorii vechi trec pe propuneri.**
+Starea v2 capătă două chei aditive: `references.recent_sets` (seturile de dinaintea celui curent,
+≤2, sursa `shown_earlier`) și `parked` (UN slot: subiect + nevoile lui + ultimul set arătat, I19).
+`reduce_turn` (pur, fără apelant în producție până la pasul 6) aplică ordinea contractului: `aside`
+⇒ identitate (I5); `resume` = SCHIMB cu parcatul, cu nevoile reactivate exact cum erau (o cheie
+retrasă de client după parcare rămâne retrasă, I6); schimbarea de subiect parchează (pe
+interpretare subiectul e PERECHEA raft+tip, câmpul `StateUpdateProposal.origin`; `_learn_subject`
+schimbă tipul fără parcare); corecția retrage cu `correction` doar ce contrazice turul anterior
+(I21, altfel `correction_unconfirmed`); executorii pot propune doar referințe și `active_search`
+(`executor_state_scope`, I20); ținta `exact` a actului principal devine `selected_product`.
+Scope-ul e DATĂ: `TypedFacet.scope` (`topic`|`conversation`) și **bugetul e al conversației**
+(inversează NX-235). Op-uri noi: `clear_topic`, `clear_all`, `note_asked`; `unmapped` ≤3 pe
+subiect. `serialize` taie întâi `recent_sets`, apoi setul parcatului (I17); măsurat, un document la
+plafoane cu nume de 80 de caractere trece de 6 KB și fără ele. Cele 9 scrieri `becomes_proposal`
+(NX-327) sunt mutate: propunerea e sursa, iar vederea v1 are UN scriitor,
+`worker/state_writes.apply_v1_view` (paritate v1 per sit, testată); `_build_new_state` e `retired`
+cu declanșatorul scris. Resolverul NX-329 primește `recent_sets`/`parked`/focusul din `ctx.state_v2`
+(stins ⇒ gol, I16 verificat local cu `kernel_differential`). Stratul `reducer` rulează în replay pe
+`park_resume.json` (electronice + modă). Probă: `pytest tests/test_state_reducer_park.py
+tests/test_state_writes_parity.py tests/test_kernel_replay.py tests/test_state_writers_inventory.py
+-q`.
 
 **NX-238 — retrievalul trece printr-un PORT, iar candidatul e inert (verdict `NOT-READY`).**
 `src/retrieval/` e contractul stabil pe care îl consumă NX-239: `RetrievalPort` + `RetrievalBundle`

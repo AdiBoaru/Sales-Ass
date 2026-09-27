@@ -81,6 +81,15 @@ _PROVENANCE_KINDS: frozenset[str] = frozenset({"structural", "claim"})
 # Default `additive`: o fațetă care nu declară nimic nu capătă putere de excludere prin tăcere.
 _BINDING_KINDS: frozenset[str] = frozenset({"partitioning", "additive"})
 
+# NX-331 (kernel.v1.0, „Subject change and parking"): cui aparține o valoare a fațetei.
+#   • "topic"        — subiectului discutat (spațiul de stocare al unui telefon): la o schimbare de
+#                      subiect se parchează împreună cu el;
+#   • "conversation" — persoanei (mărimea la modă, destinatarul unui cadou): rămâne activă pe orice
+#                      subiect.
+# Scope-ul e DATĂ a pachetului, nu regulă de cod: aceeași culoare e a persoanei la modă și a
+# subiectului la mobilă, iar un reducer care ar hardcoda una dintre ele ar greși pe celălalt pachet.
+FACET_SCOPES: frozenset[str] = frozenset({"topic", "conversation"})
+
 
 class FacetConfigError(ValueError):
     """Config de fațetă invalid — fail-closed (fațeta e respinsă, nu încărcată)."""
@@ -116,6 +125,8 @@ class TypedFacet:
     #: DOAR sub `SKIN_TYPE_ANTI_FIT_ENABLED` și doar pe o nevoie `hard` (citat + alias, NX-322):
     #: dreptul de a exclude cere auditul de precizie al valorii excluse, nu acoperirea ei.
     anti_fit: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    #: NX-331: `topic` | `conversation` — vezi `FACET_SCOPES`. Default `topic`, ca azi.
+    scope: str = "topic"
     labels: dict[str, str] = field(
         default_factory=dict
     )  # locale → etichetă display (absoarbe NX-182)
@@ -182,6 +193,9 @@ def _build_one(raw: dict[str, Any]) -> TypedFacet:
     enforce_ready = raw.get("enforce_ready", False)
     if not isinstance(enforce_ready, bool):
         raise FacetConfigError(f"enforce_ready invalid pt {key!r}: {enforce_ready!r}")
+    scope = raw.get("scope", "topic")
+    if scope not in FACET_SCOPES:
+        raise FacetConfigError(f"scope invalid pt {key!r}: {scope!r}")
 
     try:
         min_cov = float(raw.get("min_coverage", 0.0))
@@ -242,6 +256,7 @@ def _build_one(raw: dict[str, Any]) -> TypedFacet:
         binding=binding,
         enforce_ready=enforce_ready,
         anti_fit=anti_fit,
+        scope=scope,
         labels=labels,
     )
 

@@ -80,7 +80,8 @@
           "mediu": "M",
           "small": "S",
           "large": "L"
-        }
+        },
+        "scope": "conversation"
       },
       {
         "key": "color",
@@ -105,7 +106,8 @@
           "neagra": "negru",
           "alba": "alb",
           "rosie": "rosu"
-        }
+        },
+        "scope": "conversation"
       },
       {
         "key": "material",

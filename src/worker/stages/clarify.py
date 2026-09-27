@@ -39,6 +39,7 @@ from src.conversation.state_v2 import ConversationStateV2
 from src.models import Route, RouteDecision, TurnContext
 from src.web.action_models import action_command
 from src.worker.canonicalize import canonicalize_clarify_field
+from src.worker.state_writes import apply_v1_view
 
 if TYPE_CHECKING:
     from src.worker.runner import PipelineDeps
@@ -117,17 +118,18 @@ async def clarify_resume_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         return  # body gol (ex. media fără descriere) → nu consumăm slotul; rămâne pt data viitoare
 
     # 1. mesajul curent umple slotul cerut → memorie scurtă citită de context_blocks (state_block).
+    # NX-235: umplerea e exprimată ca PROPUNERI typed. Reducerul normalizează răspunsul (sau îl
+    # marchează `unknown`) și închide întrebarea pe `question_id` — memoria nu primește utterance
+    # brut, iar întrebarea închisă nu mai poate fi „redeschisă" de un slot omonim.
+    # NX-331: propunerile sunt SURSA și pentru forma v1: slotul (`constraints`) și semnalul
+    # anti-buclă (`asked_intents`, NX-112, dedup + cap 8) se derivă din ele. Întrebarea în
+    # așteptare rămâne până la scriere: `set_clarify` îi citește `attempts` în același tur.
     field = canonicalize_clarify_field(pq.get("field"), ctx.business.domain_pack)
-    ctx.state.constraints[field] = answer
-    # NX-235: aceeași umplere, exprimată ca PROPUNERI typed. Reducerul normalizează răspunsul
-    # (sau îl marchează `unknown`) și închide întrebarea pe `question_id` — memoria nu primește
-    # utterance brut, iar întrebarea închisă nu mai poate fi „redeschisă" de un slot omonim.
-    _propose_resume(ctx, field, answer, pq)
-    # NX-112: marchează slotul ca „deja întrebat" (semnal anti-loop citit de context_blocks/NX-116).
-    # Dedup + cap 8 (P4). Mutația pe ctx.state e persistată de processor (merge canonic, P3).
-    if field not in ctx.state.asked_intents:
-        ctx.state.asked_intents.append(field)
-        ctx.state.asked_intents[:] = ctx.state.asked_intents[-8:]
+    resolved, filled = _resume_proposals(ctx, field, answer, pq)
+    apply_v1_view(ctx, filled)
+    apply_v1_view(ctx, resolved)
+    if isinstance(ctx.state_v2, ConversationStateV2):
+        ctx.state_proposals += [resolved, filled]
 
     # NX-116: ANTI-BUCLĂ reală — `attempts` (scris de set_clarify la re-întrebarea ACELUIAȘI slot,
     # azi necitit) e consumat aici. Peste prag NU mai re-întrebăm la infinit (P6): mergem pe SALES
@@ -152,27 +154,26 @@ async def clarify_resume_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     ctx.emit("clarify_resumed", field=field)  # FĂRĂ `answer` (P12 — poate fi PII)
 
 
-def _propose_resume(ctx: TurnContext, field: str, answer: str, pq: dict) -> None:
+def _resume_proposals(
+    ctx: TurnContext, field: str, answer: str, pq: dict
+) -> tuple[StateUpdateProposal, StateUpdateProposal]:
     """Propunerile turului pentru un slot umplut: închide întrebarea, apoi setează nevoia.
 
     Ordinea contează — `resolve_question` scrie `asked_questions` (semnalul anti-buclă) chiar dacă
     răspunsul nu se normalizează în nimic canonic. Un „nu știu" tot închide întrebarea; altfel am
     re-întreba exact clientul care ne-a spus deja că nu are un răspuns."""
-    if not isinstance(ctx.state_v2, ConversationStateV2):
-        return
-    pending = ctx.state_v2.pending_clarification
+    state_v2 = ctx.state_v2 if isinstance(ctx.state_v2, ConversationStateV2) else None
+    pending = state_v2.pending_clarification if state_v2 is not None else None
     question_id = pending.question_id if pending else pq.get("question_id")
-    ctx.state_proposals.append(
+    return (
         StateUpdateProposal(
             "resolve_question",
             key=field,
             question_id=question_id,
             source="user_explicit",
             turn_id=ctx.turn_id,
-        )
-    )
-    ctx.state_proposals.append(
+        ),
         StateUpdateProposal(
             "set_need", key=field, value=answer, source="user_explicit", turn_id=ctx.turn_id
-        )
+        ),
     )

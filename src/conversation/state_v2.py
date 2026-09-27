@@ -53,6 +53,11 @@ MAX_COMPARED = 4
 MAX_ACTIVE_SEARCH_KEYS = 8
 MAX_ID_CHARS = 64
 MAX_NAME_CHARS = 80  # numele afișat e o etichetă de referință, nu descrierea produsului
+# NX-331 (kernel.v1.0, pasul 3b): seturile arătate ÎNAINTEA celui curent și subiectul parcat. Un
+# nivel de parcare (I19) și două seturi recente: resolverul le revalidează pe catalog (I1), deci
+# `MAX_LOOKUP_IDS` din `references.py` le are deja în calcul.
+MAX_RECENT_SETS = 2
+MAX_PARKED_NEEDS = 8
 
 # Bugetul DB e `check (pg_column_size(state) < 8192)` (migrarea 003) — pe reprezentarea BINARĂ
 # jsonb, care are overhead per intrare (JEntry + aliniere + numele cheii stocat în FIECARE obiect;
@@ -99,7 +104,9 @@ _SOURCES: frozenset[str] = frozenset(
     }
 )
 _REASON_CODES: frozenset[str] = frozenset(
-    {"user_explicit", "superseded", "topic_reset", "policy", "legacy"}
+    # `correction` (NX-331, I21): nevoia implicită a turului anterior, retrasă fiindcă turul curent
+    # a contrazis ce scrisese el pe aceeași dimensiune.
+    {"user_explicit", "superseded", "topic_reset", "policy", "legacy", "correction"}
 )
 # Cheile v1 pe care v2 nu le modelează, dar nu are voie să le piardă: `cart` e al NX-237,
 # `safety` al NX-173, `offered_chips` al NX-296 (P3 — un singur proprietar per câmp; v2 le CARĂ,
@@ -120,6 +127,8 @@ _MODELLED_KEYS: frozenset[str] = frozenset(
         "references",
         "active_search",
         "cart_ref",
+        # NX-331: modelat, deci nu trece prin `passthrough` (altfel s-ar scrie de două ori).
+        "parked",
     }
 )
 
@@ -416,6 +425,9 @@ class References:
     displayed_revision: int = 0
     compared_products: tuple[str, ...] = ()
     last_action: str | None = None
+    # NX-331: seturile arătate ÎNAINTEA celui curent, cel mai recent primul (sursa
+    # `shown_earlier` a resolverului: «cel de mai devreme»). Ref-uri, nu fapte (P8).
+    recent_sets: tuple[tuple[DisplayedRef, ...], ...] = ()
 
     def to_jsonb(self) -> dict[str, Any]:
         return _compact(
@@ -426,6 +438,7 @@ class References:
                 "displayed_revision": self.displayed_revision,
                 "compared_products": list(self.compared_products),
                 "last_action": self.last_action,
+                "recent_sets": [[d.to_jsonb() for d in s] for s in self.recent_sets if s],
             }
         )
 
@@ -446,6 +459,62 @@ class References:
                 _clip(c) for c in (raw.get("compared_products") or [])[:MAX_COMPARED] if c
             ),
             last_action=_clip(raw.get("last_action"), 32) or None,
+            recent_sets=tuple(
+                s
+                for s in (
+                    _displayed_list(x) for x in (raw.get("recent_sets") or [])[:MAX_RECENT_SETS]
+                )
+                if s
+            ),
+        )
+
+
+def _displayed_list(raw: object) -> tuple[DisplayedRef, ...]:
+    """O listă de ref-uri afișate, hidratată defensiv și tăiată la `MAX_DISPLAYED`."""
+    if not isinstance(raw, list):
+        return ()
+    return tuple(d for d in (DisplayedRef.from_jsonb(x) for x in raw) if d is not None)[
+        :MAX_DISPLAYED
+    ]
+
+
+@dataclass(frozen=True)
+class ParkedTopic:
+    """NX-331 — subiectul PARCAT: un singur slot, nu o stivă (I19).
+
+    La o schimbare de subiect, subiectul curent, nevoile lui active cu scope pe el și ultimul set
+    arătat pe el se copiază aici. `resume` face schimbul cu subiectul curent. O a treia schimbare
+    evacuează slotul (`parked_evicted`): un nivel e pariul v1, măsurat pe contoare, nu presupus."""
+
+    topic: Topic = field(default_factory=Topic)
+    needs: tuple[Need, ...] = ()
+    shown: tuple[DisplayedRef, ...] = ()
+    parked_at_revision: int = 0
+
+    def to_jsonb(self) -> dict[str, Any]:
+        return _compact(
+            {
+                "topic": self.topic.to_jsonb(),
+                "needs": [n.to_jsonb() for n in self.needs],
+                "shown": [d.to_jsonb() for d in self.shown],
+                "parked_at_revision": self.parked_at_revision,
+            }
+        )
+
+    @classmethod
+    def from_jsonb(cls, raw: object) -> ParkedTopic | None:
+        if not isinstance(raw, dict):
+            return None
+        topic = Topic.from_jsonb(raw.get("topic"))
+        if topic.category_key is None and topic.product_type is None:
+            return None  # un slot fără subiect n-are ce relua
+        return cls(
+            topic=topic,
+            needs=tuple(
+                n for n in (Need.from_jsonb(x) for x in (raw.get("needs") or [])) if n is not None
+            )[:MAX_PARKED_NEEDS],
+            shown=_displayed_list(raw.get("shown")),
+            parked_at_revision=_int(raw.get("parked_at_revision")),
         )
 
 
@@ -466,6 +535,8 @@ class ConversationStateV2:
     cart_ref: Mapping[str, Any] | None = None
     # Cheile v1 nemodelate (NX-237 `cart`, NX-173 `safety`) — cărate neatinse, nu rescrise.
     passthrough: Mapping[str, Any] = field(default_factory=dict)
+    # NX-331: subiectul parcat (un nivel). `project_v1` nu-l proiectează: cititorii v1 nu-l știu.
+    parked: ParkedTopic | None = None
 
     # --- interogări (citite de proiecții, prompt, query spec) ---------------------------------
 
@@ -507,6 +578,7 @@ class ConversationStateV2:
                 "references": self.references.to_jsonb(),
                 "active_search": dict(self.active_search) if self.active_search else None,
                 "cart_ref": dict(self.cart_ref) if self.cart_ref else None,
+                "parked": self.parked.to_jsonb() if self.parked else None,
             },
             always=("schema_version",),
         )
@@ -544,6 +616,7 @@ class ConversationStateV2:
             active_search=bounded_map(raw.get("active_search")),
             cart_ref=bounded_map(raw.get("cart_ref")),
             passthrough={k: v for k, v in raw.items() if k not in _MODELLED_KEYS},
+            parked=ParkedTopic.from_jsonb(raw.get("parked")),
         )
 
 
@@ -796,10 +869,13 @@ def enforce_caps(state: ConversationStateV2) -> ConversationStateV2:
     Ordinea contează: a tăia un `hard` ca să încapă un `soft` ar transforma bugetul de memorie
     într-o portiță de relaxare a constrângerilor."""
 
-    def _priority(indexed: tuple[int, Need]) -> tuple[int, int, int]:
+    def _priority(indexed: tuple[int, Need]) -> tuple[int, int, int, int]:
         index, need = indexed
         keep = 0 if (need.strength == HARD or need.sensitive_class) else 1
-        return (keep, -need.updated_revision, -index)
+        # NX-331 (I4): o nevoie ACTIVĂ bate orice intrare retrasă. Altfel un șir de corecții
+        # (intrări `superseded` cu revizii noi) ar împinge afară o nevoie activă mai veche: un reset
+        # orb pe care nu l-a cerut nimeni.
+        return (0 if need.is_active else 1, keep, -need.updated_revision, -index)
 
     # Selecția e pe INDECȘI, nu pe identitate de obiect: două nevoi egale (aceeași cheie, aceeași
     # valoare, în stări diferite) sunt dataclass-uri egale, iar o comparație pe valoare le-ar
@@ -815,9 +891,38 @@ def enforce_caps(state: ConversationStateV2) -> ConversationStateV2:
             state.references,
             displayed_products=state.references.displayed_products[:MAX_DISPLAYED],
             compared_products=state.references.compared_products[:MAX_COMPARED],
+            recent_sets=tuple(
+                s[:MAX_DISPLAYED] for s in state.references.recent_sets[:MAX_RECENT_SETS] if s
+            ),
         ),
         active_search=bounded_map(state.active_search),
+        parked=_cap_parked(state.parked),
     )
+
+
+def _cap_parked(parked: ParkedTopic | None) -> ParkedTopic | None:
+    """Plafoanele slotului parcat, cu aceeași prioritate ca la nevoile active: `hard`/sensibile
+    înaintea celor `soft`, iar între ele cele mai recente."""
+    if parked is None:
+        return None
+    ranked = sorted(
+        enumerate(parked.needs),
+        key=lambda item: (
+            0 if (item[1].strength == HARD or item[1].sensitive_class) else 1,
+            -item[1].updated_revision,
+            -item[0],  # la egalitate câștigă cea mai nouă, ca în `enforce_caps`
+        ),
+    )
+    kept = {index for index, _ in ranked[:MAX_PARKED_NEEDS]}
+    return replace(
+        parked,
+        needs=tuple(n for index, n in enumerate(parked.needs) if index in kept),
+        shown=parked.shown[:MAX_DISPLAYED],
+    )
+
+
+def _hard_only(needs: tuple[Need, ...]) -> tuple[Need, ...]:
+    return tuple(n for n in needs if n.strength == HARD or n.sensitive_class)
 
 
 def serialize(state: ConversationStateV2) -> tuple[dict[str, Any], int, bool]:
@@ -828,10 +933,12 @@ def serialize(state: ConversationStateV2) -> tuple[dict[str, Any], int, bool]:
     am pierde RĂSPUNSUL din cauza memoriei. Nu e ipotetic: pe calea v1 exact asta se întâmplă azi
     cu un `cart` corupt/importat.
 
-    Degradarea taie în ordinea inversă a valorii — referințe afișate → întrebări puse →
-    tombstone-uri → nevoi `soft` → sesiune/coș — și **niciodată** nevoi `hard`/sensibile. Ultimele
-    sacrificate sunt cheile altor carduri: `cart` (NX-237) înaintea lui `safety` (NX-173), care
-    hrănește un gate P0 și pleacă doar dacă singur depășește bugetul."""
+    Degradarea taie în ordinea inversă a valorii (I17, declarată în contract) — seturile de mai
+    devreme (`recent_sets`, PRIMELE) → setul parcatului → referințe afișate → întrebări puse →
+    tombstone-uri → nevoi `soft` (active și parcate, la același pas) → sesiune/coș — și
+    **niciodată** nevoi `hard`/sensibile, nici ale subiectului parcat (sunt tot ale clientului).
+    Ultimele sacrificate sunt cheile altor carduri: `cart` (NX-237) înaintea lui `safety`
+    (NX-173), care hrănește un gate P0 și pleacă doar dacă singur depășește bugetul."""
     capped = enforce_caps(state)
     doc = capped.to_jsonb()
     size = _byte_size(doc)
@@ -839,11 +946,15 @@ def serialize(state: ConversationStateV2) -> tuple[dict[str, Any], int, bool]:
         return doc, size, False
 
     for shrink in (
+        lambda s: replace(s, references=replace(s.references, recent_sets=())),
+        lambda s: replace(s, parked=replace(s.parked, shown=()) if s.parked else None),
         lambda s: replace(s, references=replace(s.references, displayed_products=())),
         lambda s: replace(s, asked_questions=()),
         lambda s: replace(s, revocations=s.revocations[-3:]),
         lambda s: replace(
-            s, needs=tuple(n for n in s.needs if n.strength == HARD or n.sensitive_class)
+            s,
+            needs=_hard_only(s.needs),
+            parked=replace(s.parked, needs=_hard_only(s.parked.needs)) if s.parked else None,
         ),
         lambda s: replace(s, active_search=None, cart_ref=None),
         # Coșul e al NX-237 și de aceea îl cărăm neatins — dar „neatins" nu poate însemna „chiar
@@ -975,6 +1086,8 @@ __all__ = [
     "MAX_COMPARED",
     "MAX_DISPLAYED",
     "MAX_NEEDS",
+    "MAX_PARKED_NEEDS",
+    "MAX_RECENT_SETS",
     "MAX_REVOCATIONS",
     "DB_STATE_LIMIT_BYTES",
     "MAX_STATE_BYTES",
@@ -987,6 +1100,7 @@ __all__ = [
     "Need",
     "NeedSource",
     "NeedStatus",
+    "ParkedTopic",
     "PendingClarification",
     "References",
     "Revocation",
