@@ -189,13 +189,19 @@ def _strictify(node: Any) -> None:
     if isinstance(node, dict):
         # Docstring-urile claselor (scrise pentru cod) ar pleca spre model ca `description`.
         # Instrucțiunile pentru model sunt ale adaptorului (pasul 5), nu ale docstring-urilor.
+        # Doar pe NODURI de schemă: cheile din `properties`/`$defs` sunt NUME (un câmp numit
+        # `title` ar fi dispărut din schemă, rămânând în `required`).
         node.pop("title", None)
         node.pop("description", None)
         if node.get("type") == "object" and "properties" in node:
             node["required"] = sorted(node["properties"])
             node["additionalProperties"] = False
-        for value in node.values():
-            _strictify(value)
+        for key, value in node.items():
+            if key in ("properties", "$defs") and isinstance(value, dict):
+                for child in value.values():
+                    _strictify(child)
+            else:
+                _strictify(value)
     elif isinstance(node, list):
         for item in node:
             _strictify(item)

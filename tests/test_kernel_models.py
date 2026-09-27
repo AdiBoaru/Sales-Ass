@@ -140,6 +140,26 @@ def test_the_schema_does_not_depend_on_dimension_order():
     assert json.dumps(a, sort_keys=True) == json.dumps(b, sort_keys=True)
 
 
+def test_strictify_keeps_fields_named_like_schema_keywords():
+    """Un câmp numit `title`/`description` e un NUME, nu metadate: nu are voie să dispară."""
+    from pydantic import BaseModel, ConfigDict
+
+    from src.conversation.interpretation import _strictify
+
+    class Named(BaseModel):
+        """docstring care nu trebuie să plece spre model"""
+
+        model_config = ConfigDict(extra="forbid")
+        title: str | None
+        description: str
+
+    schema = Named.model_json_schema()
+    _strictify(schema)
+    assert sorted(schema["properties"]) == ["description", "title"]
+    assert schema["required"] == ["description", "title"]
+    assert "description" not in {k for k in schema if k != "properties"}
+
+
 def test_code_docstrings_do_not_leak_into_the_schema():
     text = json.dumps(build_interpretation_schema([]), ensure_ascii=False)
     assert '"description"' not in text and '"title"' not in text
