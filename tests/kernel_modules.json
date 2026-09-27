@@ -1,0 +1,45 @@
+{
+  "$comment": "NX-328 — registrul modulelor kernelului kernel.v1.0 (docs/KERNEL-CONTRACT-v1.md). Rolul unui modul decide ce porți din tests/test_kernel_contract.py i se aplică. Lista e DATĂ, nu dedusă din nume: un modul de kernel nou se adaugă aici în același PR care îl creează, iar `planned` prinde uitarea (un fișier planificat care există și nu are rol pică testul). Pașii 2-6 își mută intrările din `planned` în rolul lor.",
+  "roles": {
+    "pure": {
+      "doc": "Componentele pure ale kernelului (validare, rezolvare, reducere, poartă, planificare). Nu importă client de model (I13), nu scriu stare decât prin propuneri (I3), nu construiesc SearchArgs (I2), nu ramifică pe textul brut (Enforcement) și nu conțin literali de vertical (I14).",
+      "modules": [
+        "src/conversation/interpretation.py",
+        "src/conversation/kernel_trace.py"
+      ]
+    },
+    "planner": {
+      "doc": "SINGURUL producător de SearchArgs pe calea interpretată (I2). Restul porților pure i se aplică.",
+      "modules": []
+    },
+    "adapter": {
+      "doc": "Singurul modul de kernel care are voie să cheme modelul (I13): construiește promptul și schema, face UN apel complete_schema. Nu scrie stare, nu construiește SearchArgs.",
+      "modules": []
+    },
+    "reducer": {
+      "doc": "Singurul scriitor de stare (I3). Pur (I13, I14, text brut), dar scrie starea, deci poarta I3 nu i se aplică.",
+      "modules": [
+        "src/conversation/state_reducer.py"
+      ]
+    },
+    "executor": {
+      "doc": "Executorii existenți pe care îi cheamă plannerul. Au voie să scrie referințe și active_search, niciodată nevoi sau subiect (I20).",
+      "modules": [
+        "src/tools/catalog_tools.py",
+        "src/tools/commerce_tools.py",
+        "src/tools/faq_tools.py",
+        "src/tools/orders_tools.py",
+        "src/tools/routine_tools.py",
+        "src/agent/deterministic.py"
+      ]
+    }
+  },
+  "planned": {
+    "src/conversation/provenance.py": "pure",
+    "src/conversation/delta.py": "pure",
+    "src/conversation/ambiguity_gate.py": "pure",
+    "src/conversation/answer_policy.py": "pure",
+    "src/agent/turn_planner.py": "planner",
+    "src/conversation/turn_interpreter.py": "adapter"
+  }
+}

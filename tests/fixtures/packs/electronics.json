@@ -1,0 +1,539 @@
+{
+  "_note": "Pachet de fixture NX-328 (designul kernelului §G): stocare GB, ecran inch, brand, culoare. Unitățile sunt cheia testelor I9: «256 GB» e stocare, niciodată buget.",
+  "name": "electronics",
+  "vertical": "ecommerce",
+  "locale": "ro",
+  "categories": [
+    {
+      "key": "telefoane",
+      "name": "Telefoane"
+    },
+    {
+      "key": "tablete",
+      "name": "Tablete"
+    },
+    {
+      "key": "laptopuri",
+      "name": "Laptopuri"
+    },
+    {
+      "key": "huse",
+      "name": "Huse"
+    }
+  ],
+  "domain_pack": {
+    "facets": [
+      {
+        "key": "price",
+        "value_type": "number",
+        "source": "column",
+        "source_key": "price",
+        "operators": [
+          "lte",
+          "gte",
+          "eq"
+        ],
+        "provenance": "structural",
+        "binding": "partitioning",
+        "min_coverage": 0.98,
+        "missing_value": "skip",
+        "labels": {
+          "ro": "Pret",
+          "en": "Price"
+        }
+      },
+      {
+        "key": "category",
+        "value_type": "enum",
+        "source": "category",
+        "operators": [
+          "eq"
+        ],
+        "provenance": "structural",
+        "binding": "partitioning",
+        "min_coverage": 0.98,
+        "labels": {
+          "ro": "Categorie",
+          "en": "Category"
+        }
+      },
+      {
+        "key": "brand",
+        "value_type": "enum",
+        "source": "attribute",
+        "source_key": "brand",
+        "operators": [
+          "eq"
+        ],
+        "provenance": "structural",
+        "binding": "partitioning",
+        "missing_value": "unknown",
+        "min_coverage": 0.5,
+        "values": [
+          "Samsung",
+          "Apple",
+          "Xiaomi",
+          "Motorola",
+          "Lenovo",
+          "Asus"
+        ]
+      },
+      {
+        "key": "storage",
+        "value_type": "number",
+        "source": "attribute",
+        "source_key": "storage",
+        "operators": [
+          "gte",
+          "lte",
+          "eq"
+        ],
+        "provenance": "structural",
+        "binding": "additive",
+        "missing_value": "unknown",
+        "min_coverage": 0.5
+      },
+      {
+        "key": "screen",
+        "value_type": "number",
+        "source": "attribute",
+        "source_key": "screen",
+        "operators": [
+          "gte",
+          "lte",
+          "eq"
+        ],
+        "provenance": "structural",
+        "binding": "additive",
+        "missing_value": "unknown",
+        "min_coverage": 0.5
+      },
+      {
+        "key": "color",
+        "value_type": "enum",
+        "source": "attribute",
+        "source_key": "color",
+        "operators": [
+          "eq"
+        ],
+        "provenance": "structural",
+        "binding": "partitioning",
+        "missing_value": "unknown",
+        "min_coverage": 0.5,
+        "values": [
+          "negru",
+          "alb",
+          "albastru",
+          "gri"
+        ],
+        "aliases": {
+          "neagra": "negru",
+          "negri": "negru",
+          "alba": "alb",
+          "albe": "alb"
+        }
+      }
+    ],
+    "units": {
+      "price": {
+        "canonical": "lei",
+        "default_op": "lte",
+        "factors": {
+          "lei": 1,
+          "ron": 1
+        }
+      },
+      "storage": {
+        "canonical": "gb",
+        "default_op": "gte",
+        "factors": {
+          "gb": 1,
+          "tb": 1024
+        }
+      },
+      "screen": {
+        "canonical": "inch",
+        "default_op": "gte",
+        "factors": {
+          "inch": 1,
+          "inchi": 1,
+          "toli": 1
+        }
+      }
+    }
+  },
+  "kernel": {
+    "conversation_scoped": [],
+    "topic_scoped": [
+      "brand",
+      "storage",
+      "screen",
+      "color"
+    ],
+    "subject": [
+      "category"
+    ]
+  },
+  "products": [
+    {
+      "id": "el-01",
+      "name": "Samsung Phone 1 128 GB",
+      "category": "telefoane",
+      "price": 1500,
+      "availability": "in_stock",
+      "attributes": {
+        "brand": "Samsung",
+        "storage": 128,
+        "screen": 6.1,
+        "color": "negru"
+      }
+    },
+    {
+      "id": "el-02",
+      "name": "Apple Phone 2 256 GB",
+      "category": "telefoane",
+      "price": 1750,
+      "availability": "in_stock",
+      "attributes": {
+        "brand": "Apple",
+        "storage": 256,
+        "screen": 6.199999999999999,
+        "color": "alb"
+      }
+    },
+    {
+      "id": "el-03",
+      "name": "Xiaomi Phone 3 512 GB",
+      "category": "telefoane",
+      "price": 2000,
+      "availability": "in_stock",
+      "attributes": {
+        "brand": "Xiaomi",
+        "storage": 512,
+        "screen": 6.3,
+        "color": "albastru"
+      }
+    },
+    {
+      "id": "el-04",
+      "name": "Motorola Phone 4 128 GB",
+      "category": "telefoane",
+      "price": 2250,
+      "availability": "in_stock",
+      "attributes": {
+        "brand": "Motorola",
+        "storage": 128,
+        "screen": 6.3999999999999995,
+        "color": "gri"
+      }
+    },
+    {
+      "id": "el-05",
+      "name": "Lenovo Phone 5 256 GB",
+      "category": "telefoane",
+      "price": 2500,
+      "availability": "in_stock",
+      "attributes": {
+        "brand": "Lenovo",
+        "storage": 256,
+        "screen": 6.5,
+        "color": "negru"
+      }
+    },
+    {
+      "id": "el-06",
+      "name": "Asus Phone 6 512 GB",
+      "category": "telefoane",
+      "price": 2750,
+      "availability": "in_stock",
+      "attributes": {
+        "brand": "Asus",
+        "storage": 512,
+        "screen": 6.1,
+        "color": "alb"
+      }
+    },
+    {
+      "id": "el-07",
+      "name": "Samsung Phone 7 128 GB",
+      "category": "telefoane",
+      "price": 3000,
+      "availability": "out_of_stock",
+      "attributes": {
+        "brand": "Samsung",
+        "storage": 128,
+        "screen": 6.199999999999999,
+        "color": "albastru"
+      }
+    },
+    {
+      "id": "el-08",
+      "name": "Apple Phone 8 256 GB",
+      "category": "telefoane",
+      "price": 3250,
+      "availability": "in_stock",
+      "attributes": {
+        "brand": "Apple",
+        "storage": 256,
+        "screen": 6.3,
+        "color": "gri"
+      }
+    },
+    {
+      "id": "el-09",
+      "name": "Xiaomi Phone 9 512 GB",
+      "category": "telefoane",
+      "price": 3500,
+      "availability": "in_stock",
+      "attributes": {
+        "brand": "Xiaomi",
+        "storage": 512,
+        "screen": 6.3999999999999995,
+        "color": "negru"
+      }
+    },
+    {
+      "id": "el-10",
+      "name": "Motorola Phone 10 128 GB",
+      "category": "telefoane",
+      "price": 3750,
+      "availability": "in_stock",
+      "attributes": {
+        "brand": "Motorola",
+        "storage": 128,
+        "screen": 6.5,
+        "color": "alb"
+      }
+    },
+    {
+      "id": "el-11",
+      "name": "Xiaomi Tab 1 256 GB",
+      "category": "tablete",
+      "price": 1100,
+      "availability": "in_stock",
+      "attributes": {
+        "brand": "Xiaomi",
+        "storage": 256,
+        "screen": 10.5,
+        "color": "alb"
+      }
+    },
+    {
+      "id": "el-12",
+      "name": "Motorola Tab 2 512 GB",
+      "category": "tablete",
+      "price": 1400,
+      "availability": "in_stock",
+      "attributes": {
+        "brand": "Motorola",
+        "storage": 512,
+        "screen": 11.0,
+        "color": "albastru"
+      }
+    },
+    {
+      "id": "el-13",
+      "name": "Lenovo Tab 3 128 GB",
+      "category": "tablete",
+      "price": 1700,
+      "availability": "in_stock",
+      "attributes": {
+        "brand": "Lenovo",
+        "storage": 128,
+        "screen": 11.5,
+        "color": "gri"
+      }
+    },
+    {
+      "id": "el-14",
+      "name": "Asus Tab 4 256 GB",
+      "category": "tablete",
+      "price": 2000,
+      "availability": "out_of_stock",
+      "attributes": {
+        "brand": "Asus",
+        "storage": 256,
+        "screen": 12.0,
+        "color": "negru"
+      }
+    },
+    {
+      "id": "el-15",
+      "name": "Samsung Tab 5 512 GB",
+      "category": "tablete",
+      "price": 2300,
+      "availability": "in_stock",
+      "attributes": {
+        "brand": "Samsung",
+        "storage": 512,
+        "screen": 10.5,
+        "color": "alb"
+      }
+    },
+    {
+      "id": "el-16",
+      "name": "Apple Tab 6 128 GB",
+      "category": "tablete",
+      "price": 2600,
+      "availability": "in_stock",
+      "attributes": {
+        "brand": "Apple",
+        "storage": 128,
+        "screen": 11.0,
+        "color": "albastru"
+      }
+    },
+    {
+      "id": "el-17",
+      "name": "Xiaomi Tab 7 256 GB",
+      "category": "tablete",
+      "price": 2900,
+      "availability": "in_stock",
+      "attributes": {
+        "brand": "Xiaomi",
+        "storage": 256,
+        "screen": 11.5,
+        "color": "gri"
+      }
+    },
+    {
+      "id": "el-18",
+      "name": "Lenovo Book 1",
+      "category": "laptopuri",
+      "price": 3000,
+      "availability": "in_stock",
+      "attributes": {
+        "brand": "Lenovo",
+        "storage": 256,
+        "screen": 14,
+        "color": "albastru"
+      }
+    },
+    {
+      "id": "el-19",
+      "name": "Asus Book 2",
+      "category": "laptopuri",
+      "price": 3400,
+      "availability": "in_stock",
+      "attributes": {
+        "brand": "Asus",
+        "storage": 512,
+        "screen": 15,
+        "color": "gri"
+      }
+    },
+    {
+      "id": "el-20",
+      "name": "Samsung Book 3",
+      "category": "laptopuri",
+      "price": 3800,
+      "availability": "in_stock",
+      "attributes": {
+        "brand": "Samsung",
+        "storage": 1024,
+        "screen": 16,
+        "color": "negru"
+      }
+    },
+    {
+      "id": "el-21",
+      "name": "Apple Book 4",
+      "category": "laptopuri",
+      "price": 4200,
+      "availability": "out_of_stock",
+      "attributes": {
+        "brand": "Apple",
+        "storage": 256,
+        "screen": 14,
+        "color": "alb"
+      }
+    },
+    {
+      "id": "el-22",
+      "name": "Xiaomi Book 5",
+      "category": "laptopuri",
+      "price": 4600,
+      "availability": "in_stock",
+      "attributes": {
+        "brand": "Xiaomi",
+        "storage": 512,
+        "screen": 15,
+        "color": "albastru"
+      }
+    },
+    {
+      "id": "el-23",
+      "name": "Motorola Book 6",
+      "category": "laptopuri",
+      "price": 5000,
+      "availability": "in_stock",
+      "attributes": {
+        "brand": "Motorola",
+        "storage": 1024,
+        "screen": 16,
+        "color": "gri"
+      }
+    },
+    {
+      "id": "el-24",
+      "name": "Lenovo Book 7",
+      "category": "laptopuri",
+      "price": 5400,
+      "availability": "in_stock",
+      "attributes": {
+        "brand": "Lenovo",
+        "storage": 256,
+        "screen": 14,
+        "color": "negru"
+      }
+    },
+    {
+      "id": "el-25",
+      "name": "Husa silicon model 1",
+      "category": "huse",
+      "price": 49,
+      "availability": "in_stock",
+      "attributes": {
+        "brand": "Samsung",
+        "color": "negru",
+        "compatible_with": "el-01"
+      }
+    },
+    {
+      "id": "el-26",
+      "name": "Husa silicon model 2",
+      "category": "huse",
+      "price": 59,
+      "availability": "in_stock",
+      "attributes": {
+        "brand": "Apple",
+        "color": "alb",
+        "compatible_with": "el-02"
+      }
+    },
+    {
+      "id": "el-27",
+      "name": "Husa silicon model 3",
+      "category": "huse",
+      "price": 69,
+      "availability": "in_stock",
+      "attributes": {
+        "brand": "Xiaomi",
+        "color": "albastru",
+        "compatible_with": "el-03"
+      }
+    },
+    {
+      "id": "el-28",
+      "name": "Husa silicon model 4",
+      "category": "huse",
+      "price": 79,
+      "availability": "out_of_stock",
+      "attributes": {
+        "brand": "Motorola",
+        "color": "gri",
+        "compatible_with": "el-04"
+      }
+    }
+  ]
+}

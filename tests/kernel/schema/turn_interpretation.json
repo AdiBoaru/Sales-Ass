@@ -1,0 +1,348 @@
+{
+  "contract_version": "kernel.v1.0",
+  "dimensions": [
+    "size",
+    "color",
+    "brand"
+  ],
+  "schema": {
+    "$defs": {
+      "Act": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "enum": [
+              "find",
+              "show_more",
+              "compare",
+              "detail",
+              "link",
+              "cart",
+              "bundle",
+              "order_status",
+              "store_info",
+              "chitchat",
+              "other"
+            ],
+            "type": "string"
+          },
+          "query": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targets": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "kind",
+          "query",
+          "targets"
+        ],
+        "type": "object"
+      },
+      "Ambiguity": {
+        "additionalProperties": false,
+        "properties": {
+          "about": {
+            "enum": [
+              "reference",
+              "scope",
+              "value"
+            ],
+            "type": "string"
+          },
+          "readings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "target": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "about",
+          "readings",
+          "target"
+        ],
+        "type": "object"
+      },
+      "Reference": {
+        "additionalProperties": false,
+        "properties": {
+          "dimension": {
+            "anyOf": [
+              {
+                "enum": [
+                  "brand",
+                  "category",
+                  "color",
+                  "price",
+                  "size",
+                  "unmapped"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "direction": {
+            "anyOf": [
+              {
+                "enum": [
+                  "min",
+                  "max"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "ordinal",
+              "deictic",
+              "name",
+              "attribute",
+              "extreme",
+              "the_other",
+              "earlier"
+            ],
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ordinal": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "text": {
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "dimension",
+          "direction",
+          "id",
+          "kind",
+          "name",
+          "ordinal",
+          "text",
+          "value"
+        ],
+        "type": "object"
+      },
+      "StateChange": {
+        "additionalProperties": false,
+        "properties": {
+          "dimension": {
+            "anyOf": [
+              {
+                "enum": [
+                  "brand",
+                  "category",
+                  "color",
+                  "price",
+                  "size",
+                  "unmapped"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "number": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "op": {
+            "enum": [
+              "set",
+              "add",
+              "remove",
+              "replace",
+              "clear"
+            ],
+            "type": "string"
+          },
+          "quote": {
+            "type": "string"
+          },
+          "relation": {
+            "anyOf": [
+              {
+                "enum": [
+                  "eq",
+                  "lte",
+                  "gte",
+                  "contains",
+                  "avoid"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "relative_to": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "target": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "dimension",
+          "number",
+          "op",
+          "quote",
+          "relation",
+          "relative_to",
+          "target",
+          "unit",
+          "value"
+        ],
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "acts": {
+        "items": {
+          "$ref": "#/$defs/Act"
+        },
+        "type": "array"
+      },
+      "ambiguities": {
+        "items": {
+          "$ref": "#/$defs/Ambiguity"
+        },
+        "type": "array"
+      },
+      "changes": {
+        "items": {
+          "$ref": "#/$defs/StateChange"
+        },
+        "type": "array"
+      },
+      "corrects_previous_turn": {
+        "type": "boolean"
+      },
+      "references": {
+        "items": {
+          "$ref": "#/$defs/Reference"
+        },
+        "type": "array"
+      },
+      "thread": {
+        "enum": [
+          "continue",
+          "aside",
+          "resume"
+        ],
+        "type": "string"
+      }
+    },
+    "required": [
+      "acts",
+      "ambiguities",
+      "changes",
+      "corrects_previous_turn",
+      "references",
+      "thread"
+    ],
+    "type": "object"
+  }
+}
