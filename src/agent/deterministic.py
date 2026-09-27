@@ -42,7 +42,7 @@ from src.agent.reference_resolver import (
     resolve_product_reference,
     resolve_reference,
 )
-from src.catalog.query_terms import fold, stopwords
+from src.catalog.query_terms import fold, formula_fillers, stopwords
 from src.catalog.render_text import cut_at_sentence, display_name
 from src.config import get_settings
 from src.conversation.state_reducer import StateUpdateProposal
@@ -681,36 +681,13 @@ async def serve_compare_with_similar(ctx: TurnContext, deps: PipelineDeps, ancho
     return served
 
 
-# Cuvintele care fac parte din FORMULA unei scurtături, dincolo de ce prinde regexul declanșator
-# și de cuvintele funcționale din `query_terms.stopwords`. Indexate pe locale (P11: limba e o
-# cheie); o locale necunoscută primește mulțimea goală, deci nu aplicăm româna peste altă limbă.
-#
-# Regula de includere e ACEEAȘI ca a listei de stopwords, și e strictă: un cuvânt intră aici doar
-# dacă nu poate numi NICIODATĂ un produs, un brand sau o nevoie. Verbe de arătare/trimitere, adverbe
-# de manieră și numeralele SCRISE cu litere (o cantitate de selecție: „primele două") — niciodată o
-# CIFRĂ, fiindcă o cifră poate fi un preț, un volum sau un SPF.
-#
-# Ce se întâmplă când lista e incompletă (și va fi, la orice volum de clienți): cuvântul necunoscut
-# rămâne în reziduu, turul pleacă la model și clientul primește răspunsul corect, plătit cu o
-# inferență. Asta e toată miza formei alese — enumerăm mulțimea ÎNCHISĂ (cum se cere o scurtătură),
-# nu pe cea DESCHISĂ (cum se rostește o constrângere), iar necunoscutul cade spre model, nu spre
-# tăcere.
-_FORMULA_FILLERS: dict[str, frozenset[str]] = {
-    "ro": frozenset(
-        """
-        arata arati aratati trimite trimiteti da dati vezi vreau as putea poti
-        direct rapid repede acum imediat te va rog rogu hai
-        prima primul primele primii ultima ultimul ultimele ambele astea alea acelea astealalte
-        doua doi trei patru cinci
-        """.split()
-    )
-}
-
-
-def _formula_fillers(locale: str | None) -> frozenset[str]:
-    if not locale:
-        return frozenset()
-    return _FORMULA_FILLERS.get(locale.split("-")[0].lower(), frozenset())
+# Cuvintele care fac parte din FORMULA unei scurtături trăiesc în `query_terms.formula_fillers`
+# (mutate de NX-329, fiindcă și extractorul de referințe le consumă). Ce se întâmplă când lista e
+# incompletă (și va fi, la orice volum de clienți): cuvântul necunoscut rămâne în reziduu, turul
+# pleacă la model și clientul primește răspunsul corect, plătit cu o inferență. Asta e toată miza
+# formei alese — enumerăm mulțimea ÎNCHISĂ (cum se cere o scurtătură), nu pe cea DESCHISĂ (cum se
+# rostește o constrângere), iar necunoscutul cade spre model, nu spre tăcere.
+_formula_fillers = formula_fillers
 
 
 def carries_new_constraints(ctx: TurnContext, trigger: re.Pattern[str]) -> bool:

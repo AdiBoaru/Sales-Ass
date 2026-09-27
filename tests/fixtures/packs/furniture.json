@@ -154,7 +154,10 @@
           "persoane": 1
         }
       }
-    }
+    },
+    "reference_dimensions": [
+      "color"
+    ]
   },
   "kernel": {
     "conversation_scoped": [],
@@ -180,7 +183,11 @@
         "width": 210,
         "material": "stofa",
         "color": "gri"
-      }
+      },
+      "variants": [
+        "gri",
+        "negru"
+      ]
     },
     {
       "id": "fu-02",
@@ -193,7 +200,11 @@
         "width": 245,
         "material": "piele",
         "color": "bej"
-      }
+      },
+      "variants": [
+        "bej",
+        "gri"
+      ]
     },
     {
       "id": "fu-03",

@@ -5,7 +5,8 @@
       "doc": "Componentele pure ale kernelului (validare, rezolvare, reducere, poartă, planificare). Nu importă client de model (I13), nu scriu stare decât prin propuneri (I3), nu construiesc SearchArgs (I2), nu ramifică pe textul brut (Enforcement) și nu conțin literali de vertical (I14).",
       "modules": [
         "src/conversation/interpretation.py",
-        "src/conversation/kernel_trace.py"
+        "src/conversation/kernel_trace.py",
+        "src/conversation/references.py"
       ]
     },
     "planner": {
