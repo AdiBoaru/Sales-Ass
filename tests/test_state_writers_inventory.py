@@ -229,3 +229,15 @@ class TestInventoryContract:
 
     def test_cli_check_mode_matches(self):
         assert sw.main(["--check"]) == 0
+
+    def test_doc_does_not_depend_on_line_numbers(self, fields):
+        """Regresia clasei: docul avea `(L452)` pe fiecare rând, deci orice PR care atingea un
+        fișier cu scriitori (NX-326 pe `processor.py`) îl făcea „depășit" fără ca vreun scriitor
+        să se fi schimbat, iar `main` a ieșit roșu la primul merge de după NX-327. Același cod,
+        decalat cu linii goale, trebuie să dea exact același doc."""
+        source = FIXTURE_PATH.read_text(encoding="utf-8")
+        name = "tests/fixtures/state_writers/sample.py"
+        original = sw.scan_source(source, name, fields)
+        shifted = sw.scan_source("\n\n\n# decalaj\n\n" + source, name, fields)
+        assert [w.lineno for w in original.writers] != [w.lineno for w in shifted.writers]
+        assert sw.generate_doc(original, fields, {}) == sw.generate_doc(shifted, fields, {})

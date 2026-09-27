@@ -746,15 +746,17 @@ def generate_doc(
             "| Scriitor (fișier:funcție) | Cale | Formă AST | Cheie brută | De ce | Soartă |"
         )
         lines.append("| --- | --- | --- | --- | --- | --- |")
-        rows = sorted(
-            by_field[field_id], key=lambda w: (w.path, w.file, w.function, w.form, w.lineno)
-        )
+        # Fără numere de linie în doc: identitatea unui scriitor e (fișier, funcție, câmp), cheia
+        # registrului de soartă. Cu linii, orice modificare într-un fișier cu scriitori (un
+        # `processor.py` atins de alt card) făcea docul „depășit" fără ca vreun scriitor să se fi
+        # schimbat, și a roșit `main` la primul merge de după NX-327.
+        rows = sorted(by_field[field_id], key=lambda w: (w.path, w.file, w.function, w.form))
         for w in rows:
             entry = fate.get(w.fate_key)
             why = entry.why if entry else "**LIPSEȘTE din state_writers_fate.json**"
             fate_label = f"`{entry.fate}`" if entry else "**LIPSEȘTE**"
             lines.append(
-                f"| `{w.file}:{w.function}` (L{w.lineno}) | {w.path} | `{w.form}` | "
+                f"| `{w.file}:{w.function}` | {w.path} | `{w.form}` | "
                 f"`{w.raw_key}` | {why} | {fate_label} |"
             )
         lines.append("")
@@ -762,10 +764,10 @@ def generate_doc(
     if result.unresolved:
         lines.append("## `unresolved` -- acces dinamic, nu se poate rezolva static")
         lines.append("")
-        lines.append("| Fișier:funcție | Motiv | Linie |")
-        lines.append("| --- | --- | --- |")
-        for u in result.unresolved:
-            lines.append(f"| `{u.file}:{u.function}` | `{u.reason}` | {u.lineno} |")
+        lines.append("| Fișier:funcție | Motiv |")
+        lines.append("| --- | --- |")
+        for u in sorted(result.unresolved, key=lambda u: (u.file, u.function, u.reason)):
+            lines.append(f"| `{u.file}:{u.function}` | `{u.reason}` |")
         lines.append("")
 
     return "\n".join(lines) + "\n"
