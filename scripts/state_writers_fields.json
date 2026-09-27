@@ -1,0 +1,105 @@
+{
+  "$comment": "NX-327 pasul 0.5: campurile pe care le scrie starea conversatiei, v1 + v2, luate din tabelul cardului (tasks/stage1/NX-327.md) + docs/KERNEL-CONTRACT-v1.md. DATE, nu constante in cod (pasul 3 adauga `parked_topic`/`recent_sets` fara sa rescrie scriptul). `scripts/state_writers.py` foloseste fisierul asta ca sa grupeze scriitorii gasiti prin AST pe campul lor logic -- nu filtreaza ce gaseste AST-ul, doar il eticheteaza.",
+  "groups": [
+    {
+      "field": "needs_topic",
+      "label_ro": "nevoi + subiect/raft",
+      "card_rows": ["nevoi", "subiect / raft"],
+      "v1_attrs": ["constraints", "search_constraints"],
+      "v2_ops": ["set_need", "confirm", "revoke", "supersede", "set_topic"],
+      "v2_state_fields": ["needs", "revocations", "topic"]
+    },
+    {
+      "field": "focus",
+      "label_ro": "focus (produsul selectat)",
+      "card_rows": ["focus"],
+      "v1_attrs": ["selected_product"],
+      "v2_ops": [],
+      "v2_state_fields": [],
+      "v2_payload_keys": ["selected_product"]
+    },
+    {
+      "field": "active_search",
+      "label_ro": "sesiune de cautare",
+      "card_rows": ["sesiune de cautare"],
+      "v1_attrs": ["active_search"],
+      "v2_ops": ["set_active_search"],
+      "v2_state_fields": ["active_search"]
+    },
+    {
+      "field": "references",
+      "label_ro": "referinte",
+      "card_rows": ["referinte"],
+      "v1_attrs": ["displayed_products", "offered_chips"],
+      "v2_ops": ["set_references"],
+      "v2_state_fields": ["references"],
+      "v2_payload_keys": ["displayed_products", "compared_products", "last_action", "page_product"]
+    },
+    {
+      "field": "clarification",
+      "label_ro": "clarificare",
+      "card_rows": ["clarificare"],
+      "v1_attrs": ["pending_question", "asked_intents"],
+      "v2_ops": ["set_pending_question", "resolve_question"],
+      "v2_state_fields": ["pending_clarification", "asked_questions"]
+    },
+    {
+      "field": "cart",
+      "label_ro": "cos (in afara contractului kernelului -- Out of Scope permite adaugarea in JSON)",
+      "card_rows": [],
+      "v1_attrs": ["cart", "cart_ref"],
+      "v2_ops": ["set_cart_ref"],
+      "v2_state_fields": ["cart_ref"]
+    },
+    {
+      "field": "safety",
+      "label_ro": "context de siguranta (NX-173, P0 -- in afara contractului kernelului)",
+      "card_rows": [],
+      "v1_attrs": ["safety"],
+      "v2_ops": [],
+      "v2_state_fields": []
+    },
+    {
+      "field": "other",
+      "label_ro": "alte campuri de administrare a starii (pass-through, revizie, schema)",
+      "card_rows": [],
+      "v1_attrs": ["state_version"],
+      "v2_ops": [],
+      "v2_state_fields": ["passthrough", "revision", "schema_version"]
+    }
+  ],
+  "op_default_field": {
+    "set_need": "needs_topic",
+    "confirm": "needs_topic",
+    "revoke": "needs_topic",
+    "supersede": "needs_topic",
+    "set_topic": "needs_topic",
+    "set_pending_question": "clarification",
+    "resolve_question": "clarification",
+    "set_references": "references",
+    "set_active_search": "active_search",
+    "set_cart_ref": "cart"
+  },
+  "payload_key_field_overrides": {
+    "set_references": {
+      "selected_product": "focus",
+      "displayed_products": "references",
+      "compared_products": "references",
+      "last_action": "references",
+      "page_product": "references"
+    }
+  },
+  "dict_literal_state_names": ["new_state", "base_state"],
+  "mutating_methods": [
+    "append",
+    "extend",
+    "update",
+    "pop",
+    "popitem",
+    "clear",
+    "setdefault",
+    "remove",
+    "insert",
+    "discard"
+  ]
+}
