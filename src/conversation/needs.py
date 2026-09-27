@@ -96,9 +96,17 @@ class NeedSpec:
 # Nucleul UNIVERSAL — valabil pe orice comerț, agnostic de vertical (P9). Cheile sunt aceleași pe
 # care le folosesc deja triajul (`RouteDecision.filters`), clarify (`canonicalize_clarify_field`) și
 # stiva NX-133, ca migrarea să fie o traducere, nu o reinventare de vocabular.
+#: NX-331 (I25, partea de persistență): cheia semnalelor pe care nicio dimensiune nu le prinde
+#: („bun pentru gaming" fără o fațetă de utilizare). Soft, cu scope pe subiect, cel mult
+#: `MAX_UNMAPPED_PER_TOPIC` pe subiect (reducerul îl înlocuiește pe cel mai vechi).
+UNMAPPED_KEY = "unmapped"
+MAX_UNMAPPED_PER_TOPIC = 3
+
 UNIVERSAL_SPECS: tuple[NeedSpec, ...] = (
-    NeedSpec("budget_max", NeedKind.NUMERIC_MAX, HARD, scoped=True),
-    NeedSpec("budget_min", NeedKind.NUMERIC_MIN, HARD, scoped=True),
+    # NX-331 (contractul, runda 3): bugetul e al CONVERSAȚIEI. «Cremă de față sub 100 lei» →
+    # «arată-mi ce ai la corp» păstrează plafonul; un buget nou explicit îl înlocuiește (supersede).
+    NeedSpec("budget_max", NeedKind.NUMERIC_MAX, HARD, scoped=False),
+    NeedSpec("budget_min", NeedKind.NUMERIC_MIN, HARD, scoped=False),
     NeedSpec("brand", NeedKind.SCALAR, SOFT, scoped=True),
     NeedSpec("suitable_for", NeedKind.SCALAR, SOFT, scoped=True),
     NeedSpec("concerns", NeedKind.LIST, SOFT, scoped=True),
@@ -108,6 +116,7 @@ UNIVERSAL_SPECS: tuple[NeedSpec, ...] = (
     NeedSpec("use_case", NeedKind.SCALAR, SOFT, scoped=False),
     NeedSpec("style_pref", NeedKind.SCALAR, SOFT, scoped=False),
     NeedSpec("preferred_time", NeedKind.SCALAR, SOFT, scoped=False),
+    NeedSpec(UNMAPPED_KEY, NeedKind.LIST, SOFT, scoped=True),
 )
 
 # Sinonime de CHEIE emise de triaj/clarify/model. Aliniate la `_CLARIFY_ALIASES` din
@@ -229,7 +238,9 @@ def _spec_from_facet(facet: Any) -> NeedSpec | None:
         for k, v in (getattr(facet, "aliases", None) or {}).items()
         if norm_text(k) and norm_text(v)
     }
-    return NeedSpec(key, kind, strength, scoped=True, values=values, aliases=aliases)
+    # NX-331: scope-ul e DATA fațetei (`TypedFacet.scope`), nu o constantă de cod.
+    scoped = getattr(facet, "scope", "topic") != "conversation"
+    return NeedSpec(key, kind, strength, scoped=scoped, values=values, aliases=aliases)
 
 
 @dataclass(frozen=True)
@@ -422,12 +433,14 @@ __all__ = [
     "HARD",
     "KEY_ALIASES",
     "MAX_NUMERIC_VALUE",
+    "MAX_UNMAPPED_PER_TOPIC",
     "MAX_VALUE_CHARS",
     "MAX_VALUE_WORDS",
     "OPERATOR_BY_KIND",
     "SOFT",
     "TOPIC_KEYS",
     "UNIVERSAL_SPECS",
+    "UNMAPPED_KEY",
     "NeedKind",
     "NeedSpec",
     "NeedVocabulary",

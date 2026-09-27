@@ -1,15 +1,19 @@
 {
-  "name": "ro — schimbarea de subiect retrage doar ce tine de vechea categorie",
+  "name": "ro — schimbarea de subiect retrage doar ce tine de vechea categorie (bugetul e al conversatiei, NX-331)",
   "locale": "ro",
   "turns": [
     {
-      "utterance": "caut o crema de fata sub 200, port marimea m",
+      "utterance": "caut o crema de fata cerave sub 200, port marimea m",
       "proposals": [
         {"op": "set_topic", "category_key": "skincare", "source": "catalog"},
+        {"op": "set_need", "key": "brand", "value": "cerave", "source": "user_explicit"},
         {"op": "set_need", "key": "budget_max", "value": 200, "source": "user_explicit"},
         {"op": "set_need", "key": "size", "value": "m", "source": "user_explicit"}
       ],
-      "expect": {"active": {"budget_max": 200.0, "size": "m"}, "topic": "skincare"}
+      "expect": {
+        "active": {"brand": "cerave", "budget_max": 200.0, "size": "m"},
+        "topic": "skincare"
+      }
     },
     {
       "utterance": "de fapt vreau un laptop",
@@ -17,10 +21,10 @@
         {"op": "set_topic", "category_key": "laptopuri", "source": "catalog"}
       ],
       "expect": {
-        "absent": ["budget_max"],
-        "active": {"size": "m"},
+        "absent": ["brand"],
+        "active": {"budget_max": 200.0, "size": "m"},
         "topic": "laptopuri",
-        "revoked": ["budget_max"]
+        "revoked": ["brand"]
       }
     }
   ]

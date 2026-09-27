@@ -264,14 +264,30 @@ def test_a_sensitive_fact_is_not_persisted_without_consent():
 def test_a_topic_switch_resets_scoped_needs_only():
     base = _state(
         user("set_topic", category_key="skincare"),
+        user("set_need", key="brand", value="cerave"),
         user("set_need", key="budget_max", value=200),
         user("set_need", key="size", value="m"),
     )
-    assert base.need_for("budget_max") is not None
+    assert base.need_for("brand") is not None
     state = _state(user("set_topic", category_key="laptopuri"), base=base)
-    assert state.need_for("budget_max") is None  # un buget de skincare nu plafonează un laptop
+    assert state.need_for("brand") is None  # marca de skincare nu filtrează un laptop
     assert state.need_for("size").normalized_value == "m"  # mărimea e despre OM
     assert any(r.reason_code == "topic_reset" for r in state.revocations)
+    # NX-331: nevoia retrasă nu se pierde, se PARCHEAZĂ cu subiectul ei (I4).
+    assert [n.key for n in state.parked.needs] == ["brand"]
+
+
+def test_the_budget_belongs_to_the_conversation_not_to_the_subject():
+    """NX-331, decizia din runda 3 a contractului (a inversat regula NX-235): «cremă de față sub
+    100 lei» → «arată-mi ce ai la corp» păstrează plafonul, iar un buget nou explicit îl
+    înlocuiește."""
+    base = _state(
+        user("set_topic", category_key="fata"), user("set_need", key="budget_max", value=100)
+    )
+    state = _state(user("set_topic", category_key="corp"), base=base)
+    assert state.need_for("budget_max").normalized_value == 100.0
+    again = _state(user("set_need", key="budget_max", value=200), base=state)
+    assert again.need_for("budget_max").normalized_value == 200.0
 
 
 def test_the_first_topic_anchor_resets_nothing():

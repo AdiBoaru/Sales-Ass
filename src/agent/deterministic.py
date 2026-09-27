@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import logging
 import re
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -58,6 +58,7 @@ from src.conversation.references import (
     resolve_references,
 )
 from src.conversation.state_reducer import StateUpdateProposal
+from src.conversation.state_v2 import ConversationStateV2
 from src.db.queries.catalog import (
     get_products_by_ids,
     product_category_roots,
@@ -1118,6 +1119,26 @@ def _paired_ambiguity(resolved: Sequence[ResolvedRef]) -> tuple[str, ...]:
     return tuple(first) if same and len(set(first)) == len(resolved) else ()
 
 
+def _state_v2_sources(ctx: TurnContext) -> dict[str, Any]:
+    """NX-331: seturile de mai devreme, setul parcat și focusul, din starea v2 (când e aprinsă).
+
+    Fără stare v2 sursele rămân goale, exact ca înainte (I16). Id-urile lor sunt doar referințe:
+    `plan_lookup` le revalidează pe catalog ca pe oricare altele (I1)."""
+    state = ctx.state_v2
+    if not isinstance(state, ConversationStateV2):
+        return {}
+
+    def items(refs: Iterable[Any]) -> tuple[ShownItem, ...]:
+        return tuple(ShownItem(d.product_id, d.name, d.price) for d in refs)
+
+    references = state.references
+    return {
+        "shown_earlier": tuple(items(s) for s in references.recent_sets),
+        "parked": items(state.parked.shown) if state.parked else (),
+        "focus": references.selected_product,
+    }
+
+
 async def _v2_shortcut(
     ctx: TurnContext, deps: PipelineDeps, query: str, gate: str
 ) -> ShortcutDecision | None:
@@ -1135,6 +1156,7 @@ async def _v2_shortcut(
                 ShownItem(p.product_id, p.name, p.price) for p in ctx.state.displayed_products
             ),
             page=ShownItem(page.product_id, page.name, page.price or None) if page else None,
+            **_state_v2_sources(ctx),
         )
         pack = getattr(ctx.business, "domain_pack", None)
         lookup = plan_lookup(refs, sources, pack=pack, locale=ctx.language)

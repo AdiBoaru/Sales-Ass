@@ -180,10 +180,25 @@ def test_replay_passes_when_every_labeled_layer_matches():
     def perfect(journey, index):
         expect = journey.turns[index].expect
         trace = _trace_for(expect["interpretation"], refs=expect.get("resolver", ()))
-        return trace.model_copy(update={"checked_changes": list(expect.get("checked", ()))})
+        return trace.model_copy(
+            update={
+                "checked_changes": list(expect.get("checked", ())),
+                "state_after": expect.get("reducer", {}),
+            }
+        )
 
     outcomes = replay.replay(journeys, perfect)
     assert outcomes and all(o.passed for o in outcomes)
+
+
+def _chained(journey: replay.Journey) -> bool:
+    """NX-331: un journey etichetat pe `reducer` rulează în LANȚ (sursele resolverului vin din
+    starea redusă, nu din `sources`), deci îl judecă `reducer_trace`, pe toate straturile lui."""
+    return any("reducer" in t.expect for t in journey.turns)
+
+
+def _single_turn_sources() -> list[replay.Journey]:
+    return [j for j in replay.load_journeys() if not _chained(j)]
 
 
 def test_the_resolver_layer_replays_green_on_every_labeled_journey():
@@ -191,7 +206,7 @@ def test_the_resolver_layer_replays_green_on_every_labeled_journey():
     interpretarea etichetată trece prin resolverul real, pe faptele pachetului de fixture."""
     from tests.kernel import fixture_catalog
 
-    journeys = [j for j in replay.load_journeys() if any("resolver" in t.expect for t in j.turns)]
+    journeys = [j for j in _single_turn_sources() if any("resolver" in t.expect for t in j.turns)]
     assert len(journeys) >= 12
     kinds = {
         r.kind for j in journeys for t in j.turns for r in t.expect["interpretation"].references
@@ -207,7 +222,7 @@ def test_the_checked_layer_replays_green_on_every_labeled_journey():
     validatorul de proveniență real, pe vocabularul și unitățile pachetului de fixture."""
     from tests.kernel import fixture_catalog
 
-    journeys = [j for j in replay.load_journeys() if any("checked" in t.expect for t in j.turns)]
+    journeys = [j for j in _single_turn_sources() if any("checked" in t.expect for t in j.turns)]
     assert len(journeys) >= 12
     levels = {c.provenance for j in journeys for t in j.turns for c in t.expect.get("checked", [])}
     assert {"explicit", "implicit"} <= levels
@@ -216,6 +231,40 @@ def test_the_checked_layer_replays_green_on_every_labeled_journey():
     outcomes = replay.replay(journeys, fixture_catalog.checked_trace)
     failed = [f"{o.journey_id}#{o.turn}: {o.divergence.report()}" for o in outcomes if not o.passed]
     assert not failed, "\n".join(failed)
+
+
+def test_the_reducer_layer_replays_green_on_every_chained_journey():
+    """NX-331: stratul `reducer` RULEAZĂ (pasul 3b) pe `reduce_turn`: turele journey-ului trec în
+    lanț prin validator, resolver (pe sursele stării reduse), `to_delta` și reducer. Fiecare strat
+    etichetat pe drum (`checked`, `resolver`, `reducer`) se compară."""
+    from tests.kernel import fixture_catalog
+
+    journeys = [j for j in replay.load_journeys() if _chained(j)]
+    assert {j.pack for j in journeys} >= {"electronics", "fashion"}
+    assert any(t.expect["interpretation"].thread == "resume" for j in journeys for t in j.turns)
+    outcomes = replay.replay(journeys, fixture_catalog.reducer_trace)
+    failed = [f"{o.journey_id}#{o.turn}: {o.divergence.report()}" for o in outcomes if not o.passed]
+    assert not failed, "\n".join(failed)
+    assert len(outcomes) >= 6
+
+
+def test_a_wrong_reducer_label_is_blamed_on_the_reducer_layer():
+    """Parcarea greșit etichetată (marca rămasă activă pe tablete) e vina stratului `reducer`, iar
+    straturile de dinaintea lui trec."""
+    from tests.kernel import fixture_catalog
+
+    journey = next(
+        j for j in replay.load_journeys() if j.journey_id == "k01-electronics-park-and-resume"
+    )
+    turn = journey.turns[1]
+    wrong = {**turn.expect["reducer"], "needs": ["brand eq samsung", "budget_max lte 3000"]}
+    labeled = replay.JourneyTurn(
+        user_input=turn.user_input, expect={**turn.expect, "reducer": wrong}, shown=turn.shown
+    )
+    bad = replay.Journey(**{**journey.__dict__, "turns": (journey.turns[0], labeled)})
+    outcome = replay.replay([bad], fixture_catalog.reducer_trace)[1]
+    assert outcome.divergence.layer == "reducer"
+    assert outcome.divergence.passed == ("interpretation", "checked")
 
 
 def test_a_wrong_checked_label_is_blamed_on_the_checked_layer():

@@ -50,6 +50,7 @@ from src.web.action_models import (
     clarification_question_id,
     spec_for,
 )
+from src.worker.state_writes import apply_v1_view
 
 if TYPE_CHECKING:
     from src.web.action_models import ActionCommand, ActionOutcome
@@ -206,27 +207,22 @@ def _handle_answer_clarification(ctx: TurnContext, command: ActionCommand) -> Ac
 
     answer = command.option_text
     # Aceeași umplere ca pe calea text (`clarify_resume_stage`), doar că ancorată de întrebare:
-    # slotul curent primește valoarea, iar reducerul o normalizează canonic (NX-235).
-    ctx.state.constraints[field] = answer
-    ctx.state_proposals.append(
-        StateUpdateProposal(
-            "resolve_question",
-            key=field,
-            question_id=current_id,
-            source="action",
-            turn_id=ctx.turn_id,
-        )
+    # slotul curent primește valoarea, iar reducerul o normalizează canonic (NX-235). NX-331:
+    # propunerile sunt SURSA; vederea v1 (slotul, cheia întrebată) se derivă din ele. Întrebarea e
+    # închisă AICI (`close_pending`) → `clarify_resume_stage` nu o mai consumă a doua oară.
+    resolved = StateUpdateProposal(
+        "resolve_question",
+        key=field,
+        question_id=current_id,
+        source="action",
+        turn_id=ctx.turn_id,
     )
-    ctx.state_proposals.append(
-        StateUpdateProposal(
-            "set_need", key=field, value=answer, source="action", turn_id=ctx.turn_id
-        )
+    filled = StateUpdateProposal(
+        "set_need", key=field, value=answer, source="action", turn_id=ctx.turn_id
     )
-    if field not in ctx.state.asked_intents:
-        ctx.state.asked_intents.append(field)
-        ctx.state.asked_intents[:] = ctx.state.asked_intents[-8:]
-    # Întrebarea e închisă AICI → `clarify_resume_stage` nu o mai consumă a doua oară.
-    ctx.state.pending_question = None
+    ctx.state_proposals += [resolved, filled]
+    apply_v1_view(ctx, filled)
+    apply_v1_view(ctx, resolved, close_pending=True)
     # Textul opțiunii devine inputul turului. NU e text fabricat de noi și nu e eticheta trimisă
     # de browser: e opțiunea pe care SERVERUL a scris-o în turul-sursă, recitită din ledger și
     # aleasă printr-un ordinal opac. Browserul n-a putut nici să o compună, nici să o schimbe.

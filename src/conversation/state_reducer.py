@@ -17,31 +17,44 @@ Invariantele pe care le apără (și pe care le demonstrează testele, nu coment
     clientul (`user_explicit`/`action`) are dreptul să-l reafirme;
   • siguranța (NX-173) nu se revocă decât explicit de client; nici topic switch, nici model;
   • maximum O întrebare în așteptare, iar aceeași cheie nu se re-întreabă la nesfârșit;
-  • schimbarea de subiect retrage NUMAI nevoile legate de vechea categorie, nu faptele despre om.
+  • schimbarea de subiect retrage NUMAI nevoile legate de vechea categorie, nu faptele despre om;
+  • (NX-331) nevoile retrase la o schimbare de subiect se PARCHEAZĂ, un nivel, cu ultimul set
+    arătat; `resume` face schimbul cu slotul parcat (I4, I19), `aside` nu schimbă nimic (I5);
+  • (NX-331) ieșirea executorilor scrie doar referințe și `active_search` (I20), iar
+    `corrects_previous_turn` retrage ceva doar când o schimbare contrazice turul anterior (I21).
+
+`reduce_all` e calea de azi (`processor._build_state_v2`). `reduce_turn` e punctul de intrare al
+turului INTERPRETAT (contractul kernelului, „Reducer, thread and parking"): îl cheamă replay-ul și
+testele până la pasul 6.
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from src.conversation.needs import (
     HARD,
+    MAX_UNMAPPED_PER_TOPIC,
     SOFT,
+    UNMAPPED_KEY,
     NeedVocabulary,
     norm_key,
     normalize_need,
     value_fingerprint,
 )
+from src.conversation.provenance import dimension_of_key
 from src.conversation.state_v2 import (
     HARD_CAPABLE_SOURCES,
+    MAX_RECENT_SETS,
     MAX_REVOCATIONS,
     REVIVE_CAPABLE_SOURCES,
     AskedQuestion,
     ConversationStateV2,
     DisplayedRef,
     Need,
+    ParkedTopic,
     PendingClarification,
     References,
     Revocation,
@@ -49,6 +62,10 @@ from src.conversation.state_v2 import (
     bounded_map,
     enforce_caps,
 )
+
+if TYPE_CHECKING:  # `delta.py` importă reducerul; aici e nevoie doar de tipuri
+    from src.conversation.delta import TurnDelta
+    from src.conversation.interpretation import ResolvedRef
 
 ProposalOp = Literal[
     "set_need",
@@ -61,10 +78,11 @@ ProposalOp = Literal[
     "set_references",
     "set_active_search",
     "set_cart_ref",
-    # NX-330: emise de `delta.py` pentru `clear topic` / `clear all`. Le implementează NX-331; până
-    # atunci NU sunt în `ALLOWED_OPS`, deci reducerul le respinge vizibil (`unknown_op`).
+    # NX-330: emise de `delta.py` pentru `clear topic` / `clear all` (implementate de NX-331).
     "clear_topic",
     "clear_all",
+    # NX-331: „am întrebat cheia asta" (întrebarea de îngustare NX-315, emisă de `finalize`).
+    "note_asked",
 ]
 
 ALLOWED_OPS: frozenset[str] = frozenset(
@@ -79,8 +97,19 @@ ALLOWED_OPS: frozenset[str] = frozenset(
         "set_references",
         "set_active_search",
         "set_cart_ref",
+        "clear_topic",
+        "clear_all",
+        "note_asked",
     }
 )
+
+#: I20: singurele operații pe care le poate propune ieșirea unui EXECUTOR într-un tur interpretat.
+#: Nevoile și subiectul sunt o funcție pură de (stare, interpretare, vocabular, referințe).
+EXECUTOR_OPS: frozenset[str] = frozenset({"set_references", "set_active_search"})
+
+#: Motivele de tombstone care blochează reactivarea unei nevoi parcate la `resume` (I6): clientul
+#: (sau politica) a retras cheia DUPĂ ce subiectul a fost parcat. `topic_reset` e chiar parcarea.
+_RESUME_BLOCKING_REASONS: frozenset[str] = frozenset({"user_explicit", "policy", "correction"})
 
 # Motivele de respingere — vocabular ÎNCHIS (intră în `need_update_rejected{reason}`, deci trebuie
 # low-cardinality; P10/P12: niciodată cheia sau valoarea în label).
@@ -98,6 +127,8 @@ REJECT_REASONS: frozenset[str] = frozenset(
         "already_pending",
         "already_asked",
         "subject_owned",
+        # NX-331 (I20): un executor a propus altceva decât referințe / `active_search`.
+        "executor_state_scope",
     }
 )
 
@@ -126,6 +157,11 @@ class StateUpdateProposal:
     # `category_key=None` înseamnă „raftul nu s-a schimbat", nu „propunere goală".
     product_type: str | None = None
     subject: bool = False
+    # NX-331: `interpretation` = propunere scrisă de `delta.py` din interpretarea turului. Acolo
+    # subiectul e PERECHEA (raft, tip), deci orice schimbare a ei parchează. `legacy` = scriitorii
+    # de azi: tipul propus de `_learn_subject` (NX-314) se actualizează fără parcare, iar resetul
+    # pornește doar pe raft. Distincția e un câmp, nu o euristică, și dispare la pasul 5.
+    origin: Literal["legacy", "interpretation"] = "legacy"
     # set_pending_question / resolve_question
     question_id: str | None = None
     reason: str | None = None
@@ -155,7 +191,14 @@ class Applied:
     key: str | None = None
     strength: str = SOFT
     source: str = "model_inferred"
-    outcome: str = "applied"  # applied | unchanged | superseded | revoked | reset
+    # applied | unchanged | superseded | revoked | reset; NX-331: parked | evicted (op `park`),
+    # swapped | not_available (op `resume`), applied | unconfirmed (op `correction`)
+    outcome: str = "applied"
+
+
+#: Ce întoarce un handler: starea nouă + unul sau mai multe `Applied` (o schimbare de subiect e și
+#: o parcare), sau o respingere typed.
+_Outcome = tuple[ConversationStateV2, Applied | tuple[Applied, ...]] | RejectedUpdate
 
 
 @dataclass(frozen=True)
@@ -218,13 +261,25 @@ def reduce_all(
     applied: list[Applied] = []
     rejected: list[RejectedUpdate] = []
     for proposal in proposals:
-        outcome = _reduce_one(current, proposal, policy)
-        if isinstance(outcome, RejectedUpdate):
-            rejected.append(outcome)
-            continue
-        current, record = outcome
-        applied.append(record)
+        current = _apply(current, proposal, policy, applied, rejected)
     return ReducedState(enforce_caps(current), tuple(applied), tuple(rejected))
+
+
+def _apply(
+    state: ConversationStateV2,
+    proposal: StateUpdateProposal,
+    policy: ReducerPolicy,
+    applied: list[Applied],
+    rejected: list[RejectedUpdate],
+) -> ConversationStateV2:
+    """O propunere peste starea curentă a lotului; înregistrările se adaugă în liste."""
+    outcome = _reduce_one(state, proposal, policy)
+    if isinstance(outcome, RejectedUpdate):
+        rejected.append(outcome)
+        return state
+    new_state, record = outcome
+    applied.extend(record if isinstance(record, tuple) else (record,))
+    return new_state
 
 
 # ---------------------------------------------------------------------------
@@ -234,7 +289,7 @@ def reduce_all(
 
 def _reduce_one(
     state: ConversationStateV2, proposal: StateUpdateProposal, policy: ReducerPolicy
-) -> tuple[ConversationStateV2, Applied] | RejectedUpdate:
+) -> _Outcome:
     if proposal.op not in ALLOWED_OPS:
         return RejectedUpdate(str(proposal.op), "unknown_op", None, proposal.source)
     handler = _HANDLERS[proposal.op]
@@ -280,7 +335,7 @@ def _tombstone(
 
 def _handle_set_need(
     state: ConversationStateV2, proposal: StateUpdateProposal, policy: ReducerPolicy
-) -> tuple[ConversationStateV2, Applied] | RejectedUpdate:
+) -> _Outcome:
     vocab = policy.vocabulary
     if vocab.is_topic_key(proposal.key):
         return RejectedUpdate("set_need", "topic_key", norm_key(proposal.key), proposal.source)
@@ -347,6 +402,9 @@ def _handle_set_need(
         scope=scope,
     )
 
+    if existing is None and key == UNMAPPED_KEY and normalized.value is not None:
+        state = _evict_oldest_unmapped(state, fresh.scope)
+
     if existing is not None and existing.normalized_value == normalized.value:
         # Idempotent: aceeași valoare reafirmată doar întărește (confirmare + revizie), nu duplică.
         needs = tuple(
@@ -393,6 +451,29 @@ def _handle_set_need(
     )
 
 
+def _evict_oldest_unmapped(state: ConversationStateV2, scope: str | None) -> ConversationStateV2:
+    """I25: cel mult `MAX_UNMAPPED_PER_TOPIC` semnale `unmapped` active pe subiect. Al patrulea îl
+    înlocuiește pe cel mai vechi (cea mai mică revizie, apoi primul inserat). Fără tombstone: nu e
+    o retragere a clientului, e plafonul unui semnal soft."""
+    live = [
+        (n.updated_revision, index)
+        for index, n in enumerate(state.needs)
+        if n.is_active and n.key == UNMAPPED_KEY and n.scope == scope
+    ]
+    if len(live) < MAX_UNMAPPED_PER_TOPIC:
+        return state
+    _, oldest = min(live)
+    return replace(
+        state,
+        needs=tuple(
+            replace(n, status="superseded", updated_revision=state.revision)
+            if index == oldest
+            else n
+            for index, n in enumerate(state.needs)
+        ),
+    )
+
+
 def _drop_revocations(
     state: ConversationStateV2, key: str, proposal: StateUpdateProposal
 ) -> tuple[Revocation, ...]:
@@ -405,7 +486,7 @@ def _drop_revocations(
 
 def _handle_supersede(
     state: ConversationStateV2, proposal: StateUpdateProposal, policy: ReducerPolicy
-) -> tuple[ConversationStateV2, Applied] | RejectedUpdate:
+) -> _Outcome:
     """Corecție EXPLICITĂ. Doar clientul (sau o acțiune semnată) o poate cere: altfel modelul ar
     avea o poartă laterală ca să înlocuiască un `hard`."""
     if proposal.source not in REVIVE_CAPABLE_SOURCES:
@@ -421,7 +502,7 @@ def _handle_supersede(
 
 def _handle_confirm(
     state: ConversationStateV2, proposal: StateUpdateProposal, policy: ReducerPolicy
-) -> tuple[ConversationStateV2, Applied] | RejectedUpdate:
+) -> _Outcome:
     key = norm_key(proposal.key)
     target = next((n for n in state.needs if n.is_active and n.key == key), None)
     if target is None:
@@ -438,11 +519,16 @@ def _handle_confirm(
 
 def _handle_revoke(
     state: ConversationStateV2, proposal: StateUpdateProposal, policy: ReducerPolicy
-) -> tuple[ConversationStateV2, Applied] | RejectedUpdate:
+) -> _Outcome:
     key = norm_key(proposal.key)
     if not key:
         return RejectedUpdate("revoke", "unknown_key", None, proposal.source)
     targets = [n for n in state.needs if n.is_active and n.key == key]
+    listed = _list_value(proposal, policy)
+    if listed is not None:
+        # NX-331: pe o cheie de LISTĂ o valoare numește O nevoie („remove c2" = `pores`, nu toate
+        # nevoile de ten). Fără valoare, retragerea rămâne pe toată cheia, ca înainte.
+        targets = [n for n in targets if n.normalized_value == listed]
     if any(_is_protected(n) for n in targets) and not (
         proposal.source == "user_explicit" and proposal.reason_code == "user_explicit"
     ):
@@ -462,14 +548,16 @@ def _handle_revoke(
     ):
         return RejectedUpdate("revoke", "unsupported_revoke", key, proposal.source)
 
-    prior = targets[0].normalized_value if targets else proposal.value
+    prior = targets[0].normalized_value if targets else (listed or proposal.value)
     needs = tuple(
-        replace(n, status="revoked", updated_revision=state.revision) if n in targets else n
+        replace(n, status="revoked", updated_revision=state.revision)
+        if any(n is t for t in targets)
+        else n
         for n in state.needs
     )
     reason = (
         proposal.reason_code
-        if proposal.reason_code in {"user_explicit", "policy"}
+        if proposal.reason_code in {"user_explicit", "policy", "correction"}
         else "user_explicit"
     )
     revocations = _tombstone(
@@ -488,16 +576,34 @@ def _handle_revoke(
     )
 
 
+def _list_value(proposal: StateUpdateProposal, policy: ReducerPolicy) -> Any:
+    """Valoarea canonică a unei propuneri pe o cheie de LISTĂ (`contains`), sau None."""
+    if proposal.value is None:
+        return None
+    normalized = normalize_need(proposal.key, proposal.value, policy.vocabulary)
+    if normalized is None or normalized.operator != "contains":
+        return None
+    return normalized.value
+
+
+def _proposed_category(proposal: StateUpdateProposal) -> str | None:
+    """Raftul unei propuneri `set_topic`. Proprietarul subiectului (NX-314) și interpretarea
+    (NX-331) propun CHEI de catalog deja rezolvate, deci se păstrează verbatim: `norm_key` ar face
+    din slug-ul `ten-ingrijirea-tenului` un `ten_ingrijirea_tenului`, pe care nici
+    `_category_clause`, nici `topic_root_of` nu-l mai recunosc, iar același raft ar arăta ca alt
+    subiect. Doar raftul propus liber de planul creierului trece prin `norm_key`, ca înainte."""
+    if proposal.subject or proposal.origin == "interpretation":
+        return (proposal.category_key or "").strip() or None
+    return norm_key(proposal.category_key) or None
+
+
 def _handle_set_topic(
     state: ConversationStateV2, proposal: StateUpdateProposal, policy: ReducerPolicy
-) -> tuple[ConversationStateV2, Applied] | RejectedUpdate:
-    category = norm_key(proposal.category_key) or None
+) -> _Outcome:
+    category = _proposed_category(proposal)
     if proposal.subject:
-        # Raftul subiectului e deja o CHEIE de catalog (rezolvată prin vocabular), deci se păstrează
-        # verbatim: `norm_key` ar face din slug-ul `ten-ingrijirea-tenului` un
-        # `ten_ingrijirea_tenului`, pe care nici `_category_clause`, nici `topic_root_of` nu-l mai
-        # recunosc. Raftul nerezolvat nu e o schimbare de raft: subiectul poate purta doar tipul.
-        category = (proposal.category_key or "").strip() or state.topic.category_key
+        # Raftul nerezolvat nu e o schimbare de raft: subiectul poate purta doar tipul.
+        category = category or state.topic.category_key
     elif category is None and proposal.goal is None:
         return RejectedUpdate("set_topic", "invalid_payload", None, proposal.source)
     elif proposal.source == "model_inferred" and state.topic.product_type:
@@ -505,8 +611,18 @@ def _handle_set_topic(
         # dar nu poate muta unul pe care îl susține deja setul arătat clientului.
         return RejectedUpdate("set_topic", "subject_owned", category, proposal.source)
     previous = state.topic.category_key
-    product_type = proposal.product_type if proposal.subject else state.topic.product_type
-    if category == previous:
+    interpreted = proposal.origin == "interpretation"
+    if interpreted:
+        # NX-331: subiectul e PERECHEA (raft, tip). Un tip nepropus se păstrează pe același raft și
+        # se golește pe altul (tipul vechi descria subiectul vechi).
+        product_type = proposal.product_type or (
+            state.topic.product_type if category == previous else None
+        )
+        same_subject = (category, product_type) == (previous, state.topic.product_type)
+    else:
+        product_type = proposal.product_type if proposal.subject else state.topic.product_type
+        same_subject = category == previous
+    if same_subject:
         topic = replace(
             state.topic, goal=proposal.goal or state.topic.goal, product_type=product_type
         )
@@ -519,49 +635,147 @@ def _handle_set_topic(
         category_key=category,
         goal=proposal.goal,
         changed_at_revision=state.revision,
-        product_type=product_type if proposal.subject else None,
+        product_type=product_type if (proposal.subject or interpreted) else None,
     )
-    if previous is None:
-        # Prima ancorare a subiectului nu retrage nimic — nu exista un „vechi" de resetat.
+    if previous is None and not (interpreted and state.topic.product_type):
+        # Prima ancorare a subiectului nu retrage nimic: nu exista un subiect vechi de resetat.
         return (
             replace(state, topic=topic),
             Applied("set_topic", category, SOFT, proposal.source, "applied"),
         )
 
-    scoped_keys = {
-        n.key for n in state.needs if n.is_active and n.scope == previous and not _is_protected(n)
-    }
+    outcome = "evicted" if state.parked is not None else "parked"
+    parked = _parked_now(state, policy)
+    state = _retire_topic(state, proposal.turn_id, policy)
+    return (
+        replace(state, topic=topic, parked=parked),
+        (
+            Applied("set_topic", category, SOFT, proposal.source, "reset"),
+            Applied("park", previous, SOFT, proposal.source, outcome),
+        ),
+    )
+
+
+def _topic_needs(state: ConversationStateV2, policy: ReducerPolicy) -> tuple[Need, ...]:
+    """Nevoile ACTIVE ale subiectului curent: scope pe raftul lui, fără cele de siguranță (NX-173
+    nu se resetează și nu se parchează: rămân active pe orice subiect). Un subiect fără raft n-are
+    nevoi cu scope (scope-ul se scrie din raft), deci nu întoarce nimic.
+
+    Scope-ul se judecă și pe vocabularul TURULUI, nu doar pe ce s-a scris atunci: o cheie pe care
+    pachetul o declară acum a conversației (bugetul, NX-331) nu e a subiectului, chiar dacă un
+    document scris înainte îi poartă raftul în `scope`."""
+    category = state.topic.category_key
+    if category is None:
+        return ()
+    return tuple(
+        n
+        for n in state.needs
+        if n.is_active
+        and n.scope == category
+        and not _is_protected(n)
+        and _topic_scoped(n.key, policy.vocabulary)
+    )
+
+
+def _topic_scoped(key: str, vocab: NeedVocabulary) -> bool:
+    """O cheie necunoscută vocabularului (pachet schimbat între ture) rămâne pe scope-ul scris."""
+    spec = vocab.spec_for(key)
+    return spec is None or spec.scoped
+
+
+def _parked_now(state: ConversationStateV2, policy: ReducerPolicy) -> ParkedTopic:
+    """Subiectul curent, nevoile lui și ultimul set arătat pe el, ca slot parcat (un nivel, I19).
+    Aceeași regulă la o schimbare de subiect și la `resume`."""
+    return ParkedTopic(
+        topic=state.topic,
+        needs=_topic_needs(state, policy),
+        shown=state.references.displayed_products,
+        parked_at_revision=state.revision,
+    )
+
+
+def _supersede_all(
+    state: ConversationStateV2, retired: Sequence[Need], turn_id: str | None, reason: str
+) -> ConversationStateV2:
+    """Nevoile `retired` → `superseded`, cu un tombstone per cheie (`reason`)."""
     needs = tuple(
         replace(n, status="superseded", updated_revision=state.revision)
-        if n.is_active and n.scope == previous and not _is_protected(n)
+        if any(n is r for r in retired)
         else n
         for n in state.needs
     )
     revocations = state.revocations
-    for key in sorted(scoped_keys):
+    for key in sorted({n.key for n in retired}):
         revocations = _tombstone(
             revocations,
             Revocation(
                 key=key,
-                prior_value_fingerprint=None,
-                source_turn_id=proposal.turn_id,
+                source_turn_id=turn_id,
                 revision=state.revision,
-                reason_code="topic_reset",
+                reason_code=reason,
             ),
         )
+    return replace(state, needs=needs, revocations=revocations)
+
+
+def _retire_topic(
+    state: ConversationStateV2, turn_id: str | None, policy: ReducerPolicy
+) -> ConversationStateV2:
+    """Nevoile subiectului curent → `superseded` + tombstone `topic_reset`; întrebarea în așteptare
+    și cheile deja întrebate care țin de subiect se golesc. Nevoile pe conversație rămân (I4)."""
     # Întrebarea în așteptare era despre subiectul abandonat; la fel sloturile deja întrebate care
-    # țin de categorie — după schimbare au voie să fie întrebate din nou.
+    # țin de subiect: după schimbare au voie să fie întrebate din nou.
     asked = tuple(q for q in state.asked_questions if not _scoped_key(q.key, policy.vocabulary))
+    state = _supersede_all(state, _topic_needs(state, policy), turn_id, "topic_reset")
+    return replace(state, pending_clarification=None, asked_questions=asked)
+
+
+def _handle_clear_topic(
+    state: ConversationStateV2, proposal: StateUpdateProposal, policy: ReducerPolicy
+) -> _Outcome:
+    """`clear topic`: nevoile subiectului curent se retrag (`topic_reset`), iar subiectul rămâne.
+    Nimic nu se parchează: clientul a cerut să uite criteriile, nu să schimbe subiectul."""
+    if proposal.source not in REVIVE_CAPABLE_SOURCES:
+        # Simetria cu `revoke`: doar clientul își poate șterge criteriile (D7).
+        return RejectedUpdate("clear_topic", "unsupported_revoke", None, proposal.source)
     return (
-        replace(
-            state,
-            topic=topic,
-            needs=needs,
-            revocations=revocations,
-            pending_clarification=None,
-            asked_questions=asked,
-        ),
-        Applied("set_topic", category, SOFT, proposal.source, "reset"),
+        _retire_topic(state, proposal.turn_id, policy),
+        Applied("clear_topic", state.topic.category_key, SOFT, proposal.source, "reset"),
+    )
+
+
+def _handle_clear_all(
+    state: ConversationStateV2, proposal: StateUpdateProposal, policy: ReducerPolicy
+) -> _Outcome:
+    """`clear all`: toate nevoile se retrag, mai puțin cele protejate (siguranță, politică), iar
+    slotul parcat se golește (nevoile lui sunt tot nevoi). Tombstone-urile opresc reînvierea lor din
+    istoric sau rezumat (I6)."""
+    if proposal.source not in REVIVE_CAPABLE_SOURCES:
+        return RejectedUpdate("clear_all", "unsupported_revoke", None, proposal.source)
+    retired = [n for n in state.needs if n.is_active and not _is_protected(n)]
+    state = _supersede_all(state, retired, proposal.turn_id, "user_explicit")
+    return (
+        replace(state, pending_clarification=None, parked=None),
+        Applied("clear_all", None, SOFT, proposal.source, "reset"),
+    )
+
+
+def _handle_note_asked(
+    state: ConversationStateV2, proposal: StateUpdateProposal, policy: ReducerPolicy
+) -> _Outcome:
+    """„Am întrebat cheia asta" fără o întrebare în așteptare (întrebarea de îngustare NX-315, pusă
+    ca ultimă frază a răspunsului). Semnalul anti-buclă: cheia trece la coadă, cu o încercare în
+    plus."""
+    key = norm_key(proposal.key)
+    if not key:
+        return RejectedUpdate("note_asked", "invalid_payload", None, proposal.source)
+    previous = state.asked(key)
+    asked = tuple(q for q in state.asked_questions if q.key != key) + (
+        AskedQuestion(key, state.revision, (previous.attempts + 1) if previous else 1),
+    )
+    return (
+        replace(state, asked_questions=asked),
+        Applied("note_asked", key, SOFT, proposal.source, "applied"),
     )
 
 
@@ -572,7 +786,7 @@ def _scoped_key(key: str, vocab: NeedVocabulary) -> bool:
 
 def _handle_set_pending_question(
     state: ConversationStateV2, proposal: StateUpdateProposal, policy: ReducerPolicy
-) -> tuple[ConversationStateV2, Applied] | RejectedUpdate:
+) -> _Outcome:
     key = norm_key(proposal.key)
     if not key:
         return RejectedUpdate("set_pending_question", "invalid_payload", None, proposal.source)
@@ -604,7 +818,7 @@ def _handle_set_pending_question(
 
 def _handle_resolve_question(
     state: ConversationStateV2, proposal: StateUpdateProposal, policy: ReducerPolicy
-) -> tuple[ConversationStateV2, Applied] | RejectedUpdate:
+) -> _Outcome:
     pending = state.pending_clarification
     key = norm_key(proposal.key) or (pending.target_key if pending else "")
     if not key:
@@ -622,13 +836,14 @@ def _handle_resolve_question(
 
 def _handle_set_references(
     state: ConversationStateV2, proposal: StateUpdateProposal, policy: ReducerPolicy
-) -> tuple[ConversationStateV2, Applied] | RejectedUpdate:
+) -> _Outcome:
     payload = proposal.payload if isinstance(proposal.payload, Mapping) else None
     if payload is None:
         return RejectedUpdate("set_references", "invalid_payload", None, proposal.source)
     current = state.references
     displayed = current.displayed_products
     revision = current.displayed_revision
+    recent = current.recent_sets
     if "displayed_products" in payload:
         fresh = tuple(
             d
@@ -639,6 +854,10 @@ def _handle_set_references(
             # Lista s-a schimbat ⇒ revizie nouă. Un ordinal emis peste lista veche devine STALE,
             # în loc să selecteze tăcut alt produs (failure matrix).
             revision = state.revision
+            if proposal.source != "policy":
+                # NX-331: un set NOU împinge setul curent în `recent_sets`. Prune-ul de siguranță
+                # (NX-173, `source="policy"`) e același set micșorat, deci nu împinge nimic.
+                recent = _push_recent(recent, displayed, fresh)
         displayed = fresh
     references = References(
         selected_product=_ref(payload, "selected_product", current.selected_product),
@@ -651,11 +870,29 @@ def _handle_set_references(
             else current.compared_products
         ),
         last_action=_ref(payload, "last_action", current.last_action),
+        recent_sets=recent,
     )
     return (
         replace(state, references=references),
         Applied("set_references", None, SOFT, proposal.source, "applied"),
     )
+
+
+def _id_set(refs: Iterable[DisplayedRef]) -> frozenset[str]:
+    return frozenset(d.product_id for d in refs)
+
+
+def _push_recent(
+    recent: tuple[tuple[DisplayedRef, ...], ...],
+    current: tuple[DisplayedRef, ...],
+    fresh: tuple[DisplayedRef, ...],
+) -> tuple[tuple[DisplayedRef, ...], ...]:
+    """`current` devine cel mai recent set de mai devreme. Deduplicat pe MULȚIMEA de id-uri: un set
+    reordonat nu e un set nou, iar un set revenit pe ecran nu mai e „de mai devreme"."""
+    if not current or _id_set(current) == _id_set(fresh):
+        return recent
+    kept = tuple(s for s in recent if _id_set(s) not in (_id_set(current), _id_set(fresh)))
+    return (current, *kept)[:MAX_RECENT_SETS]
 
 
 def _ref(payload: Mapping[str, Any], key: str, current: str | None) -> str | None:
@@ -667,7 +904,7 @@ def _ref(payload: Mapping[str, Any], key: str, current: str | None) -> str | Non
 
 def _handle_set_active_search(
     state: ConversationStateV2, proposal: StateUpdateProposal, policy: ReducerPolicy
-) -> tuple[ConversationStateV2, Applied] | RejectedUpdate:
+) -> _Outcome:
     payload = proposal.payload
     if payload is not None and not isinstance(payload, Mapping):
         return RejectedUpdate("set_active_search", "invalid_payload", None, proposal.source)
@@ -679,7 +916,7 @@ def _handle_set_active_search(
 
 def _handle_set_cart_ref(
     state: ConversationStateV2, proposal: StateUpdateProposal, policy: ReducerPolicy
-) -> tuple[ConversationStateV2, Applied] | RejectedUpdate:
+) -> _Outcome:
     """Doar REFERINȚA coșului (id + versiune). Liniile și totalurile rămân ale NX-237 — starea nu
     devine un al doilea coș care poate diverge de cel real."""
     payload = proposal.payload
@@ -708,11 +945,289 @@ _HANDLERS: Mapping[str, Any] = {
     "set_references": _handle_set_references,
     "set_active_search": _handle_set_active_search,
     "set_cart_ref": _handle_set_cart_ref,
+    "clear_topic": _handle_clear_topic,
+    "clear_all": _handle_clear_all,
+    "note_asked": _handle_note_asked,
 }
+
+
+# ---------------------------------------------------------------------------
+# NX-331 — turul INTERPRETAT: thread, parcare, corecție, efectul de referință
+# ---------------------------------------------------------------------------
+
+
+def reduce_turn(
+    state_before: ConversationStateV2,
+    delta: TurnDelta,
+    executor_proposals: Sequence[StateUpdateProposal],
+    resolved: Sequence[ResolvedRef],
+    primary_target: str | None,
+    corrects_previous_turn: bool,
+    policy: ReducerPolicy,
+) -> ReducedState:
+    """Un tur interpretat, în ordinea contractului („Order of application within a turn"): `aside`
+    ⇒ identitate; `resume`; subiectul și restul schimbărilor, în ordinea din `delta` (subiectul
+    întâi, pus acolo de `delta.py`); corecția; propunerile executorilor (doar referințe și
+    `active_search`, I20); efectul de referință (`selected_product` = ținta `exact` a actului
+    principal). PUR: fără ceas, fără random, fără context de tur. O singură revizie per tur."""
+    if delta.thread == "aside":
+        # I5: paranteza e identitatea pe stare, inclusiv pe `active_search` și pe referințe,
+        # oricare ar fi propunerile executorilor din tur.
+        return ReducedState(state_before)
+
+    state = replace(state_before, revision=state_before.revision + 1)
+    applied: list[Applied] = []
+    rejected: list[RejectedUpdate] = []
+
+    if delta.thread == "resume":
+        state, record = _resume(state, policy)
+        applied.append(record)
+
+    contradicted = (
+        _contradictions(state_before, delta.proposals, policy) if corrects_previous_turn else None
+    )
+    for proposal in delta.proposals:
+        state = _apply(state, proposal, policy, applied, rejected)
+    if contradicted is not None:
+        state, record = _apply_correction(state, state_before, contradicted, delta.proposals)
+        applied.append(record)
+
+    for proposal in executor_proposals:
+        if proposal.op not in EXECUTOR_OPS:
+            rejected.append(
+                RejectedUpdate(
+                    str(proposal.op),
+                    "executor_state_scope",
+                    norm_key(proposal.key) or None,
+                    proposal.source,
+                )
+            )
+            continue
+        state = _apply(state, proposal, policy, applied, rejected)
+
+    target = _primary_product(resolved, primary_target)
+    if target is not None:
+        state = _apply(
+            state,
+            StateUpdateProposal(
+                "set_references", source="catalog", payload={"selected_product": target}
+            ),
+            policy,
+            applied,
+            rejected,
+        )
+    return ReducedState(enforce_caps(state), tuple(applied), tuple(rejected))
+
+
+def _primary_product(resolved: Sequence[ResolvedRef], primary_target: str | None) -> str | None:
+    """Produsul țintei actului principal, doar când referința e `exact` pe UN produs."""
+    if primary_target is None:
+        return None
+    ref = next((r for r in resolved if r.ref_id == primary_target), None)
+    if ref is None or ref.outcome != "exact" or len(ref.product_ids) != 1:
+        return None
+    return ref.product_ids[0]
+
+
+def _resume(
+    state: ConversationStateV2, policy: ReducerPolicy
+) -> tuple[ConversationStateV2, Applied]:
+    """`thread=resume`: SCHIMB cu slotul parcat, nu scoatere din stivă (I19).
+
+    Subiectul parcat devine curent, cu nevoile lui reactivate exact cum erau (tărie, sursă,
+    `confirmed`), iar tombstone-urile lor `topic_reset` se scot. Subiectul curent devine parcat prin
+    aceeași regulă ca la o schimbare de subiect, iar setul arătat se schimbă cu cel parcat.
+    Reactivarea NU trece prin regula de înviere: o nevoie parcată de cod nu e una revocată de client
+    (I4). Una pe care clientul a retras-o DUPĂ parcare rămâne retrasă (I6)."""
+    parked = state.parked
+    if parked is None:
+        return state, Applied("resume", None, SOFT, "user_explicit", "not_available")
+
+    current = state.topic
+    has_current = current.category_key is not None or current.product_type is not None
+    new_parked = _parked_now(state, policy) if has_current else None
+    leaving = state.references.displayed_products
+    state = _retire_topic(state, None, policy)
+
+    revived: list[Need] = []
+    for need in parked.needs:
+        if _retracted_since_parking(need, state.revocations, parked.parked_at_revision):
+            continue
+        clash = any(
+            n.is_active
+            and n.key == need.key
+            and (n.operator != "contains" or n.normalized_value == need.normalized_value)
+            for n in (*state.needs, *revived)
+        )
+        if not clash:
+            revived.append(replace(need, status="active"))
+    revived_marks = {(n.key, n.normalized_value, n.scope) for n in revived}
+    needs = tuple(
+        n
+        for n in state.needs
+        if n.is_active or (n.key, n.normalized_value, n.scope) not in revived_marks
+    ) + tuple(revived)
+    revived_keys = {n.key for n in revived}
+    revocations = tuple(
+        r
+        for r in state.revocations
+        if not (r.reason_code == "topic_reset" and r.key in revived_keys)
+    )
+    on_screen = _id_set(parked.shown)
+    recent = tuple(s for s in state.references.recent_sets if _id_set(s) != on_screen)
+    if new_parked is None:
+        # Fără subiect curent, setul de pe ecran n-are slot de parcare: rămâne „de mai devreme".
+        recent = _push_recent(recent, leaving, parked.shown)
+    references = replace(
+        state.references,
+        displayed_products=parked.shown,
+        displayed_revision=state.revision,
+        # Setul care revine pe ecran nu mai e „de mai devreme"; cel care pleacă stă în parcat.
+        recent_sets=recent,
+        # Focusul și comparația țin de setul care pleacă: rămân doar dacă sunt și pe ecranul nou,
+        # altfel un «acesta» după reluare s-ar rezolva pe un produs al subiectului parcat.
+        selected_product=(
+            state.references.selected_product
+            if state.references.selected_product in on_screen
+            else None
+        ),
+        compared_products=tuple(p for p in state.references.compared_products if p in on_screen),
+    )
+    return (
+        replace(
+            state,
+            topic=replace(parked.topic, changed_at_revision=state.revision),
+            needs=needs,
+            revocations=revocations,
+            references=references,
+            parked=new_parked,
+        ),
+        Applied("resume", parked.topic.category_key, SOFT, "user_explicit", "swapped"),
+    )
+
+
+def _retracted_since_parking(
+    need: Need, revocations: Iterable[Revocation], parked_at_revision: int
+) -> bool:
+    """Clientul (sau politica) a retras nevoia DUPĂ ce subiectul a fost parcat (I6)? Tombstone-ul
+    păstrează amprenta valorii: o retragere a ALTEI valori pe aceeași cheie (marca tabletelor) nu
+    atinge marca telefoanelor parcate. O retragere fără valoare (toată cheia) o atinge."""
+    fingerprint = value_fingerprint(need.normalized_value)
+    return any(
+        r.key == need.key
+        and r.reason_code in _RESUME_BLOCKING_REASONS
+        and r.revision >= parked_at_revision
+        and r.prior_value_fingerprint in (None, fingerprint)
+        for r in revocations
+    )
+
+
+@dataclass(frozen=True)
+class _Contradiction:
+    """Ce contrazice turul curent din ce a scris turul anterior (I21)."""
+
+    dimensions: frozenset[str] = frozenset()
+    subject: bool = False
+
+    def __bool__(self) -> bool:
+        return bool(self.dimensions) or self.subject
+
+
+def _written_by_previous_turn(need: Need, before: ConversationStateV2) -> bool:
+    """`updated_revision` = revizia turului care a scris nevoia. Revizia 0 e a documentului
+    adaptat din v1, deci n-are un „tur anterior" care să-l fi scris."""
+    return before.revision > 0 and need.updated_revision == before.revision
+
+
+def _contradictions(
+    before: ConversationStateV2,
+    proposals: Sequence[StateUpdateProposal],
+    policy: ReducerPolicy,
+) -> _Contradiction:
+    """Contradicțiile cu turul anterior, judecate pe starea DINAINTEA turului (contractul,
+    „Corrections and conflicts"): `replace`/`remove` pe o nevoie scrisă de turul anterior; `set` pe
+    o dimensiune scalară a cărei valoare activă a scris-o turul anterior, cu altă valoare; o
+    schimbare de subiect când turul anterior a setat subiectul."""
+    dimensions: set[str] = set()
+    subject = False
+    for proposal in proposals:
+        if proposal.op == "set_topic":
+            category = _proposed_category(proposal)
+            subject = subject or (
+                before.revision > 0
+                and before.topic.changed_at_revision == before.revision
+                and before.topic.category_key is not None
+                and category != before.topic.category_key
+            )
+            continue
+        if proposal.op not in ("set_need", "supersede", "revoke"):
+            continue
+        normalized = normalize_need(proposal.key, proposal.value, policy.vocabulary)
+        if normalized is None:
+            continue
+        for need in before.needs:
+            if not (need.is_active and need.key == normalized.key):
+                continue
+            if not _written_by_previous_turn(need, before):
+                continue
+            if proposal.op == "set_need":
+                if normalized.operator == "contains" or need.normalized_value == normalized.value:
+                    continue
+            elif need.operator == "contains" and need.normalized_value != normalized.value:
+                # Un handle numește o valoare: pe o listă, doar acea valoare e contrazisă.
+                continue
+            dimensions.add(dimension_of_key(need.key))
+    return _Contradiction(frozenset(dimensions), subject)
+
+
+def _apply_correction(
+    state: ConversationStateV2,
+    before: ConversationStateV2,
+    contradiction: _Contradiction,
+    proposals: Sequence[StateUpdateProposal],
+) -> tuple[ConversationStateV2, Applied]:
+    """La contradicție, nevoile NEEXPLICITE (`user_implicit` / `model_inferred`) pe care turul
+    anterior le-a scris pe aceeași dimensiune se retrag, cu motivul `correction`; nevoia contrazisă
+    a fost deja înlocuită de propunerea turului. Fără contradicție nu se retrage nimic, iar
+    `correction_unconfirmed` se numără: «Nu, vreau și protecție solară» e un `add` (I21)."""
+    source = next((p.source for p in proposals), "user_explicit")
+    if not contradiction:
+        return state, Applied("correction", None, SOFT, source, "unconfirmed")
+    stale = [
+        need
+        for need in state.needs
+        if need.is_active
+        and need.source in ("user_implicit", "model_inferred")
+        and dimension_of_key(need.key) in contradiction.dimensions
+        and _written_by_previous_turn(need, before)
+    ]
+    needs = tuple(
+        replace(n, status="revoked", updated_revision=state.revision)
+        if any(n is s for s in stale)
+        else n
+        for n in state.needs
+    )
+    revocations = state.revocations
+    for need in stale:
+        revocations = _tombstone(
+            revocations,
+            Revocation(
+                key=need.key,
+                prior_value_fingerprint=value_fingerprint(need.normalized_value),
+                source_turn_id=None,
+                revision=state.revision,
+                reason_code="correction",
+            ),
+        )
+    return (
+        replace(state, needs=needs, revocations=revocations),
+        Applied("correction", None, SOFT, source, "applied"),
+    )
 
 
 __all__ = [
     "ALLOWED_OPS",
+    "EXECUTOR_OPS",
     "REJECT_REASONS",
     "Applied",
     "ProposalOp",
@@ -722,4 +1237,5 @@ __all__ = [
     "StateUpdateProposal",
     "reduce",
     "reduce_all",
+    "reduce_turn",
 ]

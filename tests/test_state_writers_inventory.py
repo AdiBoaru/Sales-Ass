@@ -216,6 +216,28 @@ class TestInventoryContract:
             assert entry.fate in sw.FATE_VALUES, f"fate necunoscut {entry.fate!r} la {entry.key}"
             assert entry.why.strip(), f"why gol pentru {entry.key}"
 
+    def test_no_writer_is_left_waiting_to_become_a_proposal(self):
+        """NX-331 (pasul 3b): toate scrierile `becomes_proposal` din matricea NX-327 au fost mutate
+        pe propuneri. Vederea v1 are un singur scriitor (`state_writes.apply_v1_view`), deci I3 e
+        verificabil mecanic și în afara modulelor de kernel. Un scriitor nou care scrie direct
+        starea trebuie să-și declare altă soartă, cu motiv."""
+        waiting = [e.key for e in sw.load_fate().values() if e.fate == "becomes_proposal"]
+        assert not waiting, f"scriitori încă nemutați pe propuneri: {waiting}"
+
+    def test_the_v1_view_has_a_single_writer_on_the_moved_sites(self):
+        """Siturile mutate de NX-331 nu mai scriu `ctx.state` direct: doar propuneri."""
+        moved = {
+            ("src/agent/action_kernel.py", "_handle_answer_clarification"),
+            ("src/agent/finalize.py", "_apply_turn_shape"),
+            ("src/worker/stages/clarify.py", "clarify_resume_stage"),
+        }
+        direct = [
+            (w.file, w.function, w.raw_key)
+            for w in sw.scan_src().writers
+            if (w.file, w.function) in moved and w.path == "v1"
+        ]
+        assert not direct, direct
+
     def test_doc_matches_generator(self):
         fields = sw.load_fields()
         result = sw.scan_src()
