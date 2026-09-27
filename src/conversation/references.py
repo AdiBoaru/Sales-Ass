@@ -27,9 +27,15 @@ from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Literal
 
-from src.catalog.query_terms import any_locale_stopwords, stopwords, tokens
+from src.catalog.query_terms import (
+    any_locale_stopwords,
+    inflection_suffixes,
+    stopwords,
+    tokens,
+)
 from src.catalog.vocabulary import (
     CatalogVocabulary,
+    Resolution,
     ResolutionStatus,
     facet_overlays,
     resolve,
@@ -52,6 +58,7 @@ REASONS: tuple[str, ...] = (
     "focus",
     "single_in_set",
     "named",
+    "named_with_qualifier",
     "attribute_match",
     "extreme",
     "the_other",
@@ -251,33 +258,68 @@ class _Hit:
     ids: tuple[str, ...]
 
 
-def match_name_in_set(name: str, items: Sequence[ShownItem], stop: Collection[str]) -> _Hit | None:
+def _same_word(asked: str, carried: str, suffixes: Collection[str]) -> bool:
+    """Același cuvânt, eventual flexionat: egal, sau unul e celălalt plus un sufix de flexiune al
+    locale-i («serul» = „ser" + „ul"). Tulpina are cel puțin `MIN_NAME_TOKEN` litere, altfel un
+    sufix scurt ar lega cuvinte fără legătură."""
+    if asked == carried:
+        return True
+    short, long_ = (asked, carried) if len(asked) < len(carried) else (carried, asked)
+    return (
+        len(short) >= MIN_NAME_TOKEN and long_[len(short) :] in suffixes and long_.startswith(short)
+    )
+
+
+def _carries(name_words: Collection[str], word: str, suffixes: Collection[str]) -> bool:
+    return word in name_words or (
+        bool(suffixes) and any(_same_word(word, w, suffixes) for w in name_words)
+    )
+
+
+def match_name_in_set(
+    name: str,
+    items: Sequence[ShownItem],
+    stop: Collection[str],
+    suffixes: Collection[str] = (),
+) -> _Hit | None:
     """Produsul (sau produsele) din `items` pe care `name` îl numește. None = setul ratează.
 
-    Trei trepte, moștenite de la NX-326/NX-318: (1) fraza cerută apare întreagă în numele UNUI
-    produs, sau numele unui produs apare întreg în fraza cerută; (2) produsele care conțin TOATE
-    cuvintele de conținut; (3) cuvintele purtate de UN singur produs din set. Fără scor pe tokeni:
-    un cuvânt comun („cremă") ar alege un produs pe care clientul nu l-a numit. Un cuvânt comun doar
-    unora, fără alt nume mai precis, e ambiguitate, nu alegere."""
+    Patru trepte, de la cea mai precisă, moștenite de la NX-326/NX-318: (1) numele ÎNTREG al unui
+    produs apare în fraza cerută; (2) fraza cerută apare întreagă în numele unui produs; (3)
+    produsele care conțin TOATE cuvintele de conținut; (4) cuvintele purtate de UN singur produs din
+    set. O treaptă cu ≥ 2 produse e ambiguitate pe EXACT acele produse: a coborî la treapta
+    următoare ar lărgi setul (sonda NX-329: «GESKE Sonic Facial Roller 4 in 1» cu trei carduri
+    identice și două «… Facial and Body Roller 4 in 1» ieșea ambiguu pe toate cinci). Fără scor pe
+    tokeni: un cuvânt comun („cremă") ar alege un produs pe care clientul nu l-a numit. Cuvintele se
+    compară modulo flexiune (`suffixes`, tabelul locale-i), frazele strict."""
     words = tuple(tokens(name))
     content = _content(words, stop)
     if not content or not items:
         return None
     named = [(it.product_id, tuple(tokens(it.name))) for it in items]
 
-    phrase = _unique(
-        pid for pid, nw in named if nw and (_contains_seq(nw, words) or _contains_seq(words, nw))
-    )
-    if len(phrase) == 1:
-        return _Hit("exact", phrase)
+    # (1) Numele întreg în cerere. Când două nume încap, câștigă cel mai LUNG: „Dokdo Cream" e
+    # conținut în «ROUND LAB 1025 Dokdo Cream» exact cât produsul cu numele lung, dar clientul l-a
+    # scris pe acela întreg. Nume identice (familii) au aceeași lungime ⇒ ambiguitate între ele.
+    whole = [(pid, len(nw)) for pid, nw in named if nw and _contains_seq(words, nw)]
+    longest = max((n for _, n in whole), default=0)
+    # (2) Cererea întreagă în numele produsului.
+    for phrase in (
+        _unique(pid for pid, n in whole if n == longest),
+        _unique(pid for pid, nw in named if nw and _contains_seq(nw, words)),
+    ):
+        if len(phrase) == 1:
+            return _Hit("exact", phrase)
+        if phrase:
+            return _Hit("ambiguous", phrase)
 
-    full = _unique(pid for pid, nw in named if set(content) <= set(nw))
+    full = _unique(pid for pid, nw in named if all(_carries(nw, w, suffixes) for w in content))
     if len(full) == 1:
         return _Hit("exact", full)
     if len(full) >= 2:
         return _Hit("ambiguous", full)
 
-    owners = {w: [pid for pid, nw in named if w in nw] for w in content}
+    owners = {w: [pid for pid, nw in named if _carries(nw, w, suffixes)] for w in content}
     if any(not o for o in owners.values()):
         # Un cuvânt pe care nu-l poartă niciun produs din set („Xiaomi" lângă un „Samsung Phone")
         # spune că numele nu e al setului. Fără regula asta, un cuvânt comun („phone") ar deveni
@@ -355,6 +397,7 @@ class _Resolver:
         self.facts = facts
         self.vocab = vocab if vocab is not None and not vocab.is_empty() else None
         self.stop = _stop(locale)
+        self.suffixes = inflection_suffixes(locale)
         self.reference_dims = _reference_dims(pack)
         self.overlays = facet_overlays(pack, self.vocab.facet_names) if self.vocab else None
         self.exact_before: list[str] = []
@@ -407,7 +450,7 @@ class _Resolver:
         if self.sources.page is not None:
             searched.append(("page", (self.sources.page,)))
         for src, items in searched:
-            hit = match_name_in_set(name, items, self.stop)
+            hit = match_name_in_set(name, items, self.stop, self.suffixes)
             if hit is not None:
                 reason = "named" if hit.outcome == "exact" else "name_shared"
                 return _Raw("name", hit.outcome, hit.ids, src, reason)
@@ -418,7 +461,90 @@ class _Resolver:
             if len(tied) == 1:
                 return _Raw("name", "exact", tied, "catalog", "named")
             return _Raw("name", "ambiguous", tied, "catalog", "catalog_tie")
+        for src, items in searched:
+            hit = self._described_match(name, items)
+            if hit is not None:
+                reason = "named_with_qualifier" if hit.outcome == "exact" else "name_shared"
+                return _Raw("name", hit.outcome, hit.ids, src, reason)
         return self._reclassify(name)
+
+    def _described_match(self, name: str, items: tuple[ShownItem, ...]) -> _Hit | None:
+        """Un nume cu cuvinte care DESCRIU produsul, nu îl numesc: «BELIF pentru ten uscat»,
+        «crema Dokdo» lângă un card „ROUND LAB 1025 Dokdo Cream". None = setul ratează.
+
+        Regula „un cuvânt pe care nu-l poartă niciun produs scoate setul din joc" (felia 2a) e
+        scrisă pentru un nume CONCURENT («Xiaomi» lângă «Samsung Phone»). Sonda NX-329 a arătat că
+        pe chip-urile noastre de comparație cuvântul străin e aproape mereu o DESCRIERE: o nevoie
+        („pentru ten uscat") sau tipul produsului în limba clientului („crema", pe un nume în
+        engleză). Vocabularul le deosebește. Fiecare secvență de cuvinte pe care nu le poartă
+        niciun nume din set se rezolvă ÎNTREAGĂ: o proprietate (dimensiune care nu numește produse)
+        se ignoră; o valoare de referință (tip, marcă) devine filtru pe faptele RECITITE ale
+        produsului; o secvență necunoscută e un nume concurent și scoate setul, ca înainte. Restul
+        numelui se potrivește pe produsele rămase. Rulează doar după ce numele întreg a ratat toate
+        sursele și catalogul, deci nu poate înlocui o potrivire mai precisă. Fără vocabular, nimic.
+        """
+        if self.vocab is None or not items:
+            return None
+        names = [tuple(tokens(it.name)) for it in items]
+        runs: list[list[str]] = []  # secvențele de cuvinte pe care nu le poartă niciun nume
+        kept: list[str] = []  # restul numelui
+        current: list[str] = []
+        gap: list[str] = []  # cuvinte goale în așteptare: leagă două cuvinte străine, altfel rămân
+        for word in tokens(name):
+            if not _content((word,), self.stop):
+                gap.append(word)
+            elif any(_carries(nw, word, self.suffixes) for nw in names):
+                if current:
+                    runs.append(current)
+                    current = []
+                kept += gap + [word]
+                gap = []
+            else:
+                if current:
+                    current += gap
+                else:
+                    kept += gap
+                current.append(word)
+                gap = []
+        if current:
+            runs.append(current)
+        kept += gap
+        if not runs or not _content(kept, self.stop):
+            return None
+        allowed = list(items)
+        for run in runs:
+            res = self._value_of(" ".join(run))
+            if res is None:
+                return None
+            if res.dimension in self.reference_dims:
+                wanted = {name_key(k) for k in res.constraint_keys}
+                allowed = [
+                    it
+                    for it in allowed
+                    if self._known(it)
+                    and any(
+                        name_key(v) in wanted
+                        for v in _values_of(self.facts.products[it.product_id], res.dimension)
+                    )
+                ]
+        return match_name_in_set(" ".join(kept), allowed, self.stop, self.suffixes)
+
+    def _value_of(self, phrase: str) -> Resolution | None:
+        """Valoarea din vocabular pe care `phrase` o numește ÎNTREAGĂ, sau None."""
+        if self.vocab is None:
+            return None
+        res = resolve_any(self.vocab, phrase, overlays=self.overlays)
+        if res.status is ResolutionStatus.UNKNOWN:
+            return None
+        if res.matched_by == "tokens":
+            # Vocabularul potrivește și pe SUBMULȚIME de cuvinte: „serul cu vitamina c" lovește
+            # valoarea „vitamina c". Dar fraza spune mai mult decât valoarea (are un cap nominal,
+            # „serul"), deci DESCRIE un produs, nu numește o proprietate. Respinsă ca proprietate
+            # (I24), ar fi blocat căutarea după nume pe care contractul o cere pentru `not_found`.
+            entry = {w for key in res.constraint_keys for w in tokens(key)}
+            if set(_content(tokens(phrase), self.stop)) - entry:
+                return None
+        return res
 
     def attribute(self, ref: Reference) -> _Raw:
         value = ref.value or ref.name or ""
@@ -501,7 +627,7 @@ class _Resolver:
             return _Raw("earlier", "not_found", (), "shown_earlier", "no_earlier")
         if ref.name:
             for src, items in sets:
-                hit = match_name_in_set(ref.name, items, self.stop)
+                hit = match_name_in_set(ref.name, items, self.stop, self.suffixes)
                 if hit is not None:
                     reason = "named" if hit.outcome == "exact" else "name_shared"
                     return _Raw("earlier", hit.outcome, hit.ids, src, reason)
@@ -591,19 +717,9 @@ class _Resolver:
         direct = self._members_by_words(value, (*sorted(self.reference_dims), VARIANT_DIMENSION))
         if direct is not None:
             return direct
-        if self.vocab is None:
+        res = self._value_of(value)
+        if res is None:
             return _Raw("name", "not_found", (), focus, "name_not_found")
-        res = resolve_any(self.vocab, value, overlays=self.overlays)
-        if res.status is ResolutionStatus.UNKNOWN:
-            return _Raw("name", "not_found", (), focus, "name_not_found")
-        if res.matched_by == "tokens":
-            # Vocabularul potrivește și pe SUBMULȚIME de cuvinte: „serul cu vitamina c" lovește
-            # valoarea „vitamina c". Dar fraza spune mai mult decât valoarea (are un cap nominal,
-            # „serul"), deci DESCRIE un produs, nu numește o proprietate. Respinsă ca proprietate
-            # (I24), ar fi blocat căutarea după nume pe care contractul o cere pentru `not_found`.
-            entry = {w for key in res.constraint_keys for w in tokens(key)}
-            if set(_content(tokens(value), self.stop)) - entry:
-                return _Raw("name", "not_found", (), focus, "name_not_found")
         if res.dimension not in self.reference_dims:
             return _Raw("attribute", "not_found", (), focus, "denotes_property")
         return self._members_by_keys(res.dimension, res.constraint_keys)
@@ -669,6 +785,7 @@ def plan_lookup(
     Toate id-urile din surse se revalidează (I1: și cele parcate sau vechi, nu doar ținta). Un nume
     se caută în catalog doar dacă nu-l numește niciun set: pe ecran, numele bate catalogul."""
     stop = _stop(locale)
+    suffixes = inflection_suffixes(locale)
     ids = sources.all_ids()[:MAX_LOOKUP_IDS]
     searched = [items for _, items in sources.sets_in_order()]
     if sources.page is not None:
@@ -683,7 +800,7 @@ def plan_lookup(
         key = name_key(name)
         if not key or not _content(tokens(name), stop) or key in names:
             continue
-        if any(match_name_in_set(name, items, stop) is not None for items in searched):
+        if any(match_name_in_set(name, items, stop, suffixes) is not None for items in searched):
             continue
         names[key] = name
     attrs = set(_reference_dims(pack))

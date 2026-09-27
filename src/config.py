@@ -1197,10 +1197,10 @@ class Settings(BaseSettings):
     # de referințe v2 (`conversation/references.py`), cu faptele recitite din catalog, în locul lui
     # `named_targets`. Închide cazul lăsat descoperit de NX-326: un nume care nu e pe ecran
     # («linkul la Cerave») nu mai servește toate linkurile, ci pleacă la model. Cere
-    # `NAMED_SHORTCUT_TARGETS_ENABLED`. OFF (implicit, până la PR-ul de aprindere) → porțile NX-326,
-    # byte-identic.
+    # `NAMED_SHORTCUT_TARGETS_ENABLED`. ON din PR-ul B, pe sonda `scripts/nx329_shortcut_probe.py`
+    # (134 de texte reale, zero ținte corecte pierdute). OFF → porțile NX-326, byte-identic.
     reference_resolver_v2_shortcuts_enabled: bool = Field(
-        default=False, validation_alias="REFERENCE_RESOLVER_V2_SHORTCUTS_ENABLED"
+        default=True, validation_alias="REFERENCE_RESOLVER_V2_SHORTCUTS_ENABLED"
     )
     # NX-326: un tur care n-a atins catalogul și nu e o clarificare („cât durează livrarea?",
     # „mersi") nu mai golește `active_search`, deci „mai arată-mi" de după el paginează căutarea de
