@@ -1389,3 +1389,24 @@ def test_a_numeric_bound_counts_as_a_facet_need_for_the_subject_rule():
     ):
         out = step("electronics", said, {"acts": [find()], "changes": [change]}).outcome
         assert verdict(out) == ("act", "clear"), said
+
+
+@pytest.mark.parametrize("name", PACKS)
+def test_a_passive_reading_verdict_does_not_hide_an_ambiguous_target(name):
+    """Găsit la NX-333: regulile lecturilor (4/5) se evaluau înaintea țintelor ambigue (6/7), iar
+    un verdict care NU întreabă (`same_reading`) închidea evaluarea. Un `detail` pe două produse
+    lângă o lectură rezolvată ieșea `resolve_from_context`, deci plannerul n-avea țintă
+    (`reply_only`), în loc de răspunsul despre ambele (`act_both`)."""
+    pair = SPEC[name]["pair"]
+    _field, first, second = SPEC[name]["same"]
+    out = step(
+        name,
+        f"spune-mi de {SPEC[name]['pair_name']}",
+        {
+            "acts": [{"kind": "detail", "targets": ["r1"]}],
+            "references": [ref("r1", "name", name=SPEC[name]["pair_name"])],
+            "ambiguities": [{"about": "value", "readings": [first, second]}],
+        },
+        on=pair,
+    ).outcome
+    assert verdict(out) == ("act_both", "ambiguous_read")

@@ -492,10 +492,24 @@ class _Gate:
                 lambda: self._ambiguous_reads(acts),
                 self._confirm,
             ]
+        # Un verdict al lecturilor care NU întreabă (`same_reading`, câștig mic, deja întrebat)
+        # spune doar că lecturile n-au nevoie de o întrebare; nu spune nimic despre ținte. Nu
+        # închide deci evaluarea: regulile de după (ținte ambigue, confirmarea) decid primele, iar
+        # el rămâne verdictul de rezervă. Altfel un `detail` pe două produse, lângă o lectură
+        # rezolvată, ieșea `resolve_from_context`, iar plannerul n-avea țintă (`reply_only`), în
+        # loc de `act_both`.
+        fallback: GateOutcome | None = None
         for rule in rules:
             outcome = rule()
-            if outcome is not None:
-                return outcome
+            if outcome is None:
+                continue
+            passive = outcome.asked_key is None and outcome.decision.verdict != "must_ask"
+            if rule == self._readings and passive:
+                fallback = outcome
+                continue
+            return outcome
+        if fallback is not None:
+            return fallback
         return self._decide("act", self.notes[0] if self.notes else "clear")
 
     def _mutation(self, acts: list[tuple[int, Act]], checks) -> GateOutcome | None:

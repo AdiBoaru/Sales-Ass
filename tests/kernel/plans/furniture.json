@@ -1,0 +1,181 @@
+{
+  "c05-furniture-extreme-over-shown": [
+    {
+      "disclosures": [
+        [
+          0,
+          "no_target"
+        ]
+      ],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "reply_only"
+        }
+      ],
+      "primary": 0,
+      "user_input": "Arată-mi varianta mai mare dintre cele două."
+    }
+  ],
+  "c10-correction-by-handle": [
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "ask"
+        }
+      ],
+      "primary": 0,
+      "user_input": "Nu, am zis bej, nu gri."
+    }
+  ],
+  "g07-furniture-readings-split-the-screen": [
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "search",
+          "search_args": {
+            "category": "canapele",
+            "query": "canapele"
+          }
+        }
+      ],
+      "primary": 0,
+      "user_input": "Arată-mi canapele."
+    },
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "ask"
+        }
+      ],
+      "primary": 0,
+      "user_input": "Vreau una într-o culoare mai deschisă."
+    }
+  ],
+  "g09-furniture-too-many-candidates": [
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "search",
+          "search_args": {
+            "category": "canapele",
+            "query": "canapele"
+          }
+        }
+      ],
+      "primary": 0,
+      "user_input": "Arată-mi canapele."
+    },
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "ask",
+          "product_ids": [
+            "fu-01",
+            "fu-02",
+            "fu-03",
+            "fu-04",
+            "fu-05"
+          ]
+        }
+      ],
+      "primary": 0,
+      "user_input": "Spune-mi mai multe despre canapeaua Oslo."
+    }
+  ],
+  "n09-furniture-bundle-declared-by-the-pack": [
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "search",
+          "search_args": {
+            "category": "canapele",
+            "query": "canapele"
+          }
+        }
+      ],
+      "primary": 0,
+      "user_input": "Arată-mi canapele."
+    },
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "bundle"
+        }
+      ],
+      "primary": 0,
+      "user_input": "Fă-mi un set complet."
+    }
+  ],
+  "p08-furniture-quote-names-another-value": [
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "ask"
+        }
+      ],
+      "primary": 0,
+      "user_input": "Vreau ceva din lemn."
+    }
+  ],
+  "p09-furniture-seats-with-their-unit": [
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [
+        "no_query"
+      ],
+      "plans": [
+        {
+          "executor": "reply_only"
+        }
+      ],
+      "primary": 0,
+      "user_input": "O canapea pentru 3 persoane."
+    }
+  ],
+  "r08-furniture-extreme-width": [
+    {
+      "disclosures": [
+        [
+          0,
+          "no_target"
+        ]
+      ],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "reply_only"
+        }
+      ],
+      "primary": 0,
+      "user_input": "Care e cea mai lată dintre ele?"
+    }
+  ]
+}

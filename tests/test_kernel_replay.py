@@ -188,6 +188,8 @@ def test_replay_passes_when_every_labeled_layer_matches():
             update["ambiguity"] = expect["ambiguity"]
         if "answer_policy" in expect:
             update["answer_policy"] = expect["answer_policy"]
+        if "plan" in expect:
+            update["plan"] = expect["plan"]
         return trace.model_copy(update=update)
 
     outcomes = replay.replay(journeys, perfect)
@@ -415,3 +417,98 @@ def test_replay_blames_the_first_wrong_layer():
     assert not outcome.passed
     assert outcome.divergence.layer == "resolver"
     assert outcome.divergence.passed == ("interpretation",)
+
+
+# --- NX-333: stratul `plan` ----------------------------------------------------------------------
+
+
+def _planned(journey: replay.Journey) -> bool:
+    return any("plan" in t.expect for t in journey.turns)
+
+
+def test_the_plan_layer_replays_green_on_every_labeled_journey():
+    """NX-333: stratul `plan` RULEAZĂ (pasul 4b) pe `plan_trace`: turele trec în lanț prin
+    validator, resolver, `to_delta`, reducer, poartă și planner. Fiecare strat etichetat pe drum
+    (`ambiguity`, `answer_policy`, `plan`) se compară."""
+    from tests.kernel import fixture_catalog
+
+    journeys = [j for j in replay.load_journeys() if _planned(j)]
+    assert any(j.journey_id.startswith("c02-") for j in journeys), "§C.2 poartă eticheta `plan`"
+    outcomes = replay.replay(journeys, fixture_catalog.plan_trace)
+    failed = [f"{o.journey_id}#{o.turn}: {o.divergence.report()}" for o in outcomes if not o.passed]
+    assert not failed, "\n".join(failed)
+
+
+def test_the_planner_journey_covers_every_row_of_the_table():
+    """Câte un tur pe fiecare rând din tabelul act → executor (cardul §1), inclusiv rândurile noi
+    din kernel.v1.1 (show_more fără sesiune; detail/compare pe un nume negăsit)."""
+    doc = replay.JOURNEYS_DIR / "planner.json"
+    journeys = [j for j in replay.load_journeys() if j.source.startswith("NX-333")]
+    assert doc.exists() and journeys
+    executors = {t.expect["plan"].executor for j in journeys for t in j.turns if "plan" in t.expect}
+    assert executors == {
+        "search",
+        "page",
+        "compare",
+        "detail",
+        "link",
+        "cart",
+        "bundle",
+        "faq",
+        "order",
+        "ask",
+        "delegate",
+        "reply_only",
+    }
+    by_act = {
+        (t.expect["interpretation"].acts[-1].kind, t.expect["plan"].executor)
+        for j in journeys
+        for t in j.turns
+        if "plan" in t.expect
+    }
+    assert {
+        ("find", "search"),
+        ("find", "ask"),
+        ("show_more", "page"),
+        ("show_more", "search"),
+        ("show_more", "reply_only"),
+        ("compare", "compare"),
+        ("compare", "search"),
+        ("detail", "detail"),
+        ("detail", "search"),
+        ("link", "link"),
+        ("link", "search"),
+        ("cart", "cart"),
+        ("bundle", "bundle"),
+        ("bundle", "search"),
+        ("store_info", "faq"),
+        ("order_status", "order"),
+        ("chitchat", "reply_only"),
+        ("other", "delegate"),
+    } <= by_act
+
+
+def test_a_wrong_plan_label_is_blamed_on_the_plan_layer():
+    from tests.kernel import fixture_catalog
+
+    journey = next(j for j in replay.load_journeys() if j.journey_id.startswith("c02-"))
+    turn = journey.turns[0]
+    wrong = turn.expect["plan"].model_copy(
+        update={
+            "search_args": turn.expect["plan"].search_args.model_copy(update={"price_max": 3500})
+        }
+    )
+    labeled = replay.JourneyTurn(user_input=turn.user_input, expect={**turn.expect, "plan": wrong})
+    bad = replay.Journey(**{**journey.__dict__, "turns": (labeled,)})
+    [outcome] = replay.replay([bad], fixture_catalog.plan_trace)
+    assert outcome.divergence.layer == "plan"
+    assert outcome.divergence.passed == ("interpretation",)
+
+
+def test_a_plan_label_is_compact_and_validated_through_search_args():
+    parsed = replay._parse_expect(
+        {"plan": {"executor": "search", "search_args": {"query": "telefon", "rank_terms": ["x"]}}}
+    )
+    plan = parsed["plan"]
+    assert plan.product_ids == [] and plan.depends_on is None
+    assert plan.search_args.rank_terms == ["x"] and plan.search_args.sort_mode == "relevance"

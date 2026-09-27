@@ -1,6 +1,6 @@
 {
   "schema_version": "kernel-journey.v1",
-  "_note": "NX-328 felia 1c: cele 12 exemple din docs/KERNEL-DESIGN.md §C, traduse în termenii contractului kernel.v1.0 (fără `thread=switch`, fără `goal`, fără `Reference.within`; `free` devine `unmapped`; o schimbare de subiect e `set category`, nu `replace` pe subiect). Etichetate doar pe `interpretation`: restul straturilor se etichetează în pașii care le construiesc. NX-332: §C.12 poartă și stratul `ambiguity` (coșul pe «primul», primul act, = `act`), iar primul ei tur arată trei telefoane (`shown`), ca lanțul `gate_trace` să aibă ecranul la care se referă «primul». Etichetele sunt compacte (nulele și listele goale lipsesc), vezi tests/kernel/replay.py.",
+  "_note": "NX-328 felia 1c: cele 12 exemple din docs/KERNEL-DESIGN.md §C, traduse în termenii contractului kernel.v1.0 (fără `thread=switch`, fără `goal`, fără `Reference.within`; `free` devine `unmapped`; o schimbare de subiect e `set category`, nu `replace` pe subiect). Etichetate doar pe `interpretation`: restul straturilor se etichetează în pașii care le construiesc. NX-332: §C.12 poartă și stratul `ambiguity` (coșul pe «primul», primul act, = `act`), iar primul ei tur arată trei telefoane (`shown`), ca lanțul `gate_trace` să aibă ecranul la care se referă «primul». NX-333: §C.2 și §C.12 poartă și stratul `plan` (planul actului principal; la §C.12 căutarea husei depinde de coș, `depends_on: 0`, fiindcă schimbarea e relativă la ținta lui). Etichetele sunt compacte (nulele și listele goale lipsesc), vezi tests/kernel/replay.py.",
   "journeys": [
     {
       "journey_id": "c01-skincare-add-avoid",
@@ -38,7 +38,8 @@
                 {"op": "add", "dimension": "storage", "relation": "gte", "number": 256, "unit": "gb", "quote": "minim 256 GB"},
                 {"op": "set", "dimension": "price", "relation": "lte", "number": 3000, "unit": "lei", "quote": "sub 3000 lei"}
               ]
-            }
+            },
+            "plan": {"executor": "search", "search_args": {"query": "telefon", "category": "telefoane", "price_max": 3000}}
           }
         }
       ]
@@ -284,7 +285,8 @@
                 {"id": "r1", "text": "primul", "kind": "ordinal", "ordinal": 1}
               ]
             },
-            "ambiguity": {"verdict": "act", "reason": "clear"}
+            "ambiguity": {"verdict": "act", "reason": "clear"},
+            "plan": {"executor": "search", "search_args": {"query": "husă", "category": "huse"}, "depends_on": 0}
           }
         }
       ]

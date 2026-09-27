@@ -63,7 +63,7 @@ gate-ul NX-210**. Direcția aprobată către care migrăm:
 
 **Înghețate până la GO-ul de la NX-210:** enforcement-ul QuerySpec/Match Gate (NX-188, NX-189).
 
-**Kernelul conversațional — contractul `kernel.v1.0` (înghețat 2026-09-25, NORMATIV).**
+**Kernelul conversațional — contractul `kernel.v1.0` (înghețat 2026-09-25, NORMATIV; azi `kernel.v1.1`, minor, NX-333).**
 Sursa: [`docs/KERNEL-CONTRACT-v1.md`](docs/KERNEL-CONTRACT-v1.md); designul din care vine, ca
 referință: [`docs/KERNEL-DESIGN.md`](docs/KERNEL-DESIGN.md). Modelul scrie O interpretare a turului
 (`TurnInterpretation`: acte, schimbări de stare adresate prin handle, referințe, ambiguități); codul
@@ -211,6 +211,49 @@ rezolvă valori, nu dimensiuni); necunoscută pe vreun candidat ⇒ `verdict_all
 `ambiguity_gate.json` (patru pachete) și pe §C.12. Probă: `pytest tests/test_kernel_ambiguity_gate.py
 tests/test_kernel_answer_policy.py tests/test_clarify_templates.py tests/test_kernel_contract.py
 tests/test_kernel_replay.py -q`.
+**Pasul 4b (NX-333) — plannerul scrie `SearchArgs` din stare; `rank_terms` ordonează, nu filtrează.**
+`src/agent/turn_planner.py` (rol `planner`, pur, fără apelant în producție până la pasul 6):
+`plan_turn(interp, state DUPĂ reducer, TurnDelta.ranking, resolved, GateOutcome, changed=…)` →
+`PlannedTurn{plans ≤ 2, primary, dropped_acts, gaps, disclosures}`. Ordinea: verdictul porții
+(`must_ask` ⇒ UN plan `ask`, cu candidații doar când întrebarea e chiar pe o țintă; fără întrebare
+`reply_only` + `no_question`), actele scoase de regula 0 (dezvăluite `invalid_target`), apoi tabelul
+act → executor rând cu rând (fiecare rând e un tur în `planner.json`). Multi-act: actul principal +
+prima mutație (altfel primul act), mutația înaintea citirii, `depends_on` pe aceeași țintă sau pe un
+`relative_to` al țintei anterioare (§C.12: husa depinde de coș), al treilea ⇒ `dropped_act`.
+`_search_args` e SINGURUL `SearchArgs(` din kernel (I2): raftul din `topic`, `price_max` DOAR dintr-un
+`budget_max` dur, finit și pozitiv, de la o sursă hard-capable (I7), fațetele dure în
+`concerns`/`features`, marca dură în `brand`; cele soft, tipul subiectului (NX-314) și semnalele
+`inferred` în `prefer`, DOAR pe fațete de ATRIBUT (fuziunea citește `attributes`; marca e coloană pe
+catalogul real ⇒ gol `soft_brand`) și cu cheia din catalog («samsung» → „Samsung", fuziunea compară
+literal); `unmapped` în `rank_terms` (≤ 3), dar un `avoid` NICIODATĂ (ar urca exact ce e ocolit: delta
+îl scrie pe `restriction`, plannerul îl duce în `exclusion`); `extreme` pe preț/rating în `sort_mode`,
+un nume negăsit în `product_name`; `query` = `Act.query` (cititor declarat `_read_act_query`), altfel
+eticheta subiectului. Ce nu încape intră în `gaps`, vocabular închis: `soft_budget`, `price_min`,
+`exclusion`, `numeric_facet` (NX-334), `variant`, `unsupported_need`, `soft_brand`, `subject_type`.
+„Schimbări în tur" = propunerile, plus `thread=resume` și un semnal `inferred` (altfel «înapoi la
+telefoane, mai arată-mi» pagina sesiunea huselor parcate); `changed` e obligatoriu.
+`bundle` e al pachetului (`DomainPack.bundle_executors`, validat de loader contra `TOOL_NAMES` și fără
+mutații; SOLE `{"*": "routine_plan"}`, aplicarea pe DB o rulează Adi); `other` ⇒ `delegate`, cu
+`DELEGATE_TOOLS` = `TOOL_NAMES` − `CATALOG_READ_TOOLS` − mutațiile din `tool_budget` (niciun
+`product_id` ales de model pe o mutație, I1 + I10). **Contractul trece pe `kernel.v1.1` (minor):** `SearchArgs.prefer`
+(a doua schimbare aditivă în unealtă, unită cu `need_prefer` NX-322, pasată fuziunii, fără SQL nou) și
+două rânduri noi (`show_more` fără sesiune ⇒ căutare din stare; `detail`/`compare` pe un nume negăsit
+sau o țintă `stale` ⇒ căutare pe nume + `not_exact_match`); schema scrisă de model e neschimbată. În
+unealtă: `search_products_tool` scoate `rank_terms`/`prefer` venite de la model
+(`planner_field_from_model{field}`), `run_planned_search` → `_search(planned=True)` oprește
+moștenirea din `active_search` și `_typed_constraints` pe mesajul brut, iar garda NX-319 nu mai
+re-judecă `price_max` al planului pe textul recent (e al stării, `price_bound_provenance{source:
+state}`: «sub prețul primului» sau un buget de acum zece mesaje ar fi fost aruncate), iar
+`rank_terms`/`prefer` intră în amprenta sesiunii doar negoale. SQL: `rank_terms` e cheie SECUNDARĂ în
+`ORDER BY` (după rangul de text, doar pe `relevance`, doar pe v2), niciodată în predicat; gol ⇒ SQL
+byte-identic cu `main` (snapshot-uri în `tests/kernel/sql/`). Ponderea e MĂSURATĂ: pe ponderile de azi o
+preferință de fațetă întoarce saltul de o poziție dat de termen oriunde în pool-ul de 50, dar nu un salt
+de peste 7 poziții din vârf (o singură dimensiune preferată; grupurile mari de egalitate ale treptei
+`filters_only`), limită declarată în contract. Stratul `plan` rulează în replay (`plan_trace`, cu
+sesiunea DERIVATĂ din plan ca în producție, nu setată de mână); snapshot-urile planurilor pe 5
+pachete: `scripts/kernel_plan_snapshot.py` (`--write`). Probă: `pytest tests/test_kernel_planner.py
+tests/test_rank_terms_sql.py tests/test_planner_only_fields.py tests/test_kernel_contract.py
+tests/test_kernel_replay.py -q` + `python scripts/kernel_plan_snapshot.py`.
 
 **NX-238 — retrievalul trece printr-un PORT, iar candidatul e inert (verdict `NOT-READY`).**
 `src/retrieval/` e contractul stabil pe care îl consumă NX-239: `RetrievalPort` + `RetrievalBundle`

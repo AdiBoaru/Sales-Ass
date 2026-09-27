@@ -18,12 +18,13 @@ from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
 
+from src.agent.turn_planner import PlannedTurn, plan_turn
 from src.catalog.folding import fold_text
 from src.catalog.vocabulary import CATEGORY_DIMENSION, CatalogVocabulary, VocabEntry
 from src.conversation.ambiguity_gate import GateOutcome, decide_ambiguity, lookup_attributes
 from src.conversation.answer_policy import answer_policy
 from src.conversation.clarification_policy import ClarificationPolicy
-from src.conversation.delta import to_delta
+from src.conversation.delta import TurnDelta, to_delta
 from src.conversation.interpretation import (
     KERNEL_CONTRACT_VERSION,
     AmbiguityDecision,
@@ -400,6 +401,9 @@ class KernelStep:
     answer_policy: AnswerPolicy | None
     state_after: ConversationStateV2
     memory: StateUpdateProposal | None
+    # NX-333: ce primește plannerul în plus (`ranking`, „schimbări în tur"), și planul lui.
+    delta: TurnDelta | None = None
+    planned: PlannedTurn | None = None
 
 
 GATE_POLICY = ClarificationPolicy()
@@ -507,7 +511,18 @@ def kernel_step(
             ambiguity=outcome.decision,
             locale=locale,
         )
-    executor = (_shown_proposal(name, shown_ids),) if shown_ids else ()
+    planned = plan_turn(
+        interpretation,
+        gate_state,
+        delta.ranking,
+        resolved,
+        outcome,
+        changed=bool(delta.proposals),
+        pack=loaded,
+        vocab=voc,
+        locale=locale,
+    )
+    executor = _executor_proposals(name, shown_ids, planned)
     after = reduce_turn(state, delta, executor, resolved, primary, corrects, reducer_policy).state
     memory = memory_proposal(outcome, turn_id)
     if memory is not None:
@@ -524,16 +539,74 @@ def kernel_step(
         answer_policy=policy_result,
         state_after=after,
         memory=memory,
+        delta=delta,
+        planned=planned,
     )
+
+
+#: Executorii care CITESC catalogul (`tools.base.CATALOG_READ_TOOLS`, pe executorii planului).
+_CATALOG_EXECUTORS = frozenset({"search", "page", "compare", "detail", "link", "bundle"})
+
+
+def _executor_proposals(
+    name: str, shown_ids: tuple[str, ...], planned: PlannedTurn
+) -> tuple[StateUpdateProposal, ...]:
+    """Ce scrie EXECUTORUL turului în stare, DERIVAT din plan, ca în producție (recenzia NX-333:
+    sesiunea era setată de mână, pe stări pe care producția nu le produce):
+
+    - referințele arătate, când turul a arătat produse;
+    - o căutare CU produse deschide sesiunea (`_search` scrie `active_search`);
+    - o paginare o continuă (`continue_search_session` o rescrie; aici rămâne cea din stare);
+    - un tur fără produse care a citit catalogul, sau o întrebare, o închide
+      (`processor._turn_proposals` + `_keeps_search_session`, NX-326);
+    - o paranteză fără catalog (faq, comandă, conversație) o păstrează."""
+    executors = {p.executor for p in planned.plans}
+    out = [_shown_proposal(name, shown_ids)] if shown_ids else []
+    if "search" in executors and shown_ids:
+        out.append(
+            StateUpdateProposal(
+                "set_active_search",
+                source="catalog",
+                payload={"fp": f"fixture:{name}", "pool": list(shown_ids), "cursor": 0, "page": 0},
+            )
+        )
+    elif (
+        "page" not in executors
+        and not shown_ids
+        and (executors & _CATALOG_EXECUTORS or "ask" in executors)
+    ):
+        out.append(StateUpdateProposal("set_active_search", source="catalog", payload=None))
+    return tuple(out)
 
 
 def gate_trace(journey: replay.Journey, index: int) -> KernelTrace:
     """Pipeline-ul pentru straturile `ambiguity` și `answer_policy` (NX-332), cu `checked`,
     `resolver` și `reducer` pe drum: turele rulează ÎN LANȚ, ca la `reducer_trace`, iar memoria
     întrebării (`set_pending_question` / `note_asked`) trece prin reducer între ture, deci replay-ul
-    vede și anti-bucla (I11) pe mai multe ture, nu doar în tur."""
+    vede și anti-bucla (I11) pe mai multe ture, nu doar în tur.
+
+    NX-333: plannerul rulează în `kernel_step`, deci și stratul `plan` e cel real (un journey
+    etichetat pe `ambiguity` și pe `plan`, ca §C.12, se compară pe amândouă)."""
+    return _plan_chain(journey, index)[1]
+
+
+def plan_trace(journey: replay.Journey, index: int) -> KernelTrace:
+    """Pipeline-ul pentru stratul `plan` (NX-333), cu toate straturile de dinainte pe drum:
+    `gate_trace` + plannerul, în lanț. `plan` = planul actului PRINCIPAL (`PlannedTurn.primary`);
+    un tur cu două acte își verifică ambele planuri în `tests/test_kernel_planner.py`, fiindcă
+    traceul contractului are un singur `TurnPlan`."""
+    return _plan_chain(journey, index)[1]
+
+
+def planned_turn(journey: replay.Journey, index: int) -> PlannedTurn:
+    """Planul COMPLET al turului `index` (toate planurile, golurile, dezvăluirile), în lanț."""
+    return _plan_chain(journey, index)[0]
+
+
+def _plan_chain(journey: replay.Journey, index: int) -> tuple[PlannedTurn, KernelTrace]:
     state = ConversationStateV2()
-    trace: KernelTrace | None = None
+    step: KernelStep | None = None
+    before = state
     for i, turn in enumerate(journey.turns[: index + 1]):
         before = state
         step = kernel_step(
@@ -547,23 +620,24 @@ def gate_trace(journey: replay.Journey, index: int) -> KernelTrace:
             locale=journey.locale,
         )
         state = step.state_after
-        trace = KernelTrace(
-            contract_version=KERNEL_CONTRACT_VERSION,
-            vocabulary_snapshot=f"fixture:{journey.pack}",
-            interpretation=step.interpretation,
-            checked_changes=list(step.checked),
-            resolved_refs=list(step.resolved),
-            state_before=state_view(before),
-            proposals=[],
-            rejected=[],
-            state_after=state_view(state),
-            ambiguity=step.outcome.decision,
-            plan=TurnPlan(executor="reply_only", product_ids=[], search_args=None, depends_on=None),
-            executor="none",
-            answer_policy=step.answer_policy,
-        )
-    assert trace is not None
-    return trace
+    assert step is not None and step.planned is not None
+    planned = step.planned
+    trace = KernelTrace(
+        contract_version=KERNEL_CONTRACT_VERSION,
+        vocabulary_snapshot=f"fixture:{journey.pack}",
+        interpretation=step.interpretation,
+        checked_changes=list(step.checked),
+        resolved_refs=list(step.resolved),
+        state_before=state_view(before),
+        proposals=[],
+        rejected=[],
+        state_after=state_view(state),
+        ambiguity=step.outcome.decision,
+        plan=planned.plans[planned.primary],
+        executor="none",
+        answer_policy=step.answer_policy,
+    )
+    return planned, trace
 
 
 __all__ = [
@@ -577,6 +651,8 @@ __all__ = [
     "name_key",
     "named_in_catalog",
     "pack",
+    "plan_trace",
+    "planned_turn",
     "products",
     "reducer_trace",
     "resolver_trace",

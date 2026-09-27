@@ -32,6 +32,7 @@ from src.conversation.interpretation import (
     ResolvedRef,
     StateChange,
     TurnInterpretation,
+    TurnPlan,
 )
 from src.conversation.kernel_trace import LAYER_NAMES, Divergence, KernelTrace, first_divergence
 
@@ -133,6 +134,13 @@ def _parse_expect(raw: dict[str, Any]) -> dict[str, Any]:
     if "ambiguity" in out:
         # NX-332: verdictul porții; `question` absentă = nulă (un verdict fără întrebare).
         out["ambiguity"] = AmbiguityDecision.model_validate({"question": None, **out["ambiguity"]})
+    if "plan" in out:
+        # NX-333: planul actului principal. Eticheta e compactă: `product_ids` gol, `search_args` și
+        # `depends_on` nule pot lipsi; `search_args` trece prin `SearchArgs`, deci câmpurile
+        # nescrise iau valorile implicite ale uneltei (ca planul real).
+        out["plan"] = TurnPlan.model_validate(
+            {"product_ids": [], "search_args": None, "depends_on": None, **out["plan"]}
+        )
     if out.get("answer_policy") is not None:
         # NX-332: politica de răspuns; `null` = actul nu cere o judecată, `missing` gol poate lipsi.
         out["answer_policy"] = AnswerPolicy.model_validate({"missing": [], **out["answer_policy"]})

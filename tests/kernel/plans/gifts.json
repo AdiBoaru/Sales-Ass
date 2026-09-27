@@ -1,0 +1,223 @@
+{
+  "c04-gifts-no-subject": [
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [
+        "no_query"
+      ],
+      "plans": [
+        {
+          "executor": "reply_only"
+        }
+      ],
+      "primary": 0,
+      "user_input": "Este pentru sora mea și nu vreau să dau mai mult de 200 lei."
+    }
+  ],
+  "g05-gifts-find-without-a-subject": [
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "ask"
+        }
+      ],
+      "primary": 0,
+      "user_input": "Vreau un cadou."
+    }
+  ],
+  "g10-gifts-confirm-an-implicit-recipient": [
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "search",
+          "search_args": {
+            "category": "casa",
+            "query": "casa"
+          }
+        }
+      ],
+      "primary": 0,
+      "user_input": "Arată-mi ce ai la casa."
+    },
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "search",
+          "search_args": {
+            "category": "casa",
+            "prefer": {
+              "recipient": [
+                "ea"
+              ]
+            },
+            "query": "cineva drag"
+          }
+        }
+      ],
+      "primary": 0,
+      "user_input": "E pentru cineva drag."
+    },
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "search",
+          "search_args": {
+            "category": "casa",
+            "prefer": {
+              "recipient": [
+                "ea"
+              ]
+            },
+            "query": "cineva drag"
+          }
+        }
+      ],
+      "primary": 0,
+      "user_input": "E pentru cineva drag."
+    },
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "search",
+          "search_args": {
+            "category": "casa",
+            "prefer": {
+              "recipient": [
+                "ea"
+              ]
+            },
+            "query": "cineva drag"
+          }
+        }
+      ],
+      "primary": 0,
+      "user_input": "E pentru cineva drag."
+    }
+  ],
+  "g11-gifts-link-to-a-property": [
+    {
+      "disclosures": [
+        [
+          -1,
+          "invalid_target"
+        ]
+      ],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "reply_only"
+        }
+      ],
+      "primary": 0,
+      "user_input": "Trimite-mi linkul la zi de nastere."
+    }
+  ],
+  "n05-gifts-confirm-implicit-still-searches": [
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "search",
+          "search_args": {
+            "category": "casa",
+            "query": "casa"
+          }
+        }
+      ],
+      "primary": 0,
+      "user_input": "Arată-mi ce ai la casa."
+    },
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "search",
+          "search_args": {
+            "category": "casa",
+            "prefer": {
+              "recipient": [
+                "ea"
+              ]
+            },
+            "query": "cineva drag"
+          }
+        }
+      ],
+      "primary": 0,
+      "user_input": "E pentru cineva drag."
+    }
+  ],
+  "p10-gifts-bare-price-number": [
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "ask"
+        }
+      ],
+      "primary": 0,
+      "user_input": "Am 200 de cheltuit."
+    }
+  ],
+  "r02-gifts-ordinal-out-of-range": [
+    {
+      "disclosures": [
+        [
+          0,
+          "no_target"
+        ]
+      ],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "reply_only"
+        }
+      ],
+      "primary": 0,
+      "user_input": "Îl vreau pe al patrulea."
+    }
+  ],
+  "r11-gifts-earlier-by-name": [
+    {
+      "disclosures": [
+        [
+          0,
+          "no_target"
+        ]
+      ],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "reply_only"
+        }
+      ],
+      "primary": 0,
+      "user_input": "Mai arată-mi setul de ceai de mai devreme."
+    }
+  ]
+}

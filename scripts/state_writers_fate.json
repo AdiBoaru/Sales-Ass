@@ -437,9 +437,9 @@
     },
     {
       "file": "src/tools/catalog_tools.py",
-      "function": "search_products_tool",
+      "function": "_search",
       "field": "active_search",
-      "why": "Tool-ul de cautare scrie/sterge `ctx.state_patch[\"active_search\"]` (sesiunea de paginare) ca parte din executia cautarii -- iesire de executor, permisa explicit de I20.",
+      "why": "Tool-ul de cautare scrie/sterge `ctx.state_patch[\"active_search\"]` (sesiunea de paginare) ca parte din executia cautarii -- iesire de executor, permisa explicit de I20. NX-333: corpul comun al uneltei (`search_products_tool`, intrarea modelului) si al plannerului (`run_planned_search`), deci acelasi scriitor pe ambele cai.",
       "fate": "executor_output"
     },
     {

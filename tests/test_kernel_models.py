@@ -184,7 +184,10 @@ def test_a_schema_change_without_a_version_bump_is_a_violation():
     base["schema"]["$defs"]["Act"]["properties"].pop("query")
     assert snap.bump_violation(base, head) is not None
 
-    bumped = {**head, "contract_version": "kernel.v1.1"}
+    # Versiunea următoare, derivată (nu scrisă de mână: la bump-ul v1.0 → v1.1 din NX-333, un
+    # „kernel.v1.1" literal ajunsese egal cu versiunea curentă, iar testul mințea).
+    major, minor = head["contract_version"].removeprefix("kernel.v").split(".")
+    bumped = {**head, "contract_version": f"kernel.v{major}.{int(minor) + 1}"}
     assert snap.bump_violation(base, bumped) is None
     assert snap.bump_violation(head, head) is None
 

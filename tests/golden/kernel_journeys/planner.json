@@ -1,0 +1,543 @@
+{
+  "schema_version": "kernel-journey.v1",
+  "_note": "NX-333 (kernel pasul 4b): câte un tur pe fiecare rând din tabelul act → executor al plannerului (cardul §1 + rândurile noi acceptate în kernel.v1.1). Turele rulează ÎN LANȚ prin `fixture_catalog.plan_trace` (validator, resolver, delta, reducer, poartă, planner), deci subiectul, nevoile și ecranul unui tur vin din turele de dinainte, nu din etichete. `plan` = planul actului PRINCIPAL; turele cu două acte își verifică ambele planuri în tests/test_kernel_planner.py. Sesiunea de căutare (`active_search`) e derivată din plan, ca în producție: o căutare cu produse arătate o deschide, o citire de catalog fără produse o închide. Etichetele sunt compacte, vezi tests/kernel/replay.py.",
+  "journeys": [
+    {
+      "journey_id": "n01-electronics-find-then-page-then-refine",
+      "pack": "electronics",
+      "family": ["planner", "find", "show_more"],
+      "source": "NX-333 §1: find cu cuvinte, find fără cuvinte cu subiect, show_more pe sesiune, show_more cu schimbări",
+      "turns": [
+        {
+          "user_input": "Vreau un telefon.",
+          "shown": ["el-01", "el-02", "el-03"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "telefon"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "telefoane", "quote": "telefon"}
+              ]
+            },
+            "plan": {"executor": "search", "search_args": {"query": "telefon", "category": "telefoane"}}
+          }
+        },
+        {
+          "user_input": "Ce recomanzi?",
+          "shown": ["el-04", "el-05", "el-06"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find"}]
+            },
+            "plan": {"executor": "search", "search_args": {"query": "Telefoane", "category": "telefoane"}}
+          }
+        },
+        {
+          "user_input": "Mai arată-mi.",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "show_more"}]
+            },
+            "plan": {"executor": "page"}
+          }
+        },
+        {
+          "user_input": "Mai arată-mi, dar sub 2000 de lei.",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "show_more"}],
+              "changes": [
+                {"op": "set", "dimension": "price", "relation": "lte", "number": 2000, "unit": "lei", "quote": "sub 2000 de lei"}
+              ]
+            },
+            "plan": {"executor": "search", "search_args": {"query": "Telefoane", "category": "telefoane", "price_max": 2000}}
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "n02-electronics-show-more-without-a-session",
+      "pack": "electronics",
+      "family": ["planner", "show_more"],
+      "source": "NX-333 §1, rând nou (kernel.v1.1): show_more fără active_search (căutarea de dinainte n-a găsit nimic, deci n-a deschis sesiune) și fără schimbări ⇒ căutare din stare",
+      "turns": [
+        {
+          "user_input": "Vreau un telefon.",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "telefon"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "telefoane", "quote": "telefon"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "Mai arată-mi.",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "show_more"}]
+            },
+            "plan": {"executor": "search", "search_args": {"query": "Telefoane", "category": "telefoane"}}
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "n03-electronics-show-more-without-a-subject",
+      "pack": "electronics",
+      "family": ["planner", "show_more"],
+      "source": "NX-333 §1, rând nou: show_more fără sesiune și fără subiect ⇒ reply_only",
+      "turns": [
+        {
+          "user_input": "Mai arată-mi.",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "show_more"}]
+            },
+            "plan": {"executor": "reply_only"}
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "n04-electronics-find-without-anything-asks",
+      "pack": "electronics",
+      "family": ["planner", "find", "clarify"],
+      "source": "NX-333 §1: find fără subiect, fără cuvinte, fără nevoi de fațetă ⇒ ask (poarta a dat must_ask)",
+      "turns": [
+        {
+          "user_input": "Vreau ceva.",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find"}]
+            },
+            "ambiguity": {"verdict": "must_ask", "reason": "no_subject", "question": "Ce cauți? Am Telefoane, Laptopuri, Tablete și Huse."},
+            "plan": {"executor": "ask"}
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "n05-gifts-confirm-implicit-still-searches",
+      "pack": "gifts",
+      "family": ["planner", "find", "implicit_need"],
+      "source": "NX-333 §1: find cu verdict act + confirm_implicit ⇒ search; nevoia implicită intră în prefer, nu în filtru (I7)",
+      "turns": [
+        {
+          "user_input": "Arată-mi ce ai la casa.",
+          "shown": ["gi-01", "gi-02", "gi-03", "gi-04"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "casa"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "casa", "quote": "casa"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "E pentru cineva drag.",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "cineva drag"}],
+              "changes": [
+                {"op": "set", "dimension": "recipient", "relation": "eq", "value": "ea", "quote": "cineva drag"}
+              ]
+            },
+            "ambiguity": {"verdict": "act", "reason": "confirm_implicit", "question": "Să înțeleg că e vorba de ea?"},
+            "plan": {"executor": "search", "search_args": {"query": "cineva drag", "category": "casa", "prefer": {"recipient": ["ea"]}}}
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "n06-electronics-compare-two-then-one",
+      "pack": "electronics",
+      "family": ["planner", "compare"],
+      "source": "NX-333 §1: compare cu ≥ 2 ținte exact; compare cu 1 țintă exact (calea COMPARE_WITH_SIMILAR)",
+      "turns": [
+        {
+          "user_input": "Vreau un telefon.",
+          "shown": ["el-01", "el-02", "el-03"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "telefon"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "telefoane", "quote": "telefon"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "Compară primul cu al doilea.",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "compare", "targets": ["r1", "r2"]}],
+              "references": [
+                {"id": "r1", "text": "primul", "kind": "ordinal", "ordinal": 1},
+                {"id": "r2", "text": "al doilea", "kind": "ordinal", "ordinal": 2}
+              ]
+            },
+            "plan": {"executor": "compare", "product_ids": ["el-01", "el-02"]}
+          }
+        },
+        {
+          "user_input": "Compară-l pe al treilea cu ceva asemănător.",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "compare", "targets": ["r1"]}],
+              "references": [
+                {"id": "r1", "text": "al treilea", "kind": "ordinal", "ordinal": 3}
+              ]
+            },
+            "plan": {"executor": "compare", "product_ids": ["el-03"]}
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "n07-electronics-detail-link-and-names-not-found",
+      "pack": "electronics",
+      "family": ["planner", "detail", "link", "not_found"],
+      "source": "NX-333 §1: detail/link pe țintă exact; link, detail și compare pe un nume negăsit ⇒ search cu product_name (rândul nou pentru detail/compare, kernel.v1.1)",
+      "turns": [
+        {
+          "user_input": "Vreau un telefon.",
+          "shown": ["el-01", "el-02", "el-03"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "telefon"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "telefoane", "quote": "telefon"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "Spune-mi mai multe despre al doilea.",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "detail", "targets": ["r1"]}],
+              "references": [
+                {"id": "r1", "text": "al doilea", "kind": "ordinal", "ordinal": 2}
+              ]
+            },
+            "plan": {"executor": "detail", "product_ids": ["el-02"]}
+          }
+        },
+        {
+          "user_input": "Trimite-mi linkul la primul.",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "link", "targets": ["r1"]}],
+              "references": [
+                {"id": "r1", "text": "primul", "kind": "ordinal", "ordinal": 1}
+              ]
+            },
+            "plan": {"executor": "link", "product_ids": ["el-01"]}
+          }
+        },
+        {
+          "user_input": "Trimite-mi linkul la Nokia Lumia 800.",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "link", "targets": ["r1"]}],
+              "references": [
+                {"id": "r1", "text": "Nokia Lumia 800", "kind": "name", "name": "Nokia Lumia 800"}
+              ]
+            },
+            "plan": {"executor": "search", "search_args": {"query": "Nokia Lumia 800", "product_name": "Nokia Lumia 800", "category": "telefoane"}}
+          }
+        },
+        {
+          "user_input": "Spune-mi mai multe despre Nokia Lumia 800.",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "detail", "targets": ["r1"]}],
+              "references": [
+                {"id": "r1", "text": "Nokia Lumia 800", "kind": "name", "name": "Nokia Lumia 800"}
+              ]
+            },
+            "plan": {"executor": "search", "search_args": {"query": "Nokia Lumia 800", "product_name": "Nokia Lumia 800", "category": "telefoane"}}
+          }
+        },
+        {
+          "user_input": "Compară primul cu Nokia Lumia 800.",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "compare", "targets": ["r1", "r2"]}],
+              "references": [
+                {"id": "r1", "text": "primul", "kind": "ordinal", "ordinal": 1},
+                {"id": "r2", "text": "Nokia Lumia 800", "kind": "name", "name": "Nokia Lumia 800"}
+              ]
+            },
+            "plan": {"executor": "search", "search_args": {"query": "Nokia Lumia 800", "product_name": "Nokia Lumia 800", "category": "telefoane"}}
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "n08-electronics-cart-on-an-exact-target",
+      "pack": "electronics",
+      "family": ["planner", "cart", "mutation"],
+      "source": "NX-333 §1: cart pe țintă exact",
+      "turns": [
+        {
+          "user_input": "Vreau un telefon.",
+          "shown": ["el-01", "el-02", "el-03"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "telefon"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "telefoane", "quote": "telefon"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "Adaugă-l pe al doilea în coș.",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "cart", "targets": ["r1"]}],
+              "references": [
+                {"id": "r1", "text": "al doilea", "kind": "ordinal", "ordinal": 2}
+              ]
+            },
+            "plan": {"executor": "cart", "product_ids": ["el-02"]}
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "n09-furniture-bundle-declared-by-the-pack",
+      "pack": "furniture",
+      "family": ["planner", "bundle"],
+      "source": "NX-333 §1: bundle cu subiect cunoscut și executor declarat de pachet ⇒ bundle",
+      "turns": [
+        {
+          "user_input": "Arată-mi canapele.",
+          "shown": ["fu-01", "fu-02", "fu-03"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "canapele"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "canapele", "quote": "canapele"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "Fă-mi un set complet.",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "bundle"}]
+            },
+            "plan": {"executor": "bundle"}
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "n10-electronics-bundle-without-an-executor-searches",
+      "pack": "electronics",
+      "family": ["planner", "bundle"],
+      "source": "NX-333 §1: bundle fără executor declarat (ecommerce.json n-are intrare) ⇒ search",
+      "turns": [
+        {
+          "user_input": "Vreau un telefon.",
+          "shown": ["el-01", "el-02", "el-03"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "telefon"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "telefoane", "quote": "telefon"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "Fă-mi un pachet complet.",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "bundle"}]
+            },
+            "plan": {"executor": "search", "search_args": {"query": "Telefoane", "category": "telefoane"}}
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "n11-electronics-acts-without-targets",
+      "pack": "electronics",
+      "family": ["planner", "store_info", "order_status", "chitchat", "other"],
+      "source": "NX-333 §1: store_info ⇒ faq, order_status ⇒ order, chitchat ⇒ reply_only, other ⇒ delegate",
+      "turns": [
+        {
+          "user_input": "Cât durează livrarea?",
+          "expect": {
+            "interpretation": {
+              "thread": "aside",
+              "acts": [{"kind": "store_info", "query": "livrarea"}]
+            },
+            "plan": {"executor": "faq"}
+          }
+        },
+        {
+          "user_input": "Unde e comanda mea?",
+          "expect": {
+            "interpretation": {
+              "thread": "aside",
+              "acts": [{"kind": "order_status"}]
+            },
+            "plan": {"executor": "order"}
+          }
+        },
+        {
+          "user_input": "Mulțumesc!",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "chitchat"}]
+            },
+            "plan": {"executor": "reply_only"}
+          }
+        },
+        {
+          "user_input": "Îmi poți face o factură pe firmă?",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "other"}]
+            },
+            "plan": {"executor": "delegate"}
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "n12-electronics-unmapped-ranks-and-survives",
+      "pack": "electronics",
+      "family": ["planner", "unmapped", "rank_terms"],
+      "source": "NX-333 §4 + contractul runda 4, punctul 31: «bun pentru gaming» (unmapped) ⇒ rank_terms, iar semnalul rostit supraviețuiește lui «și sub 3000»",
+      "turns": [
+        {
+          "user_input": "Vreau un telefon bun pentru gaming.",
+          "shown": ["el-01", "el-02", "el-03"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "telefon"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "telefoane", "quote": "telefon"},
+                {"op": "add", "dimension": "unmapped", "relation": "contains", "value": "gaming", "quote": "bun pentru gaming"}
+              ]
+            },
+            "plan": {"executor": "search", "search_args": {"query": "telefon", "category": "telefoane", "rank_terms": ["gaming"]}}
+          }
+        },
+        {
+          "user_input": "Și sub 3000 de lei.",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find"}],
+              "changes": [
+                {"op": "set", "dimension": "price", "relation": "lte", "number": 3000, "unit": "lei", "quote": "sub 3000 de lei"}
+              ]
+            },
+            "plan": {"executor": "search", "search_args": {"query": "Telefoane", "category": "telefoane", "price_max": 3000, "rank_terms": ["gaming"]}}
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "n13-electronics-cheapest-sorts",
+      "pack": "electronics",
+      "family": ["planner", "extreme", "sort"],
+      "source": "NX-333 §2: o referință extreme pe preț, min ⇒ sort_mode price_asc",
+      "turns": [
+        {
+          "user_input": "Vreau cel mai ieftin telefon.",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "telefon"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "telefoane", "quote": "telefon"}
+              ],
+              "references": [
+                {"id": "r1", "text": "cel mai ieftin", "kind": "extreme", "dimension": "price", "direction": "min"}
+              ]
+            },
+            "plan": {"executor": "search", "search_args": {"query": "telefon", "category": "telefoane", "sort_mode": "price_asc"}}
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "n15-sole-routine-is-the-bundle",
+      "pack": "sole-ro",
+      "family": ["planner", "bundle", "find"],
+      "source": "NX-333 §1: pe SOLE `bundle` e `routine_plan` (`bundle_executors: {\"*\": ...}`), cu subiectul construit în tur",
+      "turns": [
+        {
+          "user_input": "Vreau o cremă de față pentru ten uscat.",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "cremă de față"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "ten-ingrijirea-tenului", "quote": "cremă de față"},
+                {"op": "add", "dimension": "skin_type", "relation": "eq", "value": "dry", "quote": "ten uscat"}
+              ]
+            },
+            "plan": {"executor": "search", "search_args": {"query": "cremă de față", "category": "ten-ingrijirea-tenului", "prefer": {"skin_type": ["dry"]}}}
+          }
+        },
+        {
+          "user_input": "Fă-mi o rutină.",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "bundle"}]
+            },
+            "plan": {"executor": "bundle"}
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "n14-electronics-three-acts-keep-two",
+      "pack": "electronics",
+      "family": ["planner", "multi_act", "mutation"],
+      "source": "NX-333 §1, Multi-act: trei acte ⇒ două planuri (mutația înaintea citirii), al treilea raportat ca nefăcut",
+      "turns": [
+        {
+          "user_input": "Vreau un telefon.",
+          "shown": ["el-01", "el-02", "el-03"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "telefon"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "telefoane", "quote": "telefon"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "Adaugă-l pe primul în coș, compară-l cu al doilea și arată-mi niște huse.",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {"kind": "cart", "targets": ["r1"]},
+                {"kind": "compare", "targets": ["r1", "r2"]},
+                {"kind": "find", "query": "huse"}
+              ],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "huse", "quote": "huse"}
+              ],
+              "references": [
+                {"id": "r1", "text": "primul", "kind": "ordinal", "ordinal": 1},
+                {"id": "r2", "text": "al doilea", "kind": "ordinal", "ordinal": 2}
+              ]
+            },
+            "plan": {"executor": "search", "search_args": {"query": "huse", "category": "huse"}}
+          }
+        }
+      ]
+    }
+  ]
+}

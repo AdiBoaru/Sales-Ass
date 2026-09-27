@@ -13,7 +13,7 @@ import hashlib
 import json
 import re
 import time
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -48,7 +48,7 @@ from src.catalog.vocabulary_cache import get_vocabulary
 from src.commerce.project import delivery_for
 from src.config import card_slots, get_settings
 from src.config import max_per_type as cfg_max_per_type
-from src.conversation.needs import corroborated_by
+from src.conversation.needs import MAX_UNMAPPED_PER_TOPIC, corroborated_by
 from src.db.queries.catalog import (
     get_products_by_ids,
     get_substitutes,
@@ -149,6 +149,26 @@ class SearchArgs(BaseModel):
     # Filtru DUR → doar produse care AU o variantă cu eticheta asta (fallback gradat, nivelul 3:
     # „alte game care chiar au Warm Beige"). Cap de lungime = o etichetă, nu o frază.
     variant_label: str | None = Field(default=None, max_length=80)
+    # NX-333 (kernel.v1.1) — câmpurile DOAR ale plannerului kernelului
+    # (`src/agent/turn_planner.py`).
+    # Nu sunt în schema văzută de model (`tool_definitions.py` rămâne neatins), iar dacă modelul le
+    # trimite totuși, `search_products_tool` le SCOATE înainte de validare și le numără
+    # (`planner_field_from_model`). Goale implicit, iar goale nu schimbă nimic: nici SQL-ul, nici
+    # fuziunea, nici amprenta sesiunii (I16).
+    #
+    # `rank_terms` (I25): semnalele `unmapped` („bun pentru gaming", fără o fațetă de utilizare).
+    # ORDONEAZĂ în `ORDER BY` (cheie secundară după rangul de text), niciodată în predicatul
+    # lexical.
+    rank_terms: list[str] = Field(default_factory=list, max_length=MAX_UNMAPPED_PER_TOPIC)
+    # `prefer`: nevoile de fațetă `soft` (și semnalele `inferred` ale turului), cheie de atribut →
+    # valori canonice. Unit cu preferința meniului NX-322 și pasat fuziunii (`need_preference`):
+    # ordonează, nu exclude. Fără el, pe datele de azi (nicio fațetă `enforce_ready`) toate nevoile
+    # de fațetă ale clientului ar dispărea din căutarea interpretată.
+    prefer: dict[str, list[str]] = Field(default_factory=dict)
+
+
+#: NX-333: câmpurile pe care le scrie DOAR plannerul. Intrarea modelului nu le poate purta.
+PLANNER_ONLY_FIELDS: tuple[str, ...] = ("rank_terms", "prefer")
 
 
 class DetailArgs(BaseModel):
@@ -747,6 +767,10 @@ PRICE_BOUND_SPOKEN_NOW = "spoken_now"
 PRICE_BOUND_SPOKEN_EARLIER = "spoken_earlier"
 PRICE_BOUND_RELATIVE_REQUEST = "relative_request"
 PRICE_BOUND_SESSION = "session"
+#: NX-333: pe calea PLANIFICATĂ, `price_max` vine doar dintr-un `budget_max` dur al stării reduse
+#: (I7): proveniența lui a judecat-o deja validatorul kernelului, pe citatul clientului, iar
+#: bugetul e al conversației (NX-331), deci poate fi spus cu mult înaintea ferestrei de texte.
+PRICE_BOUND_STATE = "state"
 
 
 def price_bound_source(
@@ -826,6 +850,19 @@ def apply_need_menu(
         )
     hard, soft = split_needs(verdicts)
     return (soft or None), hard
+
+
+def _merge_prefer(
+    menu: Mapping[str, Sequence[str]] | None, planned: Mapping[str, Sequence[str]]
+) -> dict[str, list[str]] | None:
+    """NX-333: preferința plannerului unită cu a meniului NX-322, pe dimensiune, fără duplicate,
+    în ordinea de sosire (meniul întâi). PUR. Ambele goale ⇒ None, ca fuziunea să nu vadă nimic."""
+    out: dict[str, list[str]] = {}
+    for source in (menu or {}, planned):
+        for key, values in source.items():
+            merged = out.setdefault(key, [])
+            merged.extend(v for v in values if v and v not in merged)
+    return {k: v for k, v in out.items() if v} or None
 
 
 def price_units(ctx: TurnContext) -> UnitRegistry | None:
@@ -974,6 +1011,12 @@ class _ResolvedTerms:
     category: Resolution | None = None
 
 
+def _rank_kwargs(a: SearchArgs) -> dict[str, Any]:
+    """NX-333: `rank_terms` pleacă spre SQL DOAR când plannerul i-a dat. Goale, apelul rămâne
+    identic cu cel de dinainte de câmp (aceleași argumente, deci același SQL, I16)."""
+    return {"rank_terms": list(a.rank_terms)} if a.rank_terms else {}
+
+
 async def _subject_filter_tail(
     conn: Any,
     ctx: TurnContext,
@@ -1009,6 +1052,7 @@ async def _subject_filter_tail(
         allow_filters_only=True,
         only_filters_step=True,
         pool=MAX_SEARCH_POOL,
+        **_rank_kwargs(a),
     )
     for r in rows:
         r["lexical_step"] = "filters_only"  # eticheta treptei NX-293, ca în `catalog.py`
@@ -1454,6 +1498,20 @@ def _session_filters(
     }
     if constraints:
         out["constraints"] = sorted(b.constraint.describe() for b in constraints)
+    # NX-333: `rank_terms` și `prefer` schimbă ORDINEA și, prin plafonul pool-ului, SETUL, deci
+    # definesc sesiunea: fără ele, «și bun pentru gaming» pe aceeași cerere ar pagina pool-ul VECHI.
+    # Aceeași regulă ca la constrângeri: cheia există DOAR când nu sunt goale, ca amprenta
+    # sesiunilor în curs (calea de azi, unde modelul nu le poate trimite) să rămână identică.
+    rank_terms = sorted({normalize(t) for t in a.rank_terms if normalize(t)})
+    if rank_terms:
+        out["rank_terms"] = rank_terms
+    prefer = {
+        key: sorted({normalize(v) for v in values if normalize(v)})
+        for key, values in sorted(a.prefer.items())
+    }
+    prefer = {key: values for key, values in prefer.items() if values}
+    if prefer:
+        out["prefer"] = prefer
     return out
 
 
@@ -1561,8 +1619,45 @@ async def search_products_tool(
     re-sortate determinist (preț/rating). Filtrele dure care golesc tot se relaxează progresiv
     ÎNAINTE de a întoarce gol (P6). Înainte de trunchierea la 6: dedup vs `displayed_products`
     (paritate „arată altele", P8). Degradare grațioasă la lexical-only fără LLM/embeddings sau
-    dacă `embed` pică. Singurul apel extern rămâne `embed([query])` (P2)."""
-    a = SearchArgs(**args)
+    dacă `embed` pică. Singurul apel extern rămâne `embed([query])` (P2).
+
+    NX-333: intrarea MODELULUI. Câmpurile doar ale plannerului (`PLANNER_ONLY_FIELDS`) se scot
+    înainte de validare și se numără: un model care le-ar ghici ar ocoli plannerul (I2)."""
+    return await _search(ctx, deps, SearchArgs(**_model_args(ctx, args)), planned=False)
+
+
+def _model_args(ctx: TurnContext, args: dict[str, Any]) -> dict[str, Any]:
+    """Argumentele modelului fără câmpurile plannerului. Evenimentul poartă NUMELE câmpului, nu
+    valoarea (P12). Pe calea de azi ar trebui să fie mereu zero: schema modelului nu le are, deci
+    unul nenul înseamnă un prompt care a început să le ceară."""
+    sent = [f for f in PLANNER_ONLY_FIELDS if f in args]
+    for field_name in sent:
+        ctx.emit("planner_field_from_model", field=field_name)
+    if not sent:
+        return args
+    return {k: v for k, v in args.items() if k not in PLANNER_ONLY_FIELDS}
+
+
+async def run_planned_search(ctx: TurnContext, deps: PipelineDeps, a: SearchArgs) -> ToolResult:
+    """NX-333 — intrarea PLANNERULUI kernelului (`src/agent/turn_planner.py`, I2): același corp ca
+    unealta, cu `SearchArgs` construit din starea redusă. N-are apelant până la pasul 6."""
+    return await _search(ctx, deps, a.model_copy(deep=True), planned=True)
+
+
+async def _search(
+    ctx: TurnContext, deps: PipelineDeps, a: SearchArgs, *, planned: bool
+) -> ToolResult:
+    """Corpul comun al căutării. `planned=False` = calea de azi, byte-identică.
+
+    `planned=True` (NX-333) oprește cei doi autori de filtre din afara plannerului:
+      • moștenirea din sesiune (`active_search.filters`): starea redusă e sursa subiectului și a
+        nevoilor (I20). Moștenit, un `clear topic` sau o nevoie retrasă s-ar întoarce din sesiune,
+        adică o a doua memorie peste reducer;
+      • `_typed_constraints` pe mesajul BRUT: pragurile numerice vin doar din `SearchArgs`, iar
+        plannerul le pune azi în `gaps`. Altfel «minim 256 GB» ar filtra din text în timp ce
+        trace-ul spune că e gol.
+    `price_bound_verdict` (NX-319) judecă doar marginea MODELULUI (calea de azi); pe calea
+    planificată marginea e a stării și se numără cu sursa `state` (recenzia NX-333)."""
     legacy_concerns, need_args = split_args(a.concerns)
     a.concerns = legacy_concerns or None
     # IZI-anti-drift: rafinare ÎN sesiune activă, fără categorie/nevoi NOI → moștenește-le pe ale
@@ -1579,7 +1674,7 @@ async def search_products_tool(
     )  # kill-switch (OFF → fiecare căutare fresh)
     sess_filters = (ctx.state.active_search or {}).get("filters") or {}
     inherited: list[str] = []
-    if sessions_on and sess_filters:
+    if sessions_on and sess_filters and not planned:
         if a.category is None and sess_filters.get("category"):
             a.category = sess_filters["category"]
             inherited.append("category")
@@ -1593,15 +1688,23 @@ async def search_products_tool(
     # Înaintea amprentei de sesiune, deliberat: o margine respinsă nu are voie să definească
     # sesiunea, altfel „mai arată-mi" ar pagina un pool tăiat la un preț pe care clientul nu l-a
     # cerut.
+    #
+    # NX-333: pe calea planificată marginea NU e a modelului, e a stării reduse (I7), deci nu se
+    # re-judecă pe textul recent: «sub prețul primului» (valoare calculată de cod din prețul
+    # recitit) sau un buget spus acum zece mesaje n-au numărul în fereastra de texte, iar garda
+    # le-ar fi aruncat (recenzia NX-333). Se numără cu sursa `state`, ca să rămână vizibile.
     if a.price_max is not None and get_settings().search_price_bound_provenance_enabled:
-        texts = client_texts(ctx)
-        source, unit_rejected = price_bound_verdict(
-            ctx,
-            a.price_max,
-            texts=texts,
-            relative_request=_is_relative_price_request(texts[0]),
-            session_price_max=sess_filters.get("price_max"),
-        )
+        if planned:
+            source, unit_rejected = PRICE_BOUND_STATE, False
+        else:
+            texts = client_texts(ctx)
+            source, unit_rejected = price_bound_verdict(
+                ctx,
+                a.price_max,
+                texts=texts,
+                relative_request=_is_relative_price_request(texts[0]),
+                session_price_max=sess_filters.get("price_max"),
+            )
         ctx.emit(
             "price_bound_provenance",
             source=source or "unsupported",
@@ -1639,6 +1742,10 @@ async def search_products_tool(
     # sesiune, telemetrie): cheile rezolvate, indiferent de dimensiunea din care provin.
     concern_keys = resolutions.flat_facet_keys or None
     need_prefer, hard_needs = apply_need_menu(ctx, need_args, vocab, consumer="search_products")
+    # NX-333: preferința plannerului se UNEȘTE cu cea a meniului NX-322 (aceeași fuziune, aceeași
+    # pondere `need_preference`). Goală ⇒ `need_prefer` neatins, deci calea de azi e byte-identică.
+    if a.prefer:
+        need_prefer = _merge_prefer(need_prefer, a.prefer)
     if hard_needs:
         facet_filters = {
             dim: list(dict.fromkeys([*(facet_filters or {}).get(dim, []), *keys]))
@@ -1667,7 +1774,7 @@ async def search_products_tool(
         ] or None
     # NX-266: numerele cererii, tipizate. Cu flagul stins e `_Constraints()` gol, deci tot ce
     # urmează (fp, scară, SQL, plasă) e byte-identic cu azi.
-    tc = _typed_constraints(ctx, a)
+    tc = _Constraints() if planned else _typed_constraints(ctx, a)
     # Migrarea lui `budget_max`: când prețul a devenit constrângere tipizată, NU mai pleacă și ca
     # `price_max` — ar fi același predicat de două ori, iar valoarea autoritară trebuie să fie una
     # singură. Predicatul rezultat e echivalent (fațeta declară `missing_value: skip`, adică un
@@ -1833,6 +1940,7 @@ async def search_products_tool(
                 # fiindcă o fațetă era prea îngustă. Precizia întâi pe AMBELE axe, nu doar pe a ei.
                 allow_filters_only=(i == len(ladder) - 1),
                 pool=_FUSION_POOL,
+                **_rank_kwargs(a),
             )
             vector: list[dict[str, Any]] = []
             if query_vec is not None:
@@ -1948,6 +2056,7 @@ async def search_products_tool(
                 # E exact zgomotul de care se apără `_lexical_steps`, deci nu se cere.
                 allow_filters_only=False,
                 pool=_FUSION_POOL,
+                **_rank_kwargs(a),
             )
             if coherence:
                 reason, share = guessed_filter_verdict(
@@ -2054,6 +2163,7 @@ async def search_products_tool(
                 allow_filters_only=True,
                 only_filters_step=True,
                 pool=_FUSION_POOL,
+                **_rank_kwargs(a),
             )
             have = {str(p.get("id")) for p in ranked_final}
             for p in extra:

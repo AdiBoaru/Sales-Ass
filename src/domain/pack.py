@@ -179,6 +179,12 @@ class DomainPack:
     # fațetă `binding: additive`, deci o linie de config nu poate transforma o nevoie în țintă.
     # Etichetele de variantă sunt mereu de referință (sunt ale produsului prin construcție).
     reference_dimensions: tuple[str, ...] = DEFAULT_REFERENCE_DIMENSIONS
+    # NX-333 (kernel pasul 4b, contractul runda 3, punctul 21): CE unealtă servește actul `bundle`
+    # („fă-mi o rutină", „un set complet"). Rădăcina raftului (sau `"*"` pentru orice raft) → numele
+    # uneltei. Semantica unui pachet e a verticalului (SOLE: `routine_plan`), deci stă în date, nu
+    # în kernel. Loaderul păstrează doar nume din `TOOL_NAMES`; fără intrare, plannerul servește
+    # `bundle` ca pe o căutare.
+    bundle_executors: dict[str, str] = field(default_factory=dict)
 
     def value_label(self, facet_key: str, code: str, locale: str | None) -> str | None:
         """Eticheta localizată a unei VALORI de fațetă, sau `None` dacă pachetul n-o declară.

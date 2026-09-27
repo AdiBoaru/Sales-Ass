@@ -2061,5 +2061,7 @@
     "_removed": {
       "sticky": "SCOASĂ pe măsurătoare (2026-09-07). Trei runde: literal 36% din produse (flexiune negată), apoi 484 recenzii cu 4/30 corecte (coordonare sub negație: „nu lasă urme albe sau lipicioase”), apoi 148 recenzii cu 20/40 corecte (negație la distanță, contrast „mă temeam că… dar”, „alte produse lasă strat lipicios, acesta nu”). 50% precizie pentru un CONTRA afișat e inacceptabil; regulile structurale (prefix, gap, excluderi cu poziție) nu trec zidul semantic al negației la distanță. Se reia doar cu alt mecanism, nu cu mai multe excluderi."
     }
-  }
+  },
+  "_bundle_executors_note": "NX-333 (kernel pasul 4b): unealta care servește actul `bundle` al kernelului, per rădăcină de raft sau `*`. Pe SOLE un pachet cerut de client („fă-mi o rutină”) e o rutină, deci `routine_plan`. Numele se validează la load contra TOOL_NAMES. Fără consumator până la pasul 6; aplicarea pe DB o rulează Adi (scripts/set_domain_pack.py --apply --backup).",
+  "bundle_executors": {"*": "routine_plan"}
 }

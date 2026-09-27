@@ -1,0 +1,344 @@
+{
+  "c03-fashion-subject-change-keeps-person": [
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "search",
+          "search_args": {
+            "category": "fuste",
+            "query": "Fuste"
+          }
+        }
+      ],
+      "primary": 0,
+      "user_input": "Nu mai vreau rochii, arată-mi fuste."
+    }
+  ],
+  "g03-fashion-cart-on-a-sold-out-dress": [
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "search",
+          "search_args": {
+            "category": "rochii",
+            "query": "rochie"
+          }
+        }
+      ],
+      "primary": 0,
+      "user_input": "Vreau o rochie."
+    },
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [
+        "no_question"
+      ],
+      "plans": [
+        {
+          "executor": "reply_only"
+        }
+      ],
+      "primary": 0,
+      "user_input": "O iau pe prima."
+    }
+  ],
+  "g04-fashion-crossing-bounds": [
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "ask"
+        }
+      ],
+      "primary": 0,
+      "user_input": "Vreau o rochie sub 200 de lei, dar minim 300 lei."
+    }
+  ],
+  "g06-fashion-two-readings-one-value": [
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "search",
+          "search_args": {
+            "query": "roșu"
+          }
+        }
+      ],
+      "primary": 0,
+      "user_input": "Vreau ceva roșu."
+    }
+  ],
+  "k02-fashion-person-facts-stay-subject-facts-park": [
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "search",
+          "search_args": {
+            "category": "rochii",
+            "concerns": [
+              "m"
+            ],
+            "prefer": {
+              "color": [
+                "negru"
+              ],
+              "material": [
+                "bumbac"
+              ]
+            },
+            "query": "rochii"
+          }
+        }
+      ],
+      "primary": 0,
+      "user_input": "Caut rochii negre din bumbac, mărimea M."
+    },
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "search",
+          "search_args": {
+            "category": "pantofi",
+            "concerns": [
+              "m"
+            ],
+            "prefer": {
+              "color": [
+                "negru"
+              ]
+            },
+            "query": "pantofi"
+          }
+        }
+      ],
+      "primary": 0,
+      "user_input": "Arată-mi și pantofi."
+    },
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "detail",
+          "product_ids": [
+            "fa-05"
+          ]
+        }
+      ],
+      "primary": 0,
+      "user_input": "Înapoi la rochii, care era cea mai ieftină?"
+    }
+  ],
+  "p01-fashion-explicit-value": [
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [
+        "no_query"
+      ],
+      "plans": [
+        {
+          "executor": "reply_only"
+        }
+      ],
+      "primary": 0,
+      "user_input": "Vreau ceva negru."
+    }
+  ],
+  "p02-fashion-pack-alias-is-explicit": [
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [
+        "no_query"
+      ],
+      "plans": [
+        {
+          "executor": "reply_only"
+        }
+      ],
+      "primary": 0,
+      "user_input": "Aș vrea o rochie neagră."
+    }
+  ],
+  "p03-fashion-avoid-with-negation": [
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "ask"
+        }
+      ],
+      "primary": 0,
+      "user_input": "Să nu fie din poliester."
+    }
+  ],
+  "p04-fashion-avoid-without-negation": [
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "ask"
+        }
+      ],
+      "primary": 0,
+      "user_input": "Poliesterul mă zgârie."
+    }
+  ],
+  "p11-fashion-crossing-bounds": [
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "ask"
+        }
+      ],
+      "primary": 0,
+      "user_input": "Sub 200 de lei, dar minim 300."
+    }
+  ],
+  "p12-fashion-two-turns": [
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [
+        "no_query"
+      ],
+      "plans": [
+        {
+          "executor": "reply_only"
+        }
+      ],
+      "primary": 0,
+      "user_input": "Caut ceva negru."
+    },
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [
+        "no_query"
+      ],
+      "plans": [
+        {
+          "executor": "reply_only"
+        }
+      ],
+      "primary": 0,
+      "user_input": "Și din bumbac."
+    }
+  ],
+  "p13-fashion-inflected-value-is-implicit": [
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [
+        "no_query"
+      ],
+      "plans": [
+        {
+          "executor": "reply_only"
+        }
+      ],
+      "primary": 0,
+      "user_input": "Aș vrea o rochie albastră."
+    }
+  ],
+  "r03-fashion-deictic-page": [
+    {
+      "disclosures": [
+        [
+          0,
+          "no_target"
+        ]
+      ],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "reply_only"
+        }
+      ],
+      "primary": 0,
+      "user_input": "Asta o ai și în mărimea M?"
+    }
+  ],
+  "r06-fashion-attribute-cart": [
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [
+        "no_question"
+      ],
+      "plans": [
+        {
+          "executor": "reply_only"
+        }
+      ],
+      "primary": 0,
+      "user_input": "Adaug-o în coș pe cea neagră."
+    }
+  ],
+  "r07-fashion-property-is-not-a-target": [
+    {
+      "disclosures": [
+        [
+          -1,
+          "invalid_target"
+        ]
+      ],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "reply_only"
+        }
+      ],
+      "primary": 0,
+      "user_input": "Dă-mi linkul la bumbac."
+    }
+  ],
+  "r10-fashion-the-other": [
+    {
+      "disclosures": [
+        [
+          0,
+          "no_target"
+        ]
+      ],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "reply_only"
+        }
+      ],
+      "primary": 0,
+      "user_input": "Nu Mara, cealaltă."
+    }
+  ]
+}
