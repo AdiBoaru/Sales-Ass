@@ -18,6 +18,11 @@
       "reason": "NX-332: lecturile modelului (Ambiguity.readings) se rezolva prin vocabular o singura data, la (dimensiune, valoare); o lectura nerezolvata nu conteaza, iar nicio lectura nu ajunge intr-o intrebare."
     },
     {
+      "file": "src/agent/turn_planner.py",
+      "function": "_read_act_query",
+      "reason": "NX-333: cererea actului (Act.query) intra NESCHIMBATA in SearchArgs.query, ca valoare, si doar cand are cuvinte de continut (dovada din answer_policy.read_query, pe tabelele locale-i). Nicio decizie a plannerului nu ramifica pe text: ramificarea e pe QueryEvidence.has_words."
+    },
+    {
       "file": "src/conversation/kernel_trace.py",
       "function": "_change",
       "reason": "NX-328: afisarea traceului pentru om (scripts/kernel_trace.py); citatul apare ca text, nu intra in nicio decizie."

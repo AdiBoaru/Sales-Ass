@@ -794,6 +794,7 @@ async def search_products_lexical(
     allow_filters_only: bool = False,
     only_filters_step: bool = False,
     pool: int = 50,
+    rank_terms: Sequence[str] = (),
 ) -> list[dict[str, Any]]:
     """Lexical REAL (NX-113a) — înlocuiește `p.name ILIKE '%q%'`. ACELEAȘI filtre dure ca
     `search_products` (paritate). Întoarce ~`pool` rânduri; pe `relevance` POZIȚIA în listă =
@@ -823,9 +824,15 @@ async def search_products_lexical(
     sonda de variantă (`missing_variant` vs `no_result`) ar clasifica orice ca „variantă lipsă"
     dacă raftul i-ar răspunde mereu, iar harnessul de retrieval ar măsura alt sistem decât cel pe
     care îl compară.
+
+    `rank_terms` (NX-333, I25) sunt semnalele `unmapped` ale plannerului kernelului („bun pentru
+    gaming" fără o fațetă de utilizare): ORDONEAZĂ, nu filtrează niciodată. Trec prin aceleași
+    cuvinte goale ale locale-i ca interogarea, iar pe calea veche (`not v2`) nu se leagă deloc.
+    Goale ⇒ SQL byte-identic cu cel de dinainte de câmp (snapshot în `tests/kernel/sql/`).
     """
     v2 = get_settings().lexical_query_v2_enabled
     terms = content_terms(query_text, locale) if v2 else []
+    rank = content_terms(" ".join(rank_terms), locale) if v2 and rank_terms else []
     steps = _lexical_steps(
         v2,
         terms,
@@ -865,6 +872,7 @@ async def search_products_lexical(
             sort_mode=sort_mode,
             in_stock_only=in_stock_only,
             pool=pool,
+            rank_terms=rank,
         )
         if rows:
             # Degradarea trebuie să fie VIZIBILĂ. Un rezultat obținut prin relaxare sau prin plasa
@@ -901,6 +909,7 @@ async def _lexical_fetch(
     sort_mode: str,
     in_stock_only: bool,
     pool: int,
+    rank_terms: Sequence[str] = (),
 ) -> list[dict[str, Any]]:
     """O treaptă a scării lexicale. Filtrele dure sunt IDENTICE pe toate treptele — se relaxează
     potrivirea de TEXT, niciodată constrângerile (preț, brand, categorie, variantă, stoc). Scara
@@ -999,6 +1008,17 @@ async def _lexical_fetch(
     if cs := _content_status_pred():  # NX-171c: doar 'published' (per-tenant, gated)
         conds.append(cs)
 
+    # NX-333 (I25): semnalele `unmapped` ale plannerului, ca CHEIE de ordonare, niciodată în
+    # `conds`.
+    # Doar pe `relevance` și doar pe calea v2: pe un sort explicit (sau pe calea veche) nu intră în
+    # `ORDER BY`, deci nu se leagă deloc — un placeholder legat și nefolosit crapă tot query-ul
+    # (NX-313). Placeholderul se leagă DUPĂ filtre, deci fără termeni SQL-ul e byte-identic.
+    rt_expr: str | None = None
+    if rank_terms and v2 and sort_mode == "relevance":
+        rt_ph = placeholder(relaxed_query_any(list(rank_terms)))
+        rt_expr = f"ts_rank_cd(p.search_tsv, websearch_to_tsquery('simple', ro_unaccent({rt_ph})))"
+    rt_key = f"({rt_expr}) desc, " if rt_expr is not None else ""
+
     if sort_mode == "relevance" and rank_expr is not None:
         if step == _LEXICAL_FILTERS_ONLY:
             # NX-298: rangul de text departajează doar VÂRFUL. Sub el, sute de produse au rang
@@ -1006,10 +1026,17 @@ async def _lexical_fetch(
             # arbitrar — adică pagina ar depinde de ordinea de import. Sub rang rămâne ordinea
             # `filters_only` pură: rating shrinkuit, apoi preț.
             order = (
-                f" order by ({rank_expr}) desc, {_SHRUNK_RATING} desc, {_EFFECTIVE_PRICE} asc, p.id"
+                f" order by ({rank_expr}) desc, {rt_key}{_SHRUNK_RATING} desc, "
+                f"{_EFFECTIVE_PRICE} asc, p.id"
             )
         else:
-            order = f" order by ({rank_expr}) desc, p.id"
+            # Cheie SECUNDARĂ: un produs cu termenul urcă doar în grupul de egalitate al rangului
+            # de text, deci nu poate trece peste unul care potrivește mai bine cererea.
+            order = f" order by ({rank_expr}) desc, {rt_key}p.id"
+    elif rt_expr is not None:
+        # `filters_only` fără termeni de text: rangul semnalelor e singurul semnal de text, deci
+        # cheia întâi, iar sub ea ordinea `relevance` de azi (rating shrinkuit, preț, `p.id`).
+        order = f" order by {rt_key}" + _order_clause(sort_mode).removeprefix(" order by ")
     else:
         order = _order_clause(sort_mode)  # price/rating explicit → sort pe subsetul lexical filtrat
 

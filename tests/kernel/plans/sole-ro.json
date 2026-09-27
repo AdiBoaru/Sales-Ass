@@ -1,0 +1,85 @@
+{
+  "c01-skincare-add-avoid": [
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [
+        "no_subject"
+      ],
+      "plans": [
+        {
+          "executor": "reply_only"
+        }
+      ],
+      "primary": 0,
+      "user_input": "Și să nu fie foarte gras."
+    }
+  ],
+  "c06-remove-by-handle": [
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [
+        "no_subject"
+      ],
+      "plans": [
+        {
+          "executor": "reply_only"
+        }
+      ],
+      "primary": 0,
+      "user_input": "Nu mai contează dacă are parfum."
+    }
+  ],
+  "c11-scope-ambiguity": [
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [
+        "no_query"
+      ],
+      "plans": [
+        {
+          "executor": "reply_only"
+        }
+      ],
+      "primary": 0,
+      "user_input": "Păi mi se usucă pielea după duș."
+    }
+  ],
+  "n15-sole-routine-is-the-bundle": [
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "search",
+          "search_args": {
+            "category": "ten-ingrijirea-tenului",
+            "prefer": {
+              "skin_type": [
+                "dry"
+              ]
+            },
+            "query": "cremă de față"
+          }
+        }
+      ],
+      "primary": 0,
+      "user_input": "Vreau o cremă de față pentru ten uscat."
+    },
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "bundle"
+        }
+      ],
+      "primary": 0,
+      "user_input": "Fă-mi o rutină."
+    }
+  ]
+}

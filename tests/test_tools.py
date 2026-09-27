@@ -12,6 +12,7 @@ import pytest
 from src.catalog.vocabulary import CatalogVocabulary, VocabEntry
 from src.config import get_settings
 from src.db.queries.catalog import search_products_lexical, search_products_semantic
+from src.db.queries.fusion import fuse_candidates
 from src.models import BusinessConfig, Contact, InboundMessage, TurnContext
 from src.tools import catalog_tools as ct
 from src.tools.base import enabled_tools, run_tool
@@ -1031,10 +1032,12 @@ _FP_EXEMPT = {"limit"}
 
 
 def _retriever_params() -> set[str]:
-    """Parametrii ACCEPTAȚI de cele două retrievere (sursa de adevăr = semnăturile lor)."""
+    """Parametrii ACCEPTAȚI de cele două retrievere și de fuziune (sursa de adevăr = semnăturile
+    lor). NX-333: fuziunea intră și ea, fiindcă `prefer` nu ajunge la SQL, dar reordonează pool-ul
+    din care se servește pagina, deci schimbă setul ca orice filtru."""
     return {
         name
-        for fn in (search_products_lexical, search_products_semantic)
+        for fn in (search_products_lexical, search_products_semantic, fuse_candidates)
         for name in inspect.signature(fn).parameters
     }
 
@@ -1049,8 +1052,41 @@ def _fp_gaps(arg_fields: set[str], retriever_params: set[str], fp_keys: set[str]
 
 
 def _fp_keys() -> set[str]:
-    """Cheile fp-ului (statice — nu depind de valori); `SearchArgs` minimal valid ca sondă."""
-    return set(ct._session_filters(ct.SearchArgs(query="q"), None, None))
+    """Cheile fp-ului; `SearchArgs` minimal valid ca sondă, plus câmpurile plannerului NEGOALE
+    (NX-333: cheia lor există doar când poartă ceva, ca amprenta sesiunilor în curs să nu se
+    schimbe; o sondă goală le-ar fi declarat, fals, lipsă)."""
+    probe = ct.SearchArgs(query="q", rank_terms=["gaming"], prefer={"skin_type": ["dry"]})
+    return set(ct._session_filters(probe, None, None))
+
+
+def test_planner_fields_are_in_the_fp_only_when_they_carry_something():
+    """NX-333: `rank_terms`/`prefer` goale ⇒ amprenta IDENTICĂ cu cea de dinainte de câmp (sesiunile
+    în curs nu se invalidează); negoale ⇒ fp nou, deci rafinarea «și bun pentru gaming» nu
+    paginează pool-ul vechi."""
+    base = ct.SearchArgs(query="telefon", category="telefoane")
+    empty = ct._session_filters(base, None, None)
+    assert "rank_terms" not in empty and "prefer" not in empty
+    before = {
+        "query": "telefon",
+        "category": "telefoane",
+        "brand": None,
+        "concerns": None,
+        "features": None,
+        "price_max": None,
+        "sort_mode": "relevance",
+        "in_stock_only": False,
+        "variant_label": None,
+        "product_name": None,
+    }
+    assert ct._fp(empty) == ct._fp(before)
+    ranked = base.model_copy(update={"rank_terms": ["Gaming"]})
+    assert ct._fp(ct._session_filters(ranked, None, None)) != ct._fp(empty)
+    preferred = base.model_copy(update={"prefer": {"color": ["negru"]}})
+    assert ct._fp(ct._session_filters(preferred, None, None)) != ct._fp(empty)
+    # normalizate și sortate: aceeași preferință scrisă altfel = aceeași sesiune
+    a = base.model_copy(update={"rank_terms": ["gaming", "Foto"]})
+    b = base.model_copy(update={"rank_terms": ["foto", "GAMING"]})
+    assert ct._fp(ct._session_filters(a, None, None)) == ct._fp(ct._session_filters(b, None, None))
 
 
 def test_session_fp_covers_every_filtering_arg():

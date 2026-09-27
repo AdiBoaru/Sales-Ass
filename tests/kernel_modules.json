@@ -15,7 +15,9 @@
     },
     "planner": {
       "doc": "SINGURUL producător de SearchArgs pe calea interpretată (I2). Restul porților pure i se aplică.",
-      "modules": []
+      "modules": [
+        "src/agent/turn_planner.py"
+      ]
     },
     "adapter": {
       "doc": "Singurul modul de kernel care are voie să cheme modelul (I13): construiește promptul și schema, face UN apel complete_schema. Nu scrie stare, nu construiește SearchArgs.",
@@ -40,7 +42,6 @@
     }
   },
   "planned": {
-    "src/agent/turn_planner.py": "planner",
     "src/conversation/turn_interpreter.py": "adapter"
   }
 }

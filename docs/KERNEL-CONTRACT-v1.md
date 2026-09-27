@@ -12,6 +12,8 @@ Versioning: the contract is `kernel.v1.0`. **Minor** (`v1.1`): additive schema f
 
 **Status: `kernel.v1.0` frozen after review round 4 (2026-09-25).** From here, changes follow the minor/major rule; architecture changes are out of scope. Future defects go through the replay corpus and are fixed in pack data, a reducer rule or the one component the trace blames.
 
+**Current version: `kernel.v1.1` (minor, NX-333, 2026-09-27).** Additive changes only, none of them to the model-written schema (`TurnInterpretation` is byte-identical to v1.0; the schema snapshot differs only in its version stamp): `SearchArgs.prefer`, a second planner-only field next to `rank_terms` (see „Bounds on `unmapped`"); two planner rows that the v1.0 table was missing (see „Primary act → executor"); and two tightenings found in review, both stated where they apply: the delegated loop has no mutation either, and the planned search keeps the state's hard budget instead of re-judging it on the recent text. The delta now writes `unmapped` + `avoid` as an exclusion, which is what „Operations” already required (`avoid` creates an exclusion need), so it is a defect fix, not a rule change. The meaning of every existing field, invariant, ownership row and state rule is unchanged, so no replay gate is required.
+
 ## Review decisions
 
 All eight points are accepted. Three go further than the review asked (thread, goal, provenance), and one moves to a different layer (insufficient evidence). None is rejected.
@@ -100,7 +102,7 @@ The model proposes meaning; code decides everything that is a fact, an identifie
 | State persistence and budget | — | owns | `serialize`, 6 KB; `inferred` never persisted |
 | Ambiguity candidates | proposes | owns final verdict | Ambiguity gate |
 | Clarification question text | — | owns | Pack template + vocabulary labels, deterministic interpolation; no model text |
-| `SearchArgs` | never | owns (planner) | The only producer of `SearchArgs` on the interpreted path |
+| `SearchArgs` | never | owns (planner) | The only producer of `SearchArgs` on the interpreted path. The planner-only fields (`rank_terms`, `prefer`) are stripped from the model's tool arguments before validation and counted (`planner_field_from_model`) |
 | Which executor runs, bundle semantics | — | owns (planner + pack) | The pack declares which executor serves `bundle` |
 | Tool execution, safety policy, tenant (`business_id`) | never | owns | Unchanged from today |
 | Reply prose | writes (compose) | validates | Existing validator + `grounding_guard`; `naturalize` is a pure function |
@@ -148,7 +150,7 @@ These replace section B of the design tab. Changes from it: `thread` loses `swit
 ### Written by the model
 
 ```python
-KERNEL_CONTRACT_VERSION = "kernel.v1.0"
+KERNEL_CONTRACT_VERSION = "kernel.v1.1"   # v1.1 (NX-333): planner-side additions only
 
 ActKind = Literal["find", "show_more", "compare", "detail", "link", "cart",
                   "bundle", "order_status", "store_info", "chitchat", "other"]
@@ -299,9 +301,18 @@ Never afterwards:
 | Strength | never hard |
 | Persistence | `explicit`/`implicit` (the user said it) persist as a soft signal, at most 3 per topic, topic-scoped. `inferred` is turn-local (I23) |
 | Promotion | only through vocabulary resolution of the user's words at validation, never through search results |
-| Effect on search | rank-only: passed as `SearchArgs.rank_terms`, used in `ORDER BY` next to `ts_rank_cd`, never in the lexical predicate; weight capped below any facet match |
+| Effect on search | rank-only: passed as `SearchArgs.rank_terms`, used in `ORDER BY` as a secondary key after the text rank (`ts_rank_cd`), never in the lexical predicate; weight capped below any facet match |
 
-`rank_terms` is the one additive change the contract requires in the search tool. Today the only textual input is `query`, and on the `strict` rung the query is a gate: its terms are joined with AND. Passing unmapped words through `query` would turn „piele obosită după avion” into a hidden filter, which is the NX-298 lesson.
+The contract requires two additive changes in the search tool, both written only by the planner and both empty by default (empty ⇒ the SQL, the fusion and the session fingerprint are byte-identical to v1.0):
+
+- `SearchArgs.rank_terms` (v1.0). Today the only textual input is `query`, and on the `strict` rung the query is a gate: its terms are joined with AND. Passing unmapped words through `query` would turn „piele obosită după avion” into a hidden filter, which is the NX-298 lesson.
+- `SearchArgs.prefer` (v1.1, NX-333): the `soft` facet needs, the subject's product type and this turn's `inferred` facet signals, as attribute key → catalog values, merged in the tool with the NX-322 need-menu preference and passed to the existing fusion (`need_preference`). No new SQL. Without it, a `soft` need had no channel into the search, and since no facet is `enforce_ready` on today's data, every facet need the user stated would have vanished from the interpreted search, which is worse than today's path. Only dimensions that are **attribute** facets enter `prefer`: fusion reads the preference from `attributes`, so a column-backed dimension (the brand, on the real catalog) would order nothing and dilute the others; it goes into `gaps` instead.
+
+„Weight capped below any facet match” is measured, not assumed (`tests/test_kernel_planner.py`): with today's fusion weights and the real fusion pool (50), a facet preference always beats the one-position lift a rank term gives between two adjacent products. The declared limit: a rank term is a secondary key, so inside a large tie group of the text rank (the `filters_only` rung, where hundreds of products rank zero) it can lift a product by several positions at once, and one preferred dimension (0.25) undoes a lift of at most 7 positions from the top of the pool; with several preferred dimensions the preference is their mean, so the bound is lower. Moving `rank_terms` into a fusion signal would lift that limit and is a contract change on measurement, not on principle.
+
+What the planner cannot express in `SearchArgs` (`budget_min`, exclusions, numeric facet bounds, a `soft` budget, a variant, a preference on a non-attribute dimension) goes into the plan's `gaps` (closed vocabulary), never into a hidden filter. An `avoid` on an `unmapped` word is an exclusion (the delta writes it on the universal `restriction` key, `soft`), never a rank term: a rank term can only lift the products that carry the word.
+
+On the planned path the tool does not re-judge `price_max` on the recent text (the NX-319 guard judges the **model's** bound on today's path): the planner's `price_max` comes only from a hard `budget_max` of the reduced state, whose provenance the kernel already checked on the user's quote, and the budget is conversation-scoped, so its number can be far outside the text window. It is counted as `price_bound_provenance{source: state}`.
 
 ## Reducer, thread and parking
 
@@ -370,15 +381,19 @@ The planner reads the reduced state, the resolved references and the gate verdic
 | `find` | an `implicit` need with gain ≥ 0.30, not yet asked | `search` + one confirmation question as the closing line (the NX-315 `question` slot) |
 | `show_more` | `active_search` present, no changes this turn | `page` |
 | `show_more` | changes this turn | `search` (it is a refinement) |
+| `show_more` | no `active_search`, no changes this turn (v1.1) | `search` from state, as a `find` with a known subject; no subject → `reply_only` |
 | `compare` | ≥ 2 exact targets | `compare` |
 | `compare` | 1 exact target | `compare` with a similar product (the existing `COMPARE_WITH_SIMILAR` path) |
 | `detail`, `link` | exact target | `detail` / `link` |
 | `link` | name `not_found` | `search` with the name, then disclose the result is not an exact match |
+| `detail`, `compare` | name `not_found`, or a target `stale` with `not_in_catalog` (v1.1) | as `link`: `search` with the name (`product_name`), disclosed as `not_exact_match`; a stale target without a name searches the subject |
 | `cart` | exact target | `cart` |
 | `bundle` | subject known, and the pack declares a bundle executor for it | `bundle`: the executor named by the pack (SOLE: `routine_plan`), with the family from the subject and the budget only from an `explicit` need. No executor declared → `search` |
 | `store_info` / `order_status` | — | `faq` / `order` (login wall unchanged) |
 | `chitchat` | — | `reply_only` |
-| `other` | — | `delegate`: the tool loop without catalog search |
+| `other` | — | `delegate`: the tool loop without catalog search and without mutations (v1.1: the set is derived from the schema registry minus `CATALOG_READ_TOOLS` minus the tools `tool_budget` classifies as mutations, so no model-chosen product id reaches a mutation, I1 + I10) |
+
+The two v1.1 rows are additive planner rules: they fill cases the v1.0 table left without an executor (design §D already sends every read act on a missing name to the search), and change the meaning of no existing row. „Changes this turn” is `TurnDelta.proposals` non-empty, passed to the planner as a required boolean, never recomputed from text; a `resume` (it swaps the subject without any proposal, and the session still belongs to the subject just parked) and an `inferred` ranking signal also count as changes, so `show_more` searches instead of paging a stale pool. The reducer does not touch `active_search` on park or resume; whether it should is a step 6 decision. A disclosure travels in the plan as a closed code (`not_exact_match`, `invalid_target`, `dropped_act`, `no_target`), and composition writes the sentence (step 6).
 
 **Acts say what, the planner says how.** An act never carries an execution hint, and `find` is a request („the user wants products”), not a strategy. A new `ActKind` is admitted only for a user request that no existing act plus a planner rule can express; a new strategy is always a planner row.
 
@@ -478,7 +493,7 @@ One component per PR, and no step starts before the previous one is merged with 
 | 1 | Contract scaffolding: models, schema snapshot, `KernelTrace`, AST gates, 4 fixture packs, replay harness, **I16 differential harness** | Gates and the differential harness run in CI; OFF = `main` on every surface | I1 (schema), I13, I14 (gates armed), I16 |
 | 2 | Reference resolver v2 (pure); also plugged into the step 0 shortcuts | Resolver suite green on 5 packs | I1 (property), I10, I24 |
 | 3 | Provenance checker, delta mapper, reducer extensions (park/resume/aside, `user_implicit`, facet scope, budget conversation-scoped, correction rule), legacy writers moved per the 0.5 matrix | Property tests green | I3–I9, I17, I19–I23 |
-| 4 | Ambiguity gate, planner, answer policy, pack clarification templates; `SearchArgs.rank_terms` (additive, `ORDER BY` only) | `SearchArgs` golden snapshots; gate tables; SQL snapshot | I2, I11, I12, I25 |
+| 4 | Ambiguity gate, planner, answer policy, pack clarification templates; `SearchArgs.rank_terms` (additive, `ORDER BY` only) and `SearchArgs.prefer` (additive, fusion only, v1.1) | `SearchArgs` golden snapshots; gate tables; SQL snapshot | I2, I11, I12, I25 |
 | 5 | Interpretation adapter (`turn_interpreter`): prompt, per-tenant schema, `complete_schema` call, validation into `CheckedChange` | Provider accepts the schema (one smoke call, run by Adi); offline agreement report on real SOLE turns | I18, I22 |
 | — | Production: `CONVERSATION_STATE_V2_ENABLED` shadow, then v2 write | Shadow diff read and explained | — |
 | 6 | Full stage behind `INTERPRETED_TURN_ENABLED` (OFF), wired to existing executors and compose, trace written | `ScriptedLLM` journeys × 5 packs green; differential harness still equal with OFF | I13 (replay), I15a, I15b, I20 |

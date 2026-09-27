@@ -1,0 +1,1036 @@
+{
+  "c02-electronics-units": [
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [
+        "numeric_facet"
+      ],
+      "plans": [
+        {
+          "executor": "search",
+          "search_args": {
+            "category": "telefoane",
+            "price_max": 3000.0,
+            "query": "telefon"
+          }
+        }
+      ],
+      "primary": 0,
+      "user_input": "Vreau un telefon cu minim 256 GB, sub 3000 lei."
+    }
+  ],
+  "c07-park-and-resume": [
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "search",
+          "search_args": {
+            "category": "tablete",
+            "query": "Tablete"
+          }
+        }
+      ],
+      "primary": 0,
+      "user_input": "Arată-mi și niște tablete."
+    },
+    {
+      "disclosures": [
+        [
+          0,
+          "no_target"
+        ]
+      ],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "reply_only"
+        }
+      ],
+      "primary": 0,
+      "user_input": "Hai înapoi la telefoane. Care era cel mai ieftin?"
+    }
+  ],
+  "c08-aside-keeps-state": [
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "faq"
+        }
+      ],
+      "primary": 0,
+      "user_input": "Cât durează livrarea?"
+    }
+  ],
+  "c09-compare-then-cart": [
+    {
+      "disclosures": [
+        [
+          0,
+          "no_target"
+        ]
+      ],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "reply_only"
+        }
+      ],
+      "primary": 0,
+      "user_input": "Care e diferența între primele două?"
+    },
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [
+        "no_question"
+      ],
+      "plans": [
+        {
+          "executor": "reply_only"
+        }
+      ],
+      "primary": 0,
+      "user_input": "Ok, îl iau pe al doilea."
+    }
+  ],
+  "c12-deictic-then-multi-act": [
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "ask"
+        }
+      ],
+      "primary": 0,
+      "user_input": "Vreau ceva bun pentru ea."
+    },
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "cart",
+          "product_ids": [
+            "el-01"
+          ]
+        },
+        {
+          "depends_on": 0,
+          "executor": "search",
+          "search_args": {
+            "category": "huse",
+            "query": "husă"
+          }
+        }
+      ],
+      "primary": 1,
+      "user_input": "Adaugă-l pe primul în coș și arată-mi o husă pentru el."
+    }
+  ],
+  "g01-electronics-cart-on-an-exact-target": [
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "search",
+          "search_args": {
+            "category": "telefoane",
+            "query": "telefon"
+          }
+        }
+      ],
+      "primary": 0,
+      "user_input": "Vreau un telefon."
+    },
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "cart",
+          "product_ids": [
+            "el-01"
+          ]
+        }
+      ],
+      "primary": 0,
+      "user_input": "Adaugă-l pe primul în coș."
+    }
+  ],
+  "g02-electronics-ambiguous-cart-asks-once": [
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "search",
+          "search_args": {
+            "category": "telefoane",
+            "query": "telefon"
+          }
+        }
+      ],
+      "primary": 0,
+      "user_input": "Vreau un telefon."
+    },
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "ask",
+          "product_ids": [
+            "el-01",
+            "el-07"
+          ]
+        }
+      ],
+      "primary": 0,
+      "user_input": "Adaugă Samsung-ul în coș."
+    },
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [
+        "no_question"
+      ],
+      "plans": [
+        {
+          "executor": "reply_only"
+        }
+      ],
+      "primary": 0,
+      "user_input": "Adaugă Samsung-ul în coș."
+    }
+  ],
+  "g08-electronics-link-to-a-shared-name": [
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "search",
+          "search_args": {
+            "category": "telefoane",
+            "query": "telefon"
+          }
+        }
+      ],
+      "primary": 0,
+      "user_input": "Vreau un telefon."
+    },
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "link",
+          "product_ids": [
+            "el-01",
+            "el-07"
+          ]
+        }
+      ],
+      "primary": 0,
+      "user_input": "Trimite-mi linkul la Samsung."
+    }
+  ],
+  "g12-electronics-better-screen": [
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "search",
+          "search_args": {
+            "category": "telefoane",
+            "query": "telefon"
+          }
+        }
+      ],
+      "primary": 0,
+      "user_input": "Vreau un telefon."
+    },
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "compare",
+          "product_ids": [
+            "el-01",
+            "el-25"
+          ]
+        }
+      ],
+      "primary": 0,
+      "user_input": "Care e mai bun la ecran, primul sau al doilea?"
+    }
+  ],
+  "g13-electronics-cheaper-of-two": [
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "search",
+          "search_args": {
+            "category": "telefoane",
+            "query": "telefon"
+          }
+        }
+      ],
+      "primary": 0,
+      "user_input": "Vreau un telefon."
+    },
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "compare",
+          "product_ids": [
+            "el-01",
+            "el-02"
+          ]
+        }
+      ],
+      "primary": 0,
+      "user_input": "Care e mai ieftin, primul sau al doilea?"
+    }
+  ],
+  "k01-electronics-park-and-resume": [
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "search",
+          "search_args": {
+            "category": "telefoane",
+            "prefer": {
+              "brand": [
+                "Samsung"
+              ]
+            },
+            "price_max": 3000.0,
+            "query": "telefoane Samsung"
+          }
+        }
+      ],
+      "primary": 0,
+      "user_input": "Arată-mi telefoane Samsung sub 3000 de lei."
+    },
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "search",
+          "search_args": {
+            "category": "tablete",
+            "price_max": 3000.0,
+            "query": "tablete"
+          }
+        }
+      ],
+      "primary": 0,
+      "user_input": "Acum arată-mi niște tablete."
+    },
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "detail",
+          "product_ids": [
+            "el-01"
+          ]
+        }
+      ],
+      "primary": 0,
+      "user_input": "Hai înapoi la telefoane, arată-mi cel mai ieftin."
+    }
+  ],
+  "n01-electronics-find-then-page-then-refine": [
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "search",
+          "search_args": {
+            "category": "telefoane",
+            "query": "telefon"
+          }
+        }
+      ],
+      "primary": 0,
+      "user_input": "Vreau un telefon."
+    },
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "search",
+          "search_args": {
+            "category": "telefoane",
+            "query": "Telefoane"
+          }
+        }
+      ],
+      "primary": 0,
+      "user_input": "Ce recomanzi?"
+    },
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "page"
+        }
+      ],
+      "primary": 0,
+      "user_input": "Mai arată-mi."
+    },
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "search",
+          "search_args": {
+            "category": "telefoane",
+            "price_max": 2000.0,
+            "query": "Telefoane"
+          }
+        }
+      ],
+      "primary": 0,
+      "user_input": "Mai arată-mi, dar sub 2000 de lei."
+    }
+  ],
+  "n02-electronics-show-more-without-a-session": [
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "search",
+          "search_args": {
+            "category": "telefoane",
+            "query": "telefon"
+          }
+        }
+      ],
+      "primary": 0,
+      "user_input": "Vreau un telefon."
+    },
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "search",
+          "search_args": {
+            "category": "telefoane",
+            "query": "Telefoane"
+          }
+        }
+      ],
+      "primary": 0,
+      "user_input": "Mai arată-mi."
+    }
+  ],
+  "n03-electronics-show-more-without-a-subject": [
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [
+        "no_subject"
+      ],
+      "plans": [
+        {
+          "executor": "reply_only"
+        }
+      ],
+      "primary": 0,
+      "user_input": "Mai arată-mi."
+    }
+  ],
+  "n04-electronics-find-without-anything-asks": [
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "ask"
+        }
+      ],
+      "primary": 0,
+      "user_input": "Vreau ceva."
+    }
+  ],
+  "n06-electronics-compare-two-then-one": [
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "search",
+          "search_args": {
+            "category": "telefoane",
+            "query": "telefon"
+          }
+        }
+      ],
+      "primary": 0,
+      "user_input": "Vreau un telefon."
+    },
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "compare",
+          "product_ids": [
+            "el-01",
+            "el-02"
+          ]
+        }
+      ],
+      "primary": 0,
+      "user_input": "Compară primul cu al doilea."
+    },
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "compare",
+          "product_ids": [
+            "el-03"
+          ]
+        }
+      ],
+      "primary": 0,
+      "user_input": "Compară-l pe al treilea cu ceva asemănător."
+    }
+  ],
+  "n07-electronics-detail-link-and-names-not-found": [
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "search",
+          "search_args": {
+            "category": "telefoane",
+            "query": "telefon"
+          }
+        }
+      ],
+      "primary": 0,
+      "user_input": "Vreau un telefon."
+    },
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "detail",
+          "product_ids": [
+            "el-02"
+          ]
+        }
+      ],
+      "primary": 0,
+      "user_input": "Spune-mi mai multe despre al doilea."
+    },
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "link",
+          "product_ids": [
+            "el-01"
+          ]
+        }
+      ],
+      "primary": 0,
+      "user_input": "Trimite-mi linkul la primul."
+    },
+    {
+      "disclosures": [
+        [
+          0,
+          "not_exact_match"
+        ]
+      ],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "search",
+          "search_args": {
+            "category": "telefoane",
+            "product_name": "Nokia Lumia 800",
+            "query": "Nokia Lumia 800"
+          }
+        }
+      ],
+      "primary": 0,
+      "user_input": "Trimite-mi linkul la Nokia Lumia 800."
+    },
+    {
+      "disclosures": [
+        [
+          0,
+          "not_exact_match"
+        ]
+      ],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "search",
+          "search_args": {
+            "category": "telefoane",
+            "product_name": "Nokia Lumia 800",
+            "query": "Nokia Lumia 800"
+          }
+        }
+      ],
+      "primary": 0,
+      "user_input": "Spune-mi mai multe despre Nokia Lumia 800."
+    },
+    {
+      "disclosures": [
+        [
+          0,
+          "not_exact_match"
+        ]
+      ],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "search",
+          "search_args": {
+            "category": "telefoane",
+            "product_name": "Nokia Lumia 800",
+            "query": "Nokia Lumia 800"
+          }
+        }
+      ],
+      "primary": 0,
+      "user_input": "Compară primul cu Nokia Lumia 800."
+    }
+  ],
+  "n08-electronics-cart-on-an-exact-target": [
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "search",
+          "search_args": {
+            "category": "telefoane",
+            "query": "telefon"
+          }
+        }
+      ],
+      "primary": 0,
+      "user_input": "Vreau un telefon."
+    },
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "cart",
+          "product_ids": [
+            "el-02"
+          ]
+        }
+      ],
+      "primary": 0,
+      "user_input": "Adaugă-l pe al doilea în coș."
+    }
+  ],
+  "n10-electronics-bundle-without-an-executor-searches": [
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "search",
+          "search_args": {
+            "category": "telefoane",
+            "query": "telefon"
+          }
+        }
+      ],
+      "primary": 0,
+      "user_input": "Vreau un telefon."
+    },
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "search",
+          "search_args": {
+            "category": "telefoane",
+            "query": "Telefoane"
+          }
+        }
+      ],
+      "primary": 0,
+      "user_input": "Fă-mi un pachet complet."
+    }
+  ],
+  "n11-electronics-acts-without-targets": [
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "faq"
+        }
+      ],
+      "primary": 0,
+      "user_input": "Cât durează livrarea?"
+    },
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "order"
+        }
+      ],
+      "primary": 0,
+      "user_input": "Unde e comanda mea?"
+    },
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "reply_only"
+        }
+      ],
+      "primary": 0,
+      "user_input": "Mulțumesc!"
+    },
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "delegate"
+        }
+      ],
+      "primary": 0,
+      "user_input": "Îmi poți face o factură pe firmă?"
+    }
+  ],
+  "n12-electronics-unmapped-ranks-and-survives": [
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "search",
+          "search_args": {
+            "category": "telefoane",
+            "query": "telefon",
+            "rank_terms": [
+              "gaming"
+            ]
+          }
+        }
+      ],
+      "primary": 0,
+      "user_input": "Vreau un telefon bun pentru gaming."
+    },
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "search",
+          "search_args": {
+            "category": "telefoane",
+            "price_max": 3000.0,
+            "query": "Telefoane",
+            "rank_terms": [
+              "gaming"
+            ]
+          }
+        }
+      ],
+      "primary": 0,
+      "user_input": "Și sub 3000 de lei."
+    }
+  ],
+  "n13-electronics-cheapest-sorts": [
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "search",
+          "search_args": {
+            "category": "telefoane",
+            "query": "telefon",
+            "sort_mode": "price_asc"
+          }
+        }
+      ],
+      "primary": 0,
+      "user_input": "Vreau cel mai ieftin telefon."
+    }
+  ],
+  "n14-electronics-three-acts-keep-two": [
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "search",
+          "search_args": {
+            "category": "telefoane",
+            "query": "telefon"
+          }
+        }
+      ],
+      "primary": 0,
+      "user_input": "Vreau un telefon."
+    },
+    {
+      "disclosures": [
+        [
+          -1,
+          "dropped_act"
+        ]
+      ],
+      "dropped_acts": 1,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "cart",
+          "product_ids": [
+            "el-01"
+          ]
+        },
+        {
+          "executor": "search",
+          "search_args": {
+            "category": "huse",
+            "query": "huse"
+          }
+        }
+      ],
+      "primary": 1,
+      "user_input": "Adaugă-l pe primul în coș, compară-l cu al doilea și arată-mi niște huse."
+    }
+  ],
+  "p05-electronics-unit-and-comparator": [
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [
+        "no_query"
+      ],
+      "plans": [
+        {
+          "executor": "reply_only"
+        }
+      ],
+      "primary": 0,
+      "user_input": "Minim 256 GB."
+    }
+  ],
+  "p06-electronics-price-is-hard": [
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "ask"
+        }
+      ],
+      "primary": 0,
+      "user_input": "Sub 3000 de lei, te rog."
+    }
+  ],
+  "p07-electronics-unit-of-another-dimension": [
+    {
+      "disclosures": [],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "ask"
+        }
+      ],
+      "primary": 0,
+      "user_input": "Vreau 256 GB."
+    }
+  ],
+  "r01-electronics-ordinal": [
+    {
+      "disclosures": [
+        [
+          0,
+          "no_target"
+        ]
+      ],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "reply_only"
+        }
+      ],
+      "primary": 0,
+      "user_input": "Vreau detalii despre al doilea."
+    }
+  ],
+  "r04-electronics-name-shared": [
+    {
+      "disclosures": [
+        [
+          0,
+          "no_target"
+        ]
+      ],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "reply_only"
+        }
+      ],
+      "primary": 0,
+      "user_input": "Dă-mi linkul la Samsung."
+    }
+  ],
+  "r05-electronics-name-nowhere": [
+    {
+      "disclosures": [
+        [
+          0,
+          "not_exact_match"
+        ]
+      ],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "search",
+          "search_args": {
+            "product_name": "Huawei",
+            "query": "Huawei"
+          }
+        }
+      ],
+      "primary": 0,
+      "user_input": "Trimite-mi linkul la Huawei."
+    }
+  ],
+  "r09-electronics-resume-cheapest": [
+    {
+      "disclosures": [
+        [
+          0,
+          "no_target"
+        ]
+      ],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "reply_only"
+        }
+      ],
+      "primary": 0,
+      "user_input": "Hai înapoi la telefoane, arată-mi cel mai ieftin."
+    }
+  ],
+  "r12-electronics-out-of-stock-stays-exact": [
+    {
+      "disclosures": [
+        [
+          0,
+          "no_target"
+        ]
+      ],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "reply_only"
+        }
+      ],
+      "primary": 0,
+      "user_input": "Trimite-mi linkul la primul."
+    }
+  ]
+}

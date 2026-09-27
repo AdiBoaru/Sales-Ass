@@ -319,7 +319,38 @@ def load_domain_pack(business: BusinessConfig) -> DomainPack | None:
         routine_steps=load_routine_steps(merged.get("routine_steps")),
         # NX-329: dimensiunile care numesc produse (I24), fără nicio fațetă aditivă.
         reference_dimensions=_norm_reference_dimensions(merged.get("reference_dimensions"), facets),
+        # NX-333: executorul actului `bundle`, per raft (fail-closed per intrare).
+        bundle_executors=_norm_bundle_executors(merged.get("bundle_executors")),
     )
+
+
+def _norm_bundle_executors(raw: Any) -> dict[str, str]:
+    """NX-333: `rădăcina raftului | "*"` → numele uneltei care servește `bundle`.
+
+    Fail-closed PER INTRARE: o unealtă care nu există în `TOOL_NAMES` (registrul schemelor, o
+    listă de nume, fără să importe uneltele) se aruncă și se loghează, iar raftul ei cade pe
+    căutare. Un nume greșit în config nu are voie să devină un executor fantomă la pasul 6.
+
+    Recenzia NX-333: și o MUTAȚIE se aruncă (clasificarea read/mutation din `tool_budget`). Un
+    pachet e o citire („fă-mi o rutină"); o mutație ca executor de `bundle` ar muta ceva fără ținta
+    `exact` pe care o cere I10."""
+    if not isinstance(raw, dict):
+        return {}
+    from src.agent.tool_budget import spec_for  # noqa: PLC0415 — doar registre de nume
+    from src.agent.tool_definitions import TOOL_NAMES  # noqa: PLC0415 — doar nume, fără unelte
+
+    out: dict[str, str] = {}
+    for shelf, tool in raw.items():
+        if not isinstance(shelf, str) or not shelf or not isinstance(tool, str):
+            continue
+        if tool not in TOOL_NAMES:
+            log.warning("bundle_executors[%s]: unealta %r nu există, refuzată", shelf, tool)
+            continue
+        if spec_for(tool).is_mutation:
+            log.warning("bundle_executors[%s]: %r e o mutație, refuzată", shelf, tool)
+            continue
+        out[shelf] = tool
+    return out
 
 
 def _norm_reference_dimensions(raw: Any, facets: tuple[TypedFacet, ...]) -> tuple[str, ...]:

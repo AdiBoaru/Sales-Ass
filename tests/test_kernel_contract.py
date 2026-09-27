@@ -59,6 +59,48 @@ def test_the_step_4a_modules_are_pure_and_no_longer_planned():
         assert rel not in registry["planned"]
 
 
+def test_the_step_4b_planner_is_registered_in_its_role_and_no_longer_planned():
+    """NX-333: plannerul e SINGURUL modul de rol `planner`; porțile rolului (I13, I3, text brut,
+    cititori declarați, I14) i se aplică, doar I2 nu (el e producătorul `SearchArgs`)."""
+    registry = gates.load_modules()
+    assert gates.modules_by_role()["planner"] == ["src/agent/turn_planner.py"]
+    assert "src/agent/turn_planner.py" not in registry["planned"]
+    assert "search_args" not in gates.GATES_BY_ROLE["planner"]
+    assert set(gates.GATES_BY_ROLE["pure"]) - {"search_args"} == set(gates.GATES_BY_ROLE["planner"])
+
+
+def test_i2_search_args_is_built_only_in_the_planner_among_kernel_modules():
+    """I2, pe codul real: printre modulele kernelului (toate rolurile, în afara executorilor, care
+    sunt calea de azi și CONSUMATORUL lui `SearchArgs`), singurul care construiește `SearchArgs`
+    e `turn_planner.py`, iar acolo o face o singură dată."""
+    roles = gates.modules_by_role()
+    builders = {
+        rel: len(gates.search_args((gates.ROOT / rel).read_text(encoding="utf-8"), rel))
+        for role, files in roles.items()
+        if role != "executor"
+        for rel in files
+    }
+    assert {rel for rel, n in builders.items() if n} == {"src/agent/turn_planner.py"}
+    assert builders["src/agent/turn_planner.py"] == 1
+
+
+def test_i2_the_delegated_loop_has_no_catalog_search_tool():
+    """I2 (a doua jumătate a enforcement-ului din contract): bucla delegată (`other`) nu are nicio
+    unealtă care citește catalogul și nicio mutație (recenzia NX-333: `cart_add` alegea produsul
+    în afara resolverului, I1 + I10), iar mulțimea e DERIVATĂ din registre, nu scrisă de mână."""
+    from src.agent.tool_budget import spec_for
+    from src.agent.tool_definitions import TOOL_NAMES
+    from src.agent.turn_planner import DELEGATE_TOOLS
+    from src.tools.base import CATALOG_READ_TOOLS
+
+    assert DELEGATE_TOOLS & CATALOG_READ_TOOLS == set()
+    mutations = {t for t in TOOL_NAMES if spec_for(t).is_mutation}
+    assert mutations and not DELEGATE_TOOLS & mutations
+    assert DELEGATE_TOOLS == set(TOOL_NAMES) - CATALOG_READ_TOOLS - mutations
+    assert {"search_products", "routine_plan"} <= set(TOOL_NAMES) - DELEGATE_TOOLS
+    assert CATALOG_READ_TOOLS <= set(TOOL_NAMES), "o unealtă de catalog lipsește din registru"
+
+
 # --- porțile pe codul real ------------------------------------------------------------------------
 
 
@@ -113,7 +155,9 @@ def test_pure_modules_do_not_load_a_model_client_even_transitively():
     intermediar ar trece de verificarea pe AST."""
     roles = gates.modules_by_role()
     modules = [
-        rel[:-3].replace("/", ".") for role in ("pure", "reducer") for rel in roles.get(role, [])
+        rel[:-3].replace("/", ".")
+        for role in ("pure", "planner", "reducer")
+        for rel in roles.get(role, [])
     ]
     loaded = _loaded_model_clients(modules)
     assert loaded == "", f"client de model încărcat tranzitiv: {loaded}"

@@ -18,6 +18,8 @@
     }
   ],
   "domain_pack": {
+    "_bundle_executors_note": "NX-333: `bundle` pe canapele e servit de graful de relații (o canapea + ce se potrivește lângă ea); pe restul rafturilor, fără intrare și fără `*`, `bundle` rămâne o căutare. Cheia e raftul (catalogul de fixture e plat, fără cale).",
+    "bundle_executors": {"canapele": "related_products"},
     "facets": [
       {
         "key": "price",

@@ -133,6 +133,13 @@ def _need_proposals(
     if c.dimension == PRICE:
         keys = _bound_keys(PRICE, relation, needs) or list(PRICE_BOUNDS)
         return [StateUpdateProposal("set_need", key=k, value=value, **common) for k in keys]
+    if c.dimension == UNMAPPED and relation == "avoid":
+        # NX-333 (recenzia): «dar nu pentru gaming» e o EXCLUDERE fără dimensiune. Scris ca nevoie
+        # `unmapped` pozitivă, plannerul l-ar fi pus în `rank_terms`, adică ar fi URCAT exact
+        # produsele ocolite. Merge pe cheia universală de excludere, tot `soft` (I25: `unmapped`
+        # nu e niciodată dur), iar plannerul o raportează ca gol (`exclusion`), nu ca filtru.
+        soft = {**common, "strength": "soft"}
+        return [StateUpdateProposal("set_need", key=RESTRICTION_KEY, value=value, **soft)]
     if c.dimension == UNMAPPED:
         # `unmapped` nu e niciodată dur (I25), oricât de explicit ar fi citatul.
         soft = {**common, "strength": "soft"}
