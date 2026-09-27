@@ -650,7 +650,7 @@ def test_plan_lookup_revalidates_every_source_id_and_searches_only_missing_names
     ]
     lookup = plan_lookup(refs, sources, pack=fc.pack("electronics"), locale="ro")
     assert set(lookup.ids) == {"el-01", "el-02", "el-03", "el-04", "el-05", "el-06"}
-    assert lookup.names == ("xiaomi phone 9 512 gb",)
+    assert lookup.names == ("Xiaomi Phone 9 512 GB",)
     assert lookup.attributes == ("brand", "color", "storage")
 
 

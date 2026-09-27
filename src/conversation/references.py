@@ -210,7 +210,8 @@ class ReferenceFacts:
 
 @dataclass(frozen=True)
 class CatalogLookup:
-    """Ce trebuie citit din catalog: id-urile de revalidat, numele de căutat, atributele de adus."""
+    """Ce trebuie citit din catalog: id-urile de revalidat, numele de căutat (așa cum le-a dat
+    referința; faptele le indexează pe `name_key`), atributele de adus."""
 
     ids: tuple[str, ...] = ()
     names: tuple[str, ...] = ()
@@ -657,7 +658,9 @@ def plan_lookup(
     searched = [items for _, items in sources.sets_in_order()]
     if sources.page is not None:
         searched.append((sources.page,))
-    names: list[str] = []
+    names: dict[
+        str, str
+    ] = {}  # cheie → numele așa cum l-a dat referința (punctuația contează în SQL)
     for ref in refs:
         if ref.kind != "name":
             continue
@@ -667,14 +670,16 @@ def plan_lookup(
             continue
         if any(match_name_in_set(name, items, stop) is not None for items in searched):
             continue
-        names.append(key)
+        names[key] = name
     attrs = set(_reference_dims(pack))
     attrs |= {
         r.dimension for r in refs if r.kind in ("attribute", "extreme", "earlier") and r.dimension
     }
     attrs -= _COLUMN_DIMENSIONS | {VARIANT_DIMENSION}
     return CatalogLookup(
-        ids=tuple(ids), names=tuple(names[:MAX_NAMES]), attributes=tuple(sorted(attrs))
+        ids=tuple(ids),
+        names=tuple(list(names.values())[:MAX_NAMES]),
+        attributes=tuple(sorted(attrs)),
     )
 
 

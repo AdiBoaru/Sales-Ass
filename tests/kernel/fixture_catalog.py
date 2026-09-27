@@ -115,7 +115,7 @@ def facts(
         catalog.pop(pid, None)
     named = {}
     if lookup is not None:
-        named = {key: named_in_catalog(name, key) for key in lookup.names}
+        named = {name_key(n): named_in_catalog(name, n) for n in lookup.names}
         wanted = set(lookup.ids) | {pid for hits in named.values() for pid, _ in hits}
         catalog = {pid: p for pid, p in catalog.items() if pid in wanted}
     return ReferenceFacts(
