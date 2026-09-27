@@ -207,6 +207,43 @@ _RO_CONNECTORS = """
 _CONNECTORS: dict[str, tuple[tuple[str, str], ...]] = {}
 
 
+# NX-329 PR B — sufixele de FLEXIUNE ale unui substantiv: articolul hotărât și pluralul. Clientul
+# (și chip-ul nostru de comparație) scrie «serul Anua», «tonerul ZEROID», iar numele de pe card
+# poartă „Ser", „Toner". Egalitatea strictă de cuvinte le despărțea: sonda NX-329 a găsit cinci
+# chip-uri de comparație emise de noi care plecau la model pe ecrane unde ambele produse erau
+# numite. NU e o potrivire pe prefix (ca `needs._prefix_match`): un prefix nelimitat ar lega „pro"
+# din «Omnia Pro» de „produse". Doar tulpina + unul dintre sufixele de mai jos, cu tulpina de cel
+# puțin 3 litere. Pe text pliat (fără diacritice).
+_INFLECTION_SUFFIXES: dict[str, tuple[str, ...]] = {
+    "ro": (
+        "ul",
+        "ului",
+        "le",
+        "lui",
+        "lor",
+        "ilor",
+        "a",
+        "ua",
+        "ei",
+        "i",
+        "ii",
+        "e",
+        "ele",
+        "uri",
+        "urile",
+        "urilor",
+    ),
+    "en": ("s", "es"),
+}
+
+
+def inflection_suffixes(locale: str | None) -> tuple[str, ...]:
+    """Sufixele de flexiune ale locale-i. Locale necunoscută → `()`: doar egalitatea (P11)."""
+    if not locale:
+        return ()
+    return _INFLECTION_SUFFIXES.get(locale.split("-")[0].lower(), ())
+
+
 def _table(
     cache: dict[str, tuple[tuple[str, str], ...]], tables: dict[str, str], locale: str | None
 ) -> tuple[tuple[str, str], ...]:

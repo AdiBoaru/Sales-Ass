@@ -1080,6 +1080,8 @@ def decide_shortcut(
     for check in gate_act_targets([act], resolved):
         if check.verdict != "ok":
             return ShortcutDecision("model", reason=check.verdict)
+    if gate == "compare" and (paired := _paired_ambiguity(resolved)):
+        return ShortcutDecision("served", paired)
     ids: list[str] = []
     for r in resolved:
         read_only_ambiguity = gate == "link" and r.outcome == "ambiguous" and r.source in _ON_SCREEN
@@ -1089,6 +1091,25 @@ def decide_shortcut(
     if gate == "compare" and len(ids) < 2:
         return ShortcutDecision("model", reason="single_target")
     return ShortcutDecision("served", tuple(ids))
+
+
+def _paired_ambiguity(resolved: Sequence[ResolvedRef]) -> tuple[str, ...]:
+    """Referințe ambigue care, ÎMPREUNĂ, numesc exact un set. PURĂ.
+
+    «Compară MUZIGAE MANSION Objet Water cu MUZIGAE MANSION…» pe un ecran cu două carduri cu
+    nume identic: fiecare referință e ambiguă între cele două, dar două referințe pe exact două
+    produse, într-o comparație (care cere produse DISTINCTE), nu lasă nicio alegere. Găsit de sonda
+    NX-329 pe chip-uri reale; calea NX-326 le compara, iar v2 le trimitea la model. Doar pe ecran
+    (candidații sunt cei văzuți) și doar când numărul candidaților e EXACT numărul referințelor:
+    șase carduri identice pentru două referințe rămân ale modelului. Ordinea e cea din resolver."""
+    if len(resolved) < 2:
+        return ()
+    first = resolved[0].product_ids
+    same = all(
+        r.outcome == "ambiguous" and r.source in _ON_SCREEN and set(r.product_ids) == set(first)
+        for r in resolved
+    )
+    return tuple(first) if same and len(set(first)) == len(resolved) else ()
 
 
 async def _v2_shortcut(

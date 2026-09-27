@@ -289,3 +289,65 @@ def test_the_events_carry_no_names_or_user_text(v2):
     ]
     decision = det.decide_shortcut("link", refs, resolved)
     assert decision.action == "model" and "cerave" not in repr(decision).lower()
+
+
+def _ambiguous(rid: str, ids: list[str], source: str = "shown_now"):
+    from src.conversation.interpretation import ResolvedRef
+
+    return ResolvedRef(
+        ref_id=rid,
+        kind="name",
+        outcome="ambiguous",
+        product_ids=ids,
+        source=source,
+        reason="name_shared",
+    )
+
+
+def _name_refs(n: int):
+    from src.conversation.interpretation import Reference
+
+    return [
+        Reference(
+            id=f"r{i + 1}",
+            text="x",
+            kind="name",
+            ordinal=None,
+            name="x",
+            dimension=None,
+            value=None,
+            direction=None,
+        )
+        for i in range(n)
+    ]
+
+
+def test_two_references_on_exactly_two_identical_cards_compare_them():
+    """Sonda NX-329: «Compară MUZIGAE MANSION Objet Water cu MUZIGAE MANSION…» pe două carduri
+    cu nume identic. Două referințe, doi candidați, o comparație cere produse distincte: nicio
+    alegere nu rămâne, deci se servește perechea (NX-326 o compara, v2 o trimitea la model)."""
+    pair = [_ambiguous("r1", ["m1", "m2"]), _ambiguous("r2", ["m2", "m1"])]
+    decision = det.decide_shortcut("compare", _name_refs(2), pair)
+    assert (decision.action, decision.ids) == ("served", ("m1", "m2"))
+
+
+@pytest.mark.parametrize(
+    "resolved",
+    [
+        # șase carduri identice pentru două referințe: alegerea e a modelului
+        [_ambiguous("r1", list("abcdef")), _ambiguous("r2", list("abcdef"))],
+        # seturi diferite
+        [_ambiguous("r1", ["a", "b"]), _ambiguous("r2", ["b", "c"])],
+        # candidații nu sunt pe ecran
+        [_ambiguous("r1", ["a", "b"], "catalog"), _ambiguous("r2", ["a", "b"], "catalog")],
+    ],
+    ids=["six_for_two", "different_sets", "off_screen"],
+)
+def test_a_pairing_that_leaves_a_choice_goes_to_the_model(resolved):
+    assert det.decide_shortcut("compare", _name_refs(2), resolved).action == "model"
+
+
+def test_pairing_is_only_for_comparison():
+    """La link, o ambiguitate pe ecran servește deja candidații; regula nu schimbă nimic acolo."""
+    pair = [_ambiguous("r1", ["m1", "m2"]), _ambiguous("r2", ["m1", "m2"])]
+    assert det.decide_shortcut("link", _name_refs(2), pair).ids == ("m1", "m2")

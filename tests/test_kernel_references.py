@@ -307,6 +307,117 @@ def test_a_description_that_names_a_product_class_is_not_a_property():
     assert bare.reason == "denotes_property"
 
 
+# --- NX-329 PR B: găsite de sonda pe chip-urile reale (`scripts/nx329_shortcut_probe.py`) ---------
+
+#: Vocabularul SOLE, cât cer cazurile: tipul e dimensiune de REFERINȚĂ, tipul de ten e o nevoie.
+_SOLE_VOCAB = CatalogVocabulary(
+    business_id="b",
+    dimensions={
+        "product_type": (
+            VocabEntry("crema de fata", "crema de fata", 300),
+            VocabEntry("ser de fata", "ser de fata", 200),
+        ),
+        "skin_type": (VocabEntry("dry", "ten uscat", 400),),
+    },
+)
+
+
+def _resolve_on(shown, *names, vocab=_SOLE_VOCAB, locale="ro", types=None):
+    types = types or {}
+    facts = ReferenceFacts(
+        products={
+            s.product_id: ProductFacts(
+                s.product_id,
+                s.name,
+                s.price,
+                True,
+                attributes={"product_type": types[s.product_id]} if s.product_id in types else {},
+            )
+            for s in shown
+        }
+    )
+    refs = [ref(f"r{i + 1}", "name", name=n) for i, n in enumerate(names)]
+    return resolve_references(
+        refs, ReferenceSources(shown_now=shown), facts, vocab=vocab, locale=locale
+    )
+
+
+def test_an_inflected_type_word_names_the_product_that_carries_it():
+    """Chip-ul nostru «Compară crema HARUHARU cu serul Anua»: cardul poartă „Ser", clientul scrie
+    «serul». Egalitatea strictă scotea setul din joc, iar comparația pleca la model."""
+    shown = (
+        ShownItem("a", "Anua Rice 7 Ceramide Ser Hidratant pentru Fata", 95.0),
+        ShownItem("h", "HARUHARU WONDER Black Rice 10 Hyaluronic Cream crema de fata", 120.0),
+    )
+    anua, haru = _resolve_on(shown, "serul Anua", "crema HARUHARU", vocab=None)
+    assert (anua.outcome, anua.product_ids) == ("exact", ["a"])
+    assert (haru.outcome, haru.product_ids) == ("exact", ["h"])
+
+
+def test_inflection_is_a_suffix_of_the_locale_not_any_prefix():
+    """„pro" din «Omnia Pro» nu e tulpina lui «prosop»: „sop" nu e o flexiune. Iar pe o
+    locale necunoscută nu există flexiune deloc (P11)."""
+    shown = (
+        ShownItem("o", "ROYAL AND LANGNICKEL Omnia Pro", 60.0),
+        ShownItem("c", "COSRX Low pH Cleanser", 45.0),
+    )
+    [pro] = _resolve_on(shown, "prosop Omnia", vocab=None)
+    assert pro.outcome == "not_found"
+    anua = (ShownItem("a", "Anua Rice Ser Hidratant", 95.0), ShownItem("c", "COSRX Cleanser", 45.0))
+    [unknown_locale] = _resolve_on(anua, "serul Anua", vocab=None, locale="xx")
+    assert unknown_locale.outcome == "not_found"
+
+
+def test_a_whole_name_is_ambiguous_only_among_the_cards_that_carry_it_whole():
+    """«GESKE Sonic Facial Roller 4 in 1» cu trei carduri identice și două «… Facial and Body
+    Roller 4 in 1»: ambiguu pe cele TREI, nu pe toate cinci (treapta cuvintelor era mai laxă)."""
+    shown = (
+        ShownItem("g1", "GESKE Sonic Facial Roller 4 in 1", 199.0),
+        ShownItem("b1", "GESKE Sonic Facial and Body Roller 4 in 1", 249.0),
+        ShownItem("g2", "GESKE Sonic Facial Roller 4 in 1", 199.0),
+        ShownItem("b2", "GESKE Sonic Facial and Body Roller 4 in 1", 249.0),
+    )
+    [r] = _resolve_on(shown, "GESKE Sonic Facial Roller 4 in 1", vocab=None)
+    assert (r.outcome, r.product_ids) == ("ambiguous", ["g1", "g2"])
+
+
+def test_a_need_qualifier_after_the_name_is_not_a_competing_name():
+    """Chip-ul nostru «Compară IUNIK cu BELIF pentru ten uscat»: „ten uscat" e o nevoie, nu alt
+    produs. Fără vocabular nu se judecă, deci rămâne negăsit."""
+    shown = (
+        ShownItem("i", "IUNIK Beta Glucan Power Moisture Serum", 90.0),
+        ShownItem("b", "BELIF The True Cream Aqua Bomb", 180.0),
+    )
+    [r] = _resolve_on(shown, "BELIF pentru ten uscat")
+    assert (r.outcome, r.product_ids, r.reason) == ("exact", ["b"], "named_with_qualifier")
+    [blind] = _resolve_on(shown, "BELIF pentru ten uscat", vocab=None)
+    assert blind.outcome == "not_found"
+
+
+def test_a_type_word_on_an_english_name_filters_on_the_reread_type():
+    """«crema Dokdo» lângă „ROUND LAB 1025 Dokdo Cream": „crema" nu e în nume (nici ca flexiune),
+    dar e tipul produsului, iar faptele recitite îl confirmă. Un tip CONTRAZIS de fapte nu alege."""
+    shown = (
+        ShownItem("d", "ROUND LAB 1025 Dokdo Cream", 99.0),
+        ShownItem("t", "ROUND LAB 1025 Dokdo Toner", 89.0),
+    )
+    types = {"d": "crema de fata", "t": "toner"}
+    [cream] = _resolve_on(shown, "crema Dokdo", types=types)
+    assert (cream.outcome, cream.product_ids) == ("exact", ["d"])
+    [serum] = _resolve_on(shown, "ser Dokdo", types=types)
+    assert serum.outcome == "not_found", "niciun Dokdo nu e ser: tipul filtrează, nu ghicește"
+
+
+def test_an_unknown_foreign_word_still_takes_the_set_out():
+    """Regula feliei 2a rămâne pentru un nume concurent: «Xiaomi» nu e o valoare cunoscută."""
+    shown = (
+        ShownItem("s", "Samsung Phone 1", 900.0),
+        ShownItem("a", "Apple Phone 2", 1200.0),
+    )
+    [r] = _resolve_on(shown, "Xiaomi Phone 1")
+    assert r.outcome == "not_found"
+
+
 def test_a_model_proposed_attribute_on_a_need_dimension_is_a_property():
     r = one(
         "fashion",
