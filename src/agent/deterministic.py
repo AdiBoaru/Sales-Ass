@@ -1110,9 +1110,12 @@ async def _v2_shortcut(
             page=ShownItem(page.product_id, page.name, page.price or None) if page else None,
         )
         pack = getattr(ctx.business, "domain_pack", None)
+        lookup = plan_lookup(refs, sources, pack=pack, locale=ctx.language)
+        # Vocabularul judecă doar valori: un atribut, sau un nume pe care nu-l poartă niciun
+        # produs de pe ecran. „linkul la al doilea" nu plătește încărcarea lui (~1 s cu cache rece).
+        needs_vocab = bool(lookup.names) or any(r.kind == "attribute" for r in refs)
         try:
-            vocab = await get_vocabulary(deps, ctx.business.id)
-            lookup = plan_lookup(refs, sources, pack=pack, locale=ctx.language)
+            vocab = await get_vocabulary(deps, ctx.business.id) if needs_vocab else None
             facts = await fetch_reference_facts(deps, ctx.business.id, lookup)
         except Exception:  # noqa: BLE001 — DB indisponibil: calea de dinainte, nu un tur picat
             log.warning("reference_v2_unavailable gate=%s", gate, exc_info=True)

@@ -285,6 +285,28 @@ def test_link_to_redness_is_rejected_on_sole():
     assert check.verdict == "invalid_reference_target"
 
 
+def test_a_description_that_names_a_product_class_is_not_a_property():
+    """«linkul la serul cu vitamina C»: vocabularul potrivește pe submulțime („vitamina c"), dar
+    fraza are un cap nominal („serul"), deci descrie un produs. Găsit pe catalogul real SOLE: era
+    respinsă ca proprietate (I24), ceea ce pe calea interpretată ar fi blocat căutarea după nume."""
+    vocab = CatalogVocabulary(
+        business_id="b",
+        dimensions={"key_ingredients": (VocabEntry("vitamina c", "vitamina c", 30),)},
+    )
+    shown = (ShownItem("s1", "SOME BY MI Yuja Niacin Gel Cream", 85.0),)
+    facts = ReferenceFacts(products={"s1": ProductFacts("s1", shown[0].name, 85.0, True)})
+    sources = ReferenceSources(shown_now=shown)
+    described, bare = resolve_references(
+        [ref("r1", "name", name="serul cu vitamina c"), ref("r2", "name", name="vitamina c")],
+        sources,
+        facts,
+        vocab=vocab,
+        locale="ro",
+    )
+    assert (described.outcome, described.reason) == ("not_found", "name_not_found")
+    assert bare.reason == "denotes_property"
+
+
 def test_a_model_proposed_attribute_on_a_need_dimension_is_a_property():
     r = one(
         "fashion",
@@ -374,6 +396,22 @@ def test_extreme_with_an_unknown_value_is_ambiguous():
         "ambiguous",
         "extreme_unknown_value",
         ["el-01", "el-02"],
+    )
+
+
+def test_extreme_when_a_shown_product_left_the_catalog_does_not_guess():
+    """Pe ecran [el-01 1500, el-02 1750, el-03 2000], el-01 a fost scos din catalog. „Cel mai
+    ieftin" era el-01; a răspunde el-02 cu `exact` ar fi o ghicire cu aer de siguranță."""
+    r = one(
+        "electronics",
+        ref("r1", "extreme", direction="min"),
+        screen("electronics", "el-01", "el-02", "el-03"),
+        drop=["el-01"],
+    )
+    assert (r.outcome, r.reason, r.product_ids) == (
+        "ambiguous",
+        "extreme_unknown_value",
+        ["el-02", "el-03"],
     )
 
 

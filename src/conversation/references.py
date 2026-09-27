@@ -456,6 +456,13 @@ class _Resolver:
         if not members:
             return _Raw("extreme", "stale", (), src, "not_in_catalog")
         values = {f.product_id: _numeric(f, dim) for f in members}
+        if len(members) < len(_unique(it.product_id for it in items)) and any(
+            v is not None for v in values.values()
+        ):
+            # Un produs pe care clientul l-a VĂZUT a dispărut din catalog: valoarea lui e
+            # necunoscută, iar extremul celor rămași poate să nu fie cel la care se referă
+            # clientul (dacă cel șters era cel mai ieftin). Nu ghicim: ambiguu, cu cei rămași.
+            return _Raw("extreme", "ambiguous", tuple(values), src, "extreme_unknown_value")
         if dim not in _COLUMN_DIMENSIONS and all(v is None for v in values.values()):
             # Nicio valoare numerică pe nimeni: dimensiunea nu se ordonează (sau nu există).
             return _Raw("extreme", "not_found", (), src, "not_orderable")
@@ -589,6 +596,14 @@ class _Resolver:
         res = resolve_any(self.vocab, value, overlays=self.overlays)
         if res.status is ResolutionStatus.UNKNOWN:
             return _Raw("name", "not_found", (), focus, "name_not_found")
+        if res.matched_by == "tokens":
+            # Vocabularul potrivește și pe SUBMULȚIME de cuvinte: „serul cu vitamina c" lovește
+            # valoarea „vitamina c". Dar fraza spune mai mult decât valoarea (are un cap nominal,
+            # „serul"), deci DESCRIE un produs, nu numește o proprietate. Respinsă ca proprietate
+            # (I24), ar fi blocat căutarea după nume pe care contractul o cere pentru `not_found`.
+            entry = {w for key in res.constraint_keys for w in tokens(key)}
+            if set(_content(tokens(value), self.stop)) - entry:
+                return _Raw("name", "not_found", (), focus, "name_not_found")
         if res.dimension not in self.reference_dims:
             return _Raw("attribute", "not_found", (), focus, "denotes_property")
         return self._members_by_keys(res.dimension, res.constraint_keys)

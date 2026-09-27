@@ -105,6 +105,7 @@ def facts(monkeypatch):
         return ReferenceFacts(products=products, named=named)
 
     async def fake_vocabulary(deps, business_id):
+        state["vocab_loads"] = state.get("vocab_loads", 0) + 1
         return CatalogVocabulary(
             business_id=business_id,
             dimensions={"concerns": (VocabEntry("redness", "roseata", 40),)},
@@ -236,6 +237,15 @@ async def test_a_target_gone_from_the_catalog_goes_to_the_model(v2, facts, catal
     assert catalog == [] and llm.loop_called
     [ref] = _event(ctx, "reference_v2")
     assert (ref["outcome"], ref["reason"]) == ("stale", "not_in_catalog")
+
+
+async def test_the_vocabulary_is_loaded_only_when_a_value_must_be_judged(v2, facts, compared):
+    """Ordinalele și numele de pe ecran nu au nevoie de vocabular (~1 s cu cache rece)."""
+    await agent_stage(_ctx("compară primul cu al treilea"), _deps())
+    await agent_stage(_ctx("Compară Wishtrend Vitamin cu Yuja Niacin"), _deps())
+    assert facts.get("vocab_loads", 0) == 0
+    await agent_stage(_ctx("compară Yuja Niacin cu Cerave"), _deps(_RecordLLM()))
+    assert facts["vocab_loads"] == 1
 
 
 # --- degradare și flag stins ---------------------------------------------------------------------
