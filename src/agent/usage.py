@@ -54,6 +54,24 @@ def request_shape(kwargs: dict[str, Any]) -> str:
     return "text"
 
 
+#: NX-335 — SCOPUL unui apel, derivat din numele schemei (`response_format.json_schema.name`).
+#: Interpretarea turului și compunerea bogată au amândouă forma `schema`, deci forma singură nu
+#: poate număra „exact un apel `interpret` pe tur interpretat" (I13, verificat pe replay, pasul 6).
+#: Vocabular ÎNCHIS: un nume care nu e aici nu primește scop, deci rândurile de azi rămân identice.
+CALL_PURPOSES: dict[str, str] = {"turn_interpretation": "interpret"}
+
+
+def request_purpose(kwargs: dict[str, Any]) -> str | None:
+    """Scopul unui apel, din argumentele lui (PUR), sau `None`. Derivat, ca `request_shape`: un
+    apelant care și-ar declara singur scopul l-ar putea declara greșit (P10)."""
+    fmt = kwargs.get("response_format")
+    if not isinstance(fmt, dict) or fmt.get("type") != "json_schema":
+        return None
+    spec = fmt.get("json_schema")
+    name = spec.get("name") if isinstance(spec, dict) else None
+    return CALL_PURPOSES.get(name) if isinstance(name, str) else None
+
+
 def _empty_model_row() -> dict[str, Any]:
     return {
         "calls": 0,
@@ -266,7 +284,15 @@ def record_chat(resp: Any, model: str) -> None:
     _record_model_metrics(model, tokens_in, tokens_out, cached)
 
 
-def record_call(resp: Any, *, shape: str, reasoning: bool, ms: float, ok: bool) -> None:
+def record_call(
+    resp: Any,
+    *,
+    shape: str,
+    reasoning: bool,
+    ms: float,
+    ok: bool,
+    purpose: str | None = None,
+) -> None:
     """NX-312 — un rând per apel de chat, cu durata și tokenii LUI (best-effort, ca `record_chat`).
 
     Chemat din `llm._chat`, wrapperul unic al tuturor apelurilor, deci și apelurile EȘUATE intră
@@ -277,27 +303,29 @@ def record_call(resp: Any, *, shape: str, reasoning: bool, ms: float, ok: bool) 
     încercări. `reasoning_tokens` rămâne `None` când furnizorul nu-l raportează — instrument de
     măsură, deci „nu știm" nu se colapsează în `0` (vezi `_reasoning_from`).
 
-    Numai numere și un cuvânt din vocabularul închis: zero text, zero identificatori (P12)."""
+    Numai numere și un cuvânt din vocabularul închis: zero text, zero identificatori (P12).
+
+    NX-335: `purpose` (valoare din `CALL_PURPOSES`) intră ca cheie doar când e dat; altfel rândul
+    e exact cel de dinainte."""
     acc = _current.get()
     if acc is None:
         return
     usage = getattr(resp, "usage", None) if resp is not None else None
-    acc.add_call_row(
-        {
-            "shape": shape if shape in CALL_SHAPES else "text",
-            "reasoning": bool(reasoning),
-            "ok": bool(ok),
-            "ms": round(float(ms), 1),
-            "tokens_in": _tokens(usage, "prompt_tokens", "input_tokens")
-            if usage is not None
-            else 0,
-            "cached": _cached_from(usage) if usage is not None else 0,
-            "tokens_out": (
-                _tokens(usage, "completion_tokens", "output_tokens") if usage is not None else 0
-            ),
-            "reasoning_tokens": _reasoning_from(usage) if usage is not None else None,
-        }
-    )
+    row: dict[str, Any] = {
+        "shape": shape if shape in CALL_SHAPES else "text",
+        "reasoning": bool(reasoning),
+        "ok": bool(ok),
+        "ms": round(float(ms), 1),
+        "tokens_in": _tokens(usage, "prompt_tokens", "input_tokens") if usage is not None else 0,
+        "cached": _cached_from(usage) if usage is not None else 0,
+        "tokens_out": (
+            _tokens(usage, "completion_tokens", "output_tokens") if usage is not None else 0
+        ),
+        "reasoning_tokens": _reasoning_from(usage) if usage is not None else None,
+    }
+    if purpose is not None and purpose in CALL_PURPOSES.values():
+        row["purpose"] = purpose
+    acc.add_call_row(row)
 
 
 def model_role(model: str) -> str:

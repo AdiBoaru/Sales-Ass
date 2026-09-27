@@ -26,7 +26,9 @@ ale acestui modul: aici nu se inventează niciun text.
 
 from __future__ import annotations
 
-from src.agent.llm import ModerationResult
+import json
+
+from src.agent.llm import ModerationResult, SchemaReply
 
 #: Linia din promptul MainBrain care enumeră obligațiile turului. Citită, nu re-derivată — vezi
 #: `obligations_from_prompt`.
@@ -40,6 +42,16 @@ _OBLIGATIONS_LINE = "Obligațiile turului (acoperă-le pe TOATE în plan): "
 #: Lista e DECLARATĂ, nu tăcută: gate-ul o marchează `xfail(strict=True)`, deci o reparație se
 #: raportează ca XPASS în loc să treacă neobservată. Așa a scăzut de la 20 la 1.
 BRAIN_NO_SCRIPTED_TEXT: frozenset[str] = frozenset({"clarify-low-confidence-sales"})
+
+#: NX-335: interpretarea minimă VALIDĂ (`TurnInterpretation`): nimic cerut, nimic schimbat.
+_EMPTY_INTERPRETATION: dict = {
+    "thread": "continue",
+    "acts": [],
+    "changes": [],
+    "references": [],
+    "ambiguities": [],
+    "corrects_previous_turn": False,
+}
 
 
 def brain_gap(case_id: str) -> str | None:
@@ -222,6 +234,16 @@ class ScriptedLLM:
         repair = self._fx.get("plan_repair")
         return dict(repair) if repair else self._plan(user)
 
+    async def complete_schema_raw(self, system, user, schema, **kw):
+        """NX-335: forma brută, pe care o cheamă DOAR adaptorul de interpretare (pasul 6). Deci
+        conținutul e o `TurnInterpretation`: `fx["interpretation"]` dacă fixtura o scrie, altfel
+        interpretarea minimă VALIDĂ (nimic cerut, nimic schimbat). Planul creierului ar fi ieșit
+        `schema_violation` pe fiecare tur (recenzia NX-335), adică un harness care măsoară
+        căderea pe v1, nu calea interpretată."""
+        explicit = self._fx.get("interpretation")
+        doc = dict(explicit) if explicit else dict(_EMPTY_INTERPRETATION)
+        return SchemaReply(content=json.dumps(doc), refusal=None, finish_reason="stop")
+
     def _plan(self, user: str) -> dict:
         fx = self._fx
         explicit = fx.get("plan_v2")
@@ -253,6 +275,7 @@ def _assert_scripted_llm_covers_client() -> None:
         "classify_json",
         "complete",
         "complete_schema",
+        "complete_schema_raw",
         "embed",
         "moderate",
         "run_tool_loop",

@@ -1,0 +1,1597 @@
+{
+  "schema_version": "kernel-real-labels.v1",
+  "business": "sole-ro",
+  "_note": "NX-335: labels of the interpretation layer on the 127 real SOLE turns of 16-25 Sep, keyed by turn id, with no customer text (the texts stay in the local snapshot under reports/nx335). Coarse: thread, primary act, targets of the primary act as positions on the screen BEFORE the turn (#i) or catalog when off screen, changes as op, dimension, canonical value, relation (value is a vocabulary code, a shelf key or a number; null for unmapped, which would be customer words, and for a relative price bound, which code computes), ambiguity yes or no. Only changes NEW in the turn are labelled; a need already in state and repeated is not. Small talk is thread aside with act chitchat. Labels marked uncertain leave the score: several requests in one turn, answers to a bot question, homograph shelves, unclear targets. Written by the agent that implemented NX-335 from the snapshot, with zero model calls; Adi reviews a sample of 30 before the run.",
+  "reviewed_by": null,
+  "turns": {
+    "b6c5b980-5744-4301-b635-9f92e0478f6c": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "set",
+          "product_type",
+          "ruj",
+          "eq"
+        ]
+      ],
+      "ambiguous": false,
+      "uncertain": true
+    },
+    "901faaf1-91b2-4f60-91a5-b61ed82d08da": {
+      "thread": "continue",
+      "primary_act": "bundle",
+      "targets": [],
+      "changes": [
+        [
+          "set",
+          "skin_type",
+          "dry",
+          "eq"
+        ]
+      ],
+      "ambiguous": false
+    },
+    "73876a34-d0a9-4e58-b54b-4f7659af9606": {
+      "thread": "continue",
+      "primary_act": "compare",
+      "targets": [
+        "#1",
+        "#2"
+      ],
+      "changes": [],
+      "ambiguous": false
+    },
+    "8182b196-b939-453f-822c-90d37a884971": {
+      "thread": "continue",
+      "primary_act": "detail",
+      "targets": [
+        "#1"
+      ],
+      "changes": [],
+      "ambiguous": false
+    },
+    "a9b4de18-5937-4a43-8890-c6d66ba83f3c": {
+      "thread": "continue",
+      "primary_act": "compare",
+      "targets": [
+        "#1"
+      ],
+      "changes": [],
+      "ambiguous": false
+    },
+    "1440f33c-f78e-46d9-a3fa-eb2f2330b078": {
+      "thread": "continue",
+      "primary_act": "detail",
+      "targets": [
+        "#2"
+      ],
+      "changes": [],
+      "ambiguous": false
+    },
+    "3d4b1a1a-864b-4aee-b6e3-a1fd9b535586": {
+      "thread": "continue",
+      "primary_act": "link",
+      "targets": [
+        "#1"
+      ],
+      "changes": [],
+      "ambiguous": false
+    },
+    "42744330-df21-453b-b820-c39449cf744b": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "add",
+          "concerns",
+          "acne",
+          "eq"
+        ]
+      ],
+      "ambiguous": false
+    },
+    "0708bce9-afcb-4159-8eab-fc672c5ae6a9": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [
+        "#2"
+      ],
+      "changes": [
+        [
+          "set",
+          "product_type",
+          "crema de fata",
+          "eq"
+        ]
+      ],
+      "ambiguous": false,
+      "uncertain": true
+    },
+    "c820226a-416f-41f4-9813-eab546021afc": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "add",
+          "concerns",
+          "acne",
+          "eq"
+        ]
+      ],
+      "ambiguous": false
+    },
+    "57fa9fbe-b588-4081-a07b-ae19a8e61a97": {
+      "thread": "continue",
+      "primary_act": "bundle",
+      "targets": [],
+      "changes": [],
+      "ambiguous": false
+    },
+    "707fde73-cceb-42fd-8658-f69fafdf049f": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "set",
+          "product_type",
+          "crema de fata",
+          "eq"
+        ]
+      ],
+      "ambiguous": false
+    },
+    "9a416690-57c4-4b0e-82b0-6f2bab5b7134": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "set",
+          "skin_type",
+          "dry",
+          "eq"
+        ]
+      ],
+      "ambiguous": false
+    },
+    "7cdf363c-f80d-4c7c-bcf4-5efa85ae05b8": {
+      "thread": "continue",
+      "primary_act": "bundle",
+      "targets": [],
+      "changes": [],
+      "ambiguous": false
+    },
+    "d2bcbaf9-e484-4e47-b546-39339844bbee": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "set",
+          "price",
+          null,
+          "lte"
+        ]
+      ],
+      "ambiguous": false
+    },
+    "38b47d4a-70df-4635-83cb-4457b6cafb32": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "add",
+          "concerns",
+          "anti_aging",
+          "eq"
+        ]
+      ],
+      "ambiguous": false
+    },
+    "8aaec031-3adb-439f-b80e-d78d1e1fe738": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "set",
+          "category",
+          "electrica",
+          "eq"
+        ]
+      ],
+      "ambiguous": false,
+      "uncertain": true
+    },
+    "525eaa20-57a5-409d-abda-c0f67508b24a": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [],
+      "ambiguous": false,
+      "uncertain": true
+    },
+    "5cde771c-1e47-475d-9685-894b21b800d9": {
+      "thread": "continue",
+      "primary_act": "detail",
+      "targets": [
+        "#1"
+      ],
+      "changes": [],
+      "ambiguous": false
+    },
+    "ee1a49f0-c73a-4351-b054-cb6fbbe2792c": {
+      "thread": "continue",
+      "primary_act": "compare",
+      "targets": [
+        "#1"
+      ],
+      "changes": [],
+      "ambiguous": false
+    },
+    "76547d5f-b9e3-4cce-be9c-ce41e7f16cc2": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "set",
+          "category",
+          "par",
+          "eq"
+        ],
+        [
+          "set",
+          "product_type",
+          "ruj",
+          "eq"
+        ]
+      ],
+      "ambiguous": false,
+      "uncertain": true
+    },
+    "ec849ac6-a4a7-4688-a1e4-217099678acb": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "set",
+          "product_type",
+          "ruj",
+          "eq"
+        ],
+        [
+          "add",
+          "unmapped",
+          null,
+          "avoid"
+        ]
+      ],
+      "ambiguous": false
+    },
+    "871960a8-81a8-41ec-884c-24c96031c009": {
+      "thread": "continue",
+      "primary_act": "detail",
+      "targets": [
+        "#1",
+        "#2"
+      ],
+      "changes": [],
+      "ambiguous": false
+    },
+    "928b1a1c-e914-4106-a256-74c60ee15fdf": {
+      "thread": "continue",
+      "primary_act": "detail",
+      "targets": [
+        "#1"
+      ],
+      "changes": [],
+      "ambiguous": false,
+      "uncertain": true
+    },
+    "a03892f5-33ae-4057-8b03-7bac48726ace": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [],
+      "ambiguous": false,
+      "uncertain": true
+    },
+    "727e2502-bd95-4653-a1b8-4f63626b36c6": {
+      "thread": "aside",
+      "primary_act": "chitchat",
+      "targets": [],
+      "changes": [],
+      "ambiguous": false
+    },
+    "d6e57a67-2411-4428-8b57-54e44e544bb5": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "set",
+          "category",
+          "par",
+          "eq"
+        ]
+      ],
+      "ambiguous": false
+    },
+    "2dd5adef-39dc-4e1c-8fe1-a58c48f160bf": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "set",
+          "category",
+          "electrica",
+          "eq"
+        ]
+      ],
+      "ambiguous": false
+    },
+    "8af43924-36d7-496b-a1f7-f0a3039cf604": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "add",
+          "concerns",
+          "hydration",
+          "eq"
+        ]
+      ],
+      "ambiguous": false
+    },
+    "4f6730d6-93c9-4122-bfec-53a5e8cfb532": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "set",
+          "category",
+          "ten",
+          "eq"
+        ]
+      ],
+      "ambiguous": false,
+      "uncertain": true
+    },
+    "bcd8e5c6-5cf1-48a7-96c0-b402d7d7f750": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "add",
+          "concerns",
+          "hydration",
+          "eq"
+        ]
+      ],
+      "ambiguous": false
+    },
+    "8432afce-b05f-4fbc-aa83-e33818cc2ed4": {
+      "thread": "continue",
+      "primary_act": "bundle",
+      "targets": [],
+      "changes": [
+        [
+          "set",
+          "skin_type",
+          "dry",
+          "eq"
+        ]
+      ],
+      "ambiguous": false
+    },
+    "d46691b1-6308-49f2-8423-089afcf6c6e5": {
+      "thread": "continue",
+      "primary_act": "bundle",
+      "targets": [],
+      "changes": [
+        [
+          "set",
+          "category",
+          "ten",
+          "eq"
+        ]
+      ],
+      "ambiguous": false,
+      "uncertain": true
+    },
+    "aa909e67-a98a-442d-b893-e7ff828cf47f": {
+      "thread": "continue",
+      "primary_act": "detail",
+      "targets": [
+        "#2",
+        "#3"
+      ],
+      "changes": [],
+      "ambiguous": false,
+      "uncertain": true
+    },
+    "d73822a3-53e7-4df2-b435-877f9f8c0dda": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "add",
+          "concerns",
+          "hydration",
+          "eq"
+        ]
+      ],
+      "ambiguous": false
+    },
+    "185b3ce9-ee8e-4712-bb79-c3aa151cad62": {
+      "thread": "aside",
+      "primary_act": "chitchat",
+      "targets": [],
+      "changes": [],
+      "ambiguous": false
+    },
+    "bdb5d813-f398-433f-834f-3b9e815b602b": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "set",
+          "product_type",
+          "ruj",
+          "eq"
+        ],
+        [
+          "add",
+          "finish",
+          "matte",
+          "eq"
+        ],
+        [
+          "add",
+          "unmapped",
+          null,
+          "eq"
+        ]
+      ],
+      "ambiguous": false
+    },
+    "89d8e09c-e95e-485e-8255-5cd7321dd039": {
+      "thread": "continue",
+      "primary_act": "detail",
+      "targets": [
+        "#1"
+      ],
+      "changes": [],
+      "ambiguous": false
+    },
+    "5b825db0-e6f6-4e98-9841-71b8c2e848f0": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "set",
+          "category",
+          "par",
+          "eq"
+        ]
+      ],
+      "ambiguous": false
+    },
+    "21319dec-ae22-46c7-8f42-33445f2e074a": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [],
+      "ambiguous": false
+    },
+    "ddbd5129-43ba-4da6-a37a-20ff6604d41f": {
+      "thread": "continue",
+      "primary_act": "show_more",
+      "targets": [],
+      "changes": [],
+      "ambiguous": false
+    },
+    "21bfc40d-8426-479e-96bd-bf3ebd1f16d6": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "set",
+          "product_type",
+          "sampon",
+          "eq"
+        ],
+        [
+          "set",
+          "fragrance_free",
+          "true",
+          "eq"
+        ]
+      ],
+      "ambiguous": false
+    },
+    "63d680d4-b952-4589-b2c8-f7dcacc79603": {
+      "thread": "continue",
+      "primary_act": "compare",
+      "targets": [],
+      "changes": [],
+      "ambiguous": true,
+      "uncertain": true
+    },
+    "03cd2fc2-6c42-46a9-9b71-0be0caea2b2f": {
+      "thread": "aside",
+      "primary_act": "chitchat",
+      "targets": [],
+      "changes": [],
+      "ambiguous": false
+    },
+    "15beba96-caf3-44e6-be3d-ded9f3b7ca0c": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "set",
+          "product_type",
+          "ruj",
+          "eq"
+        ],
+        [
+          "add",
+          "unmapped",
+          null,
+          "eq"
+        ]
+      ],
+      "ambiguous": false,
+      "uncertain": true
+    },
+    "53b2f894-6289-4c6f-a0fb-0428f5b1c710": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "add",
+          "unmapped",
+          null,
+          "eq"
+        ]
+      ],
+      "ambiguous": false,
+      "uncertain": true
+    },
+    "422efe6d-d232-419b-b36d-8e637801f79a": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [],
+      "ambiguous": false,
+      "uncertain": true
+    },
+    "81a3fe57-c44b-47ec-a97e-fc3adf4a6e0c": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "set",
+          "category",
+          "par",
+          "eq"
+        ]
+      ],
+      "ambiguous": false
+    },
+    "deff94ac-0604-417e-9953-78cbda1fea41": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "add",
+          "unmapped",
+          null,
+          "eq"
+        ]
+      ],
+      "ambiguous": false
+    },
+    "3ea59c79-9bc3-4344-b511-0bf7ca922e2d": {
+      "thread": "continue",
+      "primary_act": "detail",
+      "targets": [
+        "#1"
+      ],
+      "changes": [],
+      "ambiguous": false
+    },
+    "7cdd4507-da83-4823-bd0b-e4997def62ec": {
+      "thread": "continue",
+      "primary_act": "detail",
+      "targets": [
+        "#1"
+      ],
+      "changes": [],
+      "ambiguous": false
+    },
+    "64f91fc8-05c3-4efe-84d8-e07dde48fc3e": {
+      "thread": "continue",
+      "primary_act": "detail",
+      "targets": [
+        "#1"
+      ],
+      "changes": [],
+      "ambiguous": false
+    },
+    "d65a469d-f4fc-46d4-b98f-c345f61f79b2": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "add",
+          "unmapped",
+          null,
+          "eq"
+        ]
+      ],
+      "ambiguous": false
+    },
+    "f9c26f06-fc31-44c4-94a6-950b9b265f23": {
+      "thread": "continue",
+      "primary_act": "detail",
+      "targets": [
+        "catalog"
+      ],
+      "changes": [],
+      "ambiguous": false
+    },
+    "3e582c6d-b532-4814-93c2-17eef9c26308": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "add",
+          "concerns",
+          "acne",
+          "eq"
+        ]
+      ],
+      "ambiguous": false
+    },
+    "ed9c291d-2824-4827-8f87-bbcbb4fdf95d": {
+      "thread": "continue",
+      "primary_act": "detail",
+      "targets": [
+        "#1"
+      ],
+      "changes": [],
+      "ambiguous": false
+    },
+    "60ae3db5-925a-4dcf-a421-b1718c508c84": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "set",
+          "price",
+          "100",
+          "lte"
+        ],
+        [
+          "add",
+          "unmapped",
+          null,
+          "eq"
+        ]
+      ],
+      "ambiguous": false
+    },
+    "d24547ee-1948-4b80-9504-c38354cd3166": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "add",
+          "unmapped",
+          null,
+          "eq"
+        ]
+      ],
+      "ambiguous": false,
+      "uncertain": true
+    },
+    "28285f92-8530-4f0b-b93e-a2bd3fc5eb1f": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "set",
+          "skin_type",
+          "dry",
+          "eq"
+        ],
+        [
+          "add",
+          "routine_time",
+          "pm",
+          "eq"
+        ]
+      ],
+      "ambiguous": false
+    },
+    "7ea22189-7940-4dc9-bd02-a586d96cab49": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "set",
+          "category",
+          "barbati",
+          "eq"
+        ]
+      ],
+      "ambiguous": false,
+      "uncertain": true
+    },
+    "076fd13b-d99b-4fa9-9ff2-059ea2787a8a": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "add",
+          "unmapped",
+          null,
+          "eq"
+        ]
+      ],
+      "ambiguous": false
+    },
+    "b6373b9b-2bee-4594-8295-5f6f762ae026": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [],
+      "ambiguous": false,
+      "uncertain": true
+    },
+    "883277aa-c8e7-4ca3-baef-543de9449159": {
+      "thread": "aside",
+      "primary_act": "chitchat",
+      "targets": [],
+      "changes": [],
+      "ambiguous": false
+    },
+    "57e6e510-12ef-4e1b-8f37-b3e46a3d65b7": {
+      "thread": "continue",
+      "primary_act": "detail",
+      "targets": [],
+      "changes": [],
+      "ambiguous": true,
+      "uncertain": true
+    },
+    "11544a89-39fa-456a-b66e-dee3a1e78f84": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "add",
+          "unmapped",
+          null,
+          "eq"
+        ]
+      ],
+      "ambiguous": false
+    },
+    "5e92ea59-c732-4100-8248-0fed328391f7": {
+      "thread": "aside",
+      "primary_act": "chitchat",
+      "targets": [],
+      "changes": [],
+      "ambiguous": false,
+      "uncertain": true
+    },
+    "b905c578-d17a-4d20-8b03-6923e09d1d16": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "set",
+          "price",
+          "100",
+          "lte"
+        ],
+        [
+          "add",
+          "unmapped",
+          null,
+          "eq"
+        ]
+      ],
+      "ambiguous": false
+    },
+    "77aaa544-13b7-4a59-8ec6-b4c0e7070102": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "set",
+          "category",
+          "protectie-solara-creme-autobronzante-si-bronzere",
+          "eq"
+        ]
+      ],
+      "ambiguous": false,
+      "uncertain": true
+    },
+    "32999ab9-7b2e-4c2c-8720-124b01835f1e": {
+      "thread": "continue",
+      "primary_act": "detail",
+      "targets": [],
+      "changes": [],
+      "ambiguous": true,
+      "uncertain": true
+    },
+    "c8cf6706-3991-47c8-b78e-e127c63b7abf": {
+      "thread": "continue",
+      "primary_act": "detail",
+      "targets": [],
+      "changes": [],
+      "ambiguous": false,
+      "uncertain": true
+    },
+    "78b347fa-10ec-49b7-88f2-719cb100db44": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "add",
+          "unmapped",
+          null,
+          "eq"
+        ]
+      ],
+      "ambiguous": false,
+      "uncertain": true
+    },
+    "fd49d34f-c701-4170-8b07-38a9a5b87b8c": {
+      "thread": "continue",
+      "primary_act": "detail",
+      "targets": [
+        "catalog"
+      ],
+      "changes": [],
+      "ambiguous": false
+    },
+    "7fb07aaa-7059-4c76-9029-5847a3767d89": {
+      "thread": "continue",
+      "primary_act": "detail",
+      "targets": [
+        "catalog"
+      ],
+      "changes": [],
+      "ambiguous": false
+    },
+    "666e36f5-fdb7-42db-8144-011146d9d679": {
+      "thread": "continue",
+      "primary_act": "detail",
+      "targets": [
+        "catalog"
+      ],
+      "changes": [],
+      "ambiguous": false
+    },
+    "5b813127-abab-449b-bc87-29f63c38b303": {
+      "thread": "continue",
+      "primary_act": "detail",
+      "targets": [
+        "#1"
+      ],
+      "changes": [],
+      "ambiguous": false
+    },
+    "98629584-3d48-4668-86bb-cb3f26728341": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "set",
+          "product_type",
+          "crema de fata",
+          "eq"
+        ]
+      ],
+      "ambiguous": false
+    },
+    "397c884d-010d-461d-853f-c7c0bb5ee23f": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "set",
+          "skin_type",
+          "dry",
+          "eq"
+        ]
+      ],
+      "ambiguous": false
+    },
+    "7706862d-da5b-42de-b697-5fa0a442d6f4": {
+      "thread": "continue",
+      "primary_act": "bundle",
+      "targets": [],
+      "changes": [],
+      "ambiguous": false
+    },
+    "19a0eb52-2537-4568-baa8-a1442b92767a": {
+      "thread": "continue",
+      "primary_act": "bundle",
+      "targets": [],
+      "changes": [
+        [
+          "set",
+          "skin_type",
+          "dry",
+          "eq"
+        ]
+      ],
+      "ambiguous": false
+    },
+    "827034ac-9cf0-4c2b-94e1-09cc2f9f8258": {
+      "thread": "continue",
+      "primary_act": "compare",
+      "targets": [
+        "#1",
+        "#2"
+      ],
+      "changes": [],
+      "ambiguous": false
+    },
+    "68e9dd12-8895-4707-933e-e6fe0540247b": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "set",
+          "price",
+          null,
+          "lte"
+        ]
+      ],
+      "ambiguous": false
+    },
+    "30e111fc-4a74-4628-989c-33385209a8b6": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "add",
+          "unmapped",
+          null,
+          "eq"
+        ]
+      ],
+      "ambiguous": false
+    },
+    "a623c53e-3b3e-452e-b222-b6058344938d": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "add",
+          "concerns",
+          "hydration",
+          "eq"
+        ]
+      ],
+      "ambiguous": false
+    },
+    "11e5f149-6499-443f-8cde-28da7b564cd3": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [],
+      "ambiguous": false
+    },
+    "00a6e9fc-7ce0-4e4d-8d0f-a276daa7a3c6": {
+      "thread": "aside",
+      "primary_act": "chitchat",
+      "targets": [],
+      "changes": [],
+      "ambiguous": false
+    },
+    "aa2dc1d9-52ce-41f6-84fd-e686e353bd6a": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "add",
+          "concerns",
+          "acne",
+          "eq"
+        ]
+      ],
+      "ambiguous": false
+    },
+    "8b2a6665-8af5-492b-9302-cd900e7a9370": {
+      "thread": "continue",
+      "primary_act": "bundle",
+      "targets": [
+        "#1"
+      ],
+      "changes": [],
+      "ambiguous": false,
+      "uncertain": true
+    },
+    "c6532568-a412-4424-9192-40d225c9258e": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "set",
+          "category",
+          "par",
+          "eq"
+        ]
+      ],
+      "ambiguous": false
+    },
+    "0d55691d-3546-4f60-832a-329e55639dc7": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "set",
+          "category",
+          "ten",
+          "eq"
+        ]
+      ],
+      "ambiguous": false,
+      "uncertain": true
+    },
+    "d8639f26-076b-4f9a-a75e-59f4f64748e0": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "set",
+          "product_type",
+          "fond de ten",
+          "eq"
+        ],
+        [
+          "add",
+          "unmapped",
+          null,
+          "eq"
+        ]
+      ],
+      "ambiguous": false
+    },
+    "1d369982-8a9a-4d6b-99d7-916c25ebd91d": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "add",
+          "unmapped",
+          null,
+          "eq"
+        ]
+      ],
+      "ambiguous": false,
+      "uncertain": true
+    },
+    "78265b4e-3c7f-4cfc-8818-87cd1cda433a": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "add",
+          "unmapped",
+          null,
+          "eq"
+        ]
+      ],
+      "ambiguous": false,
+      "uncertain": true
+    },
+    "595a1b13-97f6-44b8-a9d6-a690128266fe": {
+      "thread": "continue",
+      "primary_act": "other",
+      "targets": [],
+      "changes": [],
+      "ambiguous": false,
+      "uncertain": true
+    },
+    "8f9ed36d-c944-4718-aefb-60051e2b6ab8": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "set",
+          "product_type",
+          "crema de fata",
+          "eq"
+        ]
+      ],
+      "ambiguous": false
+    },
+    "0d8a3541-3bff-422b-b99f-46de295cd489": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "set",
+          "skin_type",
+          "dry",
+          "eq"
+        ]
+      ],
+      "ambiguous": false
+    },
+    "b5d86b1a-126a-4824-953a-c3cff3272a1b": {
+      "thread": "continue",
+      "primary_act": "bundle",
+      "targets": [],
+      "changes": [],
+      "ambiguous": false
+    },
+    "5e594710-8f60-45dd-9556-6d38e6d2eba6": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "set",
+          "category",
+          "barbati",
+          "eq"
+        ]
+      ],
+      "ambiguous": false
+    },
+    "dda1dedf-c4b5-4035-9d24-e46c40c0f3a0": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "add",
+          "unmapped",
+          null,
+          "eq"
+        ]
+      ],
+      "ambiguous": false
+    },
+    "fb8939dc-c419-4c0c-93ba-49666151d30a": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "add",
+          "unmapped",
+          null,
+          "eq"
+        ]
+      ],
+      "ambiguous": false,
+      "uncertain": true
+    },
+    "d5945fac-da1e-40f5-9edc-7b0f68c02e6a": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "set",
+          "category",
+          "ten-ingrijirea-tenului",
+          "eq"
+        ]
+      ],
+      "ambiguous": false,
+      "uncertain": true
+    },
+    "13c17496-0b22-4ecd-bb67-11d52612c823": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "set",
+          "product_type",
+          "crema de fata",
+          "eq"
+        ]
+      ],
+      "ambiguous": false
+    },
+    "8d0485c2-7afd-46a8-9ecc-0c1406077088": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "add",
+          "concerns",
+          "redness",
+          "eq"
+        ]
+      ],
+      "ambiguous": false
+    },
+    "941d475c-c2d1-4aab-8482-dd16a950c890": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "add",
+          "unmapped",
+          null,
+          "eq"
+        ]
+      ],
+      "ambiguous": false
+    },
+    "34eab218-89c2-49a8-acfc-35e1ce30e534": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "set",
+          "category",
+          "machiaj",
+          "eq"
+        ]
+      ],
+      "ambiguous": false
+    },
+    "bcad1833-7a01-4c78-acfe-8718c4ccd233": {
+      "thread": "aside",
+      "primary_act": "chitchat",
+      "targets": [],
+      "changes": [],
+      "ambiguous": false
+    },
+    "7ab2aa5a-3335-49a1-b60c-ab8ba178abb4": {
+      "thread": "continue",
+      "primary_act": "bundle",
+      "targets": [],
+      "changes": [
+        [
+          "set",
+          "skin_type",
+          "dry",
+          "eq"
+        ]
+      ],
+      "ambiguous": false
+    },
+    "953dde64-e8a2-4962-bb70-8c7b22bda5e4": {
+      "thread": "continue",
+      "primary_act": "other",
+      "targets": [],
+      "changes": [],
+      "ambiguous": false,
+      "uncertain": true
+    },
+    "3656a1aa-d6e5-4c1a-9b57-1d0caf3ef9cb": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "add",
+          "concerns",
+          "hair_dryness",
+          "eq"
+        ]
+      ],
+      "ambiguous": false
+    },
+    "9796d274-f918-4c48-ba54-c8ddd2bf6859": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [],
+      "ambiguous": false
+    },
+    "364a4c29-57cd-405a-b73e-f4ae2ef08a49": {
+      "thread": "aside",
+      "primary_act": "chitchat",
+      "targets": [],
+      "changes": [],
+      "ambiguous": false
+    },
+    "39cb0967-430d-4483-9dc3-0d2312a21c4e": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "set",
+          "skin_type",
+          "dry",
+          "eq"
+        ]
+      ],
+      "ambiguous": false
+    },
+    "46961eb8-2820-41e8-95f1-4f81dc2adc6d": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "add",
+          "concerns",
+          "hydration",
+          "eq"
+        ]
+      ],
+      "ambiguous": false
+    },
+    "94df1fc3-3d05-4846-b779-56ef4c6b0425": {
+      "thread": "continue",
+      "primary_act": "compare",
+      "targets": [
+        "#1",
+        "#2"
+      ],
+      "changes": [],
+      "ambiguous": false
+    },
+    "a4407d1c-7d16-43eb-8872-ca112c28de72": {
+      "thread": "continue",
+      "primary_act": "detail",
+      "targets": [
+        "#1"
+      ],
+      "changes": [],
+      "ambiguous": false
+    },
+    "1e82ee80-6e74-4558-ae89-fec0ac65c94c": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "set",
+          "price",
+          null,
+          "lte"
+        ]
+      ],
+      "ambiguous": false
+    },
+    "0960f5c4-7069-4e96-bb3e-58851105c794": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "add",
+          "concerns",
+          "hydration",
+          "eq"
+        ]
+      ],
+      "ambiguous": false
+    },
+    "0bfae4fd-04b0-4a76-8198-86fb00385a79": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "set",
+          "skin_type",
+          "dry",
+          "eq"
+        ]
+      ],
+      "ambiguous": false
+    },
+    "414dea27-6961-4101-80cd-26c0528e389f": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "set",
+          "price",
+          null,
+          "lte"
+        ]
+      ],
+      "ambiguous": false
+    },
+    "c91ab924-4002-4533-8362-9827c6bfd355": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [],
+      "ambiguous": false,
+      "uncertain": true
+    },
+    "a5036b02-f686-4dc9-bbf9-c2c771c56a18": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "add",
+          "unmapped",
+          null,
+          "eq"
+        ]
+      ],
+      "ambiguous": false,
+      "uncertain": true
+    },
+    "4dce50b3-9ad1-4323-bab5-248a5fe2c2fd": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "set",
+          "price",
+          null,
+          "lte"
+        ]
+      ],
+      "ambiguous": false
+    },
+    "0e8f4e4d-ad00-4a6a-8ff5-9c04ce18efaf": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "set",
+          "category",
+          "par",
+          "eq"
+        ],
+        [
+          "add",
+          "unmapped",
+          null,
+          "eq"
+        ]
+      ],
+      "ambiguous": false,
+      "uncertain": true
+    },
+    "77b0ce4e-6f6c-4d85-b4dd-4dea8c25750d": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [],
+      "ambiguous": false,
+      "uncertain": true
+    },
+    "d1439d19-8ccb-4a42-afe5-437a4f1b4fbe": {
+      "thread": "continue",
+      "primary_act": "show_more",
+      "targets": [],
+      "changes": [],
+      "ambiguous": false
+    },
+    "df83c867-6694-4fba-b2ac-851ff09a66a2": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "set",
+          "product_type",
+          "ruj",
+          "eq"
+        ],
+        [
+          "set",
+          "product_type",
+          "fond de ten",
+          "eq"
+        ]
+      ],
+      "ambiguous": false,
+      "uncertain": true
+    },
+    "b1e7d6fe-ace0-4133-a847-b5c17aba18bc": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "set",
+          "category",
+          "par",
+          "eq"
+        ],
+        [
+          "set",
+          "category",
+          "machiaj",
+          "eq"
+        ]
+      ],
+      "ambiguous": false,
+      "uncertain": true
+    },
+    "6d2d8d82-c9bc-4854-b628-1ec031c17d0a": {
+      "thread": "continue",
+      "primary_act": "find",
+      "targets": [],
+      "changes": [
+        [
+          "add",
+          "concerns",
+          "hydration",
+          "eq"
+        ],
+        [
+          "set",
+          "skin_type",
+          "dry",
+          "eq"
+        ],
+        [
+          "set",
+          "price",
+          "150",
+          "lte"
+        ]
+      ],
+      "ambiguous": false
+    }
+  }
+}

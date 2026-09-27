@@ -386,7 +386,7 @@ def _currency_label(currency: str) -> str:
     return _CURRENCY_LABELS.get(cur, cur)
 
 
-def _shelf_size(n: int) -> int:
+def shelf_size(n: int) -> int:
     """Mărimea unui raft, rotunjită la 2 cifre semnificative.
 
     Rotunjirea nu e cosmetică, e condiția ca cifra să poată intra în prompt: prefixul static e
@@ -402,6 +402,11 @@ def _shelf_size(n: int) -> int:
         return n
     magnitude = 10 ** (len(str(n)) - 2)
     return int(round(n / magnitude) * magnitude)
+
+
+#: NX-335: publică fiindcă o citește și adaptorul de interpretare (meniul de rafturi al kernelului).
+#: Numele vechi rămâne pentru apelanții din modul; aceeași funcție, nu o copie.
+_shelf_size = shelf_size
 
 
 def _store_header(inp: PromptInputs) -> str:
