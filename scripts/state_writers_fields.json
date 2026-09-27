@@ -6,7 +6,7 @@
       "label_ro": "nevoi + subiect/raft",
       "card_rows": ["nevoi", "subiect / raft"],
       "v1_attrs": ["constraints", "search_constraints"],
-      "v2_ops": ["set_need", "confirm", "revoke", "supersede", "set_topic"],
+      "v2_ops": ["set_need", "confirm", "revoke", "supersede", "set_topic", "clear_topic", "clear_all"],
       "v2_state_fields": ["needs", "revocations", "topic"]
     },
     {
@@ -74,6 +74,8 @@
     "revoke": "needs_topic",
     "supersede": "needs_topic",
     "set_topic": "needs_topic",
+    "clear_topic": "needs_topic",
+    "clear_all": "needs_topic",
     "set_pending_question": "clarification",
     "resolve_question": "clarification",
     "set_references": "references",

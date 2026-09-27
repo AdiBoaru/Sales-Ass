@@ -269,6 +269,40 @@ def connectors(locale: str | None) -> tuple[tuple[str, str], ...]:
     return _table(_CONNECTORS, {"ro": _RO_CONNECTORS}, locale)
 
 
+# NX-330 — markerii de NEGAȚIE ai validatorului de proveniență (contractul kernelului, „Provenance
+# and strength", pasul 3): un `avoid` fără negație în citatul clientului coboară la `implicit`,
+# iar un `eq` cu negație lângă valoare e `polarity_conflict`. DOAR cuvinte funcționale, pe text
+# pliat: un verb („evit") e cuvânt de conținut și nu intră, iar o formulare fără marker rămâne
+# `implicit`, adică soft, direcția sigură. „nu" din comparatorii de mai sus („nu mai mult de") nu
+# e negație: se scade întâi comparatorul, apoi se caută negația.
+_NEGATION_MARKERS: dict[str, frozenset[str]] = {
+    "ro": frozenset({"nu", "fara", "niciun", "nicio", "nici"}),
+}
+
+# NX-330 — comparatorii RELATIVI („mai ieftin decât ăsta"): direcția e a limbii, numărul îl
+# calculează codul din prețul RECITIT al produsului referit (contractul, rândul „Value of a relative
+# change"). „ieftin"/„scump" numesc direcția prețului, o dimensiune universală, ca markerii de
+# referință NX-329 („cel mai ieftin"). Tabelul de comparatori de mai sus are doar „mai ieftin de".
+_RO_RELATIVE_COMPARATORS = """
+    lte: mai ieftin, mai ieftina, mai ieftine, mai ieftini, mai accesibil, mai accesibila
+    gte: mai scump, mai scumpa, mai scumpe, mai scumpi
+"""
+_RELATIVE_COMPARATORS: dict[str, tuple[tuple[str, str], ...]] = {}
+
+
+def negation_markers(locale: str | None) -> frozenset[str]:
+    """Cuvintele de negație ale locale-i. Locale necunoscută → mulțimea goală: orice `avoid`
+    coboară la `implicit` (soft), deci nicio negație ghicită nu exclude produse (P11)."""
+    if not locale:
+        return frozenset()
+    return _NEGATION_MARKERS.get(locale.split("-")[0].lower(), frozenset())
+
+
+def relative_comparators(locale: str | None) -> tuple[tuple[str, str], ...]:
+    """`(frază, op)` pentru comparatorii relativi (`lte` / `gte`), cei mai lungi întâi."""
+    return _table(_RELATIVE_COMPARATORS, {"ro": _RO_RELATIVE_COMPARATORS}, locale)
+
+
 def content_terms(query: str, locale: str | None) -> list[str]:
     """Termenii PURTĂTORI DE SENS dintr-o frază, normalizați, în ordinea din text, fără duplicate.
 

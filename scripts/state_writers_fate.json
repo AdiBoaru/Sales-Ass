@@ -511,6 +511,27 @@
       "field": "needs_topic",
       "why": "`ctx.state.constraints[field] = answer` (v1, linia 121) scrisa CHIAR INAINTE de `_propose_resume(ctx, field, answer, pq)` (v2, `set_need`), din ACELASI raspuns al clientului la o clarificare -- sursa e `user_explicit` legitima, doar mecanismul de scriere e dublu. Jumatatea v1 devine inutila cand reducerul ramane singurul scriitor.",
       "fate": "becomes_proposal"
+    },
+    {
+      "file": "src/conversation/delta.py",
+      "function": "_need_proposals",
+      "field": "needs_topic",
+      "why": "NX-330 (pasul 3a al kernelului): traducerea interpretarii VALIDATE in propuneri typed -- forma tinta a contractului (I3): starea se schimba doar prin propuneri, iar singurul care le aplica e reducerul. Sursa e proveniența calculata de cod (`provenance.py`), deci `inferred` nu produce propunere (I23). Fara apelant in productie pana la pasul 6.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/conversation/delta.py",
+      "function": "_structural_proposal",
+      "field": "needs_topic",
+      "why": "NX-330 (pasul 3a al kernelului): traducerea interpretarii VALIDATE in propuneri typed -- forma tinta a contractului (I3): starea se schimba doar prin propuneri, iar singurul care le aplica e reducerul. Sursa e proveniența calculata de cod (`provenance.py`), deci `inferred` nu produce propunere (I23). Fara apelant in productie pana la pasul 6.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/conversation/delta.py",
+      "function": "to_delta",
+      "field": "needs_topic",
+      "why": "NX-330 (pasul 3a al kernelului): traducerea interpretarii VALIDATE in propuneri typed -- forma tinta a contractului (I3): starea se schimba doar prin propuneri, iar singurul care le aplica e reducerul. Sursa e proveniența calculata de cod (`provenance.py`), deci `inferred` nu produce propunere (I23). Fara apelant in productie pana la pasul 6.",
+      "fate": "stays"
     }
   ]
 }

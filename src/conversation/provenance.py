@@ -1,0 +1,571 @@
+"""NX-330 (kernel v1.0, pasul 3a) — proveniența unei schimbări de stare, calculată de COD.
+
+Contractul (`docs/KERNEL-CONTRACT-v1.md`, „Provenance and strength"): modelul dă doar CITATUL, nu
+poate declara un nivel. Codul îl calculează în patru pași, în ordine:
+
+1. **Localizarea citatului** în mesajele CLIENTULUI (turul curent + turele lui din fereastră), pe
+   cuvinte întregi, pliate. Negăsit ⇒ `inferred`. Mesajele botului nu ajung niciodată aici
+   (`UserWords` le exclude prin construcție), iar potrivirea NU e pe prefix: «mat» nu e în
+   «matreata».
+2. **Rezolvarea citatului** prin vocabularul turului: se rezolvă pe valoarea propusă ⇒ candidat
+   `explicit`; pe ALTĂ valoare ⇒ `semantic_mismatch`; pe nimic ⇒ `implicit`.
+3. **Polaritatea**, pe markerii per locale din `query_terms`: `avoid` cere negație, `lte`/`gte` cer
+   comparator; un marker lipsă retrogradează la `implicit`; negația lângă o valoare `eq` e
+   `polarity_conflict`.
+4. **Tăria**: `explicit` ⇒ `hard` doar pe o dimensiune hard-capable (I8), altfel `soft`; `implicit`
+   ⇒ `soft`; `inferred` ⇒ `ranking`, doar turul curent (I23).
+
+Plus validările care resping (vocabularul închis `ChangeReject`): dimensiune necunoscută, handle
+necunoscut, referință nedeclarată (I22), unitatea altei dimensiuni (I9), conflict de polaritate sau
+de sens, limite dure încrucișate în același tur, plafoanele de runtime.
+
+Modul PUR (rolul `pure` din `tests/kernel_modules.json`): niciun client de model, niciun I/O, niciun
+ceas. Nu ramifică pe textul brut decât prin tabelele per locale din `query_terms` (singura excepție
+permisă de poarta de text brut) și prin vocabular. Nu conține literali de vertical (I14)."""
+
+from __future__ import annotations
+
+from collections.abc import Collection, Iterator, Mapping, Sequence
+from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
+
+from src.catalog.query_terms import (
+    comparators,
+    fold,
+    negation_markers,
+    relative_comparators,
+    stopwords,
+    tokens,
+)
+from src.catalog.vocabulary import (
+    CATEGORY_DIMENSION,
+    CatalogVocabulary,
+    Resolution,
+    ResolutionStatus,
+    facet_overlays,
+    resolve,
+    resolve_any,
+)
+from src.conversation.interpretation import (
+    UNIVERSAL_DIMENSIONS,
+    ChangeReject,
+    CheckedChange,
+    Provenance,
+    StateChange,
+    TurnInterpretation,
+)
+from src.conversation.needs import HARD, UNIVERSAL_SPECS
+from src.conversation.state_v2 import Need
+from src.domain.constraints import EMPTY_UNITS, UnitRegistry
+
+#: Plafoanele de runtime ale contractului (decizia 3 din „Review decisions"). Peste ele, restul se
+#: taie de la coadă, în ordine, și se numără (`interpretation_truncated`).
+MAX_CHANGES = 10
+MAX_REFERENCES = 6
+MAX_ACTS = 3
+
+PRICE = "price"
+UNMAPPED = "unmapped"
+#: Cheile de nevoie care stau pe dimensiunea prețului.
+PRICE_KEYS: frozenset[str] = frozenset({"budget_max", "budget_min"})
+
+#: Potrivirile de vocabular care pot face un citat `explicit` sau îl pot contrazice. `tokens` (o
+#: submulțime de cuvinte) nu intră: „dus" ar fi atunci o valoare doar fiindcă apare în „gel de dus".
+_STRONG_MATCH: frozenset[str] = frozenset({"exact", "overlay"})
+#: Cea mai lungă secvență de cuvinte din citat încercată pe vocabular (valorile au 1-3 cuvinte).
+_MAX_NGRAM = 4
+#: Câte cuvinte înaintea valorii poate sta o negație ca să o contrazică („nu gras").
+_NEGATION_WINDOW = 2
+
+
+@dataclass(frozen=True)
+class UserWords:
+    """Cuvintele CLIENTULUI. Construite de apelant din mesajul curent și turele clientului din
+    fereastra de istoric; mesajele botului nu au loc aici, deci un citat găsit doar în replica
+    botului iese `inferred` prin construcție."""
+
+    current: str
+    earlier: tuple[str, ...] = ()  # cel mai recent primul
+
+
+@dataclass(frozen=True)
+class Handle:
+    """Un handle „cN" pentru o nevoie activă: ce vede modelul în prompt (pasul 5) și ce validează
+    codul aici. `revision` = `updated_revision` al nevoii, pentru regula de corecție (NX-331)."""
+
+    handle: str
+    key: str
+    value: str | float | bool | None
+    source: str
+    written_turn: str | None = None
+    revision: int = 0
+
+    @property
+    def dimension(self) -> str:
+        return dimension_of_key(self.key)
+
+
+def dimension_of_key(key: str) -> str:
+    """Cheia unei nevoi → dimensiunea contractului (bugetul stă pe `price`)."""
+    return PRICE if key in PRICE_KEYS else key
+
+
+def need_handles(needs: Sequence[Need]) -> tuple[Handle, ...]:
+    """Handle-uri STABILE: nevoile ACTIVE, ordonate după (cheie, valoare), numerotate c1..cN.
+
+    Aceeași funcție scrie promptul (pasul 5) și validează aici, deci un handle nu poate însemna
+    două lucruri. Ordinea nu depinde de ordinea de inserție: o nevoie reafirmată nu renumerotează
+    restul."""
+    active = sorted(
+        (n for n in needs if n.is_active), key=lambda n: (n.key, str(n.normalized_value))
+    )
+    return tuple(
+        Handle(
+            handle=f"c{i}",
+            key=n.key,
+            value=n.normalized_value,
+            source=n.source,
+            written_turn=n.source_turn_id,
+            revision=n.updated_revision,
+        )
+        for i, n in enumerate(active, 1)
+    )
+
+
+def tenant_dimensions(pack: object | None) -> frozenset[str]:
+    """Enumul de dimensiuni al tenantului: cheile de fațetă ale pachetului + cele universale.
+    Același enum pe care îl primește modelul (`build_interpretation_schema`)."""
+    facets = getattr(pack, "facets", ()) or ()
+    return frozenset({f.key for f in facets if getattr(f, "key", None)} | set(UNIVERSAL_DIMENSIONS))
+
+
+def hard_capable(dimension: str, pack: object | None) -> bool:
+    """I8: o fațetă `enforce_ready`, sau o nevoie universală dură (buget, mărime, restricție).
+
+    Acoperirea unei fațete dă dreptul de a FILTRA; dreptul de a EXCLUDE cere auditul de precizie
+    (NX-268/271), adică exact `enforce_ready`. Pe datele de azi nicio fațetă nu-l are, deci dur e
+    doar prețul și cheile universale dure."""
+    if dimension == PRICE:
+        return True
+    for facet in getattr(pack, "facets", ()) or ():
+        if getattr(facet, "key", None) == dimension and getattr(facet, "enforce_ready", False):
+            return True
+    return any(s.key == dimension and s.default_strength == HARD for s in UNIVERSAL_SPECS)
+
+
+def check_targets(interp: TurnInterpretation) -> list[str]:
+    """I22: fiecare `Act.targets` și fiecare `StateChange.relative_to` numește un `Reference.id`
+    declarat în aceeași interpretare (după plafonul de referințe). Întoarce id-urile necunoscute, în
+    ordinea apariției; apelantul respinge turul cu `unknown_reference`."""
+    declared = {r.id for r in interp.references[:MAX_REFERENCES]}
+    unknown: list[str] = []
+    for act in interp.acts[:MAX_ACTS]:
+        unknown += [t for t in act.targets if t not in declared and t not in unknown]
+    for change in interp.changes[:MAX_CHANGES]:
+        rel = change.relative_to
+        if rel is not None and rel not in declared and rel not in unknown:
+            unknown.append(rel)
+    return unknown
+
+
+# --- implementare --------------------------------------------------------------------------------
+
+
+def _find(hay: Sequence[str], needle: Sequence[str]) -> int:
+    """Poziția primei apariții CONTIGUE a lui `needle` în `hay`, sau -1."""
+    n = len(needle)
+    if not n:
+        return -1
+    for i in range(len(hay) - n + 1):
+        if tuple(hay[i : i + n]) == tuple(needle):
+            return i
+    return -1
+
+
+def _number_tokens(number: float) -> tuple[str, ...]:
+    """Tokenii unui număr, cum apar într-un mesaj pliat („99.5" și „99,5" dau amândouă 99 5)."""
+    text = str(int(number)) if float(number).is_integer() else repr(float(number))
+    return tuple(tokens(text))
+
+
+@dataclass(frozen=True)
+class _Evidence:
+    words: tuple[str, ...]
+    located: bool
+    comparator_ops: frozenset[str]  # op-urile comparatorilor găsiți în citat
+    negations: tuple[int, ...]  # pozițiile negațiilor, după scăderea comparatorilor
+
+
+def _read_quote(quote: str, user: UserWords, locale: str | None) -> _Evidence:
+    words = tuple(tokens(quote))
+    located = bool(words) and any(
+        _find(tokens(message), words) >= 0 for message in (user.current, *user.earlier)
+    )
+    masked = [False] * len(words)
+    ops: set[str] = set()
+    for phrase, op in (*comparators(locale), *relative_comparators(locale)):
+        needle = tokens(phrase)
+        start = _find(words, needle)
+        while start >= 0:
+            if not any(masked[start : start + len(needle)]):
+                ops.add(op)
+                for i in range(start, start + len(needle)):
+                    masked[i] = True
+            nxt = _find(words[start + 1 :], needle)
+            start = start + 1 + nxt if nxt >= 0 else -1
+    neg = negation_markers(locale)
+    negations = tuple(i for i, w in enumerate(words) if w in neg and not masked[i])
+    return _Evidence(words, located, frozenset(ops), negations)
+
+
+class _Checker:
+    """Validarea unei interpretări pe instantaneul turului. Fără stare între ture."""
+
+    def __init__(
+        self,
+        *,
+        user: UserWords,
+        handles: Sequence[Handle],
+        vocab: CatalogVocabulary | None,
+        units: UnitRegistry,
+        pack: object | None,
+        locale: str | None,
+        declared_refs: Collection[str],
+    ) -> None:
+        self.user = user
+        self.handles = {h.handle: h for h in handles}
+        self.vocab = vocab if vocab is not None and not vocab.is_empty() else None
+        self.units = units
+        self.pack = pack
+        self.locale = locale
+        self.stop = stopwords(locale)
+        self.dimensions = tenant_dimensions(pack)
+        self.declared_refs = frozenset(declared_refs)
+        self.overlays: Mapping[str, Mapping[str, str]] = (
+            facet_overlays(pack, self.vocab.facet_names) or {} if self.vocab else {}
+        )
+
+    # --- vocabular -------------------------------------------------------------------------------
+
+    def _resolve_on(self, phrase: str, dimension: str) -> Resolution | None:
+        """Valoarea pe care `phrase` o numește PE `dimension`, doar potriviri tari."""
+        if self.vocab is None or not phrase:
+            return None
+        vocab_dim = CATEGORY_DIMENSION if dimension == CATEGORY_DIMENSION else dimension
+        res = resolve(self.vocab, phrase, vocab_dim, overlay=self.overlays.get(vocab_dim))
+        if res.status is ResolutionStatus.KNOWN and res.matched_by in _STRONG_MATCH:
+            return res
+        return None
+
+    def _resolve_anywhere(self, phrase: str) -> Resolution | None:
+        """Valoarea pe care `phrase` o numește pe ORICE dimensiune a tenantului, doar tare."""
+        if self.vocab is None or not phrase:
+            return None
+        res = resolve_any(self.vocab, phrase, overlays=self.overlays or None)
+        if (
+            res.status is ResolutionStatus.KNOWN
+            and res.matched_by in _STRONG_MATCH
+            and res.dimension in self.dimensions
+        ):
+            return res
+        return None
+
+    def _ngrams(self, words: Sequence[str]) -> Iterator[tuple[int, int, str]]:
+        """(start, lungime, frază) pentru secvențele de 1..4 cuvinte care nu încep și nu se termină
+        într-un cuvânt gol."""
+        for start in range(len(words)):
+            for size in range(1, _MAX_NGRAM + 1):
+                chunk = words[start : start + size]
+                if len(chunk) < size:
+                    break
+                if chunk[0] in self.stop or chunk[-1] in self.stop:
+                    continue
+                yield start, size, " ".join(chunk)
+
+    # --- canonic ---------------------------------------------------------------------------------
+
+    def _canonical(self, dimension: str, value: str) -> tuple[str, str | None]:
+        """(dimensiunea finală, valoarea canonică). O valoare pe care vocabularul n-o are pe
+        dimensiunea propusă devine `unmapped` și se re-rezolvă O DATĂ: cunoscută altundeva ⇒
+        promovată pe acea dimensiune; necunoscută ⇒ rămâne `unmapped`, un semnal soft."""
+        if dimension != UNMAPPED:
+            on = self._resolve_on(value, dimension)
+            if on is not None:
+                return dimension, on.key
+        promoted = self._resolve_anywhere(value)
+        if promoted is not None:
+            return promoted.dimension, promoted.key
+        if dimension != UNMAPPED and self.vocab is None:
+            # Fără vocabular nu se poate judeca nimic: valoarea rămâne pe dimensiunea propusă, iar
+            # proveniența nu poate trece de `implicit` (citatul nu se poate rezolva).
+            return dimension, fold(value).strip() or None
+        return UNMAPPED, fold(value).strip() or None
+
+    # --- o schimbare -----------------------------------------------------------------------------
+
+    def check(self, index: int, change: StateChange) -> CheckedChange:
+        # Textul brut al citatului se consumă AICI și numai aici, prin tabelele per locale: de
+        # aici încolo deciziile se iau pe DOVADA structurată (găsit, poziții, comparatori,
+        # negații), nu pe cuvintele clientului (poarta de text brut a contractului).
+        return self._decide(index, change, _read_quote(change.quote, self.user, self.locale))
+
+    def _decide(self, index: int, change: StateChange, evidence: _Evidence) -> CheckedChange:
+        located_level: Provenance = "explicit" if evidence.located else "inferred"
+
+        def reject(reason: ChangeReject, dimension: str = "", value=None) -> CheckedChange:
+            return CheckedChange(
+                change=change,
+                dimension=dimension or (change.dimension or ""),
+                canonical_value=value,
+                provenance=located_level,
+                strength="ranking",
+                rejected=reason,
+            )
+
+        if index >= MAX_CHANGES:
+            return reject("truncated")
+
+        # Operațiile structurale: nu au valoare de rezolvat, doar un citat care le susține.
+        if change.op == "clear":
+            if change.target not in ("topic", "all"):
+                return reject("unknown_handle")
+            return self._structural(change, change.target, evidence)
+        if change.op in ("remove", "replace"):
+            handle = self.handles.get(change.target or "")
+            if handle is None:
+                return reject("unknown_handle")
+            proposed = change.dimension
+            if change.op == "replace" and proposed and proposed != handle.dimension:
+                return reject("unknown_handle", handle.dimension)
+            if change.op == "remove":
+                return self._structural(change, handle.dimension, evidence)
+            return self._valued(change, handle.dimension, evidence)
+
+        dimension = change.dimension or ""
+        if dimension not in self.dimensions:
+            return reject("unknown_dimension")
+        return self._valued(change, dimension, evidence)
+
+    def _structural(
+        self, change: StateChange, dimension: str, evidence: _Evidence
+    ) -> CheckedChange:
+        provenance: Provenance = "explicit" if evidence.located else "inferred"
+        return CheckedChange(
+            change=change,
+            dimension=dimension,
+            canonical_value=None,
+            provenance=provenance,
+            strength="soft" if provenance != "inferred" else "ranking",
+            rejected=None,
+        )
+
+    def _valued(self, change: StateChange, dimension: str, evidence: _Evidence) -> CheckedChange:
+        located: Provenance = "explicit" if evidence.located else "inferred"
+
+        def reject(reason: ChangeReject, value=None) -> CheckedChange:
+            return CheckedChange(
+                change=change,
+                dimension=dimension,
+                canonical_value=value,
+                provenance=located,
+                strength="ranking",
+                rejected=reason,
+            )
+
+        relation = change.relation or "eq"
+        if change.relative_to is not None:
+            if change.relative_to not in self.declared_refs:
+                return reject("unknown_reference")
+            if relation not in ("lte", "gte"):
+                return reject("polarity_conflict")
+            # Valoarea o calculează `delta.py` din prețul RECITIT al țintei; aici doar proveniența.
+            level = self._polarity_level(
+                located, relation, evidence, dimension, number_in_quote=False
+            )
+            return self._finish(change, dimension, None, level)
+
+        hit_at = -1
+        if change.number is not None:
+            canonical_number = self._number(change, dimension)
+            if canonical_number is None:
+                return reject("unit_mismatch")
+            canonical: str | float | None = canonical_number
+            number_at = _find(evidence.words, _number_tokens(change.number))
+            level: Provenance = located
+            if located == "explicit" and number_at < 0:
+                level = "implicit"  # citatul e al clientului, numărul nu
+            hit_at = number_at
+            number_in_quote = number_at >= 0
+        else:
+            if not change.value:
+                return reject("unknown_dimension")
+            dimension, canonical = self._canonical(dimension, change.value)
+            level = located
+            number_in_quote = False
+            if located == "explicit":
+                level, hit_at, mismatch = self._resolve_quote(evidence, dimension, canonical)
+                if mismatch:
+                    return reject("semantic_mismatch", canonical)
+
+        if relation in ("eq", "contains") and hit_at >= 0:
+            window = range(max(0, hit_at - _NEGATION_WINDOW), hit_at)
+            if any(p in window for p in evidence.negations):
+                return reject("polarity_conflict", canonical)
+        level = self._polarity_level(level, relation, evidence, dimension, number_in_quote)
+        return self._finish(change, dimension, canonical, level)
+
+    def _resolve_quote(
+        self, evidence: _Evidence, dimension: str, canonical: str | float | None
+    ) -> tuple[Provenance, int, bool]:
+        """Pasul 2. (nivel, poziția valorii în citat, e contrazisă?)."""
+        if dimension == UNMAPPED or canonical is None or self.vocab is None:
+            return "implicit", -1, False
+        other = False
+        for start, _size, phrase in self._ngrams(evidence.words):
+            on = self._resolve_on(phrase, dimension)
+            if on is not None and on.key == canonical:
+                return "explicit", start, False
+        for _start, _size, phrase in self._ngrams(evidence.words):
+            anywhere = self._resolve_anywhere(phrase)
+            if anywhere is None:
+                continue
+            # Un RAFT nu concurează cu o valoare de fațetă: e subiectul, nu o proprietate. Altfel
+            # «se usucă după duș» ar fi „contrazis" de un raft „Duș".
+            if anywhere.dimension == CATEGORY_DIMENSION and dimension != CATEGORY_DIMENSION:
+                continue
+            if (anywhere.dimension, anywhere.key) != (dimension, canonical):
+                other = True
+        return "implicit", -1, other
+
+    def _polarity_level(
+        self,
+        level: Provenance,
+        relation: str,
+        evidence: _Evidence,
+        dimension: str,
+        number_in_quote: bool,
+    ) -> Provenance:
+        """Pasul 3: un marker lipsă retrogradează `explicit` la `implicit`."""
+        if level != "explicit":
+            return level
+        if relation == "avoid" and not evidence.negations:
+            return "implicit"
+        if relation in ("lte", "gte") and relation not in evidence.comparator_ops:
+            bare_price = (
+                relation == "lte"
+                and dimension == PRICE
+                and number_in_quote
+                and "gte" not in evidence.comparator_ops
+            )
+            if not bare_price:
+                return "implicit"
+        return level
+
+    def _number(self, change: StateChange, dimension: str) -> float | None:
+        """I9: un număr devine valoare a dimensiunii D doar dacă unitatea lui aparține lui D, sau
+        n-are unitate și D e prețul. Întoarce valoarea în unitatea canonică, sau None (respins)."""
+        unit = fold(change.unit or "").strip() or None
+        try:
+            value = Decimal(str(change.number))
+        except (InvalidOperation, ValueError):
+            return None
+        if unit is None:
+            return float(value) if dimension == PRICE else None
+        if self.units.facet_for_unit(unit) != dimension:
+            return None
+        spec = self.units.specs.get(dimension)
+        converted = spec.to_canonical(value, unit) if spec is not None else None
+        return float(converted) if converted is not None else None
+
+    def _finish(
+        self,
+        change: StateChange,
+        dimension: str,
+        canonical: str | float | None,
+        level: Provenance,
+    ) -> CheckedChange:
+        if level == "inferred":
+            strength = "ranking"
+        elif level == "explicit" and dimension != UNMAPPED and hard_capable(dimension, self.pack):
+            strength = "hard"
+        else:
+            strength = "soft"
+        return CheckedChange(
+            change=change,
+            dimension=dimension,
+            canonical_value=canonical,
+            provenance=level,
+            strength=strength,
+            rejected=None,
+        )
+
+
+def _cross_hard_conflicts(checked: list[CheckedChange]) -> list[CheckedChange]:
+    """Limite care se încrucișează în ACELAȘI tur („sub 100, minim 150") ⇒ ambele `hard_conflict`,
+    iar poarta de ambiguitate (pasul 4) întreabă. O limită dintr-un tur ANTERIOR nu e treaba asta:
+    acolo cea nouă câștigă (reducerul)."""
+    out = list(checked)
+    for i, low in enumerate(out):
+        for j, high in enumerate(out):
+            if i == j or low.rejected or high.rejected:
+                continue
+            if low.dimension != high.dimension or low.change.relative_to or high.change.relative_to:
+                continue
+            if (low.change.relation, high.change.relation) != ("lte", "gte"):
+                continue
+            if not isinstance(low.canonical_value, float) or not isinstance(
+                high.canonical_value, float
+            ):
+                continue
+            if low.canonical_value < high.canonical_value:
+                out[i] = low.model_copy(update={"rejected": "hard_conflict", "strength": "ranking"})
+                out[j] = high.model_copy(
+                    update={"rejected": "hard_conflict", "strength": "ranking"}
+                )
+    return out
+
+
+def check_changes(
+    interp: TurnInterpretation,
+    *,
+    words: UserWords,
+    handles: Sequence[Handle] = (),
+    vocab: CatalogVocabulary | None = None,
+    units: UnitRegistry | None = None,
+    pack: object | None = None,
+    locale: str | None = None,
+) -> list[CheckedChange]:
+    """Un `CheckedChange` per `StateChange`, în ordinea modelului. PUR și determinist.
+
+    Nimic nu se aruncă: o schimbare invalidă iese cu `rejected` din vocabularul închis, ca să
+    apară în trace și în contoare. Tăria `hard` apare doar pe `explicit` + dimensiune hard-capable
+    (I7)."""
+    checker = _Checker(
+        user=words,
+        handles=handles,
+        vocab=vocab,
+        units=units if units is not None else getattr(pack, "units", None) or EMPTY_UNITS,
+        pack=pack,
+        locale=locale,
+        declared_refs=[r.id for r in interp.references[:MAX_REFERENCES]],
+    )
+    checked = [checker.check(i, c) for i, c in enumerate(interp.changes)]
+    return _cross_hard_conflicts(checked)
+
+
+__all__ = [
+    "MAX_ACTS",
+    "MAX_CHANGES",
+    "MAX_REFERENCES",
+    "PRICE",
+    "PRICE_KEYS",
+    "UNMAPPED",
+    "Handle",
+    "UserWords",
+    "check_changes",
+    "check_targets",
+    "dimension_of_key",
+    "hard_capable",
+    "need_handles",
+    "tenant_dimensions",
+]

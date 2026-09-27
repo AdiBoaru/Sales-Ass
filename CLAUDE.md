@@ -131,6 +131,25 @@ trunchiate cu „…” (`compose._suggestion_chips`), unde fragmentul tăiat nu
 pleacă la model. Probă: `pytest tests/test_kernel_references.py tests/test_reference_facts_sql.py
 tests/test_nx329_shortcut_resolver.py tests/test_nx326_named_shortcut_targets.py
 tests/test_kernel_replay.py -q` + `PYTHONPATH=. python scripts/nx329_shortcut_probe.py`.
+**Pasul 3a (NX-330) — proveniența o calculează codul, iar interpretarea devine propuneri.** Două
+module pure noi, fără apelant în producție până la pasul 6. `src/conversation/provenance.py`
+transformă fiecare `StateChange` într-un `CheckedChange`: citatul se caută pe cuvinte ÎNTREGI în
+mesajele CLIENTULUI (nu pe prefix, ca `corroborated_by`), se rezolvă pe vocabular doar prin potriviri
+tari (`exact`/`overlay`, nu submulțime de cuvinte) și trece prin markerii per locale din `query_terms`
+(`negation_markers`, `relative_comparators`, comparatorii existenți). Rezultatul: `explicit` /
+`implicit` / `inferred`, iar tăria `hard` doar pe `explicit` + dimensiune hard-capable (I8: prețul,
+o fațetă `enforce_ready`, o cheie universală dură). Respinge din vocabularul închis: unitatea altei
+dimensiuni (I9, „100 ml" ca preț), handle sau referință nedeclarată (I22), citatul care numește ALTĂ
+valoare (`semantic_mismatch`; un raft nu contează ca valoare concurentă), negația lângă o valoare,
+limite încrucișate în același tur, plafoanele de runtime (10/6/3). Textul brut se consumă o singură
+dată, la construcția dovezii (`_read_quote`); deciziile de după ramifică pe dovadă, nu pe cuvinte.
+`src/conversation/delta.py` traduce în `StateUpdateProposal` (subiectul primul, prețul pe
+`budget_max`/`budget_min`, o valoare relativă din prețul RECITIT al țintei `exact`), iar un
+`inferred` devine `RankingSignal`, nepersistat (I23). `user_implicit` e sursă nouă în starea v2,
+în afara surselor care pot face `hard` sau învia o nevoie. Op-urile `clear_topic`/`clear_all` există
+ca tip; reducerul le implementează la NX-331. Stratul `checked` rulează în replay pe
+`provenance_levels.json`. Probă: `pytest tests/test_kernel_provenance.py tests/test_kernel_delta.py
+tests/test_kernel_replay.py tests/test_kernel_contract.py -q`.
 
 **NX-238 — retrievalul trece printr-un PORT, iar candidatul e inert (verdict `NOT-READY`).**
 `src/retrieval/` e contractul stabil pe care îl consumă NX-239: `RetrievalPort` + `RetrievalBundle`
