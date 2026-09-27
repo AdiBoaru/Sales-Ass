@@ -1101,12 +1101,18 @@ def _paired_ambiguity(resolved: Sequence[ResolvedRef]) -> tuple[str, ...]:
     produse, într-o comparație (care cere produse DISTINCTE), nu lasă nicio alegere. Găsit de sonda
     NX-329 pe chip-uri reale; calea NX-326 le compara, iar v2 le trimitea la model. Doar pe ecran
     (candidații sunt cei văzuți) și doar când numărul candidaților e EXACT numărul referințelor:
-    șase carduri identice pentru două referințe rămân ale modelului. Ordinea e cea din resolver."""
+    șase carduri identice pentru două referințe rămân ale modelului. Ordinea e cea din resolver.
+    DOAR ambiguitatea de NUME (`name_shared`): una de ordinal în afara ecranului sau fără focus
+    («compară-l pe al treilea cu celălalt» pe două carduri) cere un produs care nu există, deci
+    perechea de pe ecran nu e ce a cerut clientul."""
     if len(resolved) < 2:
         return ()
     first = resolved[0].product_ids
     same = all(
-        r.outcome == "ambiguous" and r.source in _ON_SCREEN and set(r.product_ids) == set(first)
+        r.outcome == "ambiguous"
+        and r.reason == "name_shared"
+        and r.source in _ON_SCREEN
+        and set(r.product_ids) == set(first)
         for r in resolved
     )
     return tuple(first) if same and len(set(first)) == len(resolved) else ()

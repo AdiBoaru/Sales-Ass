@@ -298,11 +298,16 @@ def match_name_in_set(
         return None
     named = [(it.product_id, tuple(tokens(it.name))) for it in items]
 
-    for phrase_hit in (
-        lambda nw: _contains_seq(words, nw),  # numele produsului, întreg, în cerere
-        lambda nw: _contains_seq(nw, words),  # cererea, întreagă, în numele produsului
+    # (1) Numele întreg în cerere. Când două nume încap, câștigă cel mai LUNG: „Dokdo Cream" e
+    # conținut în «ROUND LAB 1025 Dokdo Cream» exact cât produsul cu numele lung, dar clientul l-a
+    # scris pe acela întreg. Nume identice (familii) au aceeași lungime ⇒ ambiguitate între ele.
+    whole = [(pid, len(nw)) for pid, nw in named if nw and _contains_seq(words, nw)]
+    longest = max((n for _, n in whole), default=0)
+    # (2) Cererea întreagă în numele produsului.
+    for phrase in (
+        _unique(pid for pid, n in whole if n == longest),
+        _unique(pid for pid, nw in named if nw and _contains_seq(nw, words)),
     ):
-        phrase = _unique(pid for pid, nw in named if nw and phrase_hit(nw))
         if len(phrase) == 1:
             return _Hit("exact", phrase)
         if phrase:

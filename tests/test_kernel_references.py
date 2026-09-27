@@ -381,6 +381,17 @@ def test_a_whole_name_is_ambiguous_only_among_the_cards_that_carry_it_whole():
     assert (r.outcome, r.product_ids) == ("ambiguous", ["g1", "g2"])
 
 
+def test_the_longest_whole_name_wins_when_one_name_contains_another():
+    """«ROUND LAB 1025 Dokdo Cream» lângă un card „Dokdo Cream": ambele nume încap întregi în
+    cerere, dar clientul l-a scris pe cel lung. Treptele separate îl lăsau ambiguu (review #447)."""
+    shown = (
+        ShownItem("short", "Dokdo Cream", 50.0),
+        ShownItem("long", "ROUND LAB 1025 Dokdo Cream", 99.0),
+    )
+    [r] = _resolve_on(shown, "ROUND LAB 1025 Dokdo Cream", vocab=None)
+    assert (r.outcome, r.product_ids) == ("exact", ["long"])
+
+
 def test_a_need_qualifier_after_the_name_is_not_a_competing_name():
     """Chip-ul nostru «Compară IUNIK cu BELIF pentru ten uscat»: „ten uscat" e o nevoie, nu alt
     produs. Fără vocabular nu se judecă, deci rămâne negăsit."""

@@ -347,6 +347,31 @@ def test_a_pairing_that_leaves_a_choice_goes_to_the_model(resolved):
     assert det.decide_shortcut("compare", _name_refs(2), resolved).action == "model"
 
 
+def test_pairing_ignores_ambiguity_that_asks_for_a_missing_product():
+    """«compară-l pe al treilea cu celălalt» pe DOUĂ carduri: al treilea nu există, deci perechea de
+    pe ecran nu e ce a cerut clientul (review #447)."""
+    from src.conversation.interpretation import ResolvedRef
+
+    out_of_range = ResolvedRef(
+        ref_id="r1",
+        kind="ordinal",
+        outcome="ambiguous",
+        product_ids=["a", "b"],
+        source="shown_now",
+        reason="ordinal_out_of_range",
+    )
+    no_focus = ResolvedRef(
+        ref_id="r2",
+        kind="the_other",
+        outcome="ambiguous",
+        product_ids=["a", "b"],
+        source="shown_now",
+        reason="no_focus",
+    )
+    decision = det.decide_shortcut("compare", _name_refs(2), [out_of_range, no_focus])
+    assert decision.action == "model"
+
+
 def test_pairing_is_only_for_comparison():
     """La link, o ambiguitate pe ecran servește deja candidații; regula nu schimbă nimic acolo."""
     pair = [_ambiguous("r1", ["m1", "m2"]), _ambiguous("r2", ["m1", "m2"])]
