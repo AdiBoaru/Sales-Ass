@@ -78,6 +78,26 @@ scriitorilor de stare) în paralel, apoi 1 → 6. **Regula de reparație de acum
 proastă intră în corpusul de replay și se repară în stratul pe care îl arată traceul (date de pachet,
 o regulă din contract, sau un bug într-o componentă). O reparație care ramifică pe textul brut al
 clientului într-un modul de kernel e respinsă de poartă.
+**Pasul 1 (NX-328) — schela: porțile există înaintea codului pe care îl păzesc.** Modelele
+contractului sunt cod (`src/conversation/interpretation.py`, `kernel_trace.py`, pure). Schema scrisă
+de model are un snapshot în `tests/kernel/schema/`, iar o schimbare fără bump de versiune pică
+(`scripts/kernel_schema_snapshot.py --against origin/main`). Registrul `tests/kernel_modules.json`
+dă fiecărui modul un ROL (pure / planner / adapter / reducer / executor + `planned`), iar rolul decide
+porțile din `tests/test_kernel_contract.py`: I13 (niciun client de model, verificat și TRANZITIV,
+într-un proces curat), I2 (`SearchArgs` doar în planner), I3 (stare doar prin propuneri, prin
+extractorul NX-327), I20 (executorii nu scriu nevoi/subiect), ramificarea pe textul brut (doar
+tabelele per locale din `query_terms` sunt excepție) și I14 (NX-264 pe kernel, fără pragma și fără
+baseline). Fiecare poartă are un exemplu care TREBUIE să pice. **Un modul de kernel nou se înscrie
+în registru în PR-ul care îl creează**; `planned` prinde uitarea. Pachetele de fixture
+(`tests/fixtures/packs/`: electronice, modă, mobilă, cadouri) trec prin `load_domain_pack` și se
+contrazic pe scope (culoarea e a persoanei la modă, a subiectului la mobilă), iar journey-urile
+`tests/golden/kernel_journeys/` (formatul `kernel-journey.v1`, etichete pe STRATURI) se compară cu
+`first_divergence`: primul strat greșit e cel vinovat. **I16** e job CI (`kernel-differential`):
+`scripts/kernel_differential.py` înregistrează suprafața suitei golden (răspuns, apeluri de unealtă,
+stare persistată, accese la DB) pe `main` și pe PR, cu pluginul adus din PR, și cere diff gol. Se
+aplică DOAR PR-urilor care ating kernelul (`applies`): o reparație pe calea de azi schimbă legitim
+suprafața v1. Probă: `pytest tests/test_kernel_models.py tests/test_kernel_contract.py
+tests/test_kernel_replay.py tests/test_kernel_differential.py -q`.
 
 **NX-238 — retrievalul trece printr-un PORT, iar candidatul e inert (verdict `NOT-READY`).**
 `src/retrieval/` e contractul stabil pe care îl consumă NX-239: `RetrievalPort` + `RetrievalBundle`
