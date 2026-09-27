@@ -1,4 +1,26 @@
 {
-  "$comment": "NX-328: exceptii de la portile tests/test_kernel_contract.py. Fiecare intrare are gate, file, detail (exact textul Violation.detail) si reason nevid. O intrare care nu mai prinde nimic pica testul. Porneste GOALA: kernelul nu are datorie de mostenit.",
-  "entries": []
+  "$comment": "NX-328: exceptii de la portile tests/test_kernel_contract.py. Fiecare intrare are gate, file, detail (exact textul Violation.detail) si reason nevid. O intrare care nu mai prinde nimic pica testul. Porneste GOALA: kernelul nu are datorie de mostenit. NX-332: `raw_text_readers` declara functiile care au voie sa citeasca un camp de text brut (quote, query, readings, text, body), fiecare cu motiv; poarta `raw_readers` pica pe orice alta citire, iar un cititor declarat care nu mai exista pica testul.",
+  "entries": [],
+  "raw_text_readers": [
+    {
+      "file": "src/conversation/provenance.py",
+      "function": "_read_quote",
+      "reason": "NX-330: citatul clientului se localizeaza in mesajele lui si se trece prin tabelele per locale (comparatori, negatii) o singura data; deciziile de dupa ramifica pe dovada structurata (_Evidence)."
+    },
+    {
+      "file": "src/conversation/answer_policy.py",
+      "function": "_read_query",
+      "reason": "NX-332 (decizia de arhitectura 2): dimensiunea decisiva a politicii de raspuns se citeste din cererea actului prin ETICHETELE DE RAND ale fatetelor, date de pachet (P9/P11, I14), pe cuvinte intregi dupa normalizarea si sufixele din query_terms. Fara ea, «care e mai bun la ecran?» ar lasa un verdict pe un atribut necunoscut (I12 slabit). Iese QueryEvidence, niciun cuvant."
+    },
+    {
+      "file": "src/conversation/ambiguity_gate.py",
+      "function": "_read_readings",
+      "reason": "NX-332: lecturile modelului (Ambiguity.readings) se rezolva prin vocabular o singura data, la (dimensiune, valoare); o lectura nerezolvata nu conteaza, iar nicio lectura nu ajunge intr-o intrebare."
+    },
+    {
+      "file": "src/conversation/kernel_trace.py",
+      "function": "_change",
+      "reason": "NX-328: afisarea traceului pentru om (scripts/kernel_trace.py); citatul apare ca text, nu intra in nicio decizie."
+    }
+  ]
 }

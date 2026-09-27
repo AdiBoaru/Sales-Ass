@@ -91,7 +91,11 @@
         "provenance": "structural",
         "binding": "additive",
         "missing_value": "unknown",
-        "min_coverage": 0.5
+        "min_coverage": 0.5,
+        "labels": {
+          "ro": "Stocare",
+          "en": "Storage"
+        }
       },
       {
         "key": "screen",
@@ -106,7 +110,11 @@
         "provenance": "structural",
         "binding": "additive",
         "missing_value": "unknown",
-        "min_coverage": 0.5
+        "min_coverage": 0.5,
+        "labels": {
+          "ro": "Ecran",
+          "en": "Screen"
+        }
       },
       {
         "key": "color",

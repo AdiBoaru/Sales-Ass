@@ -1,6 +1,6 @@
 {
   "schema_version": "kernel-journey.v1",
-  "_note": "NX-328 felia 1c: cele 12 exemple din docs/KERNEL-DESIGN.md §C, traduse în termenii contractului kernel.v1.0 (fără `thread=switch`, fără `goal`, fără `Reference.within`; `free` devine `unmapped`; o schimbare de subiect e `set category`, nu `replace` pe subiect). Etichetate doar pe `interpretation`: restul straturilor se etichetează în pașii care le construiesc. Etichetele sunt compacte (nulele și listele goale lipsesc), vezi tests/kernel/replay.py.",
+  "_note": "NX-328 felia 1c: cele 12 exemple din docs/KERNEL-DESIGN.md §C, traduse în termenii contractului kernel.v1.0 (fără `thread=switch`, fără `goal`, fără `Reference.within`; `free` devine `unmapped`; o schimbare de subiect e `set category`, nu `replace` pe subiect). Etichetate doar pe `interpretation`: restul straturilor se etichetează în pașii care le construiesc. NX-332: §C.12 poartă și stratul `ambiguity` (coșul pe «primul», primul act, = `act`), iar primul ei tur arată trei telefoane (`shown`), ca lanțul `gate_trace` să aibă ecranul la care se referă «primul». Etichetele sunt compacte (nulele și listele goale lipsesc), vezi tests/kernel/replay.py.",
   "journeys": [
     {
       "journey_id": "c01-skincare-add-avoid",
@@ -257,6 +257,7 @@
       "turns": [
         {
           "user_input": "Vreau ceva bun pentru ea.",
+          "shown": ["el-01", "el-02", "el-03"],
           "expect": {
             "interpretation": {
               "acts": [{"kind": "find"}],
@@ -282,7 +283,8 @@
               "references": [
                 {"id": "r1", "text": "primul", "kind": "ordinal", "ordinal": 1}
               ]
-            }
+            },
+            "ambiguity": {"verdict": "act", "reason": "clear"}
           }
         }
       ]

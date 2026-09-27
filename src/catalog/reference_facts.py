@@ -75,6 +75,7 @@ async def fetch_reference_facts(
         products=products,
         named=named,
         snapshot=f"catalog:{len(products)}/{len(wanted)}",
+        attributes_read=tuple(lookup.attributes),
     )
 
 

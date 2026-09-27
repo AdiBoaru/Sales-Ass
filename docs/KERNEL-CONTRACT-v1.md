@@ -382,7 +382,7 @@ The planner reads the reduced state, the resolved references and the gate verdic
 
 **Acts say what, the planner says how.** An act never carries an execution hint, and `find` is a request („the user wants products”), not a strategy. A new `ActKind` is admitted only for a user request that no existing act plus a planner rule can express; a new strategy is always a planner row.
 
-**Clarification text is pack data.** `DomainPack.clarify_templates[locale][about]` holds the sentence, with `{options}` filled by canonical labels from the vocabulary (e.g. „Te interesează {options}?”). The kernel never holds a sentence. A pack without a template for that kind falls back to the pack's generic locale template, still pack data.
+**Clarification text is pack data.** `DomainPack.clarify_templates[locale][about]` holds the sentence, with `{options}` filled by canonical labels from the vocabulary (e.g. „Te interesează {options}?”). The kernel never holds a sentence. A pack without a template for that kind falls back to the pack's generic locale template, still pack data. The keys are `reference`, `scope` and `value` (the values of `Ambiguity.about`), plus the data keys `subject` (a `find` with no subject), `confirm` (an `implicit` need), `conflict` (two crossed bounds in one turn) and `generic`, each with exactly one `{options}`; `bound_lte` and `bound_gte` label the bounds inside the `conflict` question, each with exactly one `{value}`. A template with any other marker is rejected when the pack loads.
 
 ### Multi-act turns
 

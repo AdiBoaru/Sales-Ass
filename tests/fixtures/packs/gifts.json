@@ -109,6 +109,12 @@
         "scope": "conversation"
       }
     ],
+    "_clarify_templates_note": "NX-332: pachetul își scrie propria întrebare de subiect peste defaults-urile ecommerce: frazele sunt date de pachet, nu cod.",
+    "clarify_templates": {
+      "ro": {
+        "subject": "Pentru ce fel de cadou te gândești? Am {options}."
+      }
+    },
     "units": {
       "price": {
         "canonical": "lei",

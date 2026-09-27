@@ -180,12 +180,15 @@ def test_replay_passes_when_every_labeled_layer_matches():
     def perfect(journey, index):
         expect = journey.turns[index].expect
         trace = _trace_for(expect["interpretation"], refs=expect.get("resolver", ()))
-        return trace.model_copy(
-            update={
-                "checked_changes": list(expect.get("checked", ())),
-                "state_after": expect.get("reducer", {}),
-            }
-        )
+        update = {
+            "checked_changes": list(expect.get("checked", ())),
+            "state_after": expect.get("reducer", {}),
+        }
+        if "ambiguity" in expect:
+            update["ambiguity"] = expect["ambiguity"]
+        if "answer_policy" in expect:
+            update["answer_policy"] = expect["answer_policy"]
+        return trace.model_copy(update=update)
 
     outcomes = replay.replay(journeys, perfect)
     assert outcomes and all(o.passed for o in outcomes)
@@ -246,6 +249,69 @@ def test_the_reducer_layer_replays_green_on_every_chained_journey():
     failed = [f"{o.journey_id}#{o.turn}: {o.divergence.report()}" for o in outcomes if not o.passed]
     assert not failed, "\n".join(failed)
     assert len(outcomes) >= 6
+
+
+def _gated(journey: replay.Journey) -> bool:
+    return any("ambiguity" in t.expect or "answer_policy" in t.expect for t in journey.turns)
+
+
+def test_the_ambiguity_layer_replays_green_on_every_labeled_journey():
+    """NX-332: straturile `ambiguity` și `answer_policy` RULEAZĂ (pasul 4a) pe `gate_trace`: turele
+    trec în lanț prin validator, resolver, `to_delta`, reducer, poartă și politica de răspuns, iar
+    memoria întrebării trece prin reducer între ture (anti-bucla pe mai multe ture)."""
+    from tests.kernel import fixture_catalog
+
+    journeys = [j for j in replay.load_journeys() if _gated(j)]
+    assert {j.pack for j in journeys} >= {"electronics", "fashion", "gifts"}
+    verdicts = {
+        t.expect["ambiguity"].verdict for j in journeys for t in j.turns if "ambiguity" in t.expect
+    }
+    assert verdicts == {"act", "resolve_from_context", "act_both", "must_ask"}
+    assert any(j.journey_id == "c12-deictic-then-multi-act" for j in journeys)
+    outcomes = replay.replay(journeys, fixture_catalog.gate_trace)
+    failed = [f"{o.journey_id}#{o.turn}: {o.divergence.report()}" for o in outcomes if not o.passed]
+    assert not failed, "\n".join(failed)
+
+
+def test_every_gate_rule_has_a_replayed_turn():
+    """Câte un tur pe fiecare regulă din tabelul porții (§2 din card), plus anti-bucla."""
+    reasons = {
+        t.expect["ambiguity"].reason
+        for j in replay.load_journeys()
+        for t in j.turns
+        if "ambiguity" in t.expect
+    }
+    assert {
+        "invalid_target",
+        "mutation_not_exact",
+        "mutation_unavailable",
+        "hard_conflict",
+        "no_subject",
+        "same_reading",
+        "readings_differ",
+        "ambiguous_read",
+        "ambiguous_too_many",
+        "confirm_implicit",
+        "clear",
+        "already_pending",
+    } <= reasons
+
+
+def test_a_wrong_ambiguity_label_is_blamed_on_the_ambiguity_layer():
+    from tests.kernel import fixture_catalog
+
+    journey = next(
+        j for j in replay.load_journeys() if j.journey_id == "c12-deictic-then-multi-act"
+    )
+    turn = journey.turns[1]
+    wrong = turn.expect["ambiguity"].model_copy(update={"verdict": "must_ask"})
+    labeled = replay.JourneyTurn(
+        user_input=turn.user_input, expect={**turn.expect, "ambiguity": wrong}, shown=turn.shown
+    )
+    bad = replay.Journey(**{**journey.__dict__, "turns": (journey.turns[0], labeled)})
+    outcome = replay.replay([bad], fixture_catalog.gate_trace)[1]
+    assert outcome.divergence.layer == "ambiguity"
+    assert outcome.divergence.passed == ("interpretation",)
 
 
 def test_a_wrong_reducer_label_is_blamed_on_the_reducer_layer():
