@@ -93,7 +93,8 @@ def test_the_packs_disagree_on_scope_so_a_hardcoded_rule_would_fail_one_of_them(
 def test_the_design_section_c_journeys_load_and_validate():
     journeys = replay.load_journeys()
     ids = [j.journey_id for j in journeys]
-    assert len(ids) == len(set(ids)) == 12
+    assert len(ids) == len(set(ids))
+    assert sum(j.source.startswith("KERNEL-DESIGN §C.") for j in journeys) == 12
     assert all(t.expect.get("interpretation") is not None for j in journeys for t in j.turns)
 
 
@@ -177,10 +178,44 @@ def test_replay_passes_when_every_labeled_layer_matches():
     journeys = replay.load_journeys()
 
     def perfect(journey, index):
-        return _trace_for(journey.turns[index].expect["interpretation"])
+        expect = journey.turns[index].expect
+        return _trace_for(expect["interpretation"], refs=expect.get("resolver", ()))
 
     outcomes = replay.replay(journeys, perfect)
     assert outcomes and all(o.passed for o in outcomes)
+
+
+def test_the_resolver_layer_replays_green_on_every_labeled_journey():
+    """NX-329: stratul `resolver` RULEAZĂ (pasul 2) pe fiecare journey etichetat pe el:
+    interpretarea etichetată trece prin resolverul real, pe faptele pachetului de fixture."""
+    from tests.kernel import fixture_catalog
+
+    journeys = [j for j in replay.load_journeys() if any("resolver" in t.expect for t in j.turns)]
+    assert len(journeys) >= 12
+    kinds = {
+        r.kind for j in journeys for t in j.turns for r in t.expect["interpretation"].references
+    }
+    assert kinds == {"ordinal", "deictic", "name", "attribute", "extreme", "the_other", "earlier"}
+    outcomes = replay.replay(journeys, fixture_catalog.resolver_trace)
+    failed = [f"{o.journey_id}#{o.turn}: {o.divergence.report()}" for o in outcomes if not o.passed]
+    assert not failed, "\n".join(failed)
+
+
+def test_a_wrong_resolver_label_is_blamed_on_the_resolver_layer():
+    from tests.kernel import fixture_catalog
+
+    journey = next(j for j in replay.load_journeys() if j.journey_id == "r01-electronics-ordinal")
+    turn = journey.turns[0]
+    wrong = [r.model_copy(update={"product_ids": ["el-03"]}) for r in turn.expect["resolver"]]
+    labeled = replay.JourneyTurn(
+        user_input=turn.user_input,
+        expect={**turn.expect, "resolver": wrong},
+        sources=turn.sources,
+    )
+    bad = replay.Journey(**{**journey.__dict__, "turns": (labeled,)})
+    [outcome] = replay.replay([bad], fixture_catalog.resolver_trace)
+    assert outcome.divergence.layer == "resolver"
+    assert outcome.divergence.passed == ("interpretation",)
 
 
 def test_replay_blames_the_first_wrong_layer():

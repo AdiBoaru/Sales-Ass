@@ -19,12 +19,17 @@ from typing import Any
 
 from src.catalog.folding import fold_text
 from src.catalog.vocabulary import CatalogVocabulary, VocabEntry
+from src.conversation.interpretation import KERNEL_CONTRACT_VERSION, AmbiguityDecision, TurnPlan
+from src.conversation.kernel_trace import KernelTrace
 from src.conversation.references import (
     CatalogLookup,
     ProductFacts,
     ReferenceFacts,
+    ReferenceSources,
     ShownItem,
     name_key,
+    plan_lookup,
+    resolve_references,
 )
 from src.domain.loader import load_domain_pack
 from src.domain.pack import DomainPack
@@ -138,4 +143,62 @@ def vocabulary(name: str) -> CatalogVocabulary:
     return CatalogVocabulary(business_id=f"b-{name}", dimensions=dimensions)
 
 
-__all__ = ["facts", "name_key", "named_in_catalog", "pack", "products", "shown", "vocabulary"]
+def sources_of(name: str, raw: dict[str, Any]) -> ReferenceSources:
+    """`JourneyTurn.sources` (id-uri de fixture) → `ReferenceSources`, cu prețurile din pachet."""
+    page = raw.get("page")
+    return ReferenceSources(
+        shown_now=shown(name, *raw.get("shown_now", ())),
+        shown_earlier=tuple(shown(name, *s) for s in raw.get("shown_earlier", ())),
+        parked=shown(name, *raw.get("parked", ())),
+        page=shown(name, page)[0] if page else None,
+        focus=raw.get("focus"),
+        thread=raw.get("thread", "continue"),
+    )
+
+
+def resolver_trace(journey: replay.Journey, index: int) -> KernelTrace:
+    """Pipeline-ul de replay pentru stratul `resolver` (NX-329): interpretarea e cea etichetată
+    (adaptorul vine la pasul 5), iar referințele ei trec prin resolverul REAL, pe faptele
+    pachetului. Straturile de după au valori neutre până le construiesc pașii 3-6."""
+    turn = journey.turns[index]
+    interpretation = turn.expect["interpretation"]
+    sources = sources_of(journey.pack, turn.sources)
+    loaded = pack(journey.pack)
+    refs = interpretation.references
+    lookup = plan_lookup(refs, sources, pack=loaded, locale=journey.locale)
+    resolved = resolve_references(
+        refs,
+        sources,
+        facts(journey.pack, lookup),
+        vocab=vocabulary(journey.pack),
+        pack=loaded,
+        locale=journey.locale,
+    )
+    return KernelTrace(
+        contract_version=KERNEL_CONTRACT_VERSION,
+        vocabulary_snapshot=f"fixture:{journey.pack}",
+        interpretation=interpretation,
+        checked_changes=[],
+        resolved_refs=resolved,
+        state_before={},
+        proposals=[],
+        rejected=[],
+        state_after={},
+        ambiguity=AmbiguityDecision(verdict="act", reason="step-2", question=None),
+        plan=TurnPlan(executor="reply_only", product_ids=[], search_args=None, depends_on=None),
+        executor="none",
+        answer_policy=None,
+    )
+
+
+__all__ = [
+    "facts",
+    "name_key",
+    "named_in_catalog",
+    "pack",
+    "products",
+    "resolver_trace",
+    "shown",
+    "sources_of",
+    "vocabulary",
+]

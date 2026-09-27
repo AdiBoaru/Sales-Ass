@@ -1,0 +1,263 @@
+{
+  "schema_version": "kernel-journey.v1",
+  "_note": "NX-329 (kernel v1.0, pasul 2): journey-uri etichetate pe stratul `resolver`. Interpretarea e dată (adaptorul vine la pasul 5); referințele ei trec prin resolverul real, pe faptele pachetului de fixture. `sources` spune unde trăiesc produsele turului, cu id-uri de fixture.",
+  "journeys": [
+    {
+      "journey_id": "r01-electronics-ordinal",
+      "pack": "electronics",
+      "family": ["reference", "ordinal"],
+      "source": "NX-329 §2 ordinal",
+      "turns": [
+        {
+          "user_input": "Vreau detalii despre al doilea.",
+          "sources": {"shown_now": ["el-01", "el-02", "el-03"]},
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "detail", "targets": ["r1"]}],
+              "references": [{"id": "r1", "text": "al doilea", "kind": "ordinal", "ordinal": 2}]
+            },
+            "resolver": [
+              {"ref_id": "r1", "kind": "ordinal", "outcome": "exact", "product_ids": ["el-02"], "source": "shown_now", "reason": "ordinal_in_set"}
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "r02-gifts-ordinal-out-of-range",
+      "pack": "gifts",
+      "family": ["reference", "ordinal"],
+      "source": "NX-329 §2 ordinal",
+      "turns": [
+        {
+          "user_input": "Îl vreau pe al patrulea.",
+          "sources": {"shown_now": ["gi-01", "gi-02", "gi-03"]},
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "detail", "targets": ["r1"]}],
+              "references": [{"id": "r1", "text": "al patrulea", "kind": "ordinal", "ordinal": 4}]
+            },
+            "resolver": [
+              {"ref_id": "r1", "kind": "ordinal", "outcome": "ambiguous", "product_ids": ["gi-01", "gi-02", "gi-03"], "source": "shown_now", "reason": "ordinal_out_of_range"}
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "r03-fashion-deictic-page",
+      "pack": "fashion",
+      "family": ["reference", "deictic", "page"],
+      "source": "NX-329 §2 deictic",
+      "turns": [
+        {
+          "user_input": "Asta o ai și în mărimea M?",
+          "sources": {"shown_now": ["fa-01", "fa-02"], "page": "fa-05"},
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "detail", "targets": ["r1"]}],
+              "references": [{"id": "r1", "text": "asta", "kind": "deictic"}]
+            },
+            "resolver": [
+              {"ref_id": "r1", "kind": "deictic", "outcome": "exact", "product_ids": ["fa-05"], "source": "page", "reason": "page_deictic"}
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "r04-electronics-name-shared",
+      "pack": "electronics",
+      "family": ["reference", "name"],
+      "source": "NX-329 §2 name",
+      "turns": [
+        {
+          "user_input": "Dă-mi linkul la Samsung.",
+          "sources": {"shown_now": ["el-01", "el-07", "el-02"]},
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "link", "targets": ["r1"]}],
+              "references": [{"id": "r1", "text": "Samsung", "kind": "name", "name": "Samsung"}]
+            },
+            "resolver": [
+              {"ref_id": "r1", "kind": "name", "outcome": "ambiguous", "product_ids": ["el-01", "el-07"], "source": "shown_now", "reason": "name_shared"}
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "r05-electronics-name-nowhere",
+      "pack": "electronics",
+      "family": ["reference", "name"],
+      "source": "NX-329 §5 «linkul la Cerave»",
+      "turns": [
+        {
+          "user_input": "Trimite-mi linkul la Huawei.",
+          "sources": {"shown_now": ["el-01", "el-02"]},
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "link", "targets": ["r1"]}],
+              "references": [{"id": "r1", "text": "Huawei", "kind": "name", "name": "Huawei"}]
+            },
+            "resolver": [
+              {"ref_id": "r1", "kind": "name", "outcome": "not_found", "source": "shown_now", "reason": "name_not_found"}
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "r06-fashion-attribute-cart",
+      "pack": "fashion",
+      "family": ["reference", "attribute", "cart"],
+      "source": "NX-329 §2 attribute",
+      "turns": [
+        {
+          "user_input": "Adaug-o în coș pe cea neagră.",
+          "sources": {"shown_now": ["fa-02", "fa-03"]},
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "cart", "targets": ["r1"]}],
+              "references": [{"id": "r1", "text": "cea neagră", "kind": "attribute", "dimension": "color", "value": "neagra"}]
+            },
+            "resolver": [
+              {"ref_id": "r1", "kind": "attribute", "outcome": "exact", "product_ids": ["fa-02"], "source": "shown_now", "reason": "attribute_match"}
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "r07-fashion-property-is-not-a-target",
+      "pack": "fashion",
+      "family": ["reference", "i24"],
+      "source": "NX-329 §3 I24",
+      "turns": [
+        {
+          "user_input": "Dă-mi linkul la bumbac.",
+          "sources": {"shown_now": ["fa-01", "fa-02"]},
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "link", "targets": ["r1"]}],
+              "references": [{"id": "r1", "text": "bumbac", "kind": "name", "name": "bumbac"}]
+            },
+            "resolver": [
+              {"ref_id": "r1", "kind": "attribute", "outcome": "not_found", "source": "shown_now", "reason": "denotes_property"}
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "r08-furniture-extreme-width",
+      "pack": "furniture",
+      "family": ["reference", "extreme"],
+      "source": "NX-329 §2 extreme (varianta pe lățime a designului §C.5)",
+      "turns": [
+        {
+          "user_input": "Care e cea mai lată dintre ele?",
+          "sources": {"shown_now": ["fu-01", "fu-02"]},
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "detail", "targets": ["r1"]}],
+              "references": [{"id": "r1", "text": "cea mai lată", "kind": "extreme", "dimension": "width", "direction": "max"}]
+            },
+            "resolver": [
+              {"ref_id": "r1", "kind": "extreme", "outcome": "exact", "product_ids": ["fu-02"], "source": "shown_now", "reason": "extreme"}
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "r09-electronics-resume-cheapest",
+      "pack": "electronics",
+      "family": ["reference", "extreme", "resume"],
+      "source": "NX-329 §1 resume (designul §C, «înapoi la telefoane»)",
+      "turns": [
+        {
+          "user_input": "Hai înapoi la telefoane, arată-mi cel mai ieftin.",
+          "sources": {"shown_now": ["el-06"], "parked": ["el-03", "el-01", "el-02"], "thread": "resume"},
+          "expect": {
+            "interpretation": {
+              "thread": "resume",
+              "acts": [{"kind": "detail", "targets": ["r1"]}],
+              "references": [{"id": "r1", "text": "cel mai ieftin", "kind": "extreme", "dimension": "price", "direction": "min"}]
+            },
+            "resolver": [
+              {"ref_id": "r1", "kind": "extreme", "outcome": "exact", "product_ids": ["el-01"], "source": "parked", "reason": "extreme"}
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "r10-fashion-the-other",
+      "pack": "fashion",
+      "family": ["reference", "the_other"],
+      "source": "NX-329 §2 the_other",
+      "turns": [
+        {
+          "user_input": "Nu Mara, cealaltă.",
+          "sources": {"shown_now": ["fa-01", "fa-02"]},
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "detail", "targets": ["r2"]}],
+              "references": [
+                {"id": "r1", "text": "Mara", "kind": "name", "name": "Mara"},
+                {"id": "r2", "text": "cealaltă", "kind": "the_other"}
+              ]
+            },
+            "resolver": [
+              {"ref_id": "r1", "kind": "name", "outcome": "exact", "product_ids": ["fa-01"], "source": "shown_now", "reason": "named"},
+              {"ref_id": "r2", "kind": "the_other", "outcome": "exact", "product_ids": ["fa-02"], "source": "shown_now", "reason": "the_other"}
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "r11-gifts-earlier-by-name",
+      "pack": "gifts",
+      "family": ["reference", "earlier"],
+      "source": "NX-329 §2 earlier",
+      "turns": [
+        {
+          "user_input": "Mai arată-mi setul de ceai de mai devreme.",
+          "sources": {"shown_now": ["gi-03", "gi-04"], "shown_earlier": [["gi-01", "gi-02"]]},
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "detail", "targets": ["r1"]}],
+              "references": [{"id": "r1", "text": "setul de ceai de mai devreme", "kind": "earlier", "name": "Set ceai"}]
+            },
+            "resolver": [
+              {"ref_id": "r1", "kind": "earlier", "outcome": "exact", "product_ids": ["gi-01"], "source": "shown_earlier", "reason": "named"}
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "r12-electronics-out-of-stock-stays-exact",
+      "pack": "electronics",
+      "family": ["reference", "revalidation"],
+      "source": "NX-329 §4 revalidare",
+      "turns": [
+        {
+          "user_input": "Trimite-mi linkul la primul.",
+          "sources": {"shown_now": ["el-07", "el-01"]},
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "link", "targets": ["r1"]}],
+              "references": [{"id": "r1", "text": "primul", "kind": "ordinal", "ordinal": 1}]
+            },
+            "resolver": [
+              {"ref_id": "r1", "kind": "ordinal", "outcome": "exact", "product_ids": ["el-07"], "source": "shown_now", "reason": "unavailable"}
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
