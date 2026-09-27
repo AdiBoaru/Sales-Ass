@@ -66,8 +66,18 @@ MAX_STATE_BYTES = 6144
 
 NeedStatus = Literal["active", "revoked", "superseded", "unknown"]
 NeedSource = Literal[
-    "user_explicit", "action", "page_context", "catalog", "policy", "model_inferred"
+    "user_explicit",
+    "user_implicit",
+    "action",
+    "page_context",
+    "catalog",
+    "policy",
+    "model_inferred",
 ]
+# `user_implicit` (NX-330, contractul kernelului „Provenance and strength"): clientul a scris
+# citatul, dar el nu se rezolvă pe valoarea propusă („pielea mi se usucă" → `dry`). LIPSEȘTE
+# DELIBERAT din ambele mulțimi de mai jos: o inferență ancorată în cuvintele clientului rămâne tot o
+# inferență, deci nu poate deveni filtru dur și nu poate învia ce a retras clientul.
 
 # Sursele care pot susține o nevoie HARD. `model_inferred` lipsește DELIBERAT (D7): o inferență nu
 # se promovează singură la constrângere inviolabilă, oricât de sigur ar suna modelul.
@@ -78,7 +88,15 @@ REVIVE_CAPABLE_SOURCES: frozenset[str] = frozenset({"user_explicit", "action"})
 
 _STATUSES: frozenset[str] = frozenset({"active", "revoked", "superseded", "unknown"})
 _SOURCES: frozenset[str] = frozenset(
-    {"user_explicit", "action", "page_context", "catalog", "policy", "model_inferred"}
+    {
+        "user_explicit",
+        "user_implicit",
+        "action",
+        "page_context",
+        "catalog",
+        "policy",
+        "model_inferred",
+    }
 )
 _REASON_CODES: frozenset[str] = frozenset(
     {"user_explicit", "superseded", "topic_reset", "policy", "legacy"}

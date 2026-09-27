@@ -6,7 +6,9 @@
       "modules": [
         "src/conversation/interpretation.py",
         "src/conversation/kernel_trace.py",
-        "src/conversation/references.py"
+        "src/conversation/references.py",
+        "src/conversation/provenance.py",
+        "src/conversation/delta.py"
       ]
     },
     "planner": {
@@ -36,8 +38,6 @@
     }
   },
   "planned": {
-    "src/conversation/provenance.py": "pure",
-    "src/conversation/delta.py": "pure",
     "src/conversation/ambiguity_gate.py": "pure",
     "src/conversation/answer_policy.py": "pure",
     "src/agent/turn_planner.py": "planner",

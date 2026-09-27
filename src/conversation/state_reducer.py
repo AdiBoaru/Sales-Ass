@@ -61,6 +61,10 @@ ProposalOp = Literal[
     "set_references",
     "set_active_search",
     "set_cart_ref",
+    # NX-330: emise de `delta.py` pentru `clear topic` / `clear all`. Le implementează NX-331; până
+    # atunci NU sunt în `ALLOWED_OPS`, deci reducerul le respinge vizibil (`unknown_op`).
+    "clear_topic",
+    "clear_all",
 ]
 
 ALLOWED_OPS: frozenset[str] = frozenset(

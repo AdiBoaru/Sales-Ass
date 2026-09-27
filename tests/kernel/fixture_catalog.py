@@ -21,6 +21,7 @@ from src.catalog.folding import fold_text
 from src.catalog.vocabulary import CatalogVocabulary, VocabEntry
 from src.conversation.interpretation import KERNEL_CONTRACT_VERSION, AmbiguityDecision, TurnPlan
 from src.conversation.kernel_trace import KernelTrace
+from src.conversation.provenance import UserWords, check_changes
 from src.conversation.references import (
     CatalogLookup,
     ProductFacts,
@@ -47,7 +48,9 @@ def _doc(name: str) -> dict[str, Any]:
 
 
 def products(name: str) -> dict[str, dict[str, Any]]:
-    return {p["id"]: p for p in _doc(name)["products"]}
+    """Produsele pachetului. Pachetul REAL `sole-ro` (din `db/seed/`) n-are produse de fixture:
+    vocabularul lui iese gol, deci pe el proveniența nu poate trece de `implicit` în replay."""
+    return {p["id"]: p for p in _doc(name).get("products", [])}
 
 
 def pack(name: str) -> DomainPack:
@@ -191,7 +194,25 @@ def resolver_trace(journey: replay.Journey, index: int) -> KernelTrace:
     )
 
 
+def checked_trace(journey: replay.Journey, index: int) -> KernelTrace:
+    """Pipeline-ul pentru straturile `checked` (NX-330) și `resolver` (NX-329): schimbările
+    interpretării etichetate trec prin validatorul de proveniență REAL, pe vocabularul, unitățile și
+    pachetul de fixture. Cuvintele clientului sunt mesajul turului + mesajele turelor anterioare ale
+    journey-ului (niciodată ale botului: journey-ul nu le are)."""
+    turn = journey.turns[index]
+    earlier = tuple(t.user_input for t in journey.turns[:index])[::-1]
+    checked = check_changes(
+        turn.expect["interpretation"],
+        words=UserWords(turn.user_input, earlier),
+        vocab=vocabulary(journey.pack),
+        pack=pack(journey.pack),
+        locale=journey.locale,
+    )
+    return resolver_trace(journey, index).model_copy(update={"checked_changes": checked})
+
+
 __all__ = [
+    "checked_trace",
     "facts",
     "name_key",
     "named_in_catalog",

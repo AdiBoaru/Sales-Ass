@@ -179,7 +179,8 @@ def test_replay_passes_when_every_labeled_layer_matches():
 
     def perfect(journey, index):
         expect = journey.turns[index].expect
-        return _trace_for(expect["interpretation"], refs=expect.get("resolver", ()))
+        trace = _trace_for(expect["interpretation"], refs=expect.get("resolver", ()))
+        return trace.model_copy(update={"checked_changes": list(expect.get("checked", ()))})
 
     outcomes = replay.replay(journeys, perfect)
     assert outcomes and all(o.passed for o in outcomes)
@@ -199,6 +200,51 @@ def test_the_resolver_layer_replays_green_on_every_labeled_journey():
     outcomes = replay.replay(journeys, fixture_catalog.resolver_trace)
     failed = [f"{o.journey_id}#{o.turn}: {o.divergence.report()}" for o in outcomes if not o.passed]
     assert not failed, "\n".join(failed)
+
+
+def test_the_checked_layer_replays_green_on_every_labeled_journey():
+    """NX-330: stratul `checked` RULEAZĂ (pasul 3a): schimbările interpretării etichetate trec prin
+    validatorul de proveniență real, pe vocabularul și unitățile pachetului de fixture."""
+    from tests.kernel import fixture_catalog
+
+    journeys = [j for j in replay.load_journeys() if any("checked" in t.expect for t in j.turns)]
+    assert len(journeys) >= 12
+    levels = {c.provenance for j in journeys for t in j.turns for c in t.expect.get("checked", [])}
+    assert {"explicit", "implicit"} <= levels
+    rejects = {c.rejected for j in journeys for t in j.turns for c in t.expect.get("checked", [])}
+    assert {"unit_mismatch", "semantic_mismatch", "hard_conflict"} <= rejects
+    outcomes = replay.replay(journeys, fixture_catalog.checked_trace)
+    failed = [f"{o.journey_id}#{o.turn}: {o.divergence.report()}" for o in outcomes if not o.passed]
+    assert not failed, "\n".join(failed)
+
+
+def test_a_wrong_checked_label_is_blamed_on_the_checked_layer():
+    from tests.kernel import fixture_catalog
+
+    journey = next(
+        j
+        for j in replay.load_journeys()
+        if j.journey_id == "p13-fashion-inflected-value-is-implicit"
+    )
+    turn = journey.turns[0]
+    wrong = [c.model_copy(update={"provenance": "explicit"}) for c in turn.expect["checked"]]
+    labeled = replay.JourneyTurn(
+        user_input=turn.user_input, expect={**turn.expect, "checked": wrong}
+    )
+    bad = replay.Journey(**{**journey.__dict__, "turns": (labeled,)})
+    [outcome] = replay.replay([bad], fixture_catalog.checked_trace)
+    assert outcome.divergence.layer == "checked"
+    assert outcome.divergence.passed == ("interpretation",)
+
+
+def test_a_checked_label_needs_one_entry_per_change():
+    with pytest.raises(ValueError):
+        replay._parse_expect(
+            {
+                "interpretation": {"changes": [{"op": "add", "dimension": "color", "quote": "x"}]},
+                "checked": [],
+            }
+        )
 
 
 def test_a_wrong_resolver_label_is_blamed_on_the_resolver_layer():

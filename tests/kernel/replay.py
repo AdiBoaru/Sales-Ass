@@ -25,6 +25,7 @@ from typing import Any
 
 from src.catalog.folding import fold_text
 from src.conversation.interpretation import (
+    CheckedChange,
     Reference,
     ResolvedRef,
     StateChange,
@@ -109,6 +110,19 @@ def _parse_expect(raw: dict[str, Any]) -> dict[str, Any]:
         # lipsi (not_found / stale nu poartă id-uri).
         out["resolver"] = [
             ResolvedRef.model_validate({"product_ids": [], **item}) for item in out["resolver"]
+        ]
+    if "checked" in out:
+        # NX-330: stratul validatorului de proveniență, un `CheckedChange` per schimbare, în
+        # ordinea interpretării. Eticheta e COMPACTĂ: `change` se ia din interpretare după
+        # poziție (nu se repetă), iar `canonical_value`/`rejected` absente sunt nule.
+        changes = out["interpretation"].changes if "interpretation" in out else []
+        if len(out["checked"]) != len(changes):
+            raise ValueError("stratul `checked` cere câte o etichetă per schimbare")
+        out["checked"] = [
+            CheckedChange.model_validate(
+                {"canonical_value": None, "rejected": None, **item, "change": change}
+            )
+            for item, change in zip(out["checked"], changes, strict=True)
         ]
     return out
 

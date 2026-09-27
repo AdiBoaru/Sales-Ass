@@ -1,0 +1,576 @@
+{
+  "schema_version": "kernel-journey.v1",
+  "_note": "NX-330 (kernel v1.0, pasul 3a): journey-uri etichetate pe stratul `checked`. Interpretarea e dată (adaptorul vine la pasul 5); schimbările ei trec prin validatorul de proveniență REAL, pe vocabularul, unitățile și pachetul de fixture. Eticheta `checked` e compactă: `change` se ia din interpretare, după poziție. Cazurile `inferred` (citat al botului) stau în tests/test_kernel_provenance.py: igiena corpusului cere ca citatul oricărei etichete să fie în mesajul clientului.",
+  "journeys": [
+    {
+      "journey_id": "p01-fashion-explicit-value",
+      "pack": "fashion",
+      "family": [
+        "provenance",
+        "explicit"
+      ],
+      "source": "KERNEL-CONTRACT Provenance, pasul 2",
+      "turns": [
+        {
+          "user_input": "Vreau ceva negru.",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "add",
+                  "dimension": "color",
+                  "relation": "eq",
+                  "value": "negru",
+                  "quote": "negru"
+                }
+              ]
+            },
+            "checked": [
+              {
+                "dimension": "color",
+                "canonical_value": "negru",
+                "provenance": "explicit",
+                "strength": "soft"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "p02-fashion-pack-alias-is-explicit",
+      "pack": "fashion",
+      "family": [
+        "provenance",
+        "explicit"
+      ],
+      "source": "KERNEL-CONTRACT Provenance, pasul 2: un alias de pachet („neagra” → negru) face citatul explicit",
+      "turns": [
+        {
+          "user_input": "Aș vrea o rochie neagră.",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "add",
+                  "dimension": "color",
+                  "relation": "eq",
+                  "value": "negru",
+                  "quote": "neagră"
+                }
+              ]
+            },
+            "checked": [
+              {
+                "dimension": "color",
+                "canonical_value": "negru",
+                "provenance": "explicit",
+                "strength": "soft"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "p13-fashion-inflected-value-is-implicit",
+      "pack": "fashion",
+      "family": [
+        "provenance",
+        "implicit"
+      ],
+      "source": "KERNEL-CONTRACT Provenance, limita declarată: fără alias de pachet, forma flexionată nu se rezolvă",
+      "turns": [
+        {
+          "user_input": "Aș vrea o rochie albastră.",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "add",
+                  "dimension": "color",
+                  "relation": "eq",
+                  "value": "albastru",
+                  "quote": "albastră"
+                }
+              ]
+            },
+            "checked": [
+              {
+                "dimension": "color",
+                "canonical_value": "albastru",
+                "provenance": "implicit",
+                "strength": "soft"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "p03-fashion-avoid-with-negation",
+      "pack": "fashion",
+      "family": [
+        "provenance",
+        "polarity"
+      ],
+      "source": "KERNEL-CONTRACT Provenance, pasul 3",
+      "turns": [
+        {
+          "user_input": "Să nu fie din poliester.",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "add",
+                  "dimension": "material",
+                  "relation": "avoid",
+                  "value": "poliester",
+                  "quote": "Să nu fie din poliester"
+                }
+              ]
+            },
+            "checked": [
+              {
+                "dimension": "material",
+                "canonical_value": "poliester",
+                "provenance": "explicit",
+                "strength": "soft"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "p04-fashion-avoid-without-negation",
+      "pack": "fashion",
+      "family": [
+        "provenance",
+        "polarity"
+      ],
+      "source": "KERNEL-CONTRACT Provenance, pasul 3: marker lipsă ⇒ implicit",
+      "turns": [
+        {
+          "user_input": "Poliesterul mă zgârie.",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "add",
+                  "dimension": "material",
+                  "relation": "avoid",
+                  "value": "poliester",
+                  "quote": "Poliesterul"
+                }
+              ]
+            },
+            "checked": [
+              {
+                "dimension": "material",
+                "canonical_value": "poliester",
+                "provenance": "implicit",
+                "strength": "soft"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "p05-electronics-unit-and-comparator",
+      "pack": "electronics",
+      "family": [
+        "provenance",
+        "units"
+      ],
+      "source": "KERNEL-CONTRACT Provenance, tabelul: „Minim 256 GB”",
+      "turns": [
+        {
+          "user_input": "Minim 256 GB.",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "add",
+                  "dimension": "storage",
+                  "relation": "gte",
+                  "number": 256,
+                  "unit": "GB",
+                  "quote": "Minim 256 GB"
+                }
+              ]
+            },
+            "checked": [
+              {
+                "dimension": "storage",
+                "canonical_value": 256.0,
+                "provenance": "explicit",
+                "strength": "soft"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "p06-electronics-price-is-hard",
+      "pack": "electronics",
+      "family": [
+        "provenance",
+        "strength"
+      ],
+      "source": "KERNEL-CONTRACT I8: prețul e hard-capable",
+      "turns": [
+        {
+          "user_input": "Sub 3000 de lei, te rog.",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "set",
+                  "dimension": "price",
+                  "relation": "lte",
+                  "number": 3000,
+                  "unit": "lei",
+                  "quote": "Sub 3000 de lei"
+                }
+              ]
+            },
+            "checked": [
+              {
+                "dimension": "price",
+                "canonical_value": 3000.0,
+                "provenance": "explicit",
+                "strength": "hard"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "p07-electronics-unit-of-another-dimension",
+      "pack": "electronics",
+      "family": [
+        "provenance",
+        "units"
+      ],
+      "source": "KERNEL-CONTRACT I9",
+      "turns": [
+        {
+          "user_input": "Vreau 256 GB.",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "set",
+                  "dimension": "price",
+                  "relation": "lte",
+                  "number": 256,
+                  "unit": "GB",
+                  "quote": "256 GB"
+                }
+              ]
+            },
+            "checked": [
+              {
+                "dimension": "price",
+                "provenance": "explicit",
+                "strength": "ranking",
+                "rejected": "unit_mismatch"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "p08-furniture-quote-names-another-value",
+      "pack": "furniture",
+      "family": [
+        "provenance",
+        "semantic_mismatch"
+      ],
+      "source": "KERNEL-CONTRACT Provenance, pasul 2: citatul se rezolvă pe altă valoare",
+      "turns": [
+        {
+          "user_input": "Vreau ceva din lemn.",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "add",
+                  "dimension": "color",
+                  "relation": "eq",
+                  "value": "negru",
+                  "quote": "lemn"
+                }
+              ]
+            },
+            "checked": [
+              {
+                "dimension": "color",
+                "canonical_value": "negru",
+                "provenance": "explicit",
+                "strength": "ranking",
+                "rejected": "semantic_mismatch"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "p09-furniture-seats-with-their-unit",
+      "pack": "furniture",
+      "family": [
+        "provenance",
+        "units"
+      ],
+      "source": "KERNEL-CONTRACT I9: „3 locuri” aparține lui seats",
+      "turns": [
+        {
+          "user_input": "O canapea pentru 3 persoane.",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "set",
+                  "dimension": "seats",
+                  "relation": "eq",
+                  "number": 3,
+                  "unit": "persoane",
+                  "quote": "3 persoane"
+                }
+              ]
+            },
+            "checked": [
+              {
+                "dimension": "seats",
+                "canonical_value": 3.0,
+                "provenance": "explicit",
+                "strength": "soft"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "p10-gifts-bare-price-number",
+      "pack": "gifts",
+      "family": [
+        "provenance",
+        "polarity"
+      ],
+      "source": "KERNEL-CONTRACT Provenance, pasul 3: un număr de preț gol e o limită superioară",
+      "turns": [
+        {
+          "user_input": "Am 200 de cheltuit.",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "set",
+                  "dimension": "price",
+                  "relation": "lte",
+                  "number": 200,
+                  "quote": "200"
+                }
+              ]
+            },
+            "checked": [
+              {
+                "dimension": "price",
+                "canonical_value": 200.0,
+                "provenance": "explicit",
+                "strength": "hard"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "p11-fashion-crossing-bounds",
+      "pack": "fashion",
+      "family": [
+        "provenance",
+        "hard_conflict"
+      ],
+      "source": "KERNEL-CONTRACT Corrections and conflicts: limite încrucișate în același tur",
+      "turns": [
+        {
+          "user_input": "Sub 200 de lei, dar minim 300.",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "set",
+                  "dimension": "price",
+                  "relation": "lte",
+                  "number": 200,
+                  "unit": "lei",
+                  "quote": "Sub 200 de lei"
+                },
+                {
+                  "op": "set",
+                  "dimension": "price",
+                  "relation": "gte",
+                  "number": 300,
+                  "quote": "minim 300"
+                }
+              ]
+            },
+            "checked": [
+              {
+                "dimension": "price",
+                "canonical_value": 200.0,
+                "provenance": "explicit",
+                "strength": "ranking",
+                "rejected": "hard_conflict"
+              },
+              {
+                "dimension": "price",
+                "canonical_value": 300.0,
+                "provenance": "explicit",
+                "strength": "ranking",
+                "rejected": "hard_conflict"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "p12-fashion-two-turns",
+      "pack": "fashion",
+      "family": [
+        "provenance",
+        "explicit"
+      ],
+      "source": "NX-330: fiecare tur își validează schimbările pe cuvintele lui",
+      "turns": [
+        {
+          "user_input": "Caut ceva negru.",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "add",
+                  "dimension": "color",
+                  "relation": "eq",
+                  "value": "negru",
+                  "quote": "negru"
+                }
+              ]
+            },
+            "checked": [
+              {
+                "dimension": "color",
+                "canonical_value": "negru",
+                "provenance": "explicit",
+                "strength": "soft"
+              }
+            ]
+          }
+        },
+        {
+          "user_input": "Și din bumbac.",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "add",
+                  "dimension": "material",
+                  "relation": "contains",
+                  "value": "bumbac",
+                  "quote": "bumbac"
+                }
+              ]
+            },
+            "checked": [
+              {
+                "dimension": "material",
+                "canonical_value": "bumbac",
+                "provenance": "explicit",
+                "strength": "soft"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
