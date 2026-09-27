@@ -420,6 +420,11 @@ def _emit_state_v2_events(ctx: TurnContext, reduced, doc: dict, size: int, degra
         elif record.op in ("clear_topic", "clear_all"):
             # Clientul a cerut să uităm criteriile: se numără, ca `topic_reset`.
             ctx.emit("constraints_cleared", scope="topic" if record.op == "clear_topic" else "all")
+        elif record.op == "bound_crossed":
+            # NX-334: o limită nouă a înlocuit limita opusă dintr-un tur anterior (contractul,
+            # „Corrections and conflicts"). Eticheta spune doar dacă a fost prețul sau o fațetă:
+            # numele fațetei e o cheie, iar cheile nu intră în labels (P12).
+            ctx.emit("need_bound_crossed", bound="price" if record.key == "price" else "facet")
     for rejected in reduced.rejected:
         ctx.emit("need_update_rejected", reason=rejected.reason, operation=rejected.op)
     ctx.emit(

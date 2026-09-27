@@ -14,6 +14,9 @@ Trei reguli pe care le ține modulul, nu reducerul:
   (`unknown_reference`), nu ghicită.
 - **Paranteza cu schimbări** (`thread=aside` + `changes` nevide) se tratează ca `continue` și se
   numără (`aside_with_changes`): contractul, „Thread".
+- **Direcția unei limite numerice** (NX-334) ajunge neschimbată în stare: `lte` pe cheia de sus,
+  `gte` pe cea de jos, `eq` pe amândouă, pe preț și pe orice fațetă numerică, printr-un singur tabel
+  (`_BOUND_KEYS`). O direcție pe care fațeta n-o declară se respinge (`polarity_conflict`).
 
 Fiecare propunere se construiește cu op-ul LITERAL, ca extractorul NX-327 (poarta I3) să poată
 clasifica static fiecare scriitor. Modul PUR: aceleași intrări ⇒ același `TurnDelta`, byte cu byte
@@ -26,7 +29,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from src.conversation.interpretation import CheckedChange, ResolvedRef, TurnInterpretation
-from src.conversation.needs import UNMAPPED_KEY, NeedKind, NeedVocabulary
+from src.conversation.needs import PRICE_BOUNDS, UNMAPPED_KEY, NeedKind, NeedVocabulary
 from src.conversation.provenance import (
     MAX_ACTS,
     MAX_CHANGES,
@@ -46,6 +49,13 @@ _SOURCE_BY_PROVENANCE: Mapping[str, str] = {
     "explicit": "user_explicit",
     "implicit": "user_implicit",
 }
+
+#: NX-334 — relație → limitele scrise, ca indici în perechea (jos, sus) a dimensiunii. UN tabel
+#: pentru preț și fațete: pe `main` prețul avea unul, iar restul niciunul, deci «minim 256 GB»
+#: ajungea plafon. `eq` pe o fațetă = ambele limite („3 locuri" = exact 3). Pe preț, `eq` e plafon:
+#: regula contractului, „a bare price number" înseamnă `lte` („am 100 de lei").
+_BOUND_KEYS: Mapping[str, tuple[int, ...]] = {"gte": (0,), "lte": (1,), "eq": (0, 1)}
+_PRICE_EQ: tuple[int, ...] = (1,)
 
 
 @dataclass(frozen=True)
@@ -93,19 +103,35 @@ def _common(c: CheckedChange, source: str, turn_id: str) -> dict[str, Any]:
     return {"source": source, "turn_id": turn_id, "strength": strength, "origin": "interpretation"}
 
 
+def _bound_keys(dimension: str, relation: str, needs: NeedVocabulary) -> list[str] | None:
+    """Cheile limitelor pe care le scrie o relație pe o dimensiune numerică. `[]` = dimensiunea
+    nu e numerică (nu e treaba tabelului); `None` = e numerică, dar direcția nu există pe ea
+    (fațeta n-o declară, sau relația nu e o limită)."""
+    pair = needs.bounds_for(dimension)
+    if pair is None:
+        return []
+    positions = _PRICE_EQ if dimension == PRICE and relation == "eq" else _BOUND_KEYS.get(relation)
+    if positions is None:
+        # Pe preț, o relație care nu e limită (`contains`, `avoid`) își păstrează forma de dinainte:
+        # ambele chei. Pe o fațetă numerică n-are formă (cheia simplă nu mai e o nevoie).
+        return list(PRICE_BOUNDS) if dimension == PRICE else None
+    keys = [pair[p] for p in positions]
+    return None if any(k is None for k in keys) else [k for k in keys if k is not None]
+
+
 def _need_proposals(
     c: CheckedChange,
     source: str,
     turn_id: str,
     needs: NeedVocabulary,
     value: str | float | None,
-) -> list[StateUpdateProposal]:
+) -> list[StateUpdateProposal] | None:
+    """Propunerile unei schimbări cu valoare. `None` = direcția nu există pe dimensiune (fațeta
+    n-o declară): apelantul o respinge, nu o înghesuie în cealaltă limită."""
     common = _common(c, source, turn_id)
     relation = c.change.relation or "eq"
     if c.dimension == PRICE:
-        keys = {"lte": ["budget_max"], "gte": ["budget_min"]}.get(
-            relation, ["budget_max", "budget_min"]
-        )
+        keys = _bound_keys(PRICE, relation, needs) or list(PRICE_BOUNDS)
         return [StateUpdateProposal("set_need", key=k, value=value, **common) for k in keys]
     if c.dimension == UNMAPPED:
         # `unmapped` nu e niciodată dur (I25), oricât de explicit ar fi citatul.
@@ -116,12 +142,17 @@ def _need_proposals(
         exclusion = spec is not None and spec.kind is NeedKind.EXCLUSION
         key = c.dimension if exclusion else RESTRICTION_KEY
         return [StateUpdateProposal("set_need", key=key, value=value, **common)]
+    bound = _bound_keys(c.dimension, relation, needs)
+    if bound is None:
+        return None
+    if bound:
+        return [StateUpdateProposal("set_need", key=k, value=value, **common) for k in bound]
     return [StateUpdateProposal("set_need", key=c.dimension, value=value, **common)]
 
 
 def _structural_proposals(
     c: CheckedChange, source: str, turn_id: str, handle: Handle | None, needs: NeedVocabulary
-) -> list[StateUpdateProposal]:
+) -> list[StateUpdateProposal] | None:
     """`clear` / `remove` / `replace`: operațiile pe handle-uri sau pe tot subiectul.
 
     `replace cN` pe o cheie de LISTĂ (NX-331) înseamnă „ACEA valoare, nu alta": retragerea valorii
@@ -138,6 +169,20 @@ def _structural_proposals(
     removed = StateUpdateProposal("revoke", key=handle.key, value=handle.value, **common)
     if op == "remove":
         return [removed]
+    bound = _replaced_bound(c, handle, needs)
+    if bound is None:
+        return None
+    if bound and bound != [handle.key]:
+        # NX-334: «minim 256» → «de fapt maxim 512» e un `replace` pe handle-ul limitei de JOS cu
+        # o relație de SUS. Un `supersede` pe aceeași cheie ar fi scris `storage_min = 512`, adică
+        # direcția inversată; limita veche se retrage, iar valoarea nouă merge pe cheia relației.
+        return [
+            removed,
+            *(
+                StateUpdateProposal("set_need", key=k, value=c.canonical_value, **common)
+                for k in bound
+            ),
+        ]
     spec = needs.spec_for(handle.key)
     if spec is not None and spec.kind is NeedKind.LIST:
         return [
@@ -145,6 +190,15 @@ def _structural_proposals(
             StateUpdateProposal("set_need", key=handle.key, value=c.canonical_value, **common),
         ]
     return [StateUpdateProposal("supersede", key=handle.key, value=c.canonical_value, **common)]
+
+
+def _replaced_bound(c: CheckedChange, handle: Handle, needs: NeedVocabulary) -> list[str] | None:
+    """Cheile limitelor pe care le scrie un `replace` pe handle-ul unei limite numerice. `[]` =
+    handle-ul nu e o limită, sau schimbarea nu spune o direcție (atunci rămâne pe cheia lui);
+    `None` = direcția nu există pe dimensiune (respinsă, ca la `set`/`add`)."""
+    if c.change.relation is None or needs.bounds_for(handle.dimension) is None:
+        return []
+    return _bound_keys(handle.dimension, c.change.relation, needs)
 
 
 def to_delta(
@@ -196,7 +250,13 @@ def to_delta(
         source = _SOURCE_BY_PROVENANCE[c.provenance]
         if c.change.op in ("clear", "remove", "replace"):
             handle = by_handle.get(c.change.target or "")
-            proposals += _structural_proposals(c, source, turn_id, handle, needs)
+            structural = _structural_proposals(c, source, turn_id, handle, needs)
+            if structural is None:
+                rejected.append(
+                    c.model_copy(update={"rejected": "polarity_conflict", "strength": "ranking"})
+                )
+                continue
+            proposals += structural
             continue
         if c.dimension == CATEGORY:
             proposals.append(
@@ -215,7 +275,13 @@ def to_delta(
                     c.model_copy(update={"rejected": "unknown_reference", "strength": "ranking"})
                 )
                 continue
-        proposals += _need_proposals(c, source, turn_id, needs, value)
+        made = _need_proposals(c, source, turn_id, needs, value)
+        if made is None:
+            rejected.append(
+                c.model_copy(update={"rejected": "polarity_conflict", "strength": "ranking"})
+            )
+            continue
+        proposals += made
 
     return TurnDelta(
         thread=thread,

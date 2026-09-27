@@ -298,7 +298,7 @@ def reducer_trace(journey: replay.Journey, index: int) -> KernelTrace:
     trace: KernelTrace | None = None
     for i, turn in enumerate(journey.turns[: index + 1]):
         interpretation = turn.expect["interpretation"]
-        handles = need_handles(state.needs)
+        handles = need_handles(state.needs, needs)
         checked = check_changes(
             interpretation,
             words=UserWords(turn.user_input, tuple(t.user_input for t in journey.turns[:i])[::-1]),

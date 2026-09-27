@@ -171,6 +171,15 @@ cu declanșatorul scris. Resolverul NX-329 primește `recent_sets`/`parked`/focu
 `park_resume.json` (electronice + modă). Probă: `pytest tests/test_state_reducer_park.py
 tests/test_state_writes_parity.py tests/test_kernel_replay.py tests/test_state_writers_inventory.py
 -q`.
+**NX-334 — direcția unei limite numerice ajunge neschimbată în stare.** Pe pașii 3a/3b «minim 256
+GB» se persista `storage lte 256`: delta păstra relația doar pe preț, iar orice fațetă numerică era
+plafon. Acum o dimensiune numerică are DOUĂ chei, ca bugetul (`<fațetă>_min` / `<fațetă>_max`,
+declarate din `TypedFacet.operators`; fațeta `price` rămâne pe `budget_*`), relația → chei e UN tabel
+(`delta._BOUND_KEYS`: `eq` = ambele limite, pe preț plafon), iar dimensiunea unei chei se citește din
+vocabular (`NeedVocabulary.dimension_of`, handle-urile o poartă), nu din sufix. Regula contractului
+pentru limite încrucișate între ture lipsea și pe buget: o limită nouă `explicit` o înlocuiește pe
+cea opusă (`bound_crossed`, `need_bound_crossed{bound}`), una ne-explicită e respinsă. Probă:
+`pytest tests/test_numeric_need_direction.py -q`.
 
 **NX-238 — retrievalul trece printr-un PORT, iar candidatul e inert (verdict `NOT-READY`).**
 `src/retrieval/` e contractul stabil pe care îl consumă NX-239: `RetrievalPort` + `RetrievalBundle`

@@ -152,6 +152,17 @@ KEY_ALIASES: Mapping[str, str] = {
 # per câmp, P3). Propunerile pe ele se resping explicit, ca să nu apară două surse de adevăr.
 TOPIC_KEYS: frozenset[str] = frozenset({"category", "category_key", "product_type", "intent"})
 
+#: NX-334 — dimensiunea universală a prețului (`interpretation.UNIVERSAL_DIMENSIONS`). Limitele ei
+#: sunt cheile bugetului; o fațetă numerică `price` din pachet NU primește chei proprii, altfel
+#: `price_max` ar fi umbrit aliasul `price_max → budget_max` al scriitorilor vechi.
+PRICE_DIMENSION = "price"
+#: Limitele prețului, (jos, sus): forma pe care o primesc toate dimensiunile numerice.
+PRICE_BOUNDS: tuple[str, str] = ("budget_min", "budget_max")
+#: Sufixele cheilor unei fațete numerice. Se folosesc DOAR la construcția vocabularului; cine vrea
+#: dimensiunea unei chei o citește din tabel (`NeedVocabulary.dimension_of`), nu din sufix.
+_LOW_SUFFIX = "_min"
+_HIGH_SUFFIX = "_max"
+
 
 def norm_text(text: object) -> str:
     """Lower + fără diacritice + spații colapsate. Aceeași normalizare pe ambele capete ale
@@ -172,16 +183,34 @@ class NeedVocabulary:
     """Vocabularul de nevoi al UNUI business: nucleu universal + ce declară DomainPack-ul.
 
     Construit o dată per tur (`from_pack`) și pasat reducerului. Fără pack → doar nucleul, adică
-    exact comportamentul agnostic; un tenant fără config nu rămâne fără memorie."""
+    exact comportamentul agnostic; un tenant fără config nu rămâne fără memorie.
+
+    NX-334: o dimensiune NUMERICĂ are două chei, una pentru limita de jos și una pentru cea de
+    sus, ca bugetul (`budget_min` / `budget_max`). O singură cheie ar ține o singură direcție:
+    „minim 256" ar fi ajuns plafon, iar a doua limită a unui interval ar fi înlocuit-o pe prima.
+    `bounds` ține perechea per dimensiune (`None` pe o direcție pe care fațeta n-o declară)."""
 
     specs: Mapping[str, NeedSpec] = field(default_factory=dict)
     concern_map: Mapping[str, str] = field(default_factory=dict)
+    bounds: Mapping[str, tuple[str | None, str | None]] = field(default_factory=dict)
 
     @classmethod
     def from_pack(cls, pack: DomainPack | None) -> NeedVocabulary:
         specs: dict[str, NeedSpec] = {s.key: s for s in UNIVERSAL_SPECS}
+        bounds: dict[str, tuple[str | None, str | None]] = {}
         if pack is not None:
             for facet in getattr(pack, "facets", ()) or ():
+                bound_specs = _bound_specs_from_facet(facet)
+                if bound_specs is not None:
+                    low, high = bound_specs
+                    for spec in (low, high):
+                        if spec is not None and spec.key not in TOPIC_KEYS:
+                            specs[spec.key] = spec
+                    bounds[norm_key(facet.key)] = (
+                        low.key if low is not None else None,
+                        high.key if high is not None else None,
+                    )
+                    continue
                 spec = _spec_from_facet(facet)
                 if spec is not None and spec.key not in TOPIC_KEYS:
                     # Fațeta tipizată bate nucleul: businessul a declarat explicit tipul/valorile.
@@ -195,7 +224,37 @@ class NeedVocabulary:
             concern_map={
                 norm_text(k): v for k, v in (getattr(pack, "concern_map", None) or {}).items()
             },
+            bounds=bounds,
         )
+
+    def bounds_for(self, dimension: object) -> tuple[str | None, str | None] | None:
+        """Dimensiunea → cheile limitelor ei, (jos, sus). `None` = dimensiunea nu e numerică.
+        Prețul are mereu limitele bugetului, și cu un vocabular gol (nucleul le declară)."""
+        key = norm_key(dimension)
+        if key == PRICE_DIMENSION:
+            return PRICE_BOUNDS
+        return self.bounds.get(key)
+
+    def dimension_of(self, key: object) -> str:
+        """Cheia unei nevoi → dimensiunea ei (`budget_max` → `price`, `storage_min` →
+        `storage`). O cheie care nu e o limită e propria ei dimensiune."""
+        normalized = norm_key(key)
+        if normalized in PRICE_BOUNDS:
+            return PRICE_DIMENSION
+        for dimension, pair in self.bounds.items():
+            if normalized in pair:
+                return dimension
+        return normalized
+
+    def opposite_bound(self, key: object) -> str | None:
+        """Cheia limitei opuse pe aceeași dimensiune (`storage_min` → `storage_max`), sau
+        `None` dacă cheia nu e o limită sau fațeta n-o declară pe cealaltă."""
+        normalized = norm_key(key)
+        pair = self.bounds_for(self.dimension_of(normalized))
+        if pair is None or normalized not in pair:
+            return None
+        low, high = pair
+        return high if normalized == low else low
 
     def spec_for(self, key: object) -> NeedSpec | None:
         """Cheia → contractul ei, prin alias dacă e nevoie. `None` = cheie necunoscută (reducerul
@@ -212,16 +271,57 @@ class NeedVocabulary:
         return norm_key(key) in TOPIC_KEYS
 
 
+def _facet_value_type(facet: Any) -> str:
+    return getattr(getattr(facet, "value_type", None), "value", None) or str(
+        getattr(facet, "value_type", "")
+    )
+
+
+def _bound_specs_from_facet(facet: Any) -> tuple[NeedSpec | None, NeedSpec | None] | None:
+    """NX-334 — o fațetă NUMERICĂ → cheile limitelor ei (`<fațetă>_min`, `<fațetă>_max`).
+
+    `None` = fațeta nu e numerică, sau e fațeta `price` (prețul are cheile bugetului). O direcție
+    există dacă fațeta o declară în `operators` (`gte` jos, `lte` sus; `eq` le cere pe amândouă);
+    fără `operators` declarați, amândouă (pachetele de azi nu rămân fără memorie).
+
+    Tăria implicită urmează I8: `hard` doar pe o fațetă `enforce_ready`. Pe `main` orice fațetă
+    numerică era `hard` implicit; pe calea interpretată tăria vine din `CheckedChange`, deci
+    implicitul nu decidea, dar nu trebuie să poată decide greșit."""
+    key = norm_key(getattr(facet, "key", ""))
+    if not key or key == PRICE_DIMENSION or key in TOPIC_KEYS:
+        return None
+    if _facet_value_type(facet) not in ("number", "numeric", "int", "float"):
+        return None
+    operators = set(getattr(facet, "operators", ()) or ())
+    declared = bool(operators)
+    strength = HARD if getattr(facet, "enforce_ready", False) else SOFT
+    scoped = getattr(facet, "scope", "topic") != "conversation"
+    low = (
+        NeedSpec(key + _LOW_SUFFIX, NeedKind.NUMERIC_MIN, strength, scoped=scoped)
+        if not declared or operators & {"gte", "eq"}
+        else None
+    )
+    high = (
+        NeedSpec(key + _HIGH_SUFFIX, NeedKind.NUMERIC_MAX, strength, scoped=scoped)
+        if not declared or operators & {"lte", "eq"}
+        else None
+    )
+    if low is None and high is None:
+        return None
+    return low, high
+
+
 def _spec_from_facet(facet: Any) -> NeedSpec | None:
     """`TypedFacet` (NX-186) → `NeedSpec`. Tipul fațetei dă felul nevoii; prezența lui
-    `not_contains` printre operatori o face excludere (deci `hard`)."""
+    `not_contains` printre operatori o face excludere (deci `hard`).
+
+    O fațetă numerică ajunge aici doar când e fațeta `price` (restul primesc două chei, vezi
+    `_bound_specs_from_facet`); ramura numerică de mai jos îi păstrează forma de dinainte."""
     key = norm_key(getattr(facet, "key", ""))
     if not key:
         return None
     operators = tuple(getattr(facet, "operators", ()) or ())
-    value_type = getattr(getattr(facet, "value_type", None), "value", None) or str(
-        getattr(facet, "value_type", "")
-    )
+    value_type = _facet_value_type(facet)
     if "not_contains" in operators:
         kind, strength = NeedKind.EXCLUSION, HARD
     elif value_type in ("bool", "boolean"):
@@ -437,6 +537,8 @@ __all__ = [
     "MAX_VALUE_CHARS",
     "MAX_VALUE_WORDS",
     "OPERATOR_BY_KIND",
+    "PRICE_BOUNDS",
+    "PRICE_DIMENSION",
     "SOFT",
     "TOPIC_KEYS",
     "UNIVERSAL_SPECS",
