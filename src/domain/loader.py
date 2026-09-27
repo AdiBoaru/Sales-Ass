@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
+import string
 from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -154,6 +155,46 @@ def _norm_chip_templates(raw: Any) -> dict[str, dict[str, str]]:
     return out
 
 
+#: NX-332: etichetele de limită poartă `{value}`; orice alt fel de șablon de clarificare poartă
+#: `{options}`. Aceeași regulă o aplică poarta de ambiguitate (`ambiguity_gate.valid_template`);
+#: aici se repetă doar tabela, ca loaderul să nu importe kernelul.
+_CLARIFY_VALUE_KINDS = frozenset({"bound_lte", "bound_gte"})
+
+
+def _clarify_markers(phrase: str) -> tuple[str, ...] | None:
+    try:
+        return tuple(f for _, f, _, _ in string.Formatter().parse(phrase) if f is not None)
+    except ValueError:
+        return None
+
+
+def _norm_clarify_templates(raw: Any) -> dict[str, dict[str, str]]:
+    """NX-332: `locale` → `kind` → frază. Fail-closed PER ȘABLON (ca la fațete): o frază fără exact
+    un marcator, sau cu alt marcator decât cel al felului ei, se aruncă și se loghează; restul
+    pachetului se încarcă. Un `{options}` greșit n-ar ajunge niciodată să întrebe corect, iar un
+    marcator în plus ar crăpa interpolarea în mijlocul turului."""
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, dict[str, str]] = {}
+    for locale, per_kind in raw.items():
+        if not isinstance(locale, str) or not isinstance(per_kind, dict):
+            continue
+        kept: dict[str, str] = {}
+        for kind, phrase in per_kind.items():
+            if not isinstance(kind, str) or not isinstance(phrase, str) or not phrase.strip():
+                continue
+            expected = "value" if kind in _CLARIFY_VALUE_KINDS else "options"
+            if _clarify_markers(phrase) != (expected,):
+                log.warning(
+                    "clarify_templates[%s][%s] respins: cere exact un {%s}", locale, kind, expected
+                )
+                continue
+            kept[kind] = phrase
+        if kept:
+            out[locale] = kept
+    return out
+
+
 def _norm_detail_sections(raw: Any) -> tuple[SectionSpec, ...]:
     """Listă de `{kind, max_chars?}` → tuple[SectionSpec]. Intrare fără `kind` string, cu
     `max_chars` ne-întreg sau ≤ 0 → sărită (fail-safe per intrare, ca la fațete). Un `kind`
@@ -262,6 +303,8 @@ def load_domain_pack(business: BusinessConfig) -> DomainPack | None:
         # NX-299: aceeași formă (cheie → locale → șablon), deci același normalizator. Un al
         # doilea scris la fel ar fi diverge la prima corecție.
         answer_shape_templates=_norm_chip_templates(merged.get("answer_shape_templates")),
+        # NX-332: forma INVERSĂ (locale → kind), cu validarea marcatorilor per șablon.
+        clarify_templates=_norm_clarify_templates(merged.get("clarify_templates")),
         # NX-205: contractul de completitudine per categorie (fail-closed per intrare).
         required_attributes=build_category_requirements(merged.get("required_attributes")),
         # NX-262: semantica muchiilor din `product_relations` (fail-closed per intrare — o intrare

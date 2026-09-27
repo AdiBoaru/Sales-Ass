@@ -180,6 +180,37 @@ vocabular (`NeedVocabulary.dimension_of`, handle-urile o poartă), nu din sufix.
 pentru limite încrucișate între ture lipsea și pe buget: o limită nouă `explicit` o înlocuiește pe
 cea opusă (`bound_crossed`, `need_bound_crossed{bound}`), una ne-explicită e respinsă. Probă:
 `pytest tests/test_numeric_need_direction.py -q`.
+**Pasul 4a (NX-332) — poarta de ambiguitate și politica de răspuns; întrebarea e a pachetului.** Două
+module pure, fără apelant în producție până la pasul 6. `src/conversation/ambiguity_gate.py`
+(`decide_ambiguity` → `GateOutcome{decision, asked_key, asked_kind, skipped_acts}`) e o tabelă
+ordonată, prima regulă care se aplică decide: ținta invalidă scoate doar actul ei (I24); o mutație
+pe ORICE act (în §C.12 coșul e primul act, principalul e `find`) cu țintă ne-`exact`, sau `exact`
+dar epuizată (resolverul o întoarce `exact` + `unavailable`, NU `stale`), dă `must_ask` (I10);
+limitele `hard_conflict` din același tur întreabă care rămâne; `find` fără subiect, cuvinte sau
+nevoi de fațetă întreabă pe rafturile de top, cu câștig; lecturile modelului (`readings`) se rezolvă
+O DATĂ prin vocabular (`_read_readings`): aceeași valoare ⇒ `resolve_from_context`, valori diferite
+⇒ întrebare doar cu câștig ≥ 0,30 pe ecranul de dinaintea turului; o țintă ambiguă la citire ⇒
+`act_both` până la 3 candidați, întrebare peste; o nevoie `implicit` a turului, cu câștig ⇒ `act` +
+confirmare la final. Anti-bucla (I11) e a lui `decide_clarification`, refolosită; cheia unei ținte e
+`ref:` + sha1 peste id-urile candidaților (nu `r1`, local turului), iar memoria o scrie pasul 6 printr-o
+a doua trecere a reducerului (`pending` ⇒ `set_pending_question`, `noted` ⇒ `note_asked`), testat
+pe 3 ture. Întrebarea vine DOAR din `DomainPack.clarify_templates[locale][kind]` (formă inversă față de
+`answer_shape_templates`; `reference`/`scope`/`value`/`subject`/`confirm`/`conflict`/`generic` cu un
+`{options}`, `bound_lte`/`bound_gte` cu un `{value}`; loaderul aruncă per șablon orice alt marcator),
+cu opțiuni din etichete canonice sau nume recitite, niciodată din `readings` sau `quote`. Fără șablon
+sau fără opțiuni nu e tăcere: citirea coboară la `act_both`, mutația rămâne `must_ask` fără întrebare
+(`no_template`, `no_options`). Motivele sunt vocabular închis (`GATE_REASONS`, fiecare emis de un
+scenariu). `src/conversation/answer_policy.py` (I12): pe `compare`, `detail` cu ≥ 2 candidați sau
+`act_both`, dimensiunea decisivă vine dintr-o referință `extreme` sau din ETICHETA DE RÂND a unei
+fațete scrisă în cerere (`_read_query`, cuvinte întregi + sufixele din `query_terms`; `resolve_any`
+rezolvă valori, nu dimensiuni); necunoscută pe vreun candidat ⇒ `verdict_allowed=False` +
+`missing`, niciodată „nu are". Poarta nouă `raw_readers` face citirea textului brut mecanică:
+`.quote/.query/.readings/.text/.body` se citesc doar în cititorii declarați cu motiv
+(`raw_text_readers` din `tests/kernel_contract_allowlist.json`). Straturile `ambiguity` și
+`answer_policy` rulează în replay (`gate_trace`, în lanț, cu memoria întrebării între ture) pe
+`ambiguity_gate.json` (patru pachete) și pe §C.12. Probă: `pytest tests/test_kernel_ambiguity_gate.py
+tests/test_kernel_answer_policy.py tests/test_clarify_templates.py tests/test_kernel_contract.py
+tests/test_kernel_replay.py -q`.
 
 **NX-238 — retrievalul trece printr-un PORT, iar candidatul e inert (verdict `NOT-READY`).**
 `src/retrieval/` e contractul stabil pe care îl consumă NX-239: `RetrievalPort` + `RetrievalBundle`

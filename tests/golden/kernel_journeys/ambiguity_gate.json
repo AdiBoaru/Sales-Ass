@@ -1,0 +1,400 @@
+{
+  "schema_version": "kernel-journey.v1",
+  "_note": "NX-332 (kernel v1.0, pasul 4a): journey-uri etichetate pe straturile `ambiguity` și `answer_policy`, câte unul pe fiecare regulă din tabelul porții, pe patru pachete. Turele rulează ÎN LANȚ (`fixture_catalog.gate_trace`): validatorul, resolverul pe sursele stării reduse, `to_delta`, reducerul, poarta, politica de răspuns, apoi memoria întrebării (`set_pending_question` / `note_asked`) prin reducer între ture. `shown` = ce a arătat executorul turului. Întrebările sunt frazele pachetului, cu opțiunile din etichete canonice sau din numele recitite din catalog.",
+  "journeys": [
+    {
+      "journey_id": "g01-electronics-cart-on-an-exact-target",
+      "pack": "electronics",
+      "family": ["ambiguity", "mutation"],
+      "source": "NX-332 §2, regula 9: coșul pe o țintă exactă",
+      "turns": [
+        {
+          "user_input": "Vreau un telefon.",
+          "shown": ["el-01", "el-02", "el-03"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "telefon"}],
+              "changes": [{"op": "set", "dimension": "category", "relation": "eq", "value": "telefoane", "quote": "telefon"}]
+            },
+            "ambiguity": {"verdict": "act", "reason": "clear"}
+          }
+        },
+        {
+          "user_input": "Adaugă-l pe primul în coș.",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "cart", "targets": ["r1"]}],
+              "references": [{"id": "r1", "text": "primul", "kind": "ordinal", "ordinal": 1}]
+            },
+            "ambiguity": {"verdict": "act", "reason": "clear"}
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "g02-electronics-ambiguous-cart-asks-once",
+      "pack": "electronics",
+      "family": ["ambiguity", "mutation", "anti_loop"],
+      "source": "NX-332 §2, regula 1 (I10) + anti-bucla (I11) pe două ture",
+      "turns": [
+        {
+          "user_input": "Vreau un telefon.",
+          "shown": ["el-01", "el-07", "el-02"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "telefon"}],
+              "changes": [{"op": "set", "dimension": "category", "relation": "eq", "value": "telefoane", "quote": "telefon"}]
+            }
+          }
+        },
+        {
+          "user_input": "Adaugă Samsung-ul în coș.",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "cart", "targets": ["r1"]}],
+              "references": [{"id": "r1", "text": "Samsung-ul", "kind": "name", "name": "Samsung"}]
+            },
+            "ambiguity": {
+              "verdict": "must_ask",
+              "reason": "mutation_not_exact",
+              "question": "La care te referi dintre Samsung Phone 1 128 GB și Samsung Phone 7 128 GB?"
+            }
+          }
+        },
+        {
+          "user_input": "Adaugă Samsung-ul în coș.",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "cart", "targets": ["r1"]}],
+              "references": [{"id": "r1", "text": "Samsung-ul", "kind": "name", "name": "Samsung"}]
+            },
+            "ambiguity": {"verdict": "must_ask", "reason": "already_pending"}
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "g03-fashion-cart-on-a-sold-out-dress",
+      "pack": "fashion",
+      "family": ["ambiguity", "mutation"],
+      "source": "NX-332 §2, regula 1: țintă exactă, dar epuizată (resolverul NU o scoate `stale`)",
+      "turns": [
+        {
+          "user_input": "Vreau o rochie.",
+          "shown": ["fa-07", "fa-08"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "rochie"}],
+              "changes": [{"op": "set", "dimension": "category", "relation": "eq", "value": "rochii", "quote": "rochie"}]
+            }
+          }
+        },
+        {
+          "user_input": "O iau pe prima.",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "cart", "targets": ["r1"]}],
+              "references": [{"id": "r1", "text": "prima", "kind": "ordinal", "ordinal": 1}]
+            },
+            "ambiguity": {"verdict": "must_ask", "reason": "mutation_unavailable"}
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "g04-fashion-crossing-bounds",
+      "pack": "fashion",
+      "family": ["ambiguity", "hard_conflict"],
+      "source": "NX-332 §2, regula 2: limite încrucișate în același tur",
+      "turns": [
+        {
+          "user_input": "Vreau o rochie sub 200 de lei, dar minim 300 lei.",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "rochie"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "rochii", "quote": "rochie"},
+                {"op": "set", "dimension": "price", "relation": "lte", "number": 200, "unit": "lei", "quote": "sub 200 de lei"},
+                {"op": "set", "dimension": "price", "relation": "gte", "number": 300, "unit": "lei", "quote": "minim 300 lei"}
+              ]
+            },
+            "ambiguity": {
+              "verdict": "must_ask",
+              "reason": "hard_conflict",
+              "question": "Am două limite care nu se împacă: sub 200 lei și minim 300 lei. Care rămâne?"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "g05-gifts-find-without-a-subject",
+      "pack": "gifts",
+      "family": ["ambiguity", "clarify"],
+      "source": "NX-332 §2, regula 3: fără subiect, fără cuvinte, fără nevoi; fraza pachetului de cadouri",
+      "turns": [
+        {
+          "user_input": "Vreau un cadou.",
+          "expect": {
+            "interpretation": {"acts": [{"kind": "find"}]},
+            "ambiguity": {
+              "verdict": "must_ask",
+              "reason": "no_subject",
+              "question": "Pentru ce fel de cadou te gândești? Am Casa, Jocuri, Carti și Ingrijire."
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "g06-fashion-two-readings-one-value",
+      "pack": "fashion",
+      "family": ["ambiguity", "readings"],
+      "source": "NX-332 §2, regula 4: lecturile se rezolvă la aceeași valoare",
+      "turns": [
+        {
+          "user_input": "Vreau ceva roșu.",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "roșu"}],
+              "ambiguities": [{"about": "value", "readings": ["roșu", "rosie"]}]
+            },
+            "ambiguity": {"verdict": "resolve_from_context", "reason": "same_reading"}
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "g07-furniture-readings-split-the-screen",
+      "pack": "furniture",
+      "family": ["ambiguity", "readings"],
+      "source": "NX-332 §2, regula 5: lecturi diferite, câștig ≥ 0,30 pe setul de pe ecran",
+      "turns": [
+        {
+          "user_input": "Arată-mi canapele.",
+          "shown": ["fu-01", "fu-02", "fu-04", "fu-05"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "canapele"}],
+              "changes": [{"op": "set", "dimension": "category", "relation": "eq", "value": "canapele", "quote": "canapele"}]
+            }
+          }
+        },
+        {
+          "user_input": "Vreau una într-o culoare mai deschisă.",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "culoare mai deschisă"}],
+              "ambiguities": [{"about": "value", "readings": ["gri", "bej"]}]
+            },
+            "ambiguity": {
+              "verdict": "must_ask",
+              "reason": "readings_differ",
+              "question": "Care dintre acestea te interesează: gri și bej?"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "g08-electronics-link-to-a-shared-name",
+      "pack": "electronics",
+      "family": ["ambiguity", "reference"],
+      "source": "NX-332 §2, regula 6: o citire pe doi candidați răspunde despre amândoi",
+      "turns": [
+        {
+          "user_input": "Vreau un telefon.",
+          "shown": ["el-01", "el-07", "el-02"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "telefon"}],
+              "changes": [{"op": "set", "dimension": "category", "relation": "eq", "value": "telefoane", "quote": "telefon"}]
+            }
+          }
+        },
+        {
+          "user_input": "Trimite-mi linkul la Samsung.",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "link", "targets": ["r1"]}],
+              "references": [{"id": "r1", "text": "Samsung", "kind": "name", "name": "Samsung"}]
+            },
+            "ambiguity": {"verdict": "act_both", "reason": "ambiguous_read"},
+            "answer_policy": null
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "g09-furniture-too-many-candidates",
+      "pack": "furniture",
+      "family": ["ambiguity", "reference"],
+      "source": "NX-332 §2, regula 7: peste trei candidați la citire se întreabă pe primii patru",
+      "turns": [
+        {
+          "user_input": "Arată-mi canapele.",
+          "shown": ["fu-01", "fu-02", "fu-03", "fu-04", "fu-05"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "canapele"}],
+              "changes": [{"op": "set", "dimension": "category", "relation": "eq", "value": "canapele", "quote": "canapele"}]
+            }
+          }
+        },
+        {
+          "user_input": "Spune-mi mai multe despre canapeaua Oslo.",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "detail", "targets": ["r1"]}],
+              "references": [{"id": "r1", "text": "canapeaua Oslo", "kind": "name", "name": "Oslo"}]
+            },
+            "ambiguity": {
+              "verdict": "must_ask",
+              "reason": "ambiguous_too_many",
+              "question": "La care te referi dintre Canapea Oslo 2 locuri v1, Canapea Oslo 3 locuri v2, Canapea Oslo 4 locuri v3 și Canapea Oslo 2 locuri v4?"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "g10-gifts-confirm-an-implicit-recipient",
+      "pack": "gifts",
+      "family": ["ambiguity", "implicit_need", "anti_loop"],
+      "source": "NX-332 §2, regula 8: nevoie `implicit` cu câștig pe ecran ⇒ `act` + confirmare; a treia oară nu se mai întreabă",
+      "turns": [
+        {
+          "user_input": "Arată-mi ce ai la casa.",
+          "shown": ["gi-01", "gi-02", "gi-03", "gi-04"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "casa"}],
+              "changes": [{"op": "set", "dimension": "category", "relation": "eq", "value": "casa", "quote": "casa"}]
+            }
+          }
+        },
+        {
+          "user_input": "E pentru cineva drag.",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "cineva drag"}],
+              "changes": [{"op": "set", "dimension": "recipient", "relation": "eq", "value": "ea", "quote": "cineva drag"}]
+            },
+            "ambiguity": {
+              "verdict": "act",
+              "reason": "confirm_implicit",
+              "question": "Să înțeleg că e vorba de ea?"
+            }
+          }
+        },
+        {
+          "user_input": "E pentru cineva drag.",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "cineva drag"}],
+              "changes": [{"op": "set", "dimension": "recipient", "relation": "eq", "value": "ea", "quote": "cineva drag"}]
+            },
+            "ambiguity": {
+              "verdict": "act",
+              "reason": "confirm_implicit",
+              "question": "Să înțeleg că e vorba de ea?"
+            }
+          }
+        },
+        {
+          "user_input": "E pentru cineva drag.",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "cineva drag"}],
+              "changes": [{"op": "set", "dimension": "recipient", "relation": "eq", "value": "ea", "quote": "cineva drag"}]
+            },
+            "ambiguity": {"verdict": "act", "reason": "clear"}
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "g11-gifts-link-to-a-property",
+      "pack": "gifts",
+      "family": ["ambiguity", "invalid_target"],
+      "source": "NX-332 §2, regula 0: o țintă care numește o proprietate (I24) nu se planifică",
+      "turns": [
+        {
+          "user_input": "Trimite-mi linkul la zi de nastere.",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "link", "targets": ["r1"]}],
+              "references": [{"id": "r1", "text": "zi de nastere", "kind": "name", "name": "zi de nastere"}]
+            },
+            "ambiguity": {"verdict": "act", "reason": "invalid_target"}
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "g12-electronics-better-screen",
+      "pack": "electronics",
+      "family": ["answer_policy", "compare"],
+      "source": "NX-332 §3: «care e mai bun la ecran, primul sau al doilea?», fără referință `extreme`",
+      "turns": [
+        {
+          "user_input": "Vreau un telefon.",
+          "shown": ["el-01", "el-25"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "telefon"}],
+              "changes": [{"op": "set", "dimension": "category", "relation": "eq", "value": "telefoane", "quote": "telefon"}]
+            }
+          }
+        },
+        {
+          "user_input": "Care e mai bun la ecran, primul sau al doilea?",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "compare", "targets": ["r1", "r2"], "query": "mai bun la ecran"}],
+              "references": [
+                {"id": "r1", "text": "primul", "kind": "ordinal", "ordinal": 1},
+                {"id": "r2", "text": "al doilea", "kind": "ordinal", "ordinal": 2}
+              ]
+            },
+            "ambiguity": {"verdict": "act", "reason": "clear"},
+            "answer_policy": {"verdict_allowed": false, "missing": ["screen"]}
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "g13-electronics-cheaper-of-two",
+      "pack": "electronics",
+      "family": ["answer_policy", "compare", "extreme"],
+      "source": "NX-332 §3: «e mai ieftin primul sau al doilea?», prețuri cunoscute pe amândouă",
+      "turns": [
+        {
+          "user_input": "Vreau un telefon.",
+          "shown": ["el-01", "el-02"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "telefon"}],
+              "changes": [{"op": "set", "dimension": "category", "relation": "eq", "value": "telefoane", "quote": "telefon"}]
+            }
+          }
+        },
+        {
+          "user_input": "Care e mai ieftin, primul sau al doilea?",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "compare", "targets": ["r1", "r2", "r3"], "query": "mai ieftin"}],
+              "references": [
+                {"id": "r1", "text": "primul", "kind": "ordinal", "ordinal": 1},
+                {"id": "r2", "text": "al doilea", "kind": "ordinal", "ordinal": 2},
+                {"id": "r3", "text": "mai ieftin", "kind": "extreme", "dimension": "price", "direction": "min"}
+              ]
+            },
+            "ambiguity": {"verdict": "act", "reason": "clear"},
+            "answer_policy": {"verdict_allowed": true}
+          }
+        }
+      ]
+    }
+  ]
+}

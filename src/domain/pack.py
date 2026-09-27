@@ -140,6 +140,14 @@ class DomainPack:
     # aici lipsa e fail-OPEN (fără șablon, încadrarea rămâne a modelului), fiindcă un pachet
     # incomplet n-are voie să ȘTEARGĂ o frază pe care modelul a scris-o corect.
     answer_shape_templates: dict[str, dict[str, str]] = field(default_factory=dict)
+    # NX-332 (kernel pasul 4a): frazele întrebărilor de clarificare, `locale` → `kind` → frază cu
+    # exact un `{options}` (forma din contract, deci INVERSĂ față de `answer_shape_templates`).
+    # `kind` = `reference` / `scope` / `value` (valorile lui `Ambiguity.about`) plus cheile de date
+    # `subject`, `confirm`, `conflict`, `generic`; `bound_lte` / `bound_gte` sunt etichetele
+    # limitelor din întrebarea de conflict, cu exact un `{value}`. Kernelul nu ține nicio frază:
+    # completează doar `{options}` din etichete canonice. Loaderul aruncă per intrare un șablon cu
+    # alt marcator (fail-closed pe șablon), iar poarta coboară determinist când lipsește (P6).
+    clarify_templates: dict[str, dict[str, str]] = field(default_factory=dict)
     # NX-205: câmpurile OBLIGATORII per categorie — contractul de completitudine al catalogului.
     # Frunza BATE rădăcina (override, NU cumul — vezi `CategoryRequirements.required_for`): o
     # categorie de ochi cere `key_benefit`, dar NU moștenește `finish`-ul rădăcinii `machiaj`.

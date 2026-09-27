@@ -50,6 +50,15 @@ def test_the_contract_modules_of_step_1_are_pure():
     } <= set(gates.modules_by_role()["pure"])
 
 
+def test_the_step_4a_modules_are_pure_and_no_longer_planned():
+    """NX-332: poarta de ambiguitate și politica de răspuns sunt componente pure: toate porțile
+    rolului (I13, I2, I3, text brut, cititori declarați, I14) li se aplică."""
+    registry = gates.load_modules()
+    for rel in ("src/conversation/ambiguity_gate.py", "src/conversation/answer_policy.py"):
+        assert rel in gates.modules_by_role()["pure"]
+        assert rel not in registry["planned"]
+
+
 # --- porțile pe codul real ------------------------------------------------------------------------
 
 
@@ -247,6 +256,70 @@ def test_i20_gate_passes_on_the_search_session_and_references():
 )
 def test_raw_text_gate_fails_on_matching_the_users_words(source):
     assert _check("raw_text", source)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        # o citire care ocolește tiparele porții `raw_text` (fără regex, fără literal)
+        "def f(act, labels):\n    return [w for w in act.query.split() if w in labels]\n",
+        "def f(change):\n    words = change.quote.lower()\n    return words\n",
+        "def f(amb):\n    return {r: 1 for r in amb.readings}\n",
+        # un argument INDIRECT al unui cititor nu e o citire declarată
+        "def f(act):\n    return _read_query(act.query.lower(), (), None)\n",
+    ],
+)
+def test_raw_readers_gate_fails_outside_a_declared_reader(source):
+    assert _check("raw_readers", source)
+
+
+def test_raw_readers_gate_passes_inside_or_straight_into_a_declared_reader():
+    """Pe fișierul lui, cititorul declarat poate citi; oriunde, textul poate intra DIRECT într-un
+    cititor declarat (`_read_quote(change.quote, ...)`)."""
+    inside = (
+        "def _read_query(query, labels, locale):\n    return query\n\ndef g(act):\n    return 1\n"
+    )
+    assert not gates.raw_readers(textwrap.dedent(inside), "src/conversation/answer_policy.py")
+    assert gates.raw_readers(textwrap.dedent(inside), "src/conversation/other.py") == []
+    direct = (
+        "from src.conversation.answer_policy import _read_query\n\n"
+        "def f(act):\n    return _read_query(act.query, (), None)\n"
+    )
+    assert not _check("raw_readers", direct)
+    module = (
+        "from src.conversation import answer_policy as ap\n\n"
+        "def f(act):\n    return ap._read_query(act.query, (), None)\n"
+    )
+    assert not _check("raw_readers", module)
+    elsewhere = "def f(act):\n    return act.query\n"
+    assert gates.raw_readers(elsewhere, "src/conversation/answer_policy.py")
+
+
+def test_raw_readers_gate_binds_a_reader_to_its_declared_file():
+    """Recenzia NX-332: permisiunea era pe NUME. O funcție numită ca un cititor declarat, definită
+    în alt fișier (`_change` e declarat doar în `kernel_trace.py`), trecea poarta, deci textul
+    brut se putea citi oriunde sub un nume împrumutat."""
+    borrowed = (
+        "def _change(q):\n    return q.split()[0] == 'da'\n\n"
+        "def g(change):\n    return _change(change.quote)\n"
+    )
+    assert gates.raw_readers(borrowed, "src/conversation/state_reducer.py")
+    not_imported = "def f(act):\n    return _read_query(act.query, (), None)\n"
+    assert _check("raw_readers", not_imported)
+
+
+def test_every_declared_raw_text_reader_exists_and_is_in_a_kernel_module():
+    """Un cititor declarat care a dispărut ar lăsa o excepție fără obiect (datoria doar scade)."""
+    kernel = {rel for files in gates.modules_by_role().values() for rel in files}
+    for entry in gates.load_raw_readers():
+        assert entry["file"] in kernel, entry
+        tree = leak.ast.parse((gates.ROOT / entry["file"]).read_text(encoding="utf-8"))
+        names = {
+            n.name
+            for n in leak.ast.walk(tree)
+            if isinstance(n, (leak.ast.FunctionDef, leak.ast.AsyncFunctionDef))
+        }
+        assert entry["function"] in names, entry
 
 
 @pytest.mark.parametrize(

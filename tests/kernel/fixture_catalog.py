@@ -14,13 +14,25 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Iterable
+from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
 
 from src.catalog.folding import fold_text
 from src.catalog.vocabulary import CATEGORY_DIMENSION, CatalogVocabulary, VocabEntry
+from src.conversation.ambiguity_gate import GateOutcome, decide_ambiguity, lookup_attributes
+from src.conversation.answer_policy import answer_policy
+from src.conversation.clarification_policy import ClarificationPolicy
 from src.conversation.delta import to_delta
-from src.conversation.interpretation import KERNEL_CONTRACT_VERSION, AmbiguityDecision, TurnPlan
+from src.conversation.interpretation import (
+    KERNEL_CONTRACT_VERSION,
+    AmbiguityDecision,
+    AnswerPolicy,
+    CheckedChange,
+    ResolvedRef,
+    TurnInterpretation,
+    TurnPlan,
+)
 from src.conversation.kernel_trace import KernelTrace
 from src.conversation.needs import NeedVocabulary
 from src.conversation.provenance import UserWords, check_changes, need_handles
@@ -34,7 +46,12 @@ from src.conversation.references import (
     plan_lookup,
     resolve_references,
 )
-from src.conversation.state_reducer import ReducerPolicy, StateUpdateProposal, reduce_turn
+from src.conversation.state_reducer import (
+    ReducerPolicy,
+    StateUpdateProposal,
+    reduce,
+    reduce_turn,
+)
 from src.conversation.state_v2 import ConversationStateV2, Need
 from src.domain.loader import load_domain_pack
 from src.domain.pack import DomainPack
@@ -86,15 +103,19 @@ def _distinctive(product_name: str) -> str:
     return head.split(",", 1)[0].strip()
 
 
-def _facts(product: dict[str, Any]) -> ProductFacts:
-    attributes = dict(product.get("attributes") or {})
+def _facts(product: dict[str, Any], read: tuple[str, ...] | None = None) -> ProductFacts:
+    """`read` = cheile cerute de citire: ca SQL-ul (`reference_facts`), din `attributes` vin DOAR
+    ele (NX-332, recenzia: altfel testele vedeau atribute pe care producția nu le aduce). Marca e
+    coloană în producție, deci se citește oricum."""
+    full = dict(product.get("attributes") or {})
+    attributes = full if read is None else {k: v for k, v in full.items() if k in read}
     return ProductFacts(
         product_id=product["id"],
         name=product["name"],
         price=float(product["price"]) if product.get("price") is not None else None,
         available=_AVAILABLE.get(product.get("availability", "")),
         rating=product.get("rating"),
-        brand=attributes.get("brand"),
+        brand=full.get("brand"),
         attributes=attributes,
         variant_labels=tuple(product.get("variants") or ()),
     )
@@ -126,14 +147,19 @@ def facts(
     for pid in drop:
         catalog.pop(pid, None)
     named = {}
+    read: tuple[str, ...] | None = None
     if lookup is not None:
         named = {name_key(n): named_in_catalog(name, n) for n in lookup.names}
         wanted = set(lookup.ids) | {pid for hits in named.values() for pid, _ in hits}
         catalog = {pid: p for pid, p in catalog.items() if pid in wanted}
+        # Ca SQL-ul (`reference_facts`): din `attributes` vin DOAR cheile cerute. Altfel testele ar
+        # vedea atribute pe care producția nu le aduce (NX-332, recenzia: poarta număra pe ele).
+        read = tuple(lookup.attributes)
     return ReferenceFacts(
-        products={pid: _facts(p) for pid, p in catalog.items()},
+        products={pid: _facts(p, read) for pid, p in catalog.items()},
         named={k: v for k, v in named.items() if v},
         snapshot=f"fixture:{name}",
+        attributes_read=read,
     )
 
 
@@ -353,9 +379,201 @@ def reducer_trace(journey: replay.Journey, index: int) -> KernelTrace:
     return trace
 
 
+# --- NX-332: poarta de ambiguitate și politica de răspuns ----------------------------------------
+
+
+@dataclass(frozen=True)
+class KernelStep:
+    """Un tur prin kernel, pe pachetul de fixture: ce a intrat în poartă și ce a ieșit.
+
+    `gate_state` = starea DUPĂ reducer și ÎNAINTEA executorilor (ecranul e cel de dinaintea
+    turului), adică exact ce vede poarta la pasul 6. `state_after` = starea de la sfârșitul turului:
+    reducerul cu ce a arătat executorul, plus memoria întrebării scrisă din `GateOutcome` într-o a
+    doua trecere (decizia de arhitectură 1 din cardul NX-332)."""
+
+    interpretation: TurnInterpretation
+    checked: tuple[CheckedChange, ...]
+    resolved: tuple[ResolvedRef, ...]
+    facts: ReferenceFacts
+    gate_state: ConversationStateV2
+    outcome: GateOutcome
+    answer_policy: AnswerPolicy | None
+    state_after: ConversationStateV2
+    memory: StateUpdateProposal | None
+
+
+GATE_POLICY = ClarificationPolicy()
+
+
+def memory_proposal(outcome: GateOutcome, turn_id: str) -> StateUpdateProposal | None:
+    """Propunerea pe care pasul 6 o scrie din `GateOutcome`: `set_pending_question` pentru o
+    întrebare care ține locul răspunsului, `note_asked` pentru confirmarea pusă la final."""
+    if outcome.asked_key is None:
+        return None
+    op = "set_pending_question" if outcome.asked_kind == "pending" else "note_asked"
+    return StateUpdateProposal(
+        op,  # type: ignore[arg-type]
+        key=outcome.asked_key,
+        reason=outcome.decision.reason if op == "set_pending_question" else None,
+        source="policy",
+        turn_id=turn_id,
+    )
+
+
+def kernel_step(
+    name: str,
+    state: ConversationStateV2,
+    interpretation: TurnInterpretation,
+    user_input: str,
+    *,
+    earlier: tuple[str, ...] = (),
+    shown_ids: tuple[str, ...] = (),
+    turn_id: str = "t",
+    locale: str = "ro",
+    drop: Iterable[str] = (),
+    override: dict[str, dict[str, Any]] | None = None,
+    loaded: DomainPack | None = None,
+    vocab: CatalogVocabulary | None | bool = True,
+    policy: ClarificationPolicy = GATE_POLICY,
+) -> KernelStep:
+    """Un tur complet pe calea interpretată, fără executori reali: validatorul de proveniență,
+    resolverul (pe sursele stării), `to_delta`, reducerul, poarta, politica de răspuns și memoria
+    întrebării. Faptele „după unelte" ale politicii sunt faptele pachetului pentru țintele rezolvate
+    (fixture-ul n-are executor)."""
+    loaded = loaded or pack(name)
+    voc: CatalogVocabulary | None = vocabulary(name) if vocab is True else (vocab or None)
+    needs = NeedVocabulary.from_pack(loaded)
+    reducer_policy = ReducerPolicy(vocabulary=needs)
+    handles = need_handles(state.needs, needs)
+    checked = check_changes(
+        interpretation,
+        words=UserWords(user_input, earlier),
+        handles=handles,
+        vocab=voc,
+        pack=loaded,
+        locale=locale,
+    )
+    sources = _sources_from_state(state, interpretation.thread)
+    refs = interpretation.references
+    lookup = plan_lookup(
+        refs,
+        sources,
+        pack=loaded,
+        locale=locale,
+        extra_attributes=lookup_attributes(interpretation, vocab=voc, pack=loaded),
+    )
+    known = facts(name, lookup, drop=drop, override=override)
+    resolved = resolve_references(refs, sources, known, vocab=voc, pack=loaded, locale=locale)
+    delta = to_delta(
+        interpretation, checked, resolved, known, handles=handles, needs=needs, turn_id=turn_id
+    )
+    primary = (
+        interpretation.acts[-1].targets[0]
+        if interpretation.acts and interpretation.acts[-1].targets
+        else None
+    )
+    corrects = interpretation.corrects_previous_turn
+    gate_state = reduce_turn(state, delta, (), resolved, primary, corrects, reducer_policy).state
+    outcome = decide_ambiguity(
+        interpretation,
+        checked,
+        resolved,
+        gate_state,
+        known,
+        vocab=voc,
+        pack=loaded,
+        locale=locale,
+        policy=policy,
+    )
+    remaining = [a for i, a in enumerate(interpretation.acts) if i not in outcome.skipped_acts]
+    policy_result = None
+    if remaining:
+        act = remaining[-1]
+        by_id = {r.ref_id: r for r in resolved}
+        targeted = {
+            pid: known.products[pid]
+            for t in act.targets
+            if t in by_id
+            for pid in by_id[t].product_ids
+            if pid in known.products
+        }
+        policy_result = answer_policy(
+            act,
+            resolved,
+            targeted,
+            vocab=voc,
+            pack=loaded,
+            references=interpretation.references,
+            ambiguity=outcome.decision,
+            locale=locale,
+        )
+    executor = (_shown_proposal(name, shown_ids),) if shown_ids else ()
+    after = reduce_turn(state, delta, executor, resolved, primary, corrects, reducer_policy).state
+    memory = memory_proposal(outcome, turn_id)
+    if memory is not None:
+        applied = reduce(after, memory, reducer_policy)
+        if isinstance(applied, ConversationStateV2):
+            after = applied
+    return KernelStep(
+        interpretation=interpretation,
+        checked=tuple(checked),
+        resolved=tuple(resolved),
+        facts=known,
+        gate_state=gate_state,
+        outcome=outcome,
+        answer_policy=policy_result,
+        state_after=after,
+        memory=memory,
+    )
+
+
+def gate_trace(journey: replay.Journey, index: int) -> KernelTrace:
+    """Pipeline-ul pentru straturile `ambiguity` și `answer_policy` (NX-332), cu `checked`,
+    `resolver` și `reducer` pe drum: turele rulează ÎN LANȚ, ca la `reducer_trace`, iar memoria
+    întrebării (`set_pending_question` / `note_asked`) trece prin reducer între ture, deci replay-ul
+    vede și anti-bucla (I11) pe mai multe ture, nu doar în tur."""
+    state = ConversationStateV2()
+    trace: KernelTrace | None = None
+    for i, turn in enumerate(journey.turns[: index + 1]):
+        before = state
+        step = kernel_step(
+            journey.pack,
+            state,
+            turn.expect["interpretation"],
+            turn.user_input,
+            earlier=tuple(t.user_input for t in journey.turns[:i])[::-1],
+            shown_ids=turn.shown,
+            turn_id=f"t{i}",
+            locale=journey.locale,
+        )
+        state = step.state_after
+        trace = KernelTrace(
+            contract_version=KERNEL_CONTRACT_VERSION,
+            vocabulary_snapshot=f"fixture:{journey.pack}",
+            interpretation=step.interpretation,
+            checked_changes=list(step.checked),
+            resolved_refs=list(step.resolved),
+            state_before=state_view(before),
+            proposals=[],
+            rejected=[],
+            state_after=state_view(state),
+            ambiguity=step.outcome.decision,
+            plan=TurnPlan(executor="reply_only", product_ids=[], search_args=None, depends_on=None),
+            executor="none",
+            answer_policy=step.answer_policy,
+        )
+    assert trace is not None
+    return trace
+
+
 __all__ = [
+    "GATE_POLICY",
+    "KernelStep",
     "checked_trace",
     "facts",
+    "gate_trace",
+    "kernel_step",
+    "memory_proposal",
     "name_key",
     "named_in_catalog",
     "pack",

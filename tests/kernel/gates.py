@@ -259,13 +259,114 @@ def raw_text(source: str, filename: str) -> list[Violation]:
     return sorted(set(out))
 
 
+# --- NX-332: textul brut se citește O DATĂ, într-un cititor declarat ------------------------------
+
+
+def load_raw_readers() -> list[dict]:
+    """Cititorii declarați ai textului brut (`raw_text_readers` din allowlist): `file`, `function`,
+    `reason` nevid. Tiparul e `provenance._read_quote`: textul intră într-o funcție numită, iese ca
+    dovadă structurată, iar deciziile de după nu mai văd cuvintele."""
+    if not ALLOWLIST_FILE.exists():
+        return []
+    entries = json.loads(ALLOWLIST_FILE.read_text(encoding="utf-8")).get("raw_text_readers", [])
+    for entry in entries:
+        missing = [k for k in ("file", "function", "reason") if not entry.get(k)]
+        if missing:
+            raise ValueError(f"cititor de text brut fără {missing}: {entry}")
+    return entries
+
+
+def _module_of(filename: str) -> str:
+    return filename.removesuffix(".py").replace("/", ".")
+
+
+def _callee(func: ast.expr) -> tuple[str, ...] | None:
+    """`f(...)` ⇒ `("f",)`; `mod.f(...)` ⇒ `("mod", "f")`; altceva ⇒ None."""
+    if isinstance(func, ast.Name):
+        return (func.id,)
+    if isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name):
+        return (func.value.id, func.attr)
+    return None
+
+
+def _reachable_readers(
+    tree: ast.Module, declared: list[dict], own: set[str]
+) -> set[tuple[str, ...]]:
+    """Apelurile care ajung la un cititor DECLARAT, legate de fișierul lui (recenzia NX-332: după
+    nume, orice funcție numită `_change` sau `_read_query`, definită oriunde, trecea poarta):
+    definit în fișierul curent, importat prin `from <modulul declarat> import f [as g]`, sau apelat
+    ca `m.f` unde `m` e modulul declarat, importat."""
+    by_module: dict[str, set[str]] = {}
+    for entry in declared:
+        by_module.setdefault(_module_of(entry["file"]), set()).add(entry["function"])
+    reachable: set[tuple[str, ...]] = {(name,) for name in own}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module in by_module:
+            for alias in node.names:
+                if alias.name in by_module[node.module]:
+                    reachable.add((alias.asname or alias.name,))
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            for alias in node.names:
+                module = f"{node.module}.{alias.name}"
+                for function in by_module.get(module, ()):
+                    reachable.add((alias.asname or alias.name, function))
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.asname:
+                    for function in by_module.get(alias.name, ()):
+                        reachable.add((alias.asname, function))
+    return reachable
+
+
+def raw_readers(source: str, filename: str) -> list[Violation]:
+    """Un câmp de text brut (`.quote`, `.query`, `.readings`, `.text`, `.body`) se citește doar
+    (a) în interiorul unui cititor declarat pentru fișierul lui, sau (b) ca argument DIRECT al
+    unui apel către un cititor declarat. Poarta `raw_text` prinde tiparele cunoscute (regex, `in`,
+    literal); asta prinde orice altă citire, deci o excepție de la poarta de text brut e o
+    declarație cu motiv, nu o scăpare."""
+    declared = load_raw_readers()
+    own = {e["function"] for e in declared if e["file"] == filename}
+    tree = ast.parse(source, filename=filename)
+    readers = _reachable_readers(tree, declared, own)
+    allowed: set[int] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and _callee(node.func) in readers:
+            allowed.update(id(a) for a in (*node.args, *(k.value for k in node.keywords)))
+    out: list[Violation] = []
+
+    def visit(node: ast.AST, inside_reader: bool) -> None:
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                visit(child, inside_reader or child.name in own)
+                continue
+            if (
+                isinstance(child, ast.Attribute)
+                and isinstance(child.ctx, ast.Load)
+                and child.attr in RAW_TEXT_NAMES
+                and not inside_reader
+                and id(child) not in allowed
+            ):
+                out.append(
+                    Violation(
+                        filename,
+                        child.lineno,
+                        "raw_readers",
+                        f".{child.attr} în afara unui cititor",
+                    )
+                )
+            visit(child, inside_reader)
+
+    visit(tree, False)
+    return sorted(set(out))
+
+
 # --- registrul și allowlistul ---------------------------------------------------------------------
 
 GATES_BY_ROLE: dict[str, tuple[str, ...]] = {
-    "pure": ("llm_calls", "search_args", "state_writes", "raw_text"),
-    "planner": ("llm_calls", "state_writes", "raw_text"),
+    "pure": ("llm_calls", "search_args", "state_writes", "raw_text", "raw_readers"),
+    "planner": ("llm_calls", "state_writes", "raw_text", "raw_readers"),
     "adapter": ("search_args", "state_writes"),
-    "reducer": ("llm_calls", "search_args", "raw_text"),
+    "reducer": ("llm_calls", "search_args", "raw_text", "raw_readers"),
     "executor": ("executor_needs",),
 }
 GATES = {
@@ -274,6 +375,7 @@ GATES = {
     "state_writes": state_writes,
     "executor_needs": executor_needs,
     "raw_text": raw_text,
+    "raw_readers": raw_readers,
 }
 
 

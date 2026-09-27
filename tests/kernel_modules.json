@@ -8,7 +8,9 @@
         "src/conversation/kernel_trace.py",
         "src/conversation/references.py",
         "src/conversation/provenance.py",
-        "src/conversation/delta.py"
+        "src/conversation/delta.py",
+        "src/conversation/ambiguity_gate.py",
+        "src/conversation/answer_policy.py"
       ]
     },
     "planner": {
@@ -38,8 +40,6 @@
     }
   },
   "planned": {
-    "src/conversation/ambiguity_gate.py": "pure",
-    "src/conversation/answer_policy.py": "pure",
     "src/agent/turn_planner.py": "planner",
     "src/conversation/turn_interpreter.py": "adapter"
   }

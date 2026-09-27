@@ -215,6 +215,10 @@ class ReferenceFacts:
     products: Mapping[str, ProductFacts] = field(default_factory=dict)
     named: Mapping[str, tuple[tuple[str, int], ...]] = field(default_factory=dict)
     snapshot: str = ""
+    #: NX-332: cheile din `attributes` pe care le-a CERUT citirea (`CatalogLookup.attributes`).
+    #: Un atribut necerut lipsește din fapte fără să fie necunoscut pe produs: cine numără pe el
+    #: (poarta de ambiguitate) trebuie să știe diferența. `None` = toate (fixture fără lookup).
+    attributes_read: tuple[str, ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -781,8 +785,12 @@ def plan_lookup(
     *,
     pack: object | None = None,
     locale: str | None = None,
+    extra_attributes: Collection[str] = (),
 ) -> CatalogLookup:
     """Ce trebuie citit din catalog ca `resolve_references` să poată decide. PUR.
+
+    `extra_attributes` (NX-332): atributele pe care le cere alt consumator al ACELEIAȘI citiri
+    (poarta de ambiguitate, `ambiguity_gate.lookup_attributes`), ca turul să rămână la un checkout.
 
     Toate id-urile din surse se revalidează (I1: și cele parcate sau vechi, nu doar ținta). Un nume
     se caută în catalog doar dacă nu-l numește niciun set: pe ecran, numele bate catalogul."""
@@ -809,6 +817,7 @@ def plan_lookup(
     attrs |= {
         r.dimension for r in refs if r.kind in ("attribute", "extreme", "earlier") and r.dimension
     }
+    attrs |= {a for a in extra_attributes if a}
     attrs -= _COLUMN_DIMENSIONS | {VARIANT_DIMENSION}
     return CatalogLookup(
         ids=tuple(ids),

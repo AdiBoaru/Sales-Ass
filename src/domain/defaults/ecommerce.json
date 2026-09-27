@@ -14,6 +14,31 @@
       "en": "The product sheet does not list {slot} among its recommendations."
     }
   },
+  "_clarify_templates_note": "NX-332 (kernel pasul 4a): frazele intrebarilor de clarificare, locale -> kind -> fraza. {options} se completeaza de server din etichete canonice (vocabular, pachet) sau din numele de afisare ale produselor recitite din catalog, legate cu list_glue, niciodata din textul modelului. reference/scope/value sunt valorile lui Ambiguity.about, subject/confirm/conflict/generic sunt chei de date, iar bound_lte/bound_gte sunt etichetele limitelor din intrebarea de conflict (exact un {value}). Un sablon cu alt marcator e respins la load. Fara liniuta de pauza si fara punct si virgula (P13).",
+  "clarify_templates": {
+    "ro": {
+      "reference": "La care te referi dintre {options}?",
+      "scope": "Mă gândesc la {options}. La care te referi?",
+      "value": "Care dintre acestea te interesează: {options}?",
+      "subject": "Ce cauți? Am {options}.",
+      "confirm": "Să înțeleg că e vorba de {options}?",
+      "conflict": "Am două limite care nu se împacă: {options}. Care rămâne?",
+      "generic": "Poți să-mi spui mai exact? Mă gândesc la {options}.",
+      "bound_lte": "sub {value}",
+      "bound_gte": "minim {value}"
+    },
+    "en": {
+      "reference": "Which one do you mean out of {options}?",
+      "scope": "I'm thinking of {options}. Which one do you mean?",
+      "value": "Which of these are you after: {options}?",
+      "subject": "What are you looking for? I have {options}.",
+      "confirm": "Just to check, is it {options}?",
+      "conflict": "I have two limits that don't fit together: {options}. Which one stays?",
+      "generic": "Could you tell me a bit more? I'm thinking of {options}.",
+      "bound_lte": "under {value}",
+      "bound_gte": "at least {value}"
+    }
+  },
   "_chip_templates_note": "NX-296: copy-ul chips-urilor, per mutare si per locale. Un chip e MESAJUL pe care clientul il retrimite la apasare, deci se scrie la persoana I, in vocea lui. {slot} se completeaza de server din catalog (fraza de meniu, nume scurt de produs, prag de pret), niciodata de model. Mutare fara sablon = mutare care nu se ofera (P11: limba e configuratie, nu constanta in cod). Moneda face parte din sablon fiindca e a tenantului.",
   "chip_templates": {
     "refine_facet": {"ro": "Caut ceva pentru {slot}", "en": "Show me something for {slot}"},

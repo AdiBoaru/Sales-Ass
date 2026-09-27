@@ -25,6 +25,8 @@ from typing import Any
 
 from src.catalog.folding import fold_text
 from src.conversation.interpretation import (
+    AmbiguityDecision,
+    AnswerPolicy,
     CheckedChange,
     Reference,
     ResolvedRef,
@@ -128,6 +130,12 @@ def _parse_expect(raw: dict[str, Any]) -> dict[str, Any]:
             )
             for item, change in zip(out["checked"], changes, strict=True)
         ]
+    if "ambiguity" in out:
+        # NX-332: verdictul porții; `question` absentă = nulă (un verdict fără întrebare).
+        out["ambiguity"] = AmbiguityDecision.model_validate({"question": None, **out["ambiguity"]})
+    if out.get("answer_policy") is not None:
+        # NX-332: politica de răspuns; `null` = actul nu cere o judecată, `missing` gol poate lipsi.
+        out["answer_policy"] = AnswerPolicy.model_validate({"missing": [], **out["answer_policy"]})
     return out
 
 
