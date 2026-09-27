@@ -331,6 +331,11 @@ class RetrievalResult:
     # izi-parity hardening: semnal de relevanță (off-category) → compose suprimă pick-ul + pune
     # mesaj onest de redirect. Fail-open: None ⇒ potrivire exactă (comportament vechi).
     relevance: Relevance | None = None
+    # NX-326: turul a CITIT catalogul de produse. Fals doar pe calea buclei de tool-uri, când
+    # modelul n-a chemat nicio unealtă de catalog (o întrebare de livrare, un „mersi"): atunci
+    # turul e o paranteză și nu golește sesiunea de căutare. Implicit adevărat: orice alt producător
+    # (handlere deterministe, creierul unic) păstrează comportamentul de dinainte.
+    catalog_read: bool = True
 
 
 # ---------------------------------------------------------------------------

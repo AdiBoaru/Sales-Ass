@@ -7,8 +7,9 @@ Plus: `cart` (owner = Agent, via state_patch) nu e clobber-uit de merge-ul canon
 
 ZERO OpenAI/DB real — stub conn + funcții monkeypatch-uite (pattern G8-1)."""
 
+from src.config import get_settings
 from src.db.provider import static_db
-from src.models import BusinessConfig, Contact
+from src.models import BusinessConfig, Contact, RetrievalResult
 from src.worker import processor as proc
 from src.worker import turn_uow as uow
 from src.worker.processor import handle_turn
@@ -161,9 +162,31 @@ async def test_cart_via_state_patch_coexists_with_constraint(monkeypatch):
 
 
 async def test_active_search_reset_on_non_search_reply(monkeypatch):
-    # reply FĂRĂ produse → sesiunea de căutare veche se șterge (un „mai arată-mi" ulterior n-o reia)
+    # reply FĂRĂ produse → sesiunea de căutare veche se șterge (un „mai arată-mi" ulterior
+    # n-o reia).
+    # NX-326: regula de dinainte, cu flagul stins; aprins, un tur care n-a citit catalogul e o
+    # paranteză (vezi testul următor și tests/test_nx326_aside_session.py).
+    monkeypatch.setattr(get_settings(), "aside_keeps_search_session_enabled", False)
+
     async def stage(ctx, deps):
         ctx.set_reply("Salut! Cu ce te ajut?")  # niciun produs
+
+    new_state = await _run(
+        monkeypatch,
+        stage,
+        initial_state={"active_search": {"pool": ["p1"], "cursor": 6, "fp": "x"}},
+    )
+    assert new_state["active_search"] is None
+
+
+async def test_active_search_reset_on_a_catalog_reply_without_products(monkeypatch):
+    # NX-326, flag aprins: un tur care A CITIT catalogul și n-a găsit nimic închide sesiunea, ca
+    # înainte; doar paranteza (niciun tool de catalog) o păstrează.
+    monkeypatch.setattr(get_settings(), "aside_keeps_search_session_enabled", True)
+
+    async def stage(ctx, deps):
+        ctx.retrieval = RetrievalResult(products=[], source="tools", catalog_read=True)
+        ctx.set_reply("N-am găsit nimic.")
 
     new_state = await _run(
         monkeypatch,

@@ -26,7 +26,7 @@ from src.models import TurnContext
 from src.observability import hooks, turn_latency
 from src.runtime import deadline, turn_budget
 from src.safety.policy import SafetyPolicy
-from src.tools.base import run_tool
+from src.tools.base import ARGS_REJECTED, CATALOG_READ_TOOLS, run_tool
 
 if TYPE_CHECKING:
     from src.worker.runner import PipelineDeps
@@ -136,6 +136,10 @@ class ToolRun:
     # (`src/conversation/observed_constraints.py`). Doar `search_products`: celelalte unelte
     # primesc id-uri, nu constrângeri.
     search_args: list[dict[str, Any]] = field(default_factory=list)
+    # NX-326: numele uneltelor chemate, în ordine. Din ele planner-ul decide dacă turul a CITIT
+    # catalogul (`read_catalog`), iar procesorul dacă turul a fost o paranteză care nu trebuie să
+    # golească sesiunea de căutare.
+    called: list[str] = field(default_factory=list)
     failed_commerce: set[str] = field(default_factory=set)  # NX-137: cart/checkout eșuate
     checkout_url: str | None = None  # NX-137: linkul REAL de checkout creat în acest tur → CTA
     # NX-237: ultimul snapshot al coșului CANONIC (CartService, sub flag). Plannerul citește de
@@ -158,6 +162,11 @@ class ToolRun:
     _next_ticket: int = field(default=0, init=False, repr=False)
     _serving: int = field(default=0, init=False, repr=False)
     _done_tickets: set[int] = field(default_factory=set, init=False, repr=False)
+
+    @property
+    def read_catalog(self) -> bool:
+        """NX-326: turul a chemat măcar o unealtă care citește catalogul de produse."""
+        return any(name in CATALOG_READ_TOOLS for name in self.called)
 
     def _tool_gate(self) -> tool_budget.ToolGate:
         if self._gate is None:
@@ -287,6 +296,7 @@ class ToolRun:
         # număra ca timp de tool ar face ca două citiri paralele să pară de două ori mai scumpe.
         with turn_latency.span("tools"):
             result = await run_tool(ctx, deps, name, args)
+        self.called.append(name)
         if seq is not None:
             await self._await_ticket(seq)
         latency_ms = round((perf_counter() - started) * 1000, 1)
@@ -309,7 +319,11 @@ class ToolRun:
         # `price_max=100` care n-a găsit nimic spune despre client exact același lucru ca una
         # reușită: că a cerut sub 100. Filtrată pe `result.ok`, stiva ar uita tocmai constrângerile
         # prea strânse, adică pe cele care contează.
-        if name == "search_products" and isinstance(args, dict):
+        # NX-326: argumentele pe care unealta nici nu le-a acceptat nu spun nimic despre client.
+        rejected_args = result.error == ARGS_REJECTED and getattr(
+            get_settings(), "tool_field_errors_enabled", False
+        )
+        if name == "search_products" and isinstance(args, dict) and not rejected_args:
             kept = dict(args)
             # Raftul pe care căutarea însăși l-a respins ca ghicitură greșită (NX-313) nu e raftul
             # conversației: `observed_category` l-ar persista, iar meniul de chips s-ar construi pe

@@ -16,6 +16,8 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from pydantic import ValidationError
+
 from src.config import get_settings
 
 if TYPE_CHECKING:
@@ -123,16 +125,77 @@ def enabled_tools(business: Any, route: str | None = None) -> list[str]:
     return [name for name in names if name in TOOL_REGISTRY and name not in disabled]
 
 
+#: NX-326: uneltele care CITESC catalogul de produse. Un tur care n-a chemat niciuna (doar
+#: `faq_lookup`, `check_order`, sau niciun tool) e o paranteză față de căutarea în curs, deci nu-i
+#: golește sesiunea (`processor._build_new_state`). Declarat aici, lângă toolseturi, ca o unealtă
+#: nouă de catalog să fie adăugată în același loc în care e oferită.
+CATALOG_READ_TOOLS: frozenset[str] = frozenset(
+    {
+        "search_products",
+        "get_product_details",
+        "compare_products",
+        "related_products",
+        "routine_plan",
+        "reorder",
+    }
+)
+
+#: `ToolResult.error` pentru argumente respinse la validare (NX-326), distinct de o unealtă picată.
+ARGS_REJECTED = "ValidationError"
+
+# Câte câmpuri greșite se numesc modelului. Peste plafon, restul se numără, nu se enumeră.
+_MAX_FIELD_ERRORS = 6
+# Constrângerile schemei pe care le putem spune modelului fără să citim valoarea trimisă.
+_CONSTRAINT_KEYS = ("le", "lt", "ge", "gt", "max_length", "min_length", "expected")
+
+
+def _field_path(error: dict[str, Any]) -> str:
+    return ".".join(str(part) for part in error.get("loc") or ()) or "(args)"
+
+
+def field_errors_view(exc: ValidationError) -> str:
+    """Ce vede modelul când argumentele sunt respinse: CALEA câmpului, tipul erorii și
+    constrângerea din schemă. Niciodată `input`: valoarea vine de la model, dar poate cita textul
+    clientului (P12). PUR."""
+    errors = exc.errors(include_url=False, include_input=False)
+    parts: list[str] = []
+    for error in errors[:_MAX_FIELD_ERRORS]:
+        ctx_values = error.get("ctx") or {}
+        limits = ", ".join(f"{k}={ctx_values[k]}" for k in _CONSTRAINT_KEYS if k in ctx_values)
+        detail = f"{error.get('type')}" + (f" ({limits})" if limits else "")
+        parts.append(f"{_field_path(error)}: {detail}")
+    more = len(errors) - len(parts)
+    tail = f"; încă {more}" if more > 0 else ""
+    return "Argumente invalide, corectează câmpurile: " + "; ".join(parts) + tail + "."
+
+
 async def run_tool(
     ctx: TurnContext, deps: PipelineDeps, name: str, args: dict[str, Any]
 ) -> ToolResult:
     """Dispatch + protecție: un tool inexistent sau care aruncă → `ToolResult(ok=False)`,
-    NU rupe turul (principiul 6). `business_id` se ia din `ctx` în fiecare tool."""
+    NU rupe turul (principiul 6). `business_id` se ia din `ctx` în fiecare tool.
+
+    NX-326: argumentele respinse de modelul pydantic al uneltei se întorc pe CÂMP
+    (`field_errors_view`), ca modelul să le poată corecta în runda următoare, și se numără
+    (`tool_arg_invalid`, numărătorul „tool correction rate")."""
     fn = TOOL_REGISTRY.get(name)
     if fn is None:
         return ToolResult(ok=False, error=f"tool necunoscut: {name}", llm_view="Tool inexistent.")
     try:
         return await fn(ctx, deps, args or {})
+    except ValidationError as e:
+        if not getattr(get_settings(), "tool_field_errors_enabled", False):
+            log.warning("tool %s a eșuat (%s)", name, type(e).__name__)
+            return ToolResult(ok=False, error=type(e).__name__, llm_view="Unealta a eșuat.")
+        errors = e.errors(include_url=False, include_input=False)
+        ctx.emit(
+            "tool_arg_invalid",
+            tool=name,
+            fields=sorted({_field_path(err) for err in errors})[:_MAX_FIELD_ERRORS],
+            kinds=sorted({str(err.get("type")) for err in errors}),
+            n=len(errors),
+        )
+        return ToolResult(ok=False, error=ARGS_REJECTED, llm_view=field_errors_view(e))
     except Exception as e:  # noqa: BLE001 — tool eșuat (DB/validare) → degradare grațioasă
         log.warning("tool %s a eșuat (%s)", name, type(e).__name__)
         return ToolResult(ok=False, error=type(e).__name__, llm_view="Unealta a eșuat.")

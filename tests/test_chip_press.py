@@ -295,8 +295,12 @@ async def test_link_press_sends_only_the_named_product(monkeypatch):
 
 
 async def test_link_press_with_the_flag_off_is_the_old_handler(monkeypatch):
-    """Byte-identic cu flagul stins: handlerul de azi servește TOT setul afișat."""
+    """Byte-identic cu flagul stins: handlerul de azi servește TOT setul afișat.
+
+    NX-326 repară aceeași frază și pe calea TASTATĂ (`named_targets`), deci „handlerul de azi"
+    înseamnă aici ambele flaguri stinse."""
     monkeypatch.setattr(get_settings(), "chip_moves_v2_enabled", False, raising=False)
+    monkeypatch.setattr(get_settings(), "named_shortcut_targets_enabled", False, raising=False)
     served: list = []
     monkeypatch.setattr("src.agent.deterministic.get_products_by_ids", _by_ids(served))
     ctx = _ctx(_text("link:p2"), offered=["link:p2"])

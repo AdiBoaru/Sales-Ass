@@ -287,6 +287,22 @@ def _reducer_policy(ctx: TurnContext) -> ReducerPolicy:
     )
 
 
+def _keeps_search_session(ctx: TurnContext) -> bool:
+    """NX-326: turul fără produse e o PARANTEZĂ față de căutarea în curs? PUR.
+
+    Aproximarea deterministă a lui `thread=aside` din contractul kernelului, pe calea de azi:
+    turul n-a citit catalogul (`RetrievalResult.catalog_read`, sau niciun retrieval) și nu e o
+    clarificare (o întrebare poate schimba subiectul, deci închide sesiunea ca înainte). O căutare
+    cu zero rezultate a citit catalogul, deci închide sesiunea ca înainte."""
+    if not getattr(get_settings(), "aside_keeps_search_session_enabled", False):
+        return False
+    reply = ctx.reply
+    if reply is None or reply.pending_question is not None:
+        return False
+    retrieval = ctx.retrieval
+    return retrieval is None or not retrieval.catalog_read
+
+
 def _turn_proposals(
     ctx: TurnContext, *, is_rich: bool, has_products: bool
 ) -> list[StateUpdateProposal]:
@@ -315,7 +331,7 @@ def _turn_proposals(
                 "set_active_search", source="catalog", payload=ctx.state_patch["active_search"]
             )
         )
-    elif not (is_rich or has_products):
+    elif not (is_rich or has_products) and not _keeps_search_session(ctx):
         proposals.append(StateUpdateProposal("set_active_search", source="catalog", payload=None))
     if "displayed_products" in ctx.state_patch:
         # NX-173: prune-ul de siguranță scoate produse din setul afișat — trece prin aceeași
@@ -461,7 +477,12 @@ def _build_new_state(
     # sesiuni zombi — un „mai arată-mi" ulterior nu trebuie să reia o sesiune veche, fără
     # legătură). Dacă tool-ul/agentul a scris `active_search` în state_patch (căutare nouă sau
     # pagină), acela are întâietate prin merge-ul de mai jos.
-    if not (is_rich or has_products):
+    #
+    # NX-326: o paranteză (turul n-a citit catalogul și nu e o clarificare) nu e o căutare nouă,
+    # deci nu închide sesiunea: „cât durează livrarea?" între două pagini lasă „mai arată-mi" să
+    # continue. Aceeași regulă pe ramura v2 (`_turn_proposals`), altfel shadow-diff-ul ar raporta o
+    # divergență introdusă de noi.
+    if not (is_rich or has_products) and not _keeps_search_session(ctx):
         new_state = {**new_state, "active_search": None}
     # NX-79: mutații de state cerute de tool-uri (ex. cart_add → {"cart": [...]}), acumulate
     # în stagiul Agent. Owner unic = Agent; processor-ul doar le merge-uiește la scriere (P3).
@@ -931,6 +952,16 @@ async def _run_turn(  # noqa: PLR0913 — o fază, mulți parametri deja valida�
         fragments = split_reply(reply_text, limit=_s.reply_split_chars)
 
     # === FAZA 3 — COMMIT (un checkout, O tranzacție) =======================================
+    if (
+        getattr(get_settings(), "aside_keeps_search_session_enabled", False)
+        and not (is_rich or has_products)
+        and "active_search" not in ctx.state_patch
+        and isinstance(snap.state, dict)
+        and snap.state.get("active_search")
+    ):
+        # NX-326: o singură dată, aici, nu în `_build_new_state` (se re-aplică la StateConflict).
+        outcome = "kept_aside" if _keeps_search_session(ctx) else "cleared"
+        ctx.emit("search_session", outcome=outcome)
     commit = TurnCommit(
         business_id=business.id,
         conversation_id=conversation_id,

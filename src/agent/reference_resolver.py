@@ -34,10 +34,12 @@ Modulul e PUR: primește referințe, întoarce o decizie tipizată. Nu citește 
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
 from src.catalog.folding import fold_text
+from src.catalog.query_terms import any_locale_stopwords, stopwords
 from src.catalog.render_text import name_keys, unique_prefixes
 
 ReferenceSource = Literal["action", "named", "ordinal", "page", "selected", "single", "none"]
@@ -227,6 +229,98 @@ def match_name(
     if best >= 1 and len(winners) == 1:
         return winners[0]
     return None
+
+
+@dataclass(frozen=True)
+class NamedTargets:
+    """NX-326 — produsele pe care mesajul le NUMEȘTE sau le indică ordinal, ca indici în `refs`.
+
+    `indices` sunt țintele sigure, în ordinea în care apar în MESAJ (la comparație coloanele urmează
+    cererea, nu ecranul). `candidates` sunt produsele unui cuvânt pe care îl poartă mai multe nume
+    („The Fresh" lângă două «IT'S SKIN The Fresh …»): nu e o alegere, e o ambiguitate, iar
+    apelantul decide ce face cu ea (un act read-only răspunde despre toți, o comparație o lasă
+    modelului)."""
+
+    indices: tuple[int, ...] = ()
+    candidates: tuple[int, ...] = ()
+
+    @property
+    def source(self) -> Literal["named", "ambiguous", "none"]:
+        if self.candidates:
+            return "ambiguous"
+        return "named" if self.indices else "none"
+
+
+# Un cuvânt mai scurt de atât nu numește un produs („la", „cu", „92"), ca la `match_name`.
+_MIN_NAME_TOKEN = 3
+
+
+def _word_spans(text: str) -> list[tuple[int, str]]:
+    """(poziție, cheie) pentru fiecare cuvânt, pe aceeași normalizare ca numele."""
+    return [(m.start(), m.group()) for m in re.finditer(r"[a-z0-9]+", normalize_for_match(text))]
+
+
+def named_targets(
+    query: str, refs: Sequence[HasProductRef], *, locale: str | None = None
+) -> NamedTargets:
+    """NX-326 — TOATE produsele din `refs` numite sau indicate ordinal în `query`. PUR.
+
+    Trei surse, fiecare cu poziția ei în mesaj: (a) numele întreg conținut în mesaj; (b) un
+    cuvânt DISTINCTIV al clientului, adică unul care apare în numele unui singur produs din set
+    („Yuja", „Dokdo", „1025"); (c) ordinalele (`ORDINALS`, toate aparițiile, nu doar prima).
+    Prefixul unic (NX-318) nu ajunge singur: pe «SOME BY MI Yuja Niacin …» prefixul e „some", iar
+    clienții scriu cuvintele din mijloc.
+
+    Deliberat FĂRĂ scorul pe tokeni din `match_name`: pe o listă de ținte, un cuvânt comun
+    („cream") ar adăuga produse pe care clientul nu le-a numit. Un cuvânt comun TUTUROR numelor
+    nu spune nimic și se ignoră; unul comun doar unora, fără ca vreunul dintre ele să fi fost numit
+    altfel, devine `candidates`. Cuvintele goale ale locale-i nu numesc nimic (P11: tabelul
+    `query_terms`, nu o listă nouă)."""
+    if not query or not refs:
+        return NamedTargets()
+    empty = stopwords(locale) if locale else any_locale_stopwords()
+    normalized = normalize_for_match(query)
+    name_words = [set(re.findall(r"[a-z0-9]+", normalize_for_match(r.name or ""))) for r in refs]
+
+    hits: dict[int, int] = {}  # index → prima poziție în mesaj
+
+    def _hit(index: int, position: int) -> None:
+        if index not in hits or position < hits[index]:
+            hits[index] = position
+
+    for index, ref in enumerate(refs):
+        full = normalize_for_match(ref.name or "").strip()
+        position = normalized.find(full) if full else -1
+        if position >= 0:
+            _hit(index, position)
+
+    shared: list[tuple[int, tuple[int, ...]]] = []
+    for position, word in _word_spans(query):
+        if len(word) < _MIN_NAME_TOKEN or word in empty:
+            continue
+        owners = tuple(i for i, words in enumerate(name_words) if word in words)
+        if len(owners) == 1:
+            _hit(owners[0], position)
+        elif 1 < len(owners) < len(refs):
+            shared.append((position, owners))
+
+    for index, pattern in ORDINALS:
+        if index < len(refs):
+            match = pattern.search(normalized)
+            if match is not None:
+                _hit(index, match.start())
+
+    candidates: list[int] = []
+    for _, owners in sorted(shared):
+        if not any(o in hits for o in owners):
+            candidates.extend(o for o in owners if o not in candidates)
+    if candidates:
+        ordered_hits = [i for i, _ in sorted(hits.items(), key=lambda kv: kv[1])]
+        return NamedTargets(
+            indices=tuple(ordered_hits),
+            candidates=tuple(sorted(set(candidates) | set(ordered_hits))),
+        )
+    return NamedTargets(indices=tuple(i for i, _ in sorted(hits.items(), key=lambda kv: kv[1])))
 
 
 def resolve_from_displayed(
