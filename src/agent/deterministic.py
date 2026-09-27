@@ -19,7 +19,8 @@ from __future__ import annotations
 import logging
 import re
 from collections.abc import Callable, Sequence
-from typing import TYPE_CHECKING, Any
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Literal
 
 from src.agent.compare_narrative import compose_comparison
 from src.agent.fallbacks import (
@@ -41,10 +42,21 @@ from src.agent.reference_resolver import (
     resolve_from_displayed,
     resolve_product_reference,
     resolve_reference,
+    shortcut_references,
 )
-from src.catalog.query_terms import fold, stopwords
+from src.catalog.query_terms import fold, formula_fillers, stopwords
+from src.catalog.reference_facts import fetch_reference_facts
 from src.catalog.render_text import cut_at_sentence, display_name
+from src.catalog.vocabulary_cache import get_vocabulary
 from src.config import get_settings
+from src.conversation.interpretation import Act, Reference, ResolvedRef
+from src.conversation.references import (
+    ReferenceSources,
+    ShownItem,
+    gate_act_targets,
+    plan_lookup,
+    resolve_references,
+)
 from src.conversation.state_reducer import StateUpdateProposal
 from src.db.queries.catalog import (
     get_products_by_ids,
@@ -681,36 +693,13 @@ async def serve_compare_with_similar(ctx: TurnContext, deps: PipelineDeps, ancho
     return served
 
 
-# Cuvintele care fac parte din FORMULA unei scurtături, dincolo de ce prinde regexul declanșator
-# și de cuvintele funcționale din `query_terms.stopwords`. Indexate pe locale (P11: limba e o
-# cheie); o locale necunoscută primește mulțimea goală, deci nu aplicăm româna peste altă limbă.
-#
-# Regula de includere e ACEEAȘI ca a listei de stopwords, și e strictă: un cuvânt intră aici doar
-# dacă nu poate numi NICIODATĂ un produs, un brand sau o nevoie. Verbe de arătare/trimitere, adverbe
-# de manieră și numeralele SCRISE cu litere (o cantitate de selecție: „primele două") — niciodată o
-# CIFRĂ, fiindcă o cifră poate fi un preț, un volum sau un SPF.
-#
-# Ce se întâmplă când lista e incompletă (și va fi, la orice volum de clienți): cuvântul necunoscut
-# rămâne în reziduu, turul pleacă la model și clientul primește răspunsul corect, plătit cu o
-# inferență. Asta e toată miza formei alese — enumerăm mulțimea ÎNCHISĂ (cum se cere o scurtătură),
-# nu pe cea DESCHISĂ (cum se rostește o constrângere), iar necunoscutul cade spre model, nu spre
-# tăcere.
-_FORMULA_FILLERS: dict[str, frozenset[str]] = {
-    "ro": frozenset(
-        """
-        arata arati aratati trimite trimiteti da dati vezi vreau as putea poti
-        direct rapid repede acum imediat te va rog rogu hai
-        prima primul primele primii ultima ultimul ultimele ambele astea alea acelea astealalte
-        doua doi trei patru cinci
-        """.split()
-    )
-}
-
-
-def _formula_fillers(locale: str | None) -> frozenset[str]:
-    if not locale:
-        return frozenset()
-    return _FORMULA_FILLERS.get(locale.split("-")[0].lower(), frozenset())
+# Cuvintele care fac parte din FORMULA unei scurtături trăiesc în `query_terms.formula_fillers`
+# (mutate de NX-329, fiindcă și extractorul de referințe le consumă). Ce se întâmplă când lista e
+# incompletă (și va fi, la orice volum de clienți): cuvântul necunoscut rămâne în reziduu, turul
+# pleacă la model și clientul primește răspunsul corect, plătit cu o inferență. Asta e toată miza
+# formei alese — enumerăm mulțimea ÎNCHISĂ (cum se cere o scurtătură), nu pe cea DESCHISĂ (cum se
+# rostește o constrângere), iar necunoscutul cade spre model, nu spre tăcere.
+_formula_fillers = formula_fillers
 
 
 def carries_new_constraints(ctx: TurnContext, trigger: re.Pattern[str]) -> bool:
@@ -987,6 +976,15 @@ async def try_pre_intents(ctx: TurnContext, deps: PipelineDeps) -> bool:
         and _CHEAPER_RE.search(query) is None
     )
     if link_intent:
+        if _resolver_v2_enabled():
+            decision = await _v2_shortcut(ctx, deps, query, "link")
+            if decision is not None:
+                if decision.action == "model":
+                    return False
+                await _handle_link_intent(
+                    ctx, deps, list(decision.ids) if decision.action == "served" else None
+                )
+                return True
         ids = _link_targets(ctx, query, anchorable)
         if ids is None:
             await _handle_link_intent(ctx, deps)  # apelul de dinainte, neschimbat
@@ -1006,6 +1004,14 @@ async def try_pre_intents(ctx: TurnContext, deps: PipelineDeps) -> bool:
     )
     if not compare_intent:
         return False
+    if _resolver_v2_enabled():
+        decision = await _v2_shortcut(ctx, deps, query, "compare")
+        if decision is not None:
+            if decision.action == "served":
+                return await serve_comparison(ctx, deps, list(decision.ids)[:4])
+            if decision.action == "model":
+                return False
+            return await _handle_compare_intent(ctx, deps, query)
     if getattr(get_settings(), "named_shortcut_targets_enabled", False):
         displayed_refs = list(ctx.state.displayed_products)
         targets = named_targets(query, displayed_refs, locale=ctx.language)
@@ -1032,6 +1038,121 @@ def _emit_shortcut_targets(
         n=len(targets.candidates or targets.indices),
         outcome=outcome,
     )
+
+
+def _resolver_v2_enabled() -> bool:
+    settings = get_settings()
+    return bool(
+        getattr(settings, "named_shortcut_targets_enabled", False)
+        and getattr(settings, "reference_resolver_v2_shortcuts_enabled", False)
+    )
+
+
+@dataclass(frozen=True)
+class ShortcutDecision:
+    """NX-329 — ce face o scurtătură cu referințele rezolvate de resolverul v2.
+
+    `served` = țintele sunt sigure (`ids`, în ordinea mesajului); `fallback` = mesajul nu numește
+    nimic, deci comportamentul de dinainte (toate ancorele / primele N); `model` = o referință nu
+    se poate onora pe scurtătură (negăsită, ștearsă, ambiguă în afara ecranului, o proprietate), iar
+    modelul poate căuta. `reason` e al primei referințe care a trimis turul la model."""
+
+    action: Literal["served", "fallback", "model"]
+    ids: tuple[str, ...] = ()
+    reason: str | None = None
+
+
+#: Unde poate trăi o ambiguitate pe care linkul o servește ca atare (candidații sunt pe ecran).
+_ON_SCREEN: frozenset[str] = frozenset({"shown_now", "page"})
+
+
+def decide_shortcut(
+    gate: str, refs: Sequence[Reference], resolved: Sequence[ResolvedRef]
+) -> ShortcutDecision:
+    """Politica scurtăturilor pe verdictele resolverului. PURĂ (tabelul din cardul NX-329 §5).
+
+    Link: `exact` servește; `ambiguous` servește candidații DOAR dacă sunt pe ecran (act read-only:
+    răspunsul despre toți bate o întrebare); orice altceva pleacă la model. Comparație: cere ≥ 2
+    produse DISTINCTE `exact`, altfel modelul. Fără nicio referință: comportamentul de dinainte."""
+    if not refs:
+        return ShortcutDecision("fallback")
+    act = Act(kind=gate, targets=[r.id for r in refs], query=None)  # type: ignore[arg-type]
+    for check in gate_act_targets([act], resolved):
+        if check.verdict != "ok":
+            return ShortcutDecision("model", reason=check.verdict)
+    ids: list[str] = []
+    for r in resolved:
+        read_only_ambiguity = gate == "link" and r.outcome == "ambiguous" and r.source in _ON_SCREEN
+        if r.outcome != "exact" and not read_only_ambiguity:
+            return ShortcutDecision("model", reason=r.reason or r.outcome)
+        ids += [pid for pid in r.product_ids if pid not in ids]
+    if gate == "compare" and len(ids) < 2:
+        return ShortcutDecision("model", reason="single_target")
+    return ShortcutDecision("served", tuple(ids))
+
+
+async def _v2_shortcut(
+    ctx: TurnContext, deps: PipelineDeps, query: str, gate: str
+) -> ShortcutDecision | None:
+    """NX-329 — referințele scurtăturii, rezolvate de resolverul v2 pe faptele recitite în tur.
+    None = faptele n-au putut fi citite: apelantul cade pe calea NX-326 (P6, niciodată tăcere)."""
+    trigger = _LINK_RE if gate == "link" else _COMPARE_RE
+    refs = shortcut_references(
+        query, trigger=trigger, locale=ctx.language, versus=gate == "compare"
+    )
+    resolved: list[ResolvedRef] = []
+    if refs:
+        page = _page_anchor_ref(ctx)
+        sources = ReferenceSources(
+            shown_now=tuple(
+                ShownItem(p.product_id, p.name, p.price) for p in ctx.state.displayed_products
+            ),
+            page=ShownItem(page.product_id, page.name, page.price or None) if page else None,
+        )
+        pack = getattr(ctx.business, "domain_pack", None)
+        lookup = plan_lookup(refs, sources, pack=pack, locale=ctx.language)
+        # Vocabularul judecă doar valori: un atribut, sau un nume pe care nu-l poartă niciun
+        # produs de pe ecran. „linkul la al doilea" nu plătește încărcarea lui (~1 s cu cache rece).
+        needs_vocab = bool(lookup.names) or any(r.kind == "attribute" for r in refs)
+        try:
+            vocab = await get_vocabulary(deps, ctx.business.id) if needs_vocab else None
+            facts = await fetch_reference_facts(deps, ctx.business.id, lookup)
+        except Exception:  # noqa: BLE001 — DB indisponibil: calea de dinainte, nu un tur picat
+            log.warning("reference_v2_unavailable gate=%s", gate, exc_info=True)
+            ctx.emit("reference_v2_unavailable", gate=gate)
+            return None
+        resolved = resolve_references(
+            refs, sources, facts, vocab=vocab, pack=pack, locale=ctx.language
+        )
+        for r in resolved:
+            ctx.emit(
+                "reference_v2",
+                gate=gate,
+                kind=r.kind,
+                source=r.source,
+                outcome=r.outcome,
+                reason=r.reason,
+            )
+    decision = decide_shortcut(gate, refs, resolved)
+    source = (
+        "none"
+        if not refs
+        else "unresolved"
+        if decision.action == "model"
+        else "ambiguous"
+        if any(r.outcome == "ambiguous" for r in resolved)
+        else "named"
+    )
+    ctx.emit(
+        "shortcut_targets",
+        gate=gate,
+        source=source,
+        n=len(decision.ids) or len(refs),
+        outcome=decision.action,
+        resolver="v2",
+        reason=decision.reason,
+    )
+    return decision
 
 
 def _link_targets(ctx: TurnContext, query: str, refs: list[ProductRef]) -> list[str] | None:

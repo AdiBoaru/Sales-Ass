@@ -20,6 +20,10 @@ from src.domain.facets import TypedFacet
 from src.domain.relation_kinds import EMPTY_RELATION_KINDS, RelationKindRegistry
 from src.domain.routine_steps import EMPTY_ROUTINE_STEPS, RoutineSpec
 
+#: NX-329: dimensiunile care numesc produse pe orice vertical, când pachetul nu declară altele:
+#: marca și tipul produsului. Restul (culoare, mărime, nuanță) le declară pachetul.
+DEFAULT_REFERENCE_DIMENSIONS: tuple[str, ...] = ("brand", "product_type")
+
 
 @dataclass(frozen=True)
 class FacetSpec:
@@ -161,6 +165,12 @@ class DomainPack:
     # pașii de instalare la electrocasnice), iar codul definește doar ce E un pas. Gol → niciun
     # produs n-are pas, adică exact comportamentul de dinaintea NX-280.
     routine_steps: RoutineSpec = EMPTY_ROUTINE_STEPS
+    # NX-329 (kernel pasul 2, I24): dimensiunile care NUMESC produse, deci pot fi ținta unei
+    # referințe de tip atribut («Samsung-ul», «varianta neagră»): identitate și variantă, nu nevoi.
+    # O nevoie („roșeață") nu e o țintă de act, e o schimbare de stare. Loaderul refuză aici o
+    # fațetă `binding: additive`, deci o linie de config nu poate transforma o nevoie în țintă.
+    # Etichetele de variantă sunt mereu de referință (sunt ale produsului prin construcție).
+    reference_dimensions: tuple[str, ...] = DEFAULT_REFERENCE_DIMENSIONS
 
     def value_label(self, facet_key: str, code: str, locale: str | None) -> str | None:
         """Eticheta localizată a unei VALORI de fațetă, sau `None` dacă pachetul n-o declară.

@@ -98,6 +98,27 @@ stare persistată, accese la DB) pe `main` și pe PR, cu pluginul adus din PR, �
 aplică DOAR PR-urilor care ating kernelul (`applies`): o reparație pe calea de azi schimbă legitim
 suprafața v1. Probă: `pytest tests/test_kernel_models.py tests/test_kernel_contract.py
 tests/test_kernel_replay.py tests/test_kernel_differential.py -q`.
+**Pasul 2 (NX-329) — resolverul de referințe v2, pur.** `src/conversation/references.py` (rol `pure`)
+transformă `Reference`-urile (ordinal, deictic, nume, atribut, extrem, „celălalt", „de mai devreme")
+în `ResolvedRef` `exact | ambiguous | not_found | stale`, căutând în ecran, seturile arătate mai
+devreme, subiectul parcat (setul în focus când `thread=resume`), pagină și catalog. I/O-ul stă AFARĂ:
+`plan_lookup` (pur) → `src/catalog/reference_facts.py` (UN checkout, `business_id = $1`) →
+`resolve_references` (pur), deci niciun id nu iese nerecitit din catalog în tur (I1, test de
+proprietate). `gate_act_targets` respinge o țintă care numește o proprietate (I24: „link la roșeață")
+și cere `exact` pe coș (I10). Ce NUMEȘTE produse e dată de pachet (`DomainPack.reference_dimensions`,
+implicit marcă + tip; loaderul refuză o fațetă `additive`). Catalogul găsește doar un nume distinctiv
+scris ÎNTREG: căutarea aproximativă după nume e a plannerului. Un cuvânt pe care nu-l poartă niciun
+produs din set („Xiaomi" lângă „Samsung Phone") scoate setul din joc, iar cifrele rămân oricât de
+scurte („Phone 9" ≠ „Phone 3"). Scurtăturile de link/comparație trec pe resolver sub
+`REFERENCE_RESOLVER_V2_SHORTCUTS_ENABLED` (**OFF**, aprins în PR separat): extractorul
+`reference_resolver.shortcut_references` scrie `Reference`-uri din tabelele per locale din
+`query_terms` (markeri, conectori, fillerii formulei, mutați din `deterministic`), iar
+`deterministic.decide_shortcut` servește doar ținte `exact` (la link și candidații ambigui de pe
+ecran); orice alt verdict pleacă la model, deci «linkul la Cerave» nu mai servește toate linkurile.
+Fapte necitibile ⇒ calea NX-326 (P6). `recent_sets`/`parked_topic` nu există încă (pasul 3): pe v1
+sursele respective vin goale. Stratul `resolver` rulează în replay pe `resolver_kinds.json`. Probă:
+`pytest tests/test_kernel_references.py tests/test_reference_facts_sql.py
+tests/test_nx329_shortcut_resolver.py tests/test_kernel_replay.py -q`.
 
 **NX-238 — retrievalul trece printr-un PORT, iar candidatul e inert (verdict `NOT-READY`).**
 `src/retrieval/` e contractul stabil pe care îl consumă NX-239: `RetrievalPort` + `RetrievalBundle`

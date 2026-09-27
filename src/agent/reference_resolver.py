@@ -39,8 +39,15 @@ from dataclasses import dataclass
 from typing import Literal, Protocol
 
 from src.catalog.folding import fold_text
-from src.catalog.query_terms import any_locale_stopwords, stopwords
+from src.catalog.query_terms import (
+    any_locale_stopwords,
+    connectors,
+    formula_fillers,
+    reference_markers,
+    stopwords,
+)
 from src.catalog.render_text import name_keys, unique_prefixes
+from src.conversation.interpretation import Reference
 
 ReferenceSource = Literal["action", "named", "ordinal", "page", "selected", "single", "none"]
 ReferenceOutcome = Literal["resolved", "ambiguous", "stale", "none"]
@@ -484,6 +491,112 @@ def resolve_reference(request: ReferenceRequest) -> ReferenceResolution:
     return ReferenceResolution(None, "none", "ambiguous", reason="no_anchor")
 
 
+#: Separatorul de segmente al extractorului: nu poate apărea în textul pliat (nu e literă, cifră
+#: sau punctuație pe care o scrie un client), deci nu poate lipi două referințe.
+_SEGMENT = "\x00"
+#: Markerii care ÎNCEP o referință fără nume propriu: segmentul lor e capul nominal („crema asta",
+#: „al doilea ser"), nu un nume de produs.
+_MARKER_KINDS: dict[str, tuple[str, Literal["min", "max"] | None]] = {
+    "extreme_min": ("extreme", "min"),
+    "extreme_max": ("extreme", "max"),
+    "the_other": ("the_other", None),
+    "earlier": ("earlier", None),
+    "deictic": ("deictic", None),
+}
+
+
+def _phrase_re(phrase: str) -> re.Pattern[str]:
+    return re.compile(rf"(?<![a-z0-9]){re.escape(phrase)}(?![a-z0-9])")
+
+
+def shortcut_references(
+    query: str,
+    *,
+    trigger: re.Pattern[str],
+    locale: str | None,
+    versus: bool,
+) -> list[Reference]:
+    """NX-329 — referințele pe care le scrie clientul într-o SCURTĂTURĂ (link / comparație), ca
+    `Reference`-uri ale contractului `kernel.v1.0`. Adaptorul căii fără model: pe calea
+    interpretată aceeași listă o scrie modelul (pasul 5), iar resolverul nu știe diferența.
+
+    Doar formă, niciun produs: CE fel de referință e (ordinal, deictic, extrem, „celălalt", „de
+    mai devreme", nume), nu spre ce arată. Pașii: scade declanșatorul; găsește markerii (ordinalele
+    `ORDINALS` și tabelele per locale din `query_terms`); taie restul pe conectori („și", „sau";
+    pe comparație și „cu", „vs", „față de"); un segment cu un marker e referința markerului (restul
+    segmentului e capul nominal: „crema asta"), unul fără marker, cu cel puțin un cuvânt de
+    conținut, e un NUME. Cuvintele goale și fillerii formulei de la marginile segmentului se taie.
+    Pluralele („primele două", „astea") nu sunt referințe: arată spre tot setul, adică exact ce
+    face scurtătura fără nicio referință. Plafon 6 (runtime cap-ul contractului). Locale
+    necunoscută ⇒ fără markeri și fără conectori ⇒ un singur nume ⇒ `not_found` ⇒ modelul."""
+    folded = normalize_for_match(query or "")
+    folded = trigger.sub(_SEGMENT, folded)
+    found: list[tuple[int, int, str, int | None, Literal["min", "max"] | None]] = []
+    for index, pattern in ORDINALS:
+        for match in pattern.finditer(folded):
+            found.append((match.start(), match.end(), "ordinal", index + 1, None))
+    for phrase, marker in reference_markers(locale):
+        kind, direction = _MARKER_KINDS[marker]
+        for match in _phrase_re(phrase).finditer(folded):
+            if any(s < match.end() and match.start() < e for s, e, *_ in found):
+                continue  # o frază mai lungă a luat deja locul („cel mai scump" vs „asta")
+            found.append((match.start(), match.end(), kind, None, direction))
+    found.sort()
+
+    # Conectorii despart segmentele; markerii rămân în segmentul lor, ca poziții. Conectorul se
+    # înlocuiește cu separatori de ACEEAȘI lungime: altfel pozițiile markerilor, găsite înainte,
+    # ar cădea în alt segment („cu al treilea" ar pierde ordinalul).
+    cut = folded
+    for phrase, group in connectors(locale):
+        if group == "list" or versus:
+            cut = _phrase_re(phrase).sub(lambda m: _SEGMENT * len(m.group()), cut)
+    skip = stopwords(locale) | formula_fillers(locale)
+    out: list[Reference] = []
+    offset = 0
+    for segment in cut.split(_SEGMENT):
+        start, end = offset, offset + len(segment)
+        offset = end + 1
+        markers = [f for f in found if start <= f[0] and f[1] <= end]
+        if markers:
+            for _, _, kind, ordinal, direction in markers:
+                out.append(_reference(len(out) + 1, kind, ordinal=ordinal, direction=direction))
+            continue
+        name = _name_in(segment, skip)
+        if name:
+            out.append(_reference(len(out) + 1, "name", name=name))
+    return out[:6]
+
+
+def _name_in(segment: str, skip: frozenset[str]) -> str | None:
+    """Numele dintr-un segment: textul dintre primul și ultimul cuvânt care nu e gol, cu
+    punctuația păstrată („it's skin the fresh"), sau None dacă n-are niciun cuvânt de conținut."""
+    words = [m for m in re.finditer(r"[0-9a-z]+", segment) if m.group() not in skip]
+    content = [m for m in words if len(m.group()) >= 3 and not m.group().isdigit()]
+    if not content:
+        return None
+    return " ".join(segment[words[0].start() : words[-1].end()].split())
+
+
+def _reference(
+    number: int,
+    kind: str,
+    *,
+    ordinal: int | None = None,
+    name: str | None = None,
+    direction: Literal["min", "max"] | None = None,
+) -> Reference:
+    return Reference(
+        id=f"r{number}",
+        text=name or kind,
+        kind=kind,  # type: ignore[arg-type]
+        ordinal=ordinal,
+        name=name,
+        dimension="price" if kind == "extreme" else None,
+        value=None,
+        direction=direction,
+    )
+
+
 def page_anchor_from_snapshot(snapshot: object) -> PageAnchor | None:
     """`TurnSnapshot` → `PageAnchor`, sau None.
 
@@ -517,4 +630,5 @@ __all__ = [
     "resolve_from_displayed",
     "resolve_product_reference",
     "resolve_reference",
+    "shortcut_references",
 ]

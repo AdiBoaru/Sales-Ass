@@ -2456,6 +2456,88 @@ async def find_product_named_in_query(
     return rows[0]["id"], "named_in_query"
 
 
+async def find_products_named(
+    conn: asyncpg.Connection,
+    business_id: str,
+    name: str,
+    *,
+    min_name_len: int = MIN_ANCHOR_NAME_LEN,
+    limit: int = 4,
+) -> list[tuple[str, int]]:
+    """NX-329 — produsele al căror nume DISTINCTIV apare întreg în `name`, cu lungimea lui.
+
+    EXACT predicatul lui `find_product_named_in_query` (conținere, nu similaritate; `status =
+    'active'`; filtrul de conținut), dar întoarce id-urile, inclusiv pe cele de la egalitate: la
+    resolverul de referințe o egalitate e `ambiguous` CU candidați, nu un simplu „nu știu".
+    Funcția fast path-ului rămâne neatinsă (e pe calea vie). Cel mai lung primul, apoi `p.id`."""
+    if not (name or "").strip():
+        return []
+    cs = _content_status_pred()
+    rows = await conn.fetch(
+        f"select p.id::text as id, length({_DISTINCTIVE_NAME}) as name_len"
+        " from products p"
+        " where p.business_id = $1 and p.status = 'active'"
+        f" and length({_DISTINCTIVE_NAME}) >= $3"
+        f" and position(lower(ro_unaccent({_DISTINCTIVE_NAME})) in lower(ro_unaccent($2))) > 0"
+        + (f" and {cs}" if cs else "")
+        + f" order by length({_DISTINCTIVE_NAME}) desc, p.id"
+        " limit $4",
+        business_id,
+        name,
+        min_name_len,
+        limit,
+    )
+    return [(r["id"], int(r["name_len"])) for r in rows]
+
+
+# NX-329 — faptele pe care resolverul de referințe le RECITEȘTE în tur (I1). Prețul e EXACT cel de
+# pe card (`_EFFECTIVE_PRICE`, cu fereastra promoției), atributele doar cheile cerute ($3), iar
+# etichetele de variantă vin din `product_variants`, tot pe tenant. Fără filtrul de conținut:
+# id-urile vin din ce s-a ARĂTAT deja, regula lui `get_products_by_ids`.
+_REFERENCE_FACTS_SQL = f"""
+    select
+        p.id::text                  as id,
+        p.name                      as name,
+        {_EFFECTIVE_PRICE}::float8  as price,
+        p.availability              as availability,
+        p.rating::float8            as rating,
+        b.name                      as brand,
+        (select jsonb_object_agg(k, p.attributes -> k)
+           from unnest($3::text[]) as k
+          where p.attributes ? k)   as attributes,
+        (select coalesce(array_agg(v.label order by v.label), '{{}}')
+           from product_variants v
+          where v.business_id = p.business_id and v.product_id = p.id) as variant_labels
+    from products p
+    left join brands b on b.id = p.brand_id and b.business_id = p.business_id
+    left join lateral (
+        select min(case when {_SALE_WINDOW_OK} and v.sale_price is not null
+                         and v.sale_price < v.price then v.sale_price else v.price end) as price
+        from product_variants v
+        where v.product_id = p.id and v.business_id = p.business_id
+    ) vp on true
+    where p.business_id = $1 and p.status = 'active' and p.id = any($2::uuid[])
+"""
+
+
+async def reference_facts(
+    conn: asyncpg.Connection,
+    business_id: str,
+    product_ids: Sequence[str],
+    attribute_keys: Sequence[str],
+) -> list[dict[str, Any]]:
+    """NX-329 — produsele de revalidat pentru resolverul de referințe, într-un SINGUR statement.
+
+    `business_id = $1` (P7; un id al altui tenant pur și simplu nu revine). Plafonul e al
+    apelantului (30, `MAX_LOOKUP_IDS`); aici nu se taie tăcut."""
+    if not product_ids:
+        return []
+    rows = await conn.fetch(
+        _REFERENCE_FACTS_SQL, business_id, list(product_ids), list(attribute_keys)
+    )
+    return [_row_to_product(r) for r in rows]
+
+
 _FACET_KEYS_IN_SCOPE_SQL = """
 select kv.key as dimension,
        e.elem  as value,

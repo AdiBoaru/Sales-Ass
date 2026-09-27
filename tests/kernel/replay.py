@@ -24,7 +24,12 @@ from pathlib import Path
 from typing import Any
 
 from src.catalog.folding import fold_text
-from src.conversation.interpretation import Reference, StateChange, TurnInterpretation
+from src.conversation.interpretation import (
+    Reference,
+    ResolvedRef,
+    StateChange,
+    TurnInterpretation,
+)
 from src.conversation.kernel_trace import LAYER_NAMES, Divergence, KernelTrace, first_divergence
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -74,6 +79,10 @@ class JourneyTurn:
     user_input: str
     expect: dict[str, Any]
     state_before: dict[str, Any] = field(default_factory=dict)
+    # NX-329 (aditiv, formatul rămâne v1): unde trăiesc produsele la care se poate referi turul,
+    # cu id-uri de fixture — `shown_now`, `shown_earlier` (listă de seturi, recent întâi),
+    # `parked`, `page`, `focus`, `thread`. Hrănește stratul `resolver`.
+    sources: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -95,6 +104,12 @@ def _parse_expect(raw: dict[str, Any]) -> dict[str, Any]:
         out["interpretation"] = TurnInterpretation.model_validate(
             expand_interpretation(out["interpretation"])
         )
+    if "resolver" in out:
+        # NX-329: stratul resolverului, un `ResolvedRef` per referință. `product_ids` gol poate
+        # lipsi (not_found / stale nu poartă id-uri).
+        out["resolver"] = [
+            ResolvedRef.model_validate({"product_ids": [], **item}) for item in out["resolver"]
+        ]
     return out
 
 
@@ -110,6 +125,7 @@ def load_journeys(directory: Path = JOURNEYS_DIR) -> list[Journey]:
                     user_input=t["user_input"],
                     expect=_parse_expect(t.get("expect", {})),
                     state_before=t.get("state_before", {}),
+                    sources=t.get("sources", {}),
                 )
                 for t in raw["turns"]
             )
@@ -167,6 +183,9 @@ def label_problems(journey: Journey) -> list[str]:
                 out.append(f"{where}: relative_to {change.relative_to} nedeclarat (I22)")
             if fold_text(change.quote) not in fold_text(turn.user_input):
                 out.append(f"{where}: citatul „{change.quote}” nu e în mesajul clientului")
+        for resolved in turn.expect.get("resolver", []):
+            if resolved.ref_id not in declared:
+                out.append(f"{where}: rezolvarea {resolved.ref_id} n-are referință declarată")
     return out
 
 

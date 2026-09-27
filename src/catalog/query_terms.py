@@ -151,6 +151,87 @@ def _tokens(text: str) -> list[str]:
     return [t for t in re.split(r"[^0-9a-z]+", fold(text)) if t]
 
 
+#: Numele public al tokenizatorului, pentru consumatorii din afara modulului (NX-329: resolverul
+#: de referințe taie numele cerut și numele produselor cu ACEEAȘI funcție).
+tokens = _tokens
+
+
+# NX-251 → NX-329: cuvintele care fac parte din FORMULA unei scurtături, dincolo de ce prinde
+# regexul declanșator și de cuvintele goale. Regula de includere e ACEEAȘI ca a cuvintelor goale:
+# un cuvânt intră doar dacă nu poate numi NICIODATĂ un produs, un brand sau o nevoie. Verbe de
+# arătare/trimitere, adverbe de manieră și numeralele SCRISE cu litere (o cantitate de selecție:
+# „primele două"), niciodată o CIFRĂ, fiindcă o cifră poate fi un preț, un volum sau un SPF.
+# Mutat aici din `agent/deterministic.py`: extractorul de referințe al scurtăturilor îl consumă și
+# el, iar tabelele de limbă au un singur loc (P11).
+_FORMULA_FILLERS: dict[str, frozenset[str]] = {
+    "ro": frozenset(
+        """
+        arata arati aratati trimite trimiteti da dati vezi vreau as putea poti
+        direct rapid repede acum imediat te va rog rogu hai
+        prima primul primele primii ultima ultimul ultimele ambele astea alea acelea astealalte
+        doua doi trei patru cinci
+        """.split()
+    )
+}
+
+
+def formula_fillers(locale: str | None) -> frozenset[str]:
+    """Fillerii formulei unei scurtături. Locale necunoscută → mulțimea goală (P11)."""
+    if not locale:
+        return frozenset()
+    return _FORMULA_FILLERS.get(locale.split("-")[0].lower(), frozenset())
+
+
+# NX-329 — markerii de REFERINȚĂ ai extractorului scurtăturilor: fraze care spun CE FEL de
+# referință a scris clientul, nu spre ce produs arată (asta o decide resolverul, pe date). Sunt
+# vocabular funcțional al limbii („celălalt", „de mai devreme"), la fel ca comparatorii; „ieftin" și
+# „scump" numesc direcția PREȚULUI, care e o dimensiune universală, nu a unui vertical.
+# Deixisul e doar la SINGULAR: „astea" / „acestea" arată spre tot setul afișat, adică exact ce
+# face scurtătura fără nicio referință.
+_RO_REFERENCE_MARKERS = """
+    extreme_min: cel mai ieftin, cea mai ieftina, cel mai accesibil, cea mai accesibila
+    extreme_max: cel mai scump, cea mai scumpa
+    the_other: celalalt, cealalta, celalat, celalt
+    earlier: de mai devreme, de dinainte, de adineauri, de data trecuta, de mai inainte
+    deictic: acesta, aceasta, acest, acestui, acestei, asta
+"""
+_REFERENCE_MARKERS: dict[str, tuple[tuple[str, str], ...]] = {}
+
+# NX-329 — conectorii dintre DOUĂ referințe. Două grupuri, fiindcă nu leagă la fel pe orice
+# poartă: `list` desparte ținte pe orice scurtătură („linkul la X și Y"), `versus` doar pe
+# comparație („compară X cu Y"); la link „cu" e de obicei parte din nume („crema cu acid").
+_RO_CONNECTORS = """
+    list: si, sau
+    versus: cu, vs, versus, fata de
+"""
+_CONNECTORS: dict[str, tuple[tuple[str, str], ...]] = {}
+
+
+def _table(
+    cache: dict[str, tuple[tuple[str, str], ...]], tables: dict[str, str], locale: str | None
+) -> tuple[tuple[str, str], ...]:
+    """O tabelă `op: frază, …` per locale, parsată o dată (același format ca comparatorii)."""
+    if not locale:
+        return ()
+    key = locale.split("-")[0].lower()
+    if key not in cache:
+        table = tables.get(key)
+        cache[key] = _parse_comparators(table) if table else ()
+    return cache[key]
+
+
+def reference_markers(locale: str | None) -> tuple[tuple[str, str], ...]:
+    """`(frază, fel)` pentru markerii de referință ai locale-i, cele mai lungi întâi. Felurile:
+    `extreme_min`, `extreme_max`, `the_other`, `earlier`, `deictic`. Locale necunoscută → `()`."""
+    return _table(_REFERENCE_MARKERS, {"ro": _RO_REFERENCE_MARKERS}, locale)
+
+
+def connectors(locale: str | None) -> tuple[tuple[str, str], ...]:
+    """`(frază, grup)` pentru conectorii dintre referințe (`list` / `versus`), cei mai lungi
+    întâi. Locale necunoscută → `()`: textul rămâne o singură referință, iar resolverul decide."""
+    return _table(_CONNECTORS, {"ro": _RO_CONNECTORS}, locale)
+
+
 def content_terms(query: str, locale: str | None) -> list[str]:
     """Termenii PURTĂTORI DE SENS dintr-o frază, normalizați, în ordinea din text, fără duplicate.
 

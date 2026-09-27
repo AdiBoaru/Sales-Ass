@@ -136,7 +136,11 @@
           "ron": 1
         }
       }
-    }
+    },
+    "reference_dimensions": [
+      "color",
+      "size"
+    ]
   },
   "kernel": {
     "conversation_scoped": [
@@ -161,7 +165,11 @@
         "size": "L",
         "color": "bej",
         "material": "bumbac"
-      }
+      },
+      "variants": [
+        "bej",
+        "negru"
+      ]
     },
     {
       "id": "fa-02",

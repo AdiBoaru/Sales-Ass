@@ -21,9 +21,9 @@ from typing import TYPE_CHECKING, Any
 from src.config import get_settings
 from src.domain.constraints import build_units
 from src.domain.contracts import build_category_requirements
-from src.domain.facets import build_facets
+from src.domain.facets import TypedFacet, build_facets
 from src.domain.normalize import normalize
-from src.domain.pack import DomainPack, FacetSpec, SectionSpec
+from src.domain.pack import DEFAULT_REFERENCE_DIMENSIONS, DomainPack, FacetSpec, SectionSpec
 from src.domain.relation_kinds import load_relation_kinds
 from src.domain.routine_steps import load_routine_steps
 
@@ -222,6 +222,7 @@ def load_domain_pack(business: BusinessConfig) -> DomainPack | None:
     if isinstance(override, dict):
         merged = _deep_merge(merged, override)
     currency = settings.get("currency") or merged.get("currency") or "RON"
+    facets = build_facets(merged.get("facets"))  # NX-186: registru tipizat (fail-closed)
     return DomainPack(
         vertical=vertical,
         concern_map=_norm_concern_map(merged.get("concern_map")),
@@ -254,7 +255,7 @@ def load_domain_pack(business: BusinessConfig) -> DomainPack | None:
         searchable_facets=tuple(
             k for k in (merged.get("searchable_facets") or []) if isinstance(k, str) and k
         ),
-        facets=build_facets(merged.get("facets")),  # NX-186: registru tipizat (fail-closed)
+        facets=facets,
         response_style=_norm_str_map(merged.get("response_style")),  # NX-159 felia 3
         chip_templates=_norm_chip_templates(merged.get("chip_templates")),  # NX-296
         chip_templates_v2=_norm_chip_templates(merged.get("chip_templates_v2")),  # NX-316
@@ -273,7 +274,34 @@ def load_domain_pack(business: BusinessConfig) -> DomainPack | None:
         # validă ar scrie în catalog pași pe care fațeta nu-i declară, iar filtrul ar întoarce
         # tăcut zero rânduri; o hartă absentă înseamnă doar că tenantul n-are rutine).
         routine_steps=load_routine_steps(merged.get("routine_steps")),
+        # NX-329: dimensiunile care numesc produse (I24), fără nicio fațetă aditivă.
+        reference_dimensions=_norm_reference_dimensions(merged.get("reference_dimensions"), facets),
     )
+
+
+def _norm_reference_dimensions(raw: Any, facets: tuple[TypedFacet, ...]) -> tuple[str, ...]:
+    """NX-329 (I24): lista `reference_dimensions` a pachetului, fără fațetele `additive`.
+
+    Absentă ⇒ implicitul (`DEFAULT_REFERENCE_DIMENSIONS`). Fail-closed PER INTRARE, ca restul
+    loaderului: o fațetă aditivă („concerns", „ocazie") e o nevoie sau o utilizare, nu ceva care
+    numește un produs, deci nu devine țintă de act oricât ar insista config-ul; se aruncă și se
+    loghează, restul listei rămâne."""
+    if raw is None:
+        return DEFAULT_REFERENCE_DIMENSIONS
+    if not isinstance(raw, list):
+        return DEFAULT_REFERENCE_DIMENSIONS
+    additive = {f.key for f in facets if f.binding == "additive"} | {
+        f.source_key for f in facets if f.binding == "additive"
+    }
+    out: list[str] = []
+    for key in raw:
+        if not isinstance(key, str) or not key or key in out:
+            continue
+        if key in additive:
+            log.warning("reference_dimensions: fațeta aditivă %r refuzată (I24)", key)
+            continue
+        out.append(key)
+    return tuple(out)
 
 
 def _norm_numeric_map(raw: Any) -> dict[str, float]:
