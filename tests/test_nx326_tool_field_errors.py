@@ -102,3 +102,25 @@ async def test_flag_off_still_learns_rejected_args(flag):
     await run.execute("search_products", {"query": "crema", "limit": 50})
 
     assert run.search_args == [{"query": "crema", "limit": 50}]
+
+
+async def test_an_internal_validation_error_is_not_blamed_on_the_models_arguments(
+    flag, monkeypatch
+):
+    """Un model Pydantic construit ÎN unealtă (serviciu, date din DB) nu e o greșeală a
+    modelului: nu primește „corectează câmpurile", nu se numără ca argument respins."""
+    from pydantic import BaseModel
+
+    from src.tools import base
+
+    class InternalRow(BaseModel):
+        price: float
+
+    async def broken(ctx, deps, args):
+        InternalRow(price="nu e număr")
+
+    monkeypatch.setitem(base.TOOL_REGISTRY, "search_products", broken)
+    ctx = _ctx()
+    result = await run_tool(ctx, _deps(), "search_products", {"query": "crema"})
+    assert result.llm_view == "Unealta a eșuat."
+    assert not any(e.type == "tool_arg_invalid" for e in ctx.events)
