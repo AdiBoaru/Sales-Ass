@@ -79,7 +79,9 @@ def test_i23_an_inferred_change_is_only_a_ranking_signal():
 
 @pytest.mark.parametrize(
     ("relation", "keys"),
-    [("lte", ["budget_max"]), ("gte", ["budget_min"]), ("eq", ["budget_max", "budget_min"])],
+    # NX-334: `eq` pe preț e plafon (regula contractului: un număr de preț fără comparator e
+    # `lte`); înainte scria AMBELE chei cu aceeași valoare, adică un preț exact.
+    [("lte", ["budget_max"]), ("gte", ["budget_min"]), ("eq", ["budget_max"])],
 )
 def test_a_price_bound_lands_on_the_budget_keys(relation, keys):
     quote = {"lte": "sub 100 lei", "gte": "minim 100 lei", "eq": "exact 100 lei"}[relation]
@@ -135,7 +137,8 @@ def test_remove_and_replace_act_on_the_handle():
                 )
             ],
             ReducerPolicy(vocabulary=NeedVocabulary.from_pack(SOLE)),
-        ).state.needs
+        ).state.needs,
+        NeedVocabulary.from_pack(SOLE),
     )
     removed = only(
         delta_for(

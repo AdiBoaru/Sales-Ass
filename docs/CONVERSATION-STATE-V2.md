@@ -236,6 +236,8 @@ pornească. Rollback = stinge flagul de scriere; rândurile deja v2 rămân citi
 `topic_parked{outcome}` · `topic_resumed{outcome}` · `correction{outcome}` ·
 `constraints_cleared{scope}` (NX-331: contoarele
 `parked_evicted`, `resume_not_available`, `correction_unconfirmed` sunt valorile lui `outcome`) ·
+`need_bound_crossed{bound}` (NX-334: `price`|`facet`, o limită nouă a înlocuit limita opusă
+dintr-un tur anterior) ·
 `clarification_decision{decision,reason,information_gain_bucket}` · `clarify_skipped{field}` ·
 `clarify_suppressed{field,reason}` · `web_reference_resolved{source,outcome,reason}`.
 

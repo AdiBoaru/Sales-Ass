@@ -540,7 +540,7 @@ def test_an_interpreted_shelf_key_is_kept_verbatim_like_the_subject_owner_writes
 
 def _chain(state, *changes, corrects=False, policy=CORE):
     """Un tur prin `to_delta` real, cu handle-urile stării (ce ar face pasul 6)."""
-    handles = need_handles(state.needs)
+    handles = need_handles(state.needs, policy.vocabulary)
     checked = list(changes)
     interp = TurnInterpretation(
         thread="continue",
@@ -555,7 +555,8 @@ def _chain(state, *changes, corrects=False, policy=CORE):
 
 
 def _handle_of(state, key, value) -> str:
-    return next(h.handle for h in need_handles(state.needs) if (h.key, h.value) == (key, value))
+    handles = need_handles(state.needs, CORE.vocabulary)
+    return next(h.handle for h in handles if (h.key, h.value) == (key, value))
 
 
 def _on_handle(op: str, handle: str, dimension: str, value=None) -> CheckedChange:
@@ -906,10 +907,12 @@ _PROPERTY = settings(
 def test_i4_no_blind_reset(name, data):
     """O nevoie pe conversație dispare doar prin `remove`/`set` pe cheia ei sau `clear all`. Una pe
     subiect dispare doar prin astea sau printr-o schimbare de subiect, și atunci e în `parked` (sau
-    slotul a fost evacuat, numărat)."""
+    slotul a fost evacuat, numărat). NX-334: plus limita pe care o încrucișează limita opusă nouă
+    (contractul, „Corrections and conflicts"), înlocuire numărată ca `bound_crossed`."""
     script = data.draw(_turns(name))
-    for before, delta, _, reduced, _ in _walk(name, script):
+    for before, delta, _, reduced, policy in _walk(name, script):
         after = reduced.state
+        crossed = {a.key for a in reduced.applied if a.op == "bound_crossed"}
         kept = active(after)
         parked = {(n.key, n.normalized_value) for n in (after.parked.needs if after.parked else ())}
         evicted = "evicted" in outcomes(reduced, "park")
@@ -919,6 +922,8 @@ def test_i4_no_blind_reset(name, data):
         for need in before.active_needs():
             mark = (need.key, need.normalized_value)
             if mark in kept or _touched(delta.proposals, need.key):
+                continue
+            if policy.vocabulary.dimension_of(need.key) in crossed:
                 continue
             assert need.scope is not None, f"nevoie pe conversație pierdută: {mark}"
             assert switched, f"nevoie pe subiect pierdută fără schimbare de subiect: {mark}"
@@ -1041,7 +1046,13 @@ def test_the_pack_scope_metadata_and_the_facet_data_agree(name):
     declared = {f.key for f in loaded.facets if f.scope == "conversation"}
     assert declared == set(doc["kernel"]["conversation_scoped"])
     vocab = NeedVocabulary.from_pack(loaded)
+
+    def need_keys(key: str) -> tuple[str, ...]:
+        # NX-334: o fațetă numerică are două chei de nevoie, câte una pe limită.
+        pair = vocab.bounds_for(key)
+        return tuple(k for k in pair if k) if pair is not None else (key,)
+
     for key in declared:
-        assert vocab.spec_for(key).scoped is False
+        assert all(vocab.spec_for(k).scoped is False for k in need_keys(key))
     for key in doc["kernel"]["topic_scoped"]:
-        assert vocab.spec_for(key).scoped is True
+        assert all(vocab.spec_for(k).scoped is True for k in need_keys(key))

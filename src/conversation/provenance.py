@@ -54,7 +54,13 @@ from src.conversation.interpretation import (
     StateChange,
     TurnInterpretation,
 )
-from src.conversation.needs import HARD, UNIVERSAL_SPECS
+from src.conversation.needs import (
+    HARD,
+    PRICE_BOUNDS,
+    PRICE_DIMENSION,
+    UNIVERSAL_SPECS,
+    NeedVocabulary,
+)
 from src.conversation.state_v2 import Need
 from src.domain.constraints import EMPTY_UNITS, UnitRegistry
 
@@ -64,10 +70,10 @@ MAX_CHANGES = 10
 MAX_REFERENCES = 6
 MAX_ACTS = 3
 
-PRICE = "price"
+PRICE = PRICE_DIMENSION
 UNMAPPED = "unmapped"
 #: Cheile de nevoie care stau pe dimensiunea prețului.
-PRICE_KEYS: frozenset[str] = frozenset({"budget_max", "budget_min"})
+PRICE_KEYS: frozenset[str] = frozenset(PRICE_BOUNDS)
 
 #: Potrivirile de vocabular care pot face un citat `explicit` sau îl pot contrazice. `tokens` (o
 #: submulțime de cuvinte) nu intră: „dus" ar fi atunci o valoare doar fiindcă apare în „gel de dus".
@@ -99,18 +105,25 @@ class Handle:
     source: str
     written_turn: str | None = None
     revision: int = 0
+    #: NX-334: dimensiunea citită din vocabular la construcție (`storage_min` → `storage`). Fără
+    #: vocabular rămâne regula universală (bugetul stă pe `price`).
+    of_dimension: str | None = None
 
     @property
     def dimension(self) -> str:
-        return dimension_of_key(self.key)
+        return self.of_dimension or dimension_of_key(self.key)
 
 
-def dimension_of_key(key: str) -> str:
-    """Cheia unei nevoi → dimensiunea contractului (bugetul stă pe `price`)."""
-    return PRICE if key in PRICE_KEYS else key
+def dimension_of_key(key: str, vocabulary: NeedVocabulary | None = None) -> str:
+    """Cheia unei nevoi → dimensiunea contractului. Bugetul stă pe `price`, iar limitele unei
+    fațete numerice (`storage_min` / `storage_max`, NX-334) pe fațeta lor, citite din tabelul
+    vocabularului, nu din sufixul cheii."""
+    if key in PRICE_KEYS:
+        return PRICE
+    return vocabulary.dimension_of(key) if vocabulary is not None else key
 
 
-def need_handles(needs: Sequence[Need]) -> tuple[Handle, ...]:
+def need_handles(needs: Sequence[Need], vocabulary: NeedVocabulary) -> tuple[Handle, ...]:
     """Handle-uri STABILE: nevoile ACTIVE, ordonate după (cheie, valoare), numerotate c1..cN.
 
     Aceeași funcție scrie promptul (pasul 5) și validează aici, deci un handle nu poate însemna
@@ -127,6 +140,7 @@ def need_handles(needs: Sequence[Need]) -> tuple[Handle, ...]:
             source=n.source,
             written_turn=n.source_turn_id,
             revision=n.updated_revision,
+            of_dimension=dimension_of_key(n.key, vocabulary),
         )
         for i, n in enumerate(active, 1)
     )
@@ -378,6 +392,12 @@ class _Checker:
                 return reject("unknown_reference")
             if relation not in ("lte", "gte"):
                 return reject("polarity_conflict")
+            if dimension != PRICE:
+                # Contractul („Ownership"): valoarea unei schimbări relative o calculează codul din
+                # PREȚUL recitit al țintei. Pe altă dimensiune numărul ar fi prețul pus drept
+                # lățime sau capacitate (NX-334: «mai îngustă decât asta» scria `width_max = 1999`),
+                # adică exact clasa I9: o valoare a altei dimensiuni.
+                return reject("unit_mismatch")
             # Valoarea o calculează `delta.py` din prețul RECITIT al țintei; aici doar proveniența.
             level = self._polarity_level(
                 located, relation, evidence, dimension, number_in_quote=False
@@ -500,26 +520,41 @@ class _Checker:
         )
 
 
+def _bounds_of(change: CheckedChange) -> tuple[float | None, float | None]:
+    """(limita de jos, limita de sus) pe care o pune o schimbare numerică. NX-334: `eq` e ambele
+    („256 GB" = exact 256), iar pe preț e plafon (regula contractului: un număr de preț fără
+    comparator e `lte`), același tabel ca `delta._BOUND_KEYS`."""
+    value = change.canonical_value
+    if not isinstance(value, float) or change.change.relative_to:
+        return None, None
+    relation = change.change.relation
+    if relation == "lte" or (relation == "eq" and change.dimension == PRICE):
+        return None, value
+    if relation == "gte":
+        return value, None
+    if relation == "eq":
+        return value, value
+    return None, None
+
+
 def _cross_hard_conflicts(checked: list[CheckedChange]) -> list[CheckedChange]:
-    """Limite care se încrucișează în ACELAȘI tur („sub 100, minim 150") ⇒ ambele `hard_conflict`,
-    iar poarta de ambiguitate (pasul 4) întreabă. O limită dintr-un tur ANTERIOR nu e treaba asta:
-    acolo cea nouă câștigă (reducerul)."""
+    """Limite care se încrucișează în ACELAȘI tur („sub 100, minim 150"; „256 GB, dar maxim 128")
+    ⇒ ambele `hard_conflict`, iar poarta de ambiguitate (pasul 4) întreabă. O limită dintr-un tur
+    ANTERIOR nu e treaba asta: acolo cea nouă câștigă (reducerul, `bound_crossed`)."""
     out = list(checked)
-    for i, low in enumerate(out):
-        for j, high in enumerate(out):
-            if i == j or low.rejected or high.rejected:
+    bounds = [_bounds_of(c) for c in out]
+    for i, first in enumerate(out):
+        for j, second in enumerate(out):
+            if i == j or first.rejected or second.rejected:
                 continue
-            if low.dimension != high.dimension or low.change.relative_to or high.change.relative_to:
+            if first.dimension != second.dimension:
                 continue
-            if (low.change.relation, high.change.relation) != ("lte", "gte"):
-                continue
-            if not isinstance(low.canonical_value, float) or not isinstance(
-                high.canonical_value, float
-            ):
-                continue
-            if low.canonical_value < high.canonical_value:
-                out[i] = low.model_copy(update={"rejected": "hard_conflict", "strength": "ranking"})
-                out[j] = high.model_copy(
+            low, high = bounds[i][0], bounds[j][1]
+            if low is not None and high is not None and low > high:
+                out[i] = first.model_copy(
+                    update={"rejected": "hard_conflict", "strength": "ranking"}
+                )
+                out[j] = second.model_copy(
                     update={"rejected": "hard_conflict", "strength": "ranking"}
                 )
     return out

@@ -423,8 +423,22 @@ def _handle_set_need(
             Applied("set_need", key, strength, proposal.source, "unchanged"),
         )
 
+    crossing = _crossed_bound(state, key, normalized.value, vocab)
+    if crossing is not None and not _can_override(proposal, crossing):
+        # O limită ne-explicită nu înlocuiește una spusă de client (contractul: doar `explicit`
+        # poate înlocui un `explicit`), exact ca pe aceeași cheie.
+        return RejectedUpdate("set_need", "hard_downgrade", key, proposal.source)
+
     revocations = _drop_revocations(state, key, proposal)
     outcome = "applied"
+    records: tuple[Applied, ...] = ()
+    if crossing is not None:
+        state, revocations = _retire_crossed(state, crossing, revocations, proposal)
+        records = (
+            Applied(
+                "bound_crossed", vocab.dimension_of(key), strength, proposal.source, "superseded"
+            ),
+        )
     if same_key_active is not None and not list_like:
         # CORECȚIE: valoarea veche devine `superseded` ȘI primește tombstone — nu dispare tăcut.
         revocations = _tombstone(
@@ -445,10 +459,70 @@ def _handle_set_need(
         else n
         for n in state.needs
     )
+    applied = Applied("set_need", key, strength, proposal.source, outcome)
+    # Forma de dinainte (UN `Applied`) când nu s-a încrucișat nimic: `_handle_supersede` și orice
+    # alt apelant intern citesc înregistrarea turului, nu o listă.
     return (
         replace(state, needs=(*needs, fresh), revocations=revocations),
-        Applied("set_need", key, strength, proposal.source, outcome),
+        (*records, applied) if records else applied,
     )
+
+
+def _crossed_bound(
+    state: ConversationStateV2, key: str, value: Any, vocab: NeedVocabulary
+) -> Need | None:
+    """NX-334 — limita OPUSĂ activă pe care valoarea nouă o încrucișează (jos > sus), sau None.
+
+    Contractul („Corrections and conflicts"): o limită nouă care încrucișează una dintr-un tur
+    ANTERIOR câștigă, iar cea veche e înlocuită; se numără. În ACELAȘI tur conflictul e al
+    validării (`hard_conflict`, provenance), deci aici nu ajunge. Egalitatea nu e încrucișare:
+    „exact 3" e intervalul [3, 3]."""
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return None
+    pair = vocab.bounds_for(vocab.dimension_of(key))
+    opposite_key = vocab.opposite_bound(key)
+    if pair is None or opposite_key is None:
+        return None
+    opposite = next((n for n in state.needs if n.is_active and n.key == opposite_key), None)
+    if opposite is None or not isinstance(opposite.normalized_value, (int, float)):
+        return None
+    low, high = (
+        (value, opposite.normalized_value) if key == pair[0] else (opposite.normalized_value, value)
+    )
+    return opposite if float(low) > float(high) else None
+
+
+def _can_override(proposal: StateUpdateProposal, existing: Need) -> bool:
+    """Cine poate înlocui o limită: clientul (`explicit`) oricând; altcineva doar o limită care
+    nu era a clientului."""
+    return (
+        proposal.source in REVIVE_CAPABLE_SOURCES or existing.source not in REVIVE_CAPABLE_SOURCES
+    )
+
+
+def _retire_crossed(
+    state: ConversationStateV2,
+    crossed: Need,
+    revocations: tuple[Revocation, ...],
+    proposal: StateUpdateProposal,
+) -> tuple[ConversationStateV2, tuple[Revocation, ...]]:
+    """Limita încrucișată devine `superseded`, cu tombstone (ca orice înlocuire): clientul s-a
+    răzgândit, nu a retras-o de tot."""
+    needs = tuple(
+        replace(n, status="superseded", updated_revision=state.revision) if n is crossed else n
+        for n in state.needs
+    )
+    revocations = _tombstone(
+        revocations,
+        Revocation(
+            key=crossed.key,
+            prior_value_fingerprint=value_fingerprint(crossed.normalized_value),
+            source_turn_id=proposal.turn_id,
+            revision=state.revision,
+            reason_code="superseded",
+        ),
+    )
+    return replace(state, needs=needs), revocations
 
 
 def _evict_oldest_unmapped(state: ConversationStateV2, scope: str | None) -> ConversationStateV2:
@@ -497,6 +571,11 @@ def _handle_supersede(
     if isinstance(result, RejectedUpdate):
         return replace(result, op="supersede")
     new_state, record = result
+    # NX-334: o limită nouă care încrucișează limita opusă întoarce două înregistrări
+    # (`bound_crossed`, apoi scrierea); doar ultima e înlocuirea cerută.
+    if isinstance(record, tuple):
+        *crossed, own = record
+        return new_state, (*crossed, replace(own, op="supersede", outcome="superseded"))
     return new_state, replace(record, op="supersede", outcome="superseded")
 
 
@@ -989,7 +1068,9 @@ def reduce_turn(
     for proposal in delta.proposals:
         state = _apply(state, proposal, policy, applied, rejected)
     if contradicted is not None:
-        state, record = _apply_correction(state, state_before, contradicted, delta.proposals)
+        state, record = _apply_correction(
+            state, state_before, contradicted, delta.proposals, policy.vocabulary
+        )
         applied.append(record)
 
     for proposal in executor_proposals:
@@ -1176,7 +1257,7 @@ def _contradictions(
             elif need.operator == "contains" and need.normalized_value != normalized.value:
                 # Un handle numește o valoare: pe o listă, doar acea valoare e contrazisă.
                 continue
-            dimensions.add(dimension_of_key(need.key))
+            dimensions.add(dimension_of_key(need.key, policy.vocabulary))
     return _Contradiction(frozenset(dimensions), subject)
 
 
@@ -1185,6 +1266,7 @@ def _apply_correction(
     before: ConversationStateV2,
     contradiction: _Contradiction,
     proposals: Sequence[StateUpdateProposal],
+    vocabulary: NeedVocabulary,
 ) -> tuple[ConversationStateV2, Applied]:
     """La contradicție, nevoile NEEXPLICITE (`user_implicit` / `model_inferred`) pe care turul
     anterior le-a scris pe aceeași dimensiune se retrag, cu motivul `correction`; nevoia contrazisă
@@ -1198,7 +1280,7 @@ def _apply_correction(
         for need in state.needs
         if need.is_active
         and need.source in ("user_implicit", "model_inferred")
-        and dimension_of_key(need.key) in contradiction.dimensions
+        and dimension_of_key(need.key, vocabulary) in contradiction.dimensions
         and _written_by_previous_turn(need, before)
     ]
     needs = tuple(

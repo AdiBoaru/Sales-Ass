@@ -11,6 +11,7 @@ import pytest
 
 from src.catalog.vocabulary import CatalogVocabulary, VocabEntry
 from src.conversation.interpretation import Act, Reference, StateChange, TurnInterpretation
+from src.conversation.needs import NeedVocabulary
 from src.conversation.provenance import (
     Handle,
     UserWords,
@@ -294,14 +295,14 @@ def _needs() -> tuple[Need, ...]:
 
 
 def test_handles_are_the_active_needs_in_a_stable_order():
-    handles = need_handles(_needs())
+    handles = need_handles(_needs(), NeedVocabulary())
     assert [(h.handle, h.key) for h in handles] == [("c1", "budget_max"), ("c2", "concerns")]
     assert handles[0].dimension == "price"
-    assert need_handles(tuple(reversed(_needs()))) == handles
+    assert need_handles(tuple(reversed(_needs())), NeedVocabulary()) == handles
 
 
 def test_remove_and_replace_need_a_known_handle():
-    handles = need_handles(_needs())
+    handles = need_handles(_needs(), NeedVocabulary())
     ok, unknown, wrong_dim = check_changes(
         interp(
             ch(op="remove", target="c2", quote="nu mai contează roșeața"),

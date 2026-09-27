@@ -192,6 +192,13 @@
     },
     {
       "file": "src/conversation/state_reducer.py",
+      "function": "_retire_crossed",
+      "field": "needs_topic",
+      "why": "NX-334: reducerul e SINGURUL scriitor al starii v2 (I3); functia e un pas pur al lui (rol `reducer` in tests/kernel_modules.json). Limitele incrucisate intre ture (contractul, `Corrections and conflicts`): limita opusa pe care o incruciseaza una noua devine `superseded`, cu tombstone, numarata ca `bound_crossed`.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/conversation/state_reducer.py",
       "function": "_handle_clear_all",
       "field": "clarification",
       "why": "NX-331: reducerul e SINGURUL scriitor al starii v2 (I3); functia e un pas pur al lui (rol `reducer` in tests/kernel_modules.json). `clear all` goleste intrebarea in asteptare.",

@@ -131,7 +131,7 @@
       "turns": [
         {
           "user_input": "Arată-mi și niște tablete.",
-          "state_before": {"topic": "telefoane", "c1": "storage gte 256", "c2": "price lte 3000", "shown": ["el-01", "el-02", "el-03"]},
+          "state_before": {"topic": "telefoane", "c1": "storage_min gte 256", "c2": "budget_max lte 3000", "shown": ["el-01", "el-02", "el-03"]},
           "expect": {
             "interpretation": {
               "acts": [{"kind": "find"}],
