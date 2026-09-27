@@ -1193,6 +1193,15 @@ class Settings(BaseSettings):
     named_shortcut_targets_enabled: bool = Field(
         default=True, validation_alias="NAMED_SHORTCUT_TARGETS_ENABLED"
     )
+    # NX-329 (kernel v1.0, pasul 2): țintele scurtăturilor de link și comparație vin din resolverul
+    # de referințe v2 (`conversation/references.py`), cu faptele recitite din catalog, în locul lui
+    # `named_targets`. Închide cazul lăsat descoperit de NX-326: un nume care nu e pe ecran
+    # («linkul la Cerave») nu mai servește toate linkurile, ci pleacă la model. Cere
+    # `NAMED_SHORTCUT_TARGETS_ENABLED`. OFF (implicit, până la PR-ul de aprindere) → porțile NX-326,
+    # byte-identic.
+    reference_resolver_v2_shortcuts_enabled: bool = Field(
+        default=False, validation_alias="REFERENCE_RESOLVER_V2_SHORTCUTS_ENABLED"
+    )
     # NX-326: un tur care n-a atins catalogul și nu e o clarificare („cât durează livrarea?",
     # „mersi") nu mai golește `active_search`, deci „mai arată-mi" de după el paginează căutarea de
     # dinainte. Prospețimea (`fp`) rămâne verificată la paginare. OFF → orice răspuns fără produse
