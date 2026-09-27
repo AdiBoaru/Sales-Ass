@@ -1,0 +1,397 @@
+{
+  "_note": "Pachet de fixture NX-328 (designul kernelului §G): destinatarul și ocazia sunt ale conversației, prețul e bugetul. Exemplul §C.4: «pentru sora mea, sub 200 lei» fără subiect ⇒ o întrebare, nu o căutare.",
+  "name": "gifts",
+  "vertical": "ecommerce",
+  "locale": "ro",
+  "categories": [
+    {
+      "key": "casa",
+      "name": "Casa"
+    },
+    {
+      "key": "carti",
+      "name": "Carti"
+    },
+    {
+      "key": "jocuri",
+      "name": "Jocuri"
+    },
+    {
+      "key": "ingrijire",
+      "name": "Ingrijire"
+    }
+  ],
+  "domain_pack": {
+    "facets": [
+      {
+        "key": "price",
+        "value_type": "number",
+        "source": "column",
+        "source_key": "price",
+        "operators": [
+          "lte",
+          "gte",
+          "eq"
+        ],
+        "provenance": "structural",
+        "binding": "partitioning",
+        "min_coverage": 0.98,
+        "missing_value": "skip",
+        "labels": {
+          "ro": "Pret",
+          "en": "Price"
+        }
+      },
+      {
+        "key": "category",
+        "value_type": "enum",
+        "source": "category",
+        "operators": [
+          "eq"
+        ],
+        "provenance": "structural",
+        "binding": "partitioning",
+        "min_coverage": 0.98,
+        "labels": {
+          "ro": "Categorie",
+          "en": "Category"
+        }
+      },
+      {
+        "key": "recipient",
+        "value_type": "enum",
+        "source": "attribute",
+        "source_key": "recipient",
+        "operators": [
+          "eq"
+        ],
+        "provenance": "structural",
+        "binding": "additive",
+        "missing_value": "unknown",
+        "min_coverage": 0.5,
+        "values": [
+          "ea",
+          "el",
+          "copil",
+          "cuplu"
+        ],
+        "aliases": {
+          "sora": "ea",
+          "mama": "ea",
+          "prietena": "ea",
+          "frate": "el",
+          "tata": "el"
+        }
+      },
+      {
+        "key": "occasion",
+        "value_type": "enum",
+        "source": "attribute",
+        "source_key": "occasion",
+        "operators": [
+          "eq"
+        ],
+        "provenance": "structural",
+        "binding": "additive",
+        "missing_value": "unknown",
+        "min_coverage": 0.5,
+        "values": [
+          "zi de nastere",
+          "craciun",
+          "aniversare",
+          "multumire"
+        ],
+        "aliases": {
+          "ziua ei": "zi de nastere",
+          "ziua lui": "zi de nastere"
+        }
+      }
+    ],
+    "units": {
+      "price": {
+        "canonical": "lei",
+        "default_op": "lte",
+        "factors": {
+          "lei": 1,
+          "ron": 1
+        }
+      }
+    }
+  },
+  "kernel": {
+    "conversation_scoped": [
+      "recipient",
+      "occasion"
+    ],
+    "topic_scoped": [],
+    "subject": [
+      "category"
+    ]
+  },
+  "products": [
+    {
+      "id": "gi-01",
+      "name": "Set ceai 1",
+      "category": "casa",
+      "price": 39,
+      "availability": "in_stock",
+      "attributes": {
+        "recipient": "ea",
+        "occasion": "zi de nastere"
+      }
+    },
+    {
+      "id": "gi-02",
+      "name": "Lumanare parfumata 2",
+      "category": "casa",
+      "price": 54,
+      "availability": "in_stock",
+      "attributes": {
+        "recipient": "el",
+        "occasion": "zi de nastere"
+      }
+    },
+    {
+      "id": "gi-03",
+      "name": "Carte de bucate 3",
+      "category": "carti",
+      "price": 69,
+      "availability": "in_stock",
+      "attributes": {
+        "recipient": "copil",
+        "occasion": "craciun"
+      }
+    },
+    {
+      "id": "gi-04",
+      "name": "Puzzle 1000 4",
+      "category": "jocuri",
+      "price": 84,
+      "availability": "in_stock",
+      "attributes": {
+        "recipient": "cuplu",
+        "occasion": "craciun"
+      }
+    },
+    {
+      "id": "gi-05",
+      "name": "Cana personalizata 5",
+      "category": "casa",
+      "price": 99,
+      "availability": "in_stock",
+      "attributes": {
+        "recipient": "ea",
+        "occasion": "aniversare"
+      }
+    },
+    {
+      "id": "gi-06",
+      "name": "Set cosmetice 6",
+      "category": "ingrijire",
+      "price": 114,
+      "availability": "in_stock",
+      "attributes": {
+        "recipient": "el",
+        "occasion": "aniversare"
+      }
+    },
+    {
+      "id": "gi-07",
+      "name": "Joc de societate 7",
+      "category": "jocuri",
+      "price": 129,
+      "availability": "out_of_stock",
+      "attributes": {
+        "recipient": "copil",
+        "occasion": "multumire"
+      }
+    },
+    {
+      "id": "gi-08",
+      "name": "Ceas de perete 8",
+      "category": "casa",
+      "price": 144,
+      "availability": "in_stock",
+      "attributes": {
+        "recipient": "cuplu",
+        "occasion": "multumire"
+      }
+    },
+    {
+      "id": "gi-09",
+      "name": "Set ceai 9",
+      "category": "casa",
+      "price": 159,
+      "availability": "in_stock",
+      "attributes": {
+        "recipient": "ea",
+        "occasion": "zi de nastere"
+      }
+    },
+    {
+      "id": "gi-10",
+      "name": "Lumanare parfumata 10",
+      "category": "casa",
+      "price": 174,
+      "availability": "in_stock",
+      "attributes": {
+        "recipient": "el",
+        "occasion": "zi de nastere"
+      }
+    },
+    {
+      "id": "gi-11",
+      "name": "Carte de bucate 11",
+      "category": "carti",
+      "price": 189,
+      "availability": "in_stock",
+      "attributes": {
+        "recipient": "copil",
+        "occasion": "craciun"
+      }
+    },
+    {
+      "id": "gi-12",
+      "name": "Puzzle 1000 12",
+      "category": "jocuri",
+      "price": 204,
+      "availability": "in_stock",
+      "attributes": {
+        "recipient": "cuplu",
+        "occasion": "craciun"
+      }
+    },
+    {
+      "id": "gi-13",
+      "name": "Cana personalizata 13",
+      "category": "casa",
+      "price": 219,
+      "availability": "in_stock",
+      "attributes": {
+        "recipient": "ea",
+        "occasion": "aniversare"
+      }
+    },
+    {
+      "id": "gi-14",
+      "name": "Set cosmetice 14",
+      "category": "ingrijire",
+      "price": 234,
+      "availability": "out_of_stock",
+      "attributes": {
+        "recipient": "el",
+        "occasion": "aniversare"
+      }
+    },
+    {
+      "id": "gi-15",
+      "name": "Joc de societate 15",
+      "category": "jocuri",
+      "price": 249,
+      "availability": "in_stock",
+      "attributes": {
+        "recipient": "copil",
+        "occasion": "multumire"
+      }
+    },
+    {
+      "id": "gi-16",
+      "name": "Ceas de perete 16",
+      "category": "casa",
+      "price": 264,
+      "availability": "in_stock",
+      "attributes": {
+        "recipient": "cuplu",
+        "occasion": "multumire"
+      }
+    },
+    {
+      "id": "gi-17",
+      "name": "Set ceai 17",
+      "category": "casa",
+      "price": 279,
+      "availability": "in_stock",
+      "attributes": {
+        "recipient": "ea",
+        "occasion": "zi de nastere"
+      }
+    },
+    {
+      "id": "gi-18",
+      "name": "Lumanare parfumata 18",
+      "category": "casa",
+      "price": 294,
+      "availability": "in_stock",
+      "attributes": {
+        "recipient": "el",
+        "occasion": "zi de nastere"
+      }
+    },
+    {
+      "id": "gi-19",
+      "name": "Carte de bucate 19",
+      "category": "carti",
+      "price": 309,
+      "availability": "in_stock",
+      "attributes": {
+        "recipient": "copil",
+        "occasion": "craciun"
+      }
+    },
+    {
+      "id": "gi-20",
+      "name": "Puzzle 1000 20",
+      "category": "jocuri",
+      "price": 324,
+      "availability": "in_stock",
+      "attributes": {
+        "recipient": "cuplu",
+        "occasion": "craciun"
+      }
+    },
+    {
+      "id": "gi-21",
+      "name": "Cana personalizata 21",
+      "category": "casa",
+      "price": 339,
+      "availability": "out_of_stock",
+      "attributes": {
+        "recipient": "ea",
+        "occasion": "aniversare"
+      }
+    },
+    {
+      "id": "gi-22",
+      "name": "Set cosmetice 22",
+      "category": "ingrijire",
+      "price": 354,
+      "availability": "in_stock",
+      "attributes": {
+        "recipient": "el",
+        "occasion": "aniversare"
+      }
+    },
+    {
+      "id": "gi-23",
+      "name": "Joc de societate 23",
+      "category": "jocuri",
+      "price": 369,
+      "availability": "in_stock",
+      "attributes": {
+        "recipient": "copil",
+        "occasion": "multumire"
+      }
+    },
+    {
+      "id": "gi-24",
+      "name": "Ceas de perete 24",
+      "category": "casa",
+      "price": 384,
+      "availability": "in_stock",
+      "attributes": {
+        "recipient": "cuplu",
+        "occasion": "multumire"
+      }
+    }
+  ]
+}

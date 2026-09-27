@@ -1,0 +1,461 @@
+{
+  "_note": "Pachet de fixture NX-328 (designul kernelului §G): mărimea și culoarea sunt ale PERSOANEI (conversation-scoped), categoria e subiectul (topic-scoped). Exemplul §C.3: «Nu mai vreau rochii, arată-mi fuste» păstrează mărimea M și culoarea neagră.",
+  "name": "fashion",
+  "vertical": "ecommerce",
+  "locale": "ro",
+  "categories": [
+    {
+      "key": "rochii",
+      "name": "Rochii"
+    },
+    {
+      "key": "fuste",
+      "name": "Fuste"
+    },
+    {
+      "key": "camasi",
+      "name": "Camasi"
+    },
+    {
+      "key": "pantofi",
+      "name": "Pantofi"
+    }
+  ],
+  "domain_pack": {
+    "facets": [
+      {
+        "key": "price",
+        "value_type": "number",
+        "source": "column",
+        "source_key": "price",
+        "operators": [
+          "lte",
+          "gte",
+          "eq"
+        ],
+        "provenance": "structural",
+        "binding": "partitioning",
+        "min_coverage": 0.98,
+        "missing_value": "skip",
+        "labels": {
+          "ro": "Pret",
+          "en": "Price"
+        }
+      },
+      {
+        "key": "category",
+        "value_type": "enum",
+        "source": "category",
+        "operators": [
+          "eq"
+        ],
+        "provenance": "structural",
+        "binding": "partitioning",
+        "min_coverage": 0.98,
+        "labels": {
+          "ro": "Categorie",
+          "en": "Category"
+        }
+      },
+      {
+        "key": "size",
+        "value_type": "enum",
+        "source": "attribute",
+        "source_key": "size",
+        "operators": [
+          "eq"
+        ],
+        "provenance": "structural",
+        "binding": "partitioning",
+        "missing_value": "unknown",
+        "min_coverage": 0.5,
+        "values": [
+          "XS",
+          "S",
+          "M",
+          "L",
+          "XL"
+        ],
+        "aliases": {
+          "mediu": "M",
+          "small": "S",
+          "large": "L"
+        }
+      },
+      {
+        "key": "color",
+        "value_type": "enum",
+        "source": "attribute",
+        "source_key": "color",
+        "operators": [
+          "eq"
+        ],
+        "provenance": "structural",
+        "binding": "partitioning",
+        "missing_value": "unknown",
+        "min_coverage": 0.5,
+        "values": [
+          "negru",
+          "alb",
+          "rosu",
+          "bej",
+          "albastru"
+        ],
+        "aliases": {
+          "neagra": "negru",
+          "alba": "alb",
+          "rosie": "rosu"
+        }
+      },
+      {
+        "key": "material",
+        "value_type": "enum",
+        "source": "attribute",
+        "source_key": "material",
+        "operators": [
+          "eq"
+        ],
+        "provenance": "structural",
+        "binding": "additive",
+        "missing_value": "unknown",
+        "min_coverage": 0.5,
+        "values": [
+          "bumbac",
+          "in",
+          "poliester",
+          "lana"
+        ]
+      }
+    ],
+    "units": {
+      "price": {
+        "canonical": "lei",
+        "default_op": "lte",
+        "factors": {
+          "lei": 1,
+          "ron": 1
+        }
+      }
+    }
+  },
+  "kernel": {
+    "conversation_scoped": [
+      "size",
+      "color"
+    ],
+    "topic_scoped": [
+      "material"
+    ],
+    "subject": [
+      "category"
+    ]
+  },
+  "products": [
+    {
+      "id": "fa-01",
+      "name": "Rochie Mara 1",
+      "category": "rochii",
+      "price": 199,
+      "availability": "in_stock",
+      "attributes": {
+        "size": "L",
+        "color": "bej",
+        "material": "bumbac"
+      }
+    },
+    {
+      "id": "fa-02",
+      "name": "Rochie Ilona 2",
+      "category": "rochii",
+      "price": 219,
+      "availability": "in_stock",
+      "attributes": {
+        "size": "XL",
+        "color": "negru",
+        "material": "in"
+      }
+    },
+    {
+      "id": "fa-03",
+      "name": "Rochie Sara 3",
+      "category": "rochii",
+      "price": 239,
+      "availability": "in_stock",
+      "attributes": {
+        "size": "XS",
+        "color": "rosu",
+        "material": "poliester"
+      }
+    },
+    {
+      "id": "fa-04",
+      "name": "Rochie Dora 4",
+      "category": "rochii",
+      "price": 259,
+      "availability": "in_stock",
+      "attributes": {
+        "size": "S",
+        "color": "albastru",
+        "material": "lana"
+      }
+    },
+    {
+      "id": "fa-05",
+      "name": "Rochie Nora 5",
+      "category": "rochii",
+      "price": 279,
+      "availability": "in_stock",
+      "attributes": {
+        "size": "M",
+        "color": "alb",
+        "material": "bumbac"
+      }
+    },
+    {
+      "id": "fa-06",
+      "name": "Rochie Lia 6",
+      "category": "rochii",
+      "price": 299,
+      "availability": "in_stock",
+      "attributes": {
+        "size": "L",
+        "color": "bej",
+        "material": "in"
+      }
+    },
+    {
+      "id": "fa-07",
+      "name": "Rochie Ema 7",
+      "category": "rochii",
+      "price": 319,
+      "availability": "out_of_stock",
+      "attributes": {
+        "size": "XL",
+        "color": "negru",
+        "material": "poliester"
+      }
+    },
+    {
+      "id": "fa-08",
+      "name": "Rochie Ana 8",
+      "category": "rochii",
+      "price": 339,
+      "availability": "in_stock",
+      "attributes": {
+        "size": "XS",
+        "color": "rosu",
+        "material": "lana"
+      }
+    },
+    {
+      "id": "fa-09",
+      "name": "Fusta Mara 1",
+      "category": "fuste",
+      "price": 149,
+      "availability": "in_stock",
+      "attributes": {
+        "size": "S",
+        "color": "alb",
+        "material": "bumbac"
+      }
+    },
+    {
+      "id": "fa-10",
+      "name": "Fusta Ilona 2",
+      "category": "fuste",
+      "price": 169,
+      "availability": "in_stock",
+      "attributes": {
+        "size": "M",
+        "color": "bej",
+        "material": "in"
+      }
+    },
+    {
+      "id": "fa-11",
+      "name": "Fusta Sara 3",
+      "category": "fuste",
+      "price": 189,
+      "availability": "in_stock",
+      "attributes": {
+        "size": "L",
+        "color": "negru",
+        "material": "poliester"
+      }
+    },
+    {
+      "id": "fa-12",
+      "name": "Fusta Dora 4",
+      "category": "fuste",
+      "price": 209,
+      "availability": "in_stock",
+      "attributes": {
+        "size": "XL",
+        "color": "rosu",
+        "material": "lana"
+      }
+    },
+    {
+      "id": "fa-13",
+      "name": "Fusta Nora 5",
+      "category": "fuste",
+      "price": 229,
+      "availability": "in_stock",
+      "attributes": {
+        "size": "XS",
+        "color": "albastru",
+        "material": "bumbac"
+      }
+    },
+    {
+      "id": "fa-14",
+      "name": "Fusta Lia 6",
+      "category": "fuste",
+      "price": 249,
+      "availability": "out_of_stock",
+      "attributes": {
+        "size": "S",
+        "color": "alb",
+        "material": "in"
+      }
+    },
+    {
+      "id": "fa-15",
+      "name": "Camasa Mara 1",
+      "category": "camasi",
+      "price": 129,
+      "availability": "in_stock",
+      "attributes": {
+        "size": "S",
+        "color": "alb",
+        "material": "bumbac"
+      }
+    },
+    {
+      "id": "fa-16",
+      "name": "Camasa Ilona 2",
+      "category": "camasi",
+      "price": 149,
+      "availability": "in_stock",
+      "attributes": {
+        "size": "M",
+        "color": "bej",
+        "material": "in"
+      }
+    },
+    {
+      "id": "fa-17",
+      "name": "Camasa Sara 3",
+      "category": "camasi",
+      "price": 169,
+      "availability": "in_stock",
+      "attributes": {
+        "size": "L",
+        "color": "negru",
+        "material": "poliester"
+      }
+    },
+    {
+      "id": "fa-18",
+      "name": "Camasa Dora 4",
+      "category": "camasi",
+      "price": 189,
+      "availability": "in_stock",
+      "attributes": {
+        "size": "XL",
+        "color": "rosu",
+        "material": "lana"
+      }
+    },
+    {
+      "id": "fa-19",
+      "name": "Camasa Nora 5",
+      "category": "camasi",
+      "price": 209,
+      "availability": "in_stock",
+      "attributes": {
+        "size": "XS",
+        "color": "albastru",
+        "material": "bumbac"
+      }
+    },
+    {
+      "id": "fa-20",
+      "name": "Camasa Lia 6",
+      "category": "camasi",
+      "price": 229,
+      "availability": "in_stock",
+      "attributes": {
+        "size": "S",
+        "color": "alb",
+        "material": "in"
+      }
+    },
+    {
+      "id": "fa-21",
+      "name": "Pantofi Mara 1",
+      "category": "pantofi",
+      "price": 249,
+      "availability": "out_of_stock",
+      "attributes": {
+        "size": "S",
+        "color": "alb"
+      }
+    },
+    {
+      "id": "fa-22",
+      "name": "Pantofi Ilona 2",
+      "category": "pantofi",
+      "price": 269,
+      "availability": "in_stock",
+      "attributes": {
+        "size": "M",
+        "color": "bej"
+      }
+    },
+    {
+      "id": "fa-23",
+      "name": "Pantofi Sara 3",
+      "category": "pantofi",
+      "price": 289,
+      "availability": "in_stock",
+      "attributes": {
+        "size": "L",
+        "color": "negru"
+      }
+    },
+    {
+      "id": "fa-24",
+      "name": "Pantofi Dora 4",
+      "category": "pantofi",
+      "price": 309,
+      "availability": "in_stock",
+      "attributes": {
+        "size": "XL",
+        "color": "rosu"
+      }
+    },
+    {
+      "id": "fa-25",
+      "name": "Pantofi Nora 5",
+      "category": "pantofi",
+      "price": 329,
+      "availability": "in_stock",
+      "attributes": {
+        "size": "XS",
+        "color": "albastru"
+      }
+    },
+    {
+      "id": "fa-26",
+      "name": "Pantofi Lia 6",
+      "category": "pantofi",
+      "price": 349,
+      "availability": "in_stock",
+      "attributes": {
+        "size": "S",
+        "color": "alb"
+      }
+    }
+  ]
+}

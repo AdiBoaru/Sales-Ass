@@ -1,0 +1,291 @@
+{
+  "schema_version": "kernel-journey.v1",
+  "_note": "NX-328 felia 1c: cele 12 exemple din docs/KERNEL-DESIGN.md §C, traduse în termenii contractului kernel.v1.0 (fără `thread=switch`, fără `goal`, fără `Reference.within`; `free` devine `unmapped`; o schimbare de subiect e `set category`, nu `replace` pe subiect). Etichetate doar pe `interpretation`: restul straturilor se etichetează în pașii care le construiesc. Etichetele sunt compacte (nulele și listele goale lipsesc), vezi tests/kernel/replay.py.",
+  "journeys": [
+    {
+      "journey_id": "c01-skincare-add-avoid",
+      "pack": "sole-ro",
+      "family": ["add_constraint", "polarity"],
+      "source": "KERNEL-DESIGN §C.1",
+      "turns": [
+        {
+          "user_input": "Și să nu fie foarte gras.",
+          "state_before": {"topic": "ten-ingrijirea-tenului", "c1": "price lte 100", "c2": "concerns contains hydration"},
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find"}],
+              "changes": [
+                {"op": "add", "dimension": "texture", "relation": "avoid", "value": "gras", "quote": "să nu fie foarte gras"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "c02-electronics-units",
+      "pack": "electronics",
+      "family": ["new_search", "units"],
+      "source": "KERNEL-DESIGN §C.2",
+      "turns": [
+        {
+          "user_input": "Vreau un telefon cu minim 256 GB, sub 3000 lei.",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "telefon"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "telefoane", "quote": "telefon"},
+                {"op": "add", "dimension": "storage", "relation": "gte", "number": 256, "unit": "gb", "quote": "minim 256 GB"},
+                {"op": "set", "dimension": "price", "relation": "lte", "number": 3000, "unit": "lei", "quote": "sub 3000 lei"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "c03-fashion-subject-change-keeps-person",
+      "pack": "fashion",
+      "family": ["subject_change", "scope"],
+      "source": "KERNEL-DESIGN §C.3",
+      "turns": [
+        {
+          "user_input": "Nu mai vreau rochii, arată-mi fuste.",
+          "state_before": {"topic": "rochii", "c1": "size eq M", "c2": "color eq negru"},
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "fuste", "quote": "arată-mi fuste"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "c04-gifts-no-subject",
+      "pack": "gifts",
+      "family": ["clarify", "conversation_scope"],
+      "source": "KERNEL-DESIGN §C.4",
+      "turns": [
+        {
+          "user_input": "Este pentru sora mea și nu vreau să dau mai mult de 200 lei.",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find"}],
+              "changes": [
+                {"op": "set", "dimension": "recipient", "relation": "eq", "value": "ea", "quote": "pentru sora mea"},
+                {"op": "set", "dimension": "price", "relation": "lte", "number": 200, "unit": "lei", "quote": "nu vreau să dau mai mult de 200 lei"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "c05-furniture-extreme-over-shown",
+      "pack": "furniture",
+      "family": ["reference", "extreme"],
+      "source": "KERNEL-DESIGN §C.5",
+      "turns": [
+        {
+          "user_input": "Arată-mi varianta mai mare dintre cele două.",
+          "state_before": {"shown": ["fu-01", "fu-02"]},
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "detail", "targets": ["r1"]}],
+              "references": [
+                {"id": "r1", "text": "varianta mai mare dintre cele două", "kind": "extreme", "dimension": "width", "direction": "max"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "c06-remove-by-handle",
+      "pack": "sole-ro",
+      "family": ["remove_constraint"],
+      "source": "KERNEL-DESIGN §C.6",
+      "turns": [
+        {
+          "user_input": "Nu mai contează dacă are parfum.",
+          "state_before": {"c3": "fragrance_free eq true"},
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find"}],
+              "changes": [
+                {"op": "remove", "target": "c3", "quote": "Nu mai contează dacă are parfum"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "c07-park-and-resume",
+      "pack": "electronics",
+      "family": ["subject_change", "resume", "extreme"],
+      "source": "KERNEL-DESIGN §C.7",
+      "turns": [
+        {
+          "user_input": "Arată-mi și niște tablete.",
+          "state_before": {"topic": "telefoane", "c1": "storage gte 256", "c2": "price lte 3000", "shown": ["el-01", "el-02", "el-03"]},
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "tablete", "quote": "tablete"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "Hai înapoi la telefoane. Care era cel mai ieftin?",
+          "expect": {
+            "interpretation": {
+              "thread": "resume",
+              "acts": [{"kind": "detail", "targets": ["r1"]}],
+              "references": [
+                {"id": "r1", "text": "cel mai ieftin", "kind": "extreme", "dimension": "price", "direction": "min"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "c08-aside-keeps-state",
+      "pack": "electronics",
+      "family": ["aside"],
+      "source": "KERNEL-DESIGN §C.8",
+      "turns": [
+        {
+          "user_input": "Cât durează livrarea?",
+          "state_before": {"topic": "telefoane", "active_search": "page 1"},
+          "expect": {
+            "interpretation": {
+              "thread": "aside",
+              "acts": [{"kind": "store_info", "query": "livrarea"}]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "c09-compare-then-cart",
+      "pack": "electronics",
+      "family": ["ordinal_reference", "mutation"],
+      "source": "KERNEL-DESIGN §C.9",
+      "turns": [
+        {
+          "user_input": "Care e diferența între primele două?",
+          "state_before": {"shown": ["el-01", "el-02", "el-03"]},
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "compare", "targets": ["r1", "r2"]}],
+              "references": [
+                {"id": "r1", "text": "primele două", "kind": "ordinal", "ordinal": 1},
+                {"id": "r2", "text": "primele două", "kind": "ordinal", "ordinal": 2}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "Ok, îl iau pe al doilea.",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "cart", "targets": ["r1"]}],
+              "references": [
+                {"id": "r1", "text": "al doilea", "kind": "ordinal", "ordinal": 2}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "c10-correction-by-handle",
+      "pack": "furniture",
+      "family": ["correction"],
+      "source": "KERNEL-DESIGN §C.10",
+      "turns": [
+        {
+          "user_input": "Nu, am zis bej, nu gri.",
+          "state_before": {"c1": "color eq gri"},
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find"}],
+              "changes": [
+                {"op": "replace", "target": "c1", "dimension": "color", "relation": "eq", "value": "bej", "quote": "am zis bej"}
+              ],
+              "corrects_previous_turn": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "c11-scope-ambiguity",
+      "pack": "sole-ro",
+      "family": ["ambiguity", "implicit_need"],
+      "source": "KERNEL-DESIGN §C.11",
+      "turns": [
+        {
+          "user_input": "Păi mi se usucă pielea după duș.",
+          "state_before": {"topic": "ten-ingrijirea-tenului"},
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find"}],
+              "changes": [
+                {"op": "add", "dimension": "skin_type", "relation": "eq", "value": "dry", "quote": "mi se usucă pielea"}
+              ],
+              "ambiguities": [
+                {"about": "scope", "readings": ["pielea feței", "pielea corpului"]}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "c12-deictic-then-multi-act",
+      "pack": "electronics",
+      "family": ["deictic", "multi_act", "mutation"],
+      "source": "KERNEL-DESIGN §C.12",
+      "turns": [
+        {
+          "user_input": "Vreau ceva bun pentru ea.",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find"}],
+              "references": [
+                {"id": "r1", "text": "ea", "kind": "deictic"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "Adaugă-l pe primul în coș și arată-mi o husă pentru el.",
+          "state_before": {"topic": "telefoane", "shown": ["el-01", "el-02", "el-03"]},
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {"kind": "cart", "targets": ["r1"]},
+                {"kind": "find", "query": "husă"}
+              ],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "huse", "quote": "o husă"},
+                {"op": "add", "dimension": "unmapped", "relation": "contains", "value": "compatibil", "relative_to": "r1", "quote": "o husă pentru el"}
+              ],
+              "references": [
+                {"id": "r1", "text": "primul", "kind": "ordinal", "ordinal": 1}
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

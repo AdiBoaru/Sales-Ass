@@ -1,0 +1,485 @@
+{
+  "_note": "Pachet de fixture NX-328 (designul kernelului §G): lățime în cm, număr de locuri, material, variante. Exemplul §C.5: «varianta mai mare dintre cele două» se decide pe `width` citit din catalog.",
+  "name": "furniture",
+  "vertical": "ecommerce",
+  "locale": "ro",
+  "categories": [
+    {
+      "key": "canapele",
+      "name": "Canapele"
+    },
+    {
+      "key": "mese",
+      "name": "Mese"
+    },
+    {
+      "key": "scaune",
+      "name": "Scaune"
+    }
+  ],
+  "domain_pack": {
+    "facets": [
+      {
+        "key": "price",
+        "value_type": "number",
+        "source": "column",
+        "source_key": "price",
+        "operators": [
+          "lte",
+          "gte",
+          "eq"
+        ],
+        "provenance": "structural",
+        "binding": "partitioning",
+        "min_coverage": 0.98,
+        "missing_value": "skip",
+        "labels": {
+          "ro": "Pret",
+          "en": "Price"
+        }
+      },
+      {
+        "key": "category",
+        "value_type": "enum",
+        "source": "category",
+        "operators": [
+          "eq"
+        ],
+        "provenance": "structural",
+        "binding": "partitioning",
+        "min_coverage": 0.98,
+        "labels": {
+          "ro": "Categorie",
+          "en": "Category"
+        }
+      },
+      {
+        "key": "seats",
+        "value_type": "number",
+        "source": "attribute",
+        "source_key": "seats",
+        "operators": [
+          "gte",
+          "lte",
+          "eq"
+        ],
+        "provenance": "structural",
+        "binding": "additive",
+        "missing_value": "unknown",
+        "min_coverage": 0.5
+      },
+      {
+        "key": "width",
+        "value_type": "number",
+        "source": "attribute",
+        "source_key": "width",
+        "operators": [
+          "gte",
+          "lte",
+          "eq"
+        ],
+        "provenance": "structural",
+        "binding": "additive",
+        "missing_value": "unknown",
+        "min_coverage": 0.5
+      },
+      {
+        "key": "material",
+        "value_type": "enum",
+        "source": "attribute",
+        "source_key": "material",
+        "operators": [
+          "eq"
+        ],
+        "provenance": "structural",
+        "binding": "additive",
+        "missing_value": "unknown",
+        "min_coverage": 0.5,
+        "values": [
+          "stofa",
+          "piele",
+          "lemn",
+          "metal"
+        ]
+      },
+      {
+        "key": "color",
+        "value_type": "enum",
+        "source": "attribute",
+        "source_key": "color",
+        "operators": [
+          "eq"
+        ],
+        "provenance": "structural",
+        "binding": "partitioning",
+        "missing_value": "unknown",
+        "min_coverage": 0.5,
+        "values": [
+          "gri",
+          "bej",
+          "albastru",
+          "natur",
+          "alb",
+          "negru"
+        ],
+        "aliases": {
+          "bej deschis": "bej"
+        }
+      }
+    ],
+    "units": {
+      "price": {
+        "canonical": "lei",
+        "default_op": "lte",
+        "factors": {
+          "lei": 1,
+          "ron": 1
+        }
+      },
+      "width": {
+        "canonical": "cm",
+        "default_op": "lte",
+        "factors": {
+          "cm": 1,
+          "m": 100,
+          "mm": 0.1
+        }
+      },
+      "seats": {
+        "canonical": "locuri",
+        "default_op": "eq",
+        "factors": {
+          "locuri": 1,
+          "loc": 1,
+          "persoane": 1
+        }
+      }
+    }
+  },
+  "kernel": {
+    "conversation_scoped": [],
+    "topic_scoped": [
+      "seats",
+      "width",
+      "material",
+      "color"
+    ],
+    "subject": [
+      "category"
+    ]
+  },
+  "products": [
+    {
+      "id": "fu-01",
+      "name": "Canapea Oslo 2 locuri v1",
+      "category": "canapele",
+      "price": 1899,
+      "availability": "in_stock",
+      "attributes": {
+        "seats": 2,
+        "width": 210,
+        "material": "stofa",
+        "color": "gri"
+      }
+    },
+    {
+      "id": "fu-02",
+      "name": "Canapea Oslo 3 locuri v2",
+      "category": "canapele",
+      "price": 2149,
+      "availability": "in_stock",
+      "attributes": {
+        "seats": 3,
+        "width": 245,
+        "material": "piele",
+        "color": "bej"
+      }
+    },
+    {
+      "id": "fu-03",
+      "name": "Canapea Oslo 4 locuri v3",
+      "category": "canapele",
+      "price": 2399,
+      "availability": "in_stock",
+      "attributes": {
+        "seats": 4,
+        "width": 280,
+        "material": "stofa",
+        "color": "albastru"
+      }
+    },
+    {
+      "id": "fu-04",
+      "name": "Canapea Oslo 2 locuri v4",
+      "category": "canapele",
+      "price": 2649,
+      "availability": "in_stock",
+      "attributes": {
+        "seats": 2,
+        "width": 225,
+        "material": "piele",
+        "color": "gri"
+      }
+    },
+    {
+      "id": "fu-05",
+      "name": "Canapea Oslo 3 locuri v5",
+      "category": "canapele",
+      "price": 2899,
+      "availability": "in_stock",
+      "attributes": {
+        "seats": 3,
+        "width": 260,
+        "material": "stofa",
+        "color": "bej"
+      }
+    },
+    {
+      "id": "fu-06",
+      "name": "Canapea Oslo 4 locuri v6",
+      "category": "canapele",
+      "price": 3149,
+      "availability": "in_stock",
+      "attributes": {
+        "seats": 4,
+        "width": 295,
+        "material": "piele",
+        "color": "albastru"
+      }
+    },
+    {
+      "id": "fu-07",
+      "name": "Canapea Oslo 2 locuri v7",
+      "category": "canapele",
+      "price": 3399,
+      "availability": "out_of_stock",
+      "attributes": {
+        "seats": 2,
+        "width": 240,
+        "material": "stofa",
+        "color": "gri"
+      }
+    },
+    {
+      "id": "fu-08",
+      "name": "Canapea Oslo 3 locuri v8",
+      "category": "canapele",
+      "price": 3649,
+      "availability": "in_stock",
+      "attributes": {
+        "seats": 3,
+        "width": 275,
+        "material": "piele",
+        "color": "bej"
+      }
+    },
+    {
+      "id": "fu-09",
+      "name": "Canapea Oslo 4 locuri v9",
+      "category": "canapele",
+      "price": 3899,
+      "availability": "in_stock",
+      "attributes": {
+        "seats": 4,
+        "width": 310,
+        "material": "stofa",
+        "color": "albastru"
+      }
+    },
+    {
+      "id": "fu-10",
+      "name": "Canapea Oslo 2 locuri v10",
+      "category": "canapele",
+      "price": 4149,
+      "availability": "in_stock",
+      "attributes": {
+        "seats": 2,
+        "width": 255,
+        "material": "piele",
+        "color": "gri"
+      }
+    },
+    {
+      "id": "fu-11",
+      "name": "Masa Nord 1",
+      "category": "mese",
+      "price": 599,
+      "availability": "in_stock",
+      "attributes": {
+        "seats": 4,
+        "width": 120,
+        "material": "lemn",
+        "color": "natur"
+      }
+    },
+    {
+      "id": "fu-12",
+      "name": "Masa Nord 2",
+      "category": "mese",
+      "price": 719,
+      "availability": "in_stock",
+      "attributes": {
+        "seats": 6,
+        "width": 140,
+        "material": "metal",
+        "color": "alb"
+      }
+    },
+    {
+      "id": "fu-13",
+      "name": "Masa Nord 3",
+      "category": "mese",
+      "price": 839,
+      "availability": "in_stock",
+      "attributes": {
+        "seats": 8,
+        "width": 160,
+        "material": "lemn",
+        "color": "negru"
+      }
+    },
+    {
+      "id": "fu-14",
+      "name": "Masa Nord 4",
+      "category": "mese",
+      "price": 959,
+      "availability": "out_of_stock",
+      "attributes": {
+        "seats": 4,
+        "width": 180,
+        "material": "metal",
+        "color": "natur"
+      }
+    },
+    {
+      "id": "fu-15",
+      "name": "Masa Nord 5",
+      "category": "mese",
+      "price": 1079,
+      "availability": "in_stock",
+      "attributes": {
+        "seats": 6,
+        "width": 200,
+        "material": "lemn",
+        "color": "alb"
+      }
+    },
+    {
+      "id": "fu-16",
+      "name": "Masa Nord 6",
+      "category": "mese",
+      "price": 1199,
+      "availability": "in_stock",
+      "attributes": {
+        "seats": 8,
+        "width": 220,
+        "material": "metal",
+        "color": "negru"
+      }
+    },
+    {
+      "id": "fu-17",
+      "name": "Masa Nord 7",
+      "category": "mese",
+      "price": 1319,
+      "availability": "in_stock",
+      "attributes": {
+        "seats": 4,
+        "width": 240,
+        "material": "lemn",
+        "color": "natur"
+      }
+    },
+    {
+      "id": "fu-18",
+      "name": "Masa Nord 8",
+      "category": "mese",
+      "price": 1439,
+      "availability": "in_stock",
+      "attributes": {
+        "seats": 6,
+        "width": 260,
+        "material": "metal",
+        "color": "alb"
+      }
+    },
+    {
+      "id": "fu-19",
+      "name": "Scaun Vik 1",
+      "category": "scaune",
+      "price": 199,
+      "availability": "in_stock",
+      "attributes": {
+        "seats": 1,
+        "width": 45,
+        "material": "stofa",
+        "color": "gri"
+      }
+    },
+    {
+      "id": "fu-20",
+      "name": "Scaun Vik 2",
+      "category": "scaune",
+      "price": 229,
+      "availability": "in_stock",
+      "attributes": {
+        "seats": 1,
+        "width": 46,
+        "material": "piele",
+        "color": "negru"
+      }
+    },
+    {
+      "id": "fu-21",
+      "name": "Scaun Vik 3",
+      "category": "scaune",
+      "price": 259,
+      "availability": "out_of_stock",
+      "attributes": {
+        "seats": 1,
+        "width": 47,
+        "material": "lemn",
+        "color": "natur"
+      }
+    },
+    {
+      "id": "fu-22",
+      "name": "Scaun Vik 4",
+      "category": "scaune",
+      "price": 289,
+      "availability": "in_stock",
+      "attributes": {
+        "seats": 1,
+        "width": 48,
+        "material": "metal",
+        "color": "gri"
+      }
+    },
+    {
+      "id": "fu-23",
+      "name": "Scaun Vik 5",
+      "category": "scaune",
+      "price": 319,
+      "availability": "in_stock",
+      "attributes": {
+        "seats": 1,
+        "width": 49,
+        "material": "stofa",
+        "color": "negru"
+      }
+    },
+    {
+      "id": "fu-24",
+      "name": "Scaun Vik 6",
+      "category": "scaune",
+      "price": 349,
+      "availability": "in_stock",
+      "attributes": {
+        "seats": 1,
+        "width": 50,
+        "material": "piele",
+        "color": "natur"
+      }
+    }
+  ]
+}
