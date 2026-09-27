@@ -107,18 +107,30 @@ devreme, subiectul parcat (setul în focus când `thread=resume`), pagină și c
 proprietate). `gate_act_targets` respinge o țintă care numește o proprietate (I24: „link la roșeață")
 și cere `exact` pe coș (I10). Ce NUMEȘTE produse e dată de pachet (`DomainPack.reference_dimensions`,
 implicit marcă + tip; loaderul refuză o fațetă `additive`). Catalogul găsește doar un nume distinctiv
-scris ÎNTREG: căutarea aproximativă după nume e a plannerului. Un cuvânt pe care nu-l poartă niciun
-produs din set („Xiaomi" lângă „Samsung Phone") scoate setul din joc, iar cifrele rămân oricât de
-scurte („Phone 9" ≠ „Phone 3"). Scurtăturile de link/comparație trec pe resolver sub
-`REFERENCE_RESOLVER_V2_SHORTCUTS_ENABLED` (**OFF**, aprins în PR separat): extractorul
+scris ÎNTREG: căutarea aproximativă după nume e a plannerului. Un cuvânt NECUNOSCUT pe care nu-l
+poartă niciun produs din set („Xiaomi" lângă „Samsung Phone") scoate setul din joc, iar cifrele rămân
+oricât de scurte („Phone 9" ≠ „Phone 3"). Scurtăturile de link/comparație trec pe resolver sub
+`REFERENCE_RESOLVER_V2_SHORTCUTS_ENABLED` (**ON** din PR-ul B): extractorul
 `reference_resolver.shortcut_references` scrie `Reference`-uri din tabelele per locale din
 `query_terms` (markeri, conectori, fillerii formulei, mutați din `deterministic`), iar
 `deterministic.decide_shortcut` servește doar ținte `exact` (la link și candidații ambigui de pe
 ecran); orice alt verdict pleacă la model, deci «linkul la Cerave» nu mai servește toate linkurile.
 Fapte necitibile ⇒ calea NX-326 (P6). `recent_sets`/`parked_topic` nu există încă (pasul 3): pe v1
-sursele respective vin goale. Stratul `resolver` rulează în replay pe `resolver_kinds.json`. Probă:
-`pytest tests/test_kernel_references.py tests/test_reference_facts_sql.py
-tests/test_nx329_shortcut_resolver.py tests/test_kernel_replay.py -q`.
+sursele respective vin goale. Stratul `resolver` rulează în replay pe `resolver_kinds.json`.
+**PR-ul B (aprinderea)** a trecut pe `scripts/nx329_shortcut_probe.py`: decizia NX-326 vs v2 pe
+fiecare tur real și pe fiecare chip de link/comparație OFERIT (134 de texte, 16-25 sep, singura
+fereastră cu `conversation_traces`), prin funcțiile producției, zero model. Prima rulare a picat, iar
+cauzele au fost reparate în resolver, nu în poartă: (1) flexiunea («serul Anua» pe un card „Ser",
+sufixe per locale în `query_terms.inflection_suffixes`, niciodată prefix liber); (2) cuvintele care
+DESCRIU, nu numesc («BELIF pentru ten uscat», «crema Dokdo» pe un nume englezesc): o nevoie se
+ignoră, un tip sau o marcă filtrează pe faptele recitite, iar un cuvânt necunoscut rămâne nume
+concurent (motiv `named_with_qualifier`); (3) numele întreg e ambiguu doar între cardurile care îl
+poartă ÎNTREG (GESKE ×3 lângă „… and Body"); (4) două referințe ambigue pe exact două carduri cu nume
+identic se compară (`_paired_ambiguity`). Rezultat: 0 ținte corecte pierdute; rămân 4 chip-uri
+trunchiate cu „…” (`compose._suggestion_chips`), unde fragmentul tăiat nu numește nimic și turul
+pleacă la model. Probă: `pytest tests/test_kernel_references.py tests/test_reference_facts_sql.py
+tests/test_nx329_shortcut_resolver.py tests/test_nx326_named_shortcut_targets.py
+tests/test_kernel_replay.py -q` + `PYTHONPATH=. python scripts/nx329_shortcut_probe.py`.
 
 **NX-238 — retrievalul trece printr-un PORT, iar candidatul e inert (verdict `NOT-READY`).**
 `src/retrieval/` e contractul stabil pe care îl consumă NX-239: `RetrievalPort` + `RetrievalBundle`

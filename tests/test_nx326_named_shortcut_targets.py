@@ -3,13 +3,19 @@
 B1: «trimite-mi linkul la Yuja Niacin» cu cinci carduri pe ecran servea linkurile tuturor celor
 cinci. B2: «compară Wishtrend Vitamin cu Yuja Niacin» compara primele două carduri afișate.
 Regresiile de mai jos pică pe codul de dinainte și trec cu `NAMED_SHORTCUT_TARGETS_ENABLED`.
+
+NX-329 PR B: fiecare test rulează de DOUĂ ori, cu resolverul v2 stins (calea NX-326) și aprins
+(implicitul de producție). Aprins, calea v2 trebuie să DECIDĂ turul: un `None` din `_v2_shortcut`
+(fapte necitibile ⇒ cădere tăcută pe NX-326) ar face testul să treacă pe calea veche, deci pică.
 Stub-uri DB/LLM, zero apeluri reale."""
 
 import pytest
 
 from src.agent import deterministic as det
 from src.agent.reference_resolver import named_targets
+from src.catalog.vocabulary import CatalogVocabulary
 from src.config import get_settings
+from src.conversation.references import ProductFacts, ReferenceFacts
 from src.models import (
     BusinessConfig,
     Contact,
@@ -30,6 +36,40 @@ SHOWN = [
     ProductRef("p4", "By Wishtrend Pure Vitamin C 21.5 Advanced Serum", 120.0),
     ProductRef("p5", "ROUND LAB 1025 Dokdo Cream", 99.0),
 ]
+THE_FRESH = [
+    ProductRef("p1", "IT'S SKIN The Fresh Blueberries Toner", 50.0),
+    ProductRef("p2", "IT'S SKIN The Fresh Tomato Toner", 50.0),
+    ProductRef("p3", "COSRX Low pH Cleanser", 60.0),
+]
+
+
+@pytest.fixture(autouse=True, params=[False, True], ids=["nx326", "resolver_v2"])
+def resolver(request, monkeypatch):
+    """Resolverul v2 stins/aprins. Aprins: catalogul recitește exact produsele cerute (niciunul
+    dispărut), vocabularul e gol, iar `_v2_shortcut` n-are voie să cadă pe calea NX-326."""
+    monkeypatch.setattr(get_settings(), "reference_resolver_v2_shortcuts_enabled", request.param)
+    if not request.param:
+        return False
+
+    async def fetch(deps, business_id, lookup):
+        return ReferenceFacts(
+            products={pid: ProductFacts(pid, "", None, True) for pid in lookup.ids}
+        )
+
+    async def vocabulary(deps, business_id):
+        return CatalogVocabulary(business_id=business_id, dimensions={})
+
+    decide = det._v2_shortcut
+
+    async def must_decide(ctx, deps, query, gate):
+        decision = await decide(ctx, deps, query, gate)
+        assert decision is not None, "calea v2 a căzut pe NX-326 (fapte necitibile)"
+        return decision
+
+    monkeypatch.setattr(det, "fetch_reference_facts", fetch)
+    monkeypatch.setattr(det, "get_vocabulary", vocabulary)
+    monkeypatch.setattr(det, "_v2_shortcut", must_decide)
+    return True
 
 
 @pytest.fixture(autouse=True)
@@ -152,12 +192,7 @@ async def test_b1_link_without_a_name_still_serves_every_anchor(flag, catalog):
 
 
 async def test_b1_link_to_a_word_shared_by_two_serves_both_candidates(flag, catalog):
-    shown = [
-        ProductRef("p1", "IT'S SKIN The Fresh Blueberries Toner", 50.0),
-        ProductRef("p2", "IT'S SKIN The Fresh Tomato Toner", 50.0),
-        ProductRef("p3", "COSRX Low pH Cleanser", 60.0),
-    ]
-    ctx = _ctx("dă-mi linkul la The Fresh", shown=shown)
+    ctx = _ctx("dă-mi linkul la The Fresh", shown=THE_FRESH)
     await agent_stage(ctx, _deps())
 
     assert catalog == [["p1", "p2"]]
