@@ -46,6 +46,7 @@ from src.conversation.references import (
     name_key,
     plan_lookup,
     resolve_references,
+    sources_from_state,
 )
 from src.conversation.state_reducer import (
     ReducerPolicy,
@@ -281,20 +282,15 @@ def state_view(state: ConversationStateV2) -> dict[str, Any]:
     return view
 
 
-def _sources_from_state(state: ConversationStateV2, thread: str) -> ReferenceSources:
-    """Sursele resolverului din starea REDUSĂ, exact ce face `deterministic._state_v2_sources`
-    pe calea v2: ecranul, seturile de mai devreme, parcatul și focusul."""
+#: NX-335: sursele resolverului din starea redusă sunt acum o funcție PURĂ din `references.py`
+#: (`sources_from_state`), folosită de aici și de replay-ul offline: o singură copie.
+_sources_from_state = sources_from_state
 
-    def items(refs) -> tuple[ShownItem, ...]:
-        return tuple(ShownItem(d.product_id, d.name, d.price) for d in refs)
 
-    return ReferenceSources(
-        shown_now=items(state.references.displayed_products),
-        shown_earlier=tuple(items(s) for s in state.references.recent_sets),
-        parked=items(state.parked.shown) if state.parked else (),
-        focus=state.references.selected_product,
-        thread=thread,  # type: ignore[arg-type]
-    )
+def category_menu(name: str) -> tuple[tuple[str, int], ...]:
+    """Meniul de rafturi al pachetului, în forma lui `list_category_menu` (cheie, mărime),
+    ordonat pe cheie ca SQL-ul, din vocabularul de fixture (doar rafturile cu produse)."""
+    return tuple(sorted((e.key, e.count) for e in vocabulary(name).categories))
 
 
 def _shown_proposal(name: str, ids: tuple[str, ...]) -> StateUpdateProposal:

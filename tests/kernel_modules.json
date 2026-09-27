@@ -10,7 +10,8 @@
         "src/conversation/provenance.py",
         "src/conversation/delta.py",
         "src/conversation/ambiguity_gate.py",
-        "src/conversation/answer_policy.py"
+        "src/conversation/answer_policy.py",
+        "src/conversation/interpretation_check.py"
       ]
     },
     "planner": {
@@ -21,7 +22,9 @@
     },
     "adapter": {
       "doc": "Singurul modul de kernel care are voie să cheme modelul (I13): construiește promptul și schema, face UN apel complete_schema. Nu scrie stare, nu construiește SearchArgs.",
-      "modules": []
+      "modules": [
+        "src/conversation/turn_interpreter.py"
+      ]
     },
     "reducer": {
       "doc": "Singurul scriitor de stare (I3). Pur (I13, I14, text brut), dar scrie starea, deci poarta I3 nu i se aplică.",
@@ -41,7 +44,5 @@
       ]
     }
   },
-  "planned": {
-    "src/conversation/turn_interpreter.py": "adapter"
-  }
+  "planned": {}
 }

@@ -78,6 +78,18 @@ class Sampling(NamedTuple):
     reasoning_on: bool
 
 
+class SchemaReply(NamedTuple):
+    """NX-335 — ce a întors furnizorul pe un apel cu schemă strictă, NEINTERPRETAT.
+
+    `complete_schema` parsează conținutul și pune `{}` în locul unui conținut lipsă, deci un refuz,
+    un răspuns gol și unul tăiat la plafon arată la fel pentru apelant. Adaptorul de interpretare
+    trebuie să le deosebească (fiecare e alt `outcome`), așa că le primește separat."""
+
+    content: str | None
+    refusal: str | None
+    finish_reason: str | None
+
+
 class CallBudget(NamedTuple):
     """NX-311 — UN proprietar al întrebării „cât are voie apelul ăsta" (P3).
 
@@ -573,12 +585,28 @@ def _note_cache_on_span(resp: Any) -> None:
         return
 
 
-def _note_call(shape: str, reasoning: bool, started: float, resp: Any, *, ok: bool) -> None:
+def _note_call(
+    shape: str,
+    reasoning: bool,
+    started: float,
+    resp: Any,
+    *,
+    ok: bool,
+    purpose: str | None = None,
+) -> None:
     """NX-312: rândul apelului în `llm_usage.per_call`. Best-effort, ca `_note_cache_on_span`: o
-    măsurătoare care aruncă ar transforma un apel reușit într-unul eșuat (P6)."""
+    măsurătoare care aruncă ar transforma un apel reușit într-unul eșuat (P6).
+
+    NX-335: `purpose` (derivat din cerere de `_guarded`) intră pe rând doar când există, deci
+    rândurile apelurilor de azi rămân identice."""
     try:
         usage.record_call(
-            resp, shape=shape, reasoning=reasoning, ms=(perf_counter() - started) * 1000.0, ok=ok
+            resp,
+            shape=shape,
+            reasoning=reasoning,
+            ms=(perf_counter() - started) * 1000.0,
+            ok=ok,
+            purpose=purpose,
         )
     except Exception:  # noqa: BLE001
         return
@@ -602,7 +630,15 @@ class LLMClient:
         self.model_moderation = model_moderation
         self.model_vision = model_vision
 
-    def _sampling(self, *, agent: bool, model: str, has_tools: bool = False) -> "Sampling":
+    def _sampling(
+        self,
+        *,
+        agent: bool,
+        model: str,
+        has_tools: bool = False,
+        effort: str | None = None,
+        temperature: float | None = None,
+    ) -> "Sampling":
         """Params trimiși la chat.completions. Ordinea contează: întâi decidem modul de
         RAȚIONAMENT, fiindcă de el atârnă și `temperature`, și dreptul de a trimite tool-uri
         (vezi tabelul de la `_MODEL_PROFILES`).
@@ -625,7 +661,12 @@ class LLMClient:
         configurat și ce pleacă pe sârmă.
 
         Triajul (agent=False) nu primește ceiling (JSON scurt). embed/moderate/vision nu trec
-        pe aici."""
+        pe aici.
+
+        NX-335: `effort` / `temperature` = valori PER APEL, care bat setarea agentului pe apelul
+        ăsta (interpretarea turului rulează la `none` și cu temperatura ei). Aceleași reguli de
+        profil ca azi: un model fără `reasoning_effort` nu-l primește (numărat), iar temperatura
+        pleacă doar cu raționamentul oprit. Lipsă (`None`) ⇒ exact calea de dinainte."""
         s = get_settings()
         profile = model_profile(model)
         out: dict[str, Any] = {}
@@ -644,7 +685,10 @@ class LLMClient:
             # tăcut fereastra largă. Cazul e deja numărat mai sus, deci nu degradează pe tăcute.
             return Sampling(out, reasoning_on=False)
 
-        wanted = (getattr(s, "llm_reasoning_effort_agent", "") or "").strip() if agent else ""
+        if effort is not None:
+            wanted = effort.strip()
+        else:
+            wanted = (getattr(s, "llm_reasoning_effort_agent", "") or "").strip() if agent else ""
         effort = wanted
         if has_tools and "reasoning_effort" in profile.params:
             # Function tools nu sunt suportate pe `chat.completions` cu raționamentul pornit, iar
@@ -663,14 +707,24 @@ class LLMClient:
         reasoning_on = effort != _NO_REASONING if effort else profile.reasons_by_default
         if s.llm_sampling_enabled:
             if "temperature" in profile.params and not reasoning_on:
-                out["temperature"] = (
-                    s.llm_temperature_agent if agent else s.llm_temperature_background
-                )
+                if temperature is not None:
+                    out["temperature"] = temperature
+                else:
+                    out["temperature"] = (
+                        s.llm_temperature_agent if agent else s.llm_temperature_background
+                    )
             else:
                 turn_latency.degrade("llm_param_unsupported_temperature")
         return Sampling(out, reasoning_on=reasoning_on)
 
-    async def _chat(self, *, agent: bool, **kwargs: Any):
+    async def _chat(
+        self,
+        *,
+        agent: bool,
+        effort: str | None = None,
+        temperature: float | None = None,
+        **kwargs: Any,
+    ):
         """Wrapper unic pe chat.completions.create: retry bounded (NX-126) + sampling params.
 
         NX-241: plafonul de timp al UNUI apel (`llm_call_cap_ms`) intră aici, nu în fiecare
@@ -678,9 +732,16 @@ class LLMClient:
 
         NX-311: tot aici intră și ceasul apelului, derivat din ACELAȘI bit care decide dacă cererea
         e legală (`Sampling.reasoning_on`). Clientul e un singleton per proces, deci nu poate purta
-        două ceasuri — `timeout` pleacă per CERERE."""
+        două ceasuri — `timeout` pleacă per CERERE.
+
+        NX-335: `effort` / `temperature` sunt parametri NUMIȚI, nu kwargs: altfel ar pleca pe sârmă
+        ca argumente necunoscute. Merg doar în `_sampling`."""
         sampling = self._sampling(
-            agent=agent, model=kwargs["model"], has_tools=bool(kwargs.get("tools"))
+            agent=agent,
+            model=kwargs["model"],
+            has_tools=bool(kwargs.get("tools")),
+            effort=effort,
+            temperature=temperature,
         )
         kwargs.update(sampling.params)
         resp = await self._guarded(
@@ -708,6 +769,8 @@ class LLMClient:
         budget = call_budget(s, reasoning_on=reasoning_on)
         # NX-312: forma se citește ÎNAINTE de apel, din cererea care chiar pleacă pe sârmă.
         shape = usage.request_shape(kwargs)
+        # NX-335: scopul apelului, derivat din ACEEAȘI cerere (numele schemei), ca `shape`.
+        purpose = usage.request_purpose(kwargs)
         started = perf_counter()
         try:
             resp = await _with_retry(
@@ -721,9 +784,9 @@ class LLMClient:
         except BaseException:
             # Și apelul EȘUAT e un rând: timpul lui a fost plătit de tur. Re-ridicăm neatins —
             # măsurătoarea nu are voie să schimbe ce vede apelantul (P6, P10).
-            _note_call(shape, reasoning_on, started, None, ok=False)
+            _note_call(shape, reasoning_on, started, None, ok=False, purpose=purpose)
             raise
-        _note_call(shape, reasoning_on, started, resp, ok=True)
+        _note_call(shape, reasoning_on, started, resp, ok=True, purpose=purpose)
         _note_cache_on_span(resp)
         return resp
 
@@ -841,7 +904,30 @@ class LLMClient:
         agent pentru recomandarea structurată (model iZi): modelul emite DOAR cuvinte +
         referințe product_id, niciun preț/link. Modelul implicit = agent (mini), care deja
         depinde de `strict:true` în tool-uri. Ridică la JSON invalid / eroare API — caller
-        prinde și degradează pe calea de proză liberă."""
+        prinde și degradează pe calea de proză liberă.
+
+        NX-335: un strat peste `complete_schema_raw`, fără parametrii noi, deci cererea și
+        rezultatul rămân exact cele de dinainte pentru toți apelanții de azi."""
+        reply = await self.complete_schema_raw(system, user, schema, model=model)
+        return json.loads(reply.content or "{}")
+
+    async def complete_schema_raw(
+        self,
+        system: str,
+        user: str,
+        schema: dict[str, Any],
+        *,
+        model: str | None = None,
+        reasoning_effort: str | None = None,
+        temperature: float | None = None,
+    ) -> SchemaReply:
+        """NX-335 — același apel ca `complete_schema`, dar întoarce ce a spus FURNIZORUL:
+        conținutul brut, refuzul și motivul de oprire, neinterpretate. Adaptorul de interpretare
+        decide `outcome`-ul din ele (refuz ≠ tăiere ≠ conținut gol).
+
+        `reasoning_effort` / `temperature` bat setările agentului pe apelul ăsta (vezi
+        `_sampling`); lipsă ⇒ cererea lui `complete_schema`. Ridică la eroare de API, ca înainte:
+        apelantul decide degradarea."""
         mdl = model or self.model_agent
         # NX-300: apelul ăsta compune răspunsul bogat al căii v1 (`finalize._rich`) și era SINGURUL
         # apel de model de pe drumul sincron fără span. Pe turul `3e582c6d` a luat 86,7 s dintr-un
@@ -849,6 +935,8 @@ class LLMClient:
         with turn_latency.span("model"):
             resp = await self._chat(
                 agent=True,
+                effort=reasoning_effort,
+                temperature=temperature,
                 model=mdl,
                 messages=[
                     {"role": "system", "content": system},
@@ -857,8 +945,13 @@ class LLMClient:
                 response_format={"type": "json_schema", "json_schema": schema},
             )
         usage.record_chat(resp, mdl)
-        content = resp.choices[0].message.content or "{}"
-        return json.loads(content)
+        choice = resp.choices[0]
+        message = choice.message
+        return SchemaReply(
+            content=message.content,
+            refusal=getattr(message, "refusal", None),
+            finish_reason=getattr(choice, "finish_reason", None),
+        )
 
     async def complete(self, system: str, user: str, *, model: str | None = None) -> str:
         """Apel chat care întoarce TEXT simplu (nu JSON). Modelul implicit = agent

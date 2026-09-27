@@ -254,6 +254,50 @@ sesiunea DERIVATĂ din plan ca în producție, nu setată de mână); snapshot-u
 pachete: `scripts/kernel_plan_snapshot.py` (`--write`). Probă: `pytest tests/test_kernel_planner.py
 tests/test_rank_terms_sql.py tests/test_planner_only_fields.py tests/test_kernel_contract.py
 tests/test_kernel_replay.py -q` + `python scripts/kernel_plan_snapshot.py`.
+**Pasul 5 (NX-335) — adaptorul de interpretare: UN apel, iar validarea e a kernelului pur.** Două
+module, fără apelant în producție până la pasul 6. `src/conversation/turn_interpreter.py` (rol
+`adapter`, SINGURUL modul de kernel care cheamă modelul): `interpret_turn(llm, InterpretInput,
+business_id=…)` → `InterpretedTurn{outcome, interpretation, validated, event, vocabulary_snapshot}`,
+UN `complete_schema_raw` strict, fără reparație (I13), fără excepție pe TOT corpul (P6:
+`internal_error` / `provider_error` / `refused` / `truncated` / `invalid_json` / `schema_violation` /
+`ok`; `internal_error` e al nostru, cu zero apeluri dacă pică înaintea apelului). Vederea
+(`render_view`) are blocuri cu etichete fixe (CONSTRAINTS, SUBJECT + PARKED cu setul parcat, fiindcă
+resolverul caută și acolo, ON SCREEN, EARLIER,
+PENDING, HISTORY), iar fiecare vine din ACEEAȘI sursă ca validatorul: handle-urile `cN` din
+`need_handles`, `#i` din `displayed_products` (sursa resolverului, acum `references.sources_from_state`,
+promovat din teste), cuvintele clientului din fereastra de 8 mesaje din care se derivă `UserWords`
+(clientul verbatim, botul tăiat la graniță de propoziție); pe ecran nume scurte (`display_name`),
+fără id-uri (I1) și fără prețuri. Promptul: instrucțiuni GENERICE în engleză (P11, `locale` numit,
+zero exemple în cod, poarta I14 pe adaptor), meniul de dimensiuni din pachet + vocabular (valori
+ordonate pe mărimea rotunjită cu `prompt_builder.shelf_size`, plafon 20, eticheta pachetului când
+există), meniul de rafturi pe CHEI cu mărimea rotunjită; schema `turn_interpretation` cu enumul ==
+`tenant_dimensions(pack)`. `src/conversation/interpretation_check.py` (rol `pure`, I13 verificat și
+tranzitiv) ține `INTERPRET_PROMPT_VERSION`, `parse_reply`, `validate` (compune `check_changes` și I22
+pe TOATE actele și referințele, ca poarta NX-332; NU taie nimic, `overflow` doar numără: tăierea de la
+coadă ar pierde actul principal), `snapshot_id` (SHA-256 pe TOT ce citește validarea din pachet: fațete cu
+aliasuri, valori, `enforce_ready`, `value_type`, `operators`, `scope`, `source_key`, unități,
+overlay, plus vocabularul CU `count`: detector de drift, nu reproducere), `format_value` (numere
+exacte, fără exponent) și evenimentul `turn_interpretation` (I18: versiunea
+contractului pe toate cele șapte `outcome`, vocabular închis, zero text de client). Clientul:
+`complete_schema_raw` întoarce `SchemaReply{content, refusal, finish_reason}` (refuz ≠ tăiere ≠ gol),
+`complete_schema` e un strat peste el cu cererea BYTE-IDENTICĂ (test pe kwargs capturate pe `main`);
+`_chat`/`_sampling` primesc `effort`/`temperature` PER APEL (`LLM_REASONING_EFFORT_INTERPRET=none`,
+vocabular ÎNCHIS `config.InterpretEffort`, deci gol sau necunoscut pică la boot, iar
+`LLM_TEMPERATURE_INTERPRET=0.2`, deci ceasul NX-311 de 30 s); `llm_usage.per_call[].purpose =
+"interpret"` DERIVAT din numele schemei (`usage.request_purpose`), absent pe apelurile de azi. Felia
+5c: `scripts/nx335_interpret_smoke.py` (`--message` obligatoriu, `--yes` = UN apel, îl rulează Adi) și
+`scripts/nx335_interpret_replay.py` (`--snapshot` = instantaneul LOCAL, gitignored, al celor 127 de ture
+SOLE din 16-25 sep + pachet, meniu și vocabular; implicit dry-run cu zero apeluri; `--yes` = raportul,
+lanțul kernelului prin funcțiile producției cu ecranul lui v1 sintetizat ca `set_references`
+(`processor._displayed_product_refs`), `--efforts none,low` cu ordinea amestecată per tur;
+comparatorul potrivește pe clasa op-ului + dimensiune + valoare + clasa relației, valorile nule în
+afara F1, și numără prețurile puse în locul unei limite relative). Etichetele sunt în
+`tests/golden/kernel_real/sole-ro.json` (127 de ture, 37 `uncertain`, fără text de client, verificat
+de test). Snapshot-urile promptului pe 4 pachete: `scripts/kernel_prompt_snapshot.py` (`--write`).
+Probă: `pytest tests/test_turn_interpreter.py tests/test_interpretation_check.py
+tests/test_llm_interpret_effort.py tests/test_usage_purpose.py tests/test_nx335_interpret_replay.py
+tests/test_nx335_review.py tests/test_kernel_contract.py tests/test_kernel_replay.py -q` +
+`python scripts/kernel_prompt_snapshot.py`.
 
 **NX-238 — retrievalul trece printr-un PORT, iar candidatul e inert (verdict `NOT-READY`).**
 `src/retrieval/` e contractul stabil pe care îl consumă NX-239: `RetrievalPort` + `RetrievalBundle`

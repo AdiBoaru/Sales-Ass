@@ -82,6 +82,8 @@ scripts/sim/runs/
 # Certificatul de pereche (SHA backend + SHA frontend) e artefact de CI, nu sursă: îl produce
 # rularea, îl consumă NX-249. Un fișier comis ar fi provenance care nu corespunde niciunei rulări.
 reports/stage1/
+# NX-335: instantaneul corpusului real (texte de client) și rapoartele de replay rămân LOCALE.
+reports/nx335/
 .env.new
 
 # Spațiu local de lucru (hărți, note, rapoarte personale) — niciodată în git

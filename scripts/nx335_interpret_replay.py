@@ -1,0 +1,976 @@
+"""NX-335 felia 5c — raportul de acord al adaptorului de interpretare pe turele reale.
+
+Întrebarea: citește modelul turele reale suficient de bine încât cablarea de la pasul 6 să merite?
+Pași, fiecare cu modul lui:
+
+1. `--snapshot` (ZERO apeluri de model, DB read-only): instantaneul corpusului, ÎNAINTE ca retenția
+   `conversation_traces` (30 de zile) să-l șteargă. Pentru fiecare tur: textul clientului și al
+   botului, ce a arătat v1 (`recommended`) și argumentele căutării v1 (`analytics_events`
+   `tool_call` + `product_search`, pe `turn_id`); lângă el pachetul, meniul de rafturi și
+   vocabularul din ziua instantaneului (cu `vocabulary_snapshot`), ca rularea să rezolve pe același
+   vocabular oricând ar porni. Totul local, în `reports/nx335/`, NU în repo (texte de client).
+2. implicit (`--dry-run`, ZERO apeluri): corpusul din instantaneu, tokenii estimați și costul.
+3. `--yes`: rularea reală, un apel pe tur pe braț de efort (`--efforts none` implicit;
+   `none,low` rulează ambele, cu ordinea amestecată per tur, tiparul NX-312 felia 5). **Consumă
+   credite OpenAI; o pornește Adi.**
+
+Reconstrucția turului trece prin funcțiile PRODUCȚIEI, în lanț pe conversație: starea kernelului
+pornește goală, iar fiecare tur trece prin `validate` → `resolve_references` (faptele recitite din
+catalog, `reference_facts`, read-only) → `to_delta` → `reduce_turn`; sursele resolverului vin din
+`references.sources_from_state`. Ecranul e al lui v1: kernelul nu execută aici, deci scriptul
+sintetizează din `recommended` EXACT propunerea pe care o emite producția (`set_references`,
+`source="catalog"`, deci `recent_sets` se rotește ca acolo). Poarta și plannerul rulează doar
+pentru comparația cu ce a căutat v1. Fiecare braț își ține propriul lanț de stare.
+
+Limita, declarată: ecranul e al lui v1, nu al planului kernelului, iar o greșeală la turul 2 se
+propagă în starea turului 3; de aceea raportul dă și primul tur divergent per conversație.
+
+    PYTHONPATH=. python scripts/nx335_interpret_replay.py --business sole-ro --snapshot
+    PYTHONPATH=. python scripts/nx335_interpret_replay.py --business sole-ro            # dry-run
+    PYTHONPATH=. python scripts/nx335_interpret_replay.py --business sole-ro --yes
+    PYTHONPATH=. python scripts/nx335_interpret_replay.py --efforts none,low --yes
+"""
+
+from __future__ import annotations
+
+import argparse
+import asyncio
+import json
+import math
+import random
+import sys
+from collections import Counter
+from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
+from src.agent import usage  # noqa: E402
+from src.agent.turn_planner import PlannedTurn, plan_turn  # noqa: E402
+from src.catalog.vocabulary import CatalogVocabulary, VocabEntry  # noqa: E402
+from src.config import INTERPRET_EFFORTS  # noqa: E402
+from src.conversation.ambiguity_gate import (  # noqa: E402
+    GateOutcome,
+    decide_ambiguity,
+    lookup_attributes,
+)
+from src.conversation.clarification_policy import ClarificationPolicy  # noqa: E402
+from src.conversation.delta import TurnDelta, to_delta  # noqa: E402
+from src.conversation.interpretation import (  # noqa: E402
+    ResolvedRef,
+    TurnInterpretation,
+)
+from src.conversation.interpretation_check import (  # noqa: E402
+    Validated,
+    format_value,
+    snapshot_id,
+    validate,
+)
+from src.conversation.needs import NeedVocabulary  # noqa: E402
+from src.conversation.provenance import UserWords, need_handles  # noqa: E402
+from src.conversation.references import (  # noqa: E402
+    CatalogLookup,
+    ReferenceFacts,
+    plan_lookup,
+    resolve_references,
+    sources_from_state,
+)
+from src.conversation.state_reducer import (  # noqa: E402
+    ReducerPolicy,
+    StateUpdateProposal,
+    reduce_turn,
+)
+from src.conversation.state_v2 import ConversationStateV2  # noqa: E402
+from src.conversation.turn_interpreter import (  # noqa: E402
+    InterpretedTurn,
+    InterpretInput,
+    interpret_turn,
+    system_prompt,
+    user_prompt,
+    user_words,
+)
+from src.models import BusinessConfig  # noqa: E402
+
+OUT_DIR = ROOT / "reports" / "nx335"
+LABELS_DIR = ROOT / "tests" / "golden" / "kernel_real"
+CORPUS_FILE = "corpus.jsonl"
+VOCAB_FILE = "vocabulary.json"
+#: Estimare grosieră de tokeni (≈ 4 caractere pe token), declarată: tokenizerul real e al
+#: furnizorului, iar raportul real citește tokenii din `per_call`.
+CHARS_PER_TOKEN = 4
+#: Ieșirea estimată pe tur (cardul, „Cost"): o interpretare are ~400 de tokeni.
+EST_OUTPUT_TOKENS = 400
+#: Pragurile PREÎNREGISTRATE din card (propunere; le ratifică Adi înainte de rulare).
+THRESHOLDS = {
+    "primary_act": 0.90,
+    "thread": 0.95,
+    "changes_f1": 0.85,
+    "unknown_reference_max": 0.02,
+}
+GATE_POLICY = ClarificationPolicy()
+FactsFn = Callable[[CatalogLookup], Awaitable[ReferenceFacts]]
+
+
+# --- instantaneul (fișiere locale) ---------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class CorpusTurn:
+    """Un tur real, din instantaneu. Textele clientului/botului rămân LOCALE (nu intră în repo)."""
+
+    turn_id: str
+    conversation_id: str
+    seq: int
+    created_at: str
+    language: str
+    client_text: str
+    bot_text: str
+    recommended: tuple[dict[str, Any], ...]
+    tool_calls: tuple[dict[str, Any], ...] = ()
+    product_search: tuple[dict[str, Any], ...] = ()
+
+
+@dataclass(frozen=True)
+class Snapshot:
+    business: BusinessConfig
+    pack: Any
+    vocab: CatalogVocabulary
+    category_menu: tuple[tuple[str, int], ...]
+    vocabulary_snapshot: str
+    turns: tuple[CorpusTurn, ...]
+
+    def conversations(self) -> list[list[CorpusTurn]]:
+        by: dict[str, list[CorpusTurn]] = {}
+        for t in self.turns:
+            by.setdefault(t.conversation_id, []).append(t)
+        return [sorted(v, key=lambda t: (t.seq, t.created_at)) for _, v in sorted(by.items())]
+
+
+def vocab_to_doc(vocab: CatalogVocabulary) -> dict[str, Any]:
+    return {
+        "business_id": vocab.business_id,
+        "dimensions": {
+            name: [[e.key, e.label, e.count, e.path] for e in entries]
+            for name, entries in sorted(vocab.dimensions.items())
+        },
+        "noise_badges": sorted(vocab.noise_badges),
+    }
+
+
+def vocab_from_doc(doc: Mapping[str, Any]) -> CatalogVocabulary:
+    return CatalogVocabulary(
+        business_id=str(doc["business_id"]),
+        dimensions={
+            name: tuple(VocabEntry(str(k), str(lb), int(n), str(p or "")) for k, lb, n, p in rows)
+            for name, rows in doc.get("dimensions", {}).items()
+        },
+        noise_badges=frozenset(doc.get("noise_badges", ())),
+    )
+
+
+def load_snapshot(directory: Path) -> Snapshot:
+    """Instantaneul din `directory`, fără DB: pachetul se reconstruiește prin `load_domain_pack`
+    din setările salvate, vocabularul din `vocabulary.json`."""
+    from src.domain.loader import load_domain_pack  # noqa: PLC0415
+
+    meta = json.loads((directory / VOCAB_FILE).read_text(encoding="utf-8"))
+    business = BusinessConfig(**meta["business"])
+    pack = load_domain_pack(business)
+    turns = tuple(
+        CorpusTurn(
+            **{
+                **row,
+                "recommended": tuple(row.get("recommended") or ()),
+                "tool_calls": tuple(row.get("tool_calls") or ()),
+                "product_search": tuple(row.get("product_search") or ()),
+            }
+        )
+        for row in (
+            json.loads(line)
+            for line in (directory / CORPUS_FILE).read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        )
+    )
+    vocab = vocab_from_doc(meta["vocabulary"])
+    # Recenzia NX-335: amprenta se RECALCULEAZĂ din pachetul și vocabularul salvate (funcția ei s-a
+    # schimbat după instantaneu), iar valoarea nouă se scrie în metadate, lângă cea din ziua
+    # capturii. Fără DB: vocabularul e cel salvat, nu cel de azi.
+    current = snapshot_id(pack, vocab)
+    if meta.get("vocabulary_snapshot") != current:
+        meta.setdefault("vocabulary_snapshot_at_capture", meta.get("vocabulary_snapshot"))
+        meta["vocabulary_snapshot"] = current
+        (directory / VOCAB_FILE).write_text(
+            json.dumps(meta, ensure_ascii=False, indent=2, default=str), encoding="utf-8"
+        )
+    return Snapshot(
+        business=business,
+        pack=pack,
+        vocab=vocab,
+        category_menu=tuple((str(k), int(n)) for k, n in meta["category_menu"]),
+        vocabulary_snapshot=current,
+        turns=turns,
+    )
+
+
+async def take_snapshot(business_ref: str, out_dir: Path) -> dict[str, int]:
+    """Instantaneul corpusului, pe DB, READ-ONLY. Zero apeluri de model.
+
+    `conversation_traces` și `messages` pe `tenant_conn` (`business_id = $1`); `analytics_events`
+    pe `admin_conn` cu `business_id` explicit (`bot_runtime` are doar INSERT pe tabel, prin
+    design). Nicio scriere, în niciun tabel."""
+    from src.catalog.vocabulary import load_vocabulary  # noqa: PLC0415
+    from src.db.connection import admin_conn, close_pool, get_pool, tenant_conn  # noqa: PLC0415
+    from src.db.queries.businesses import load_business  # noqa: PLC0415
+    from src.db.queries.catalog import list_category_menu  # noqa: PLC0415
+
+    try:
+        pool = await get_pool()
+        async with admin_conn(pool) as admin:
+            bid = await admin.fetchval(
+                "select id::text from businesses where slug = $1 or id::text = $1", business_ref
+            )
+            if bid is None:
+                raise SystemExit(f"tenant necunoscut: {business_ref!r}")
+            async with tenant_conn(bid) as conn:
+                business = await load_business(conn, bid)
+                vocab = await load_vocabulary(conn, bid)
+                menu = await list_category_menu(conn, bid)
+                traces = await conn.fetch(
+                    """
+                    select turn_id::text as turn_id, conversation_id::text as conversation_id,
+                           created_at, coalesce(language, '') as language,
+                           coalesce(client_text, '') as client_text,
+                           coalesce(bot_text, '') as bot_text, recommended
+                    from conversation_traces
+                    where business_id = $1::uuid
+                    order by conversation_id, created_at
+                    """,
+                    bid,
+                )
+                conv_ids = sorted({t["conversation_id"] for t in traces})
+                messages = await conn.fetch(
+                    """
+                    select conversation_id::text as conversation_id, direction, author,
+                           created_at, coalesce(body, '') as body
+                    from messages
+                    where business_id = $1::uuid and conversation_id::text = any($2::text[])
+                    order by conversation_id, created_at
+                    """,
+                    bid,
+                    conv_ids,
+                )
+            events = await admin.fetch(
+                """
+                select turn_id::text as turn_id, event_type, properties, created_at
+                from analytics_events
+                where business_id = $1::uuid and event_type in ('tool_call', 'product_search')
+                  and turn_id::text = any($2::text[])
+                order by created_at
+                """,
+                bid,
+                [t["turn_id"] for t in traces],
+            )
+    finally:
+        await close_pool()
+    if business is None:
+        raise SystemExit("businessul nu s-a putut încărca")
+
+    by_turn: dict[str, dict[str, list[dict[str, Any]]]] = {}
+    for e in events:
+        props = e["properties"]
+        props = json.loads(props) if isinstance(props, str) else dict(props or {})
+        by_turn.setdefault(e["turn_id"], {}).setdefault(e["event_type"], []).append(props)
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    seq: Counter[str] = Counter()
+    rows = []
+    for t in traces:
+        rec = t["recommended"]
+        rec = json.loads(rec) if isinstance(rec, str) else list(rec or [])
+        seq[t["conversation_id"]] += 1
+        rows.append(
+            {
+                "turn_id": t["turn_id"],
+                "conversation_id": t["conversation_id"],
+                "seq": seq[t["conversation_id"]],
+                "created_at": t["created_at"].isoformat(),
+                "language": t["language"] or business.default_locale,
+                "client_text": t["client_text"],
+                "bot_text": t["bot_text"],
+                "recommended": rec,
+                "tool_calls": by_turn.get(t["turn_id"], {}).get("tool_call", []),
+                "product_search": by_turn.get(t["turn_id"], {}).get("product_search", []),
+            }
+        )
+    with (out_dir / CORPUS_FILE).open("w", encoding="utf-8", newline="\n") as fh:
+        for row in rows:
+            fh.write(json.dumps(row, ensure_ascii=False, default=str) + "\n")
+    with (out_dir / "messages.jsonl").open("w", encoding="utf-8", newline="\n") as fh:
+        for m in messages:
+            fh.write(
+                json.dumps(
+                    {
+                        "conversation_id": m["conversation_id"],
+                        "direction": m["direction"],
+                        "author": m["author"],
+                        "created_at": m["created_at"].isoformat(),
+                        "body": m["body"],
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n"
+            )
+    settings = business.settings or {}
+    meta = {
+        "taken_at": datetime.now(UTC).isoformat(),
+        "business": {
+            "id": business.id,
+            "slug": business.slug,
+            "name": business.name,
+            "vertical": business.vertical,
+            "default_locale": business.default_locale,
+            "settings": {k: settings[k] for k in ("domain_pack", "currency") if k in settings},
+        },
+        "category_menu": [list(m) for m in menu],
+        "vocabulary": vocab_to_doc(vocab),
+        "vocabulary_snapshot": snapshot_id(business.domain_pack, vocab),
+    }
+    (out_dir / VOCAB_FILE).write_text(
+        json.dumps(meta, ensure_ascii=False, indent=2, default=str), encoding="utf-8"
+    )
+    return {
+        "turns": len(rows),
+        "conversations": len(conv_ids),
+        "messages": len(messages),
+        "tool_call_events": sum(len(v.get("tool_call", [])) for v in by_turn.values()),
+        "product_search_events": sum(len(v.get("product_search", [])) for v in by_turn.values()),
+        "vocabulary_dimensions": len(vocab.dimensions),
+        "shelves": len(menu),
+    }
+
+
+# --- lanțul kernelului (funcțiile producției) ----------------------------------------------------
+
+
+def screen_proposal(recommended: Sequence[Mapping[str, Any]], turn_id: str) -> StateUpdateProposal:
+    """EXACT propunerea pe care o emite producția pentru ecranul turului
+    (`processor._turn_proposals`): `set_references`, `source="catalog"`, cu ref-urile construite
+    de ACEEAȘI funcție (`processor._displayed_product_refs`, recenzia NX-335), deci aruncarea unui
+    card fără nume sau preț și conversia prețului sunt ale producției prin construcție. Cu
+    `"policy"` setul nou n-ar împinge setul vechi în `recent_sets`."""
+    from src.worker.processor import _displayed_product_refs  # noqa: PLC0415
+
+    return StateUpdateProposal(
+        "set_references",
+        source="catalog",
+        turn_id=turn_id,
+        payload={"displayed_products": _displayed_product_refs([dict(r) for r in recommended])},
+    )
+
+
+@dataclass(frozen=True)
+class KernelTurn:
+    """Un tur prin kernel, în afara executorilor: ce a ieșit din fiecare strat pur."""
+
+    validated: Validated | None
+    resolved: tuple[ResolvedRef, ...]
+    delta: TurnDelta
+    gate: GateOutcome | None
+    planned: PlannedTurn | None
+    state_after: ConversationStateV2
+
+
+_EMPTY = TurnInterpretation(
+    thread="continue",
+    acts=[],
+    changes=[],
+    references=[],
+    ambiguities=[],
+    corrects_previous_turn=False,
+)
+
+
+async def kernel_turn(
+    state: ConversationStateV2,
+    interp: TurnInterpretation | None,
+    *,
+    words: UserWords,
+    pack: Any,
+    vocab: CatalogVocabulary | None,
+    locale: str,
+    facts: FactsFn,
+    recommended: Sequence[Mapping[str, Any]] = (),
+    turn_id: str = "t",
+) -> KernelTurn:
+    """Lanțul din `tests/kernel/fixture_catalog.kernel_step`, cu faptele aduse de `facts` (DB
+    read-only în rulare, fixture în teste) și ecranul sintetizat din `recommended`. Fără
+    `active_search` și fără memoria întrebării: acolo producția ar fi executat planul kernelului, pe
+    care replay-ul nu-l execută. O interpretare lipsă (`outcome` ≠ `ok`) rotește doar ecranul."""
+    needs = NeedVocabulary.from_pack(pack)
+    policy = ReducerPolicy(vocabulary=needs)
+    handles = need_handles(state.needs, needs)
+    executor = (screen_proposal(recommended, turn_id),) if recommended else ()
+    if interp is None:
+        delta = to_delta(_EMPTY, [], [], None, handles=handles, needs=needs, turn_id=turn_id)
+        after = reduce_turn(state, delta, executor, [], None, False, policy).state
+        return KernelTurn(None, (), delta, None, None, after)
+    validated = validate(
+        interp, words=words, handles=handles, vocab=vocab, pack=pack, locale=locale
+    )
+    sources = sources_from_state(state, interp.thread)
+    lookup = plan_lookup(
+        interp.references,
+        sources,
+        pack=pack,
+        locale=locale,
+        extra_attributes=lookup_attributes(interp, vocab=vocab, pack=pack),
+    )
+    known = await facts(lookup)
+    resolved = resolve_references(
+        interp.references, sources, known, vocab=vocab, pack=pack, locale=locale
+    )
+    delta = to_delta(
+        interp, validated.checked, resolved, known, handles=handles, needs=needs, turn_id=turn_id
+    )
+    primary = interp.acts[-1].targets[0] if interp.acts and interp.acts[-1].targets else None
+    corrects = interp.corrects_previous_turn
+    gate_state = reduce_turn(state, delta, (), resolved, primary, corrects, policy).state
+    gate = decide_ambiguity(
+        interp,
+        validated.checked,
+        resolved,
+        gate_state,
+        known,
+        vocab=vocab,
+        pack=pack,
+        locale=locale,
+        policy=GATE_POLICY,
+    )
+    planned = plan_turn(
+        interp,
+        gate_state,
+        delta.ranking,
+        resolved,
+        gate,
+        changed=bool(delta.proposals),
+        pack=pack,
+        vocab=vocab,
+        locale=locale,
+    )
+    after = reduce_turn(state, delta, executor, resolved, primary, corrects, policy).state
+    return KernelTurn(validated, tuple(resolved), delta, gate, planned, after)
+
+
+def history_of(previous: Sequence[CorpusTurn]) -> tuple[tuple[str, str], ...]:
+    out: list[tuple[str, str]] = []
+    for t in previous:
+        out.append(("user", t.client_text))
+        if t.bot_text:
+            out.append(("bot", t.bot_text))
+    return tuple(out)
+
+
+def make_input(snap: Snapshot, state: ConversationStateV2, previous, turn: CorpusTurn):
+    return InterpretInput(
+        locale=turn.language or snap.business.default_locale,
+        pack=snap.pack,
+        vocab=snap.vocab,
+        category_menu=snap.category_menu,
+        state=state,
+        history=history_of(previous),
+        message=turn.client_text,
+    )
+
+
+# --- etichetele și comparatorul ------------------------------------------------------------------
+
+
+def load_labels(business: str) -> dict[str, dict[str, Any]]:
+    path = LABELS_DIR / f"{business}.json"
+    if not path.exists():
+        return {}
+    return dict(json.loads(path.read_text(encoding="utf-8")).get("turns", {}))
+
+
+def screen_positions(state: ConversationStateV2) -> dict[str, str]:
+    return {d.product_id: f"#{i}" for i, d in enumerate(state.references.displayed_products, 1)}
+
+
+def observed(
+    interp: TurnInterpretation | None,
+    kernel: KernelTurn | None,
+    state_before: ConversationStateV2,
+) -> dict[str, Any]:
+    """Interpretarea turului în forma etichetelor: `thread`, actul principal, țintele (poziții de
+    pe ecranul de dinainte sau `catalog`), schimbările validate ca `[op, dimensiune, valoare,
+    relație]` (valoarea canonică; `null` pe `unmapped`), ambiguitate da/nu."""
+    if interp is None:
+        return {}
+    positions = screen_positions(state_before)
+    by_ref = {r.ref_id: r for r in (kernel.resolved if kernel else ())}
+    primary = interp.acts[-1] if interp.acts else None
+    targets: list[str] = []
+    for t in primary.targets if primary else []:
+        ref = by_ref.get(t)
+        for pid in ref.product_ids if ref else []:
+            targets.append(positions.get(pid, "catalog"))
+    changes = []
+    for c in kernel.validated.checked if kernel and kernel.validated else []:
+        if c.rejected:
+            continue
+        value = c.canonical_value
+        if c.dimension == "unmapped":
+            value = None
+        elif value is not None:
+            value = format_value(value)
+        changes.append([c.change.op, c.dimension, value, c.change.relation or "eq"])
+    return {
+        "thread": interp.thread,
+        "primary_act": primary.kind if primary else None,
+        "targets": sorted(set(targets)),
+        "changes": changes,
+        "ambiguous": bool(interp.ambiguities),
+    }
+
+
+#: Clasele de op și de relație ale comparatorului (recenzia NX-335): un `avoid` sau un `remove`
+#: nu e o potrivire pentru un `add … eq`, dar `set`/`add`/`replace` afirmă toate o valoare, iar
+#: `eq`/`contains`/fără relație sunt toate pozitive.
+_OP_CLASS = {"set": "assert", "add": "assert", "replace": "assert", "remove": "remove"}
+_RELATION_CLASS = {"eq": "positive", "contains": "positive", None: "positive"}
+
+
+def _key(change: Sequence[Any]) -> tuple[str, str, str | None, str]:
+    op, dimension, value, relation = (list(change) + [None] * 4)[:4]
+    return (
+        _OP_CLASS.get(op, str(op)),
+        str(dimension),
+        None if value is None else str(value),
+        _RELATION_CLASS.get(relation, str(relation)),
+    )
+
+
+def _split(changes: Iterable[Sequence[Any]]) -> tuple[Counter, Counter]:
+    """(perechile cu valoare, perechile cu valoare NULĂ: `unmapped` și limitele relative, unde
+    valoarea e cuvintele clientului sau un număr calculat de cod, deci nu intră în F1)."""
+    valued: Counter = Counter()
+    null: Counter = Counter()
+    for change in changes:
+        key = _key(change)
+        if key[2] is None:
+            null[(key[0], key[1], key[3])] += 1
+        else:
+            valued[key] += 1
+    return valued, null
+
+
+def compare(label: Mapping[str, Any], got: Mapping[str, Any]) -> dict[str, Any]:
+    """Comparatorul propriu al etichetelor (nu `first_divergence`, care compară straturile unui
+    singur trace, pe egalitate exactă): acord pe câmpuri, apoi potriviri pe (clasa op-ului,
+    dimensiune, valoare, clasa relației). Perechile cu valoare nulă se numără separat, pe
+    (clasa op-ului, dimensiune, clasa relației), în afara F1. `number_for_relative`: eticheta cere
+    o limită relativă de preț, iar modelul a pus un număr (riscul prețurilor din HISTORY)."""
+    want, want_null = _split(label.get("changes", []))
+    have, have_null = _split(got.get("changes", []))
+    relative = any(k[1] == "price" for k in want_null)
+    numbered = any(k[1] == "price" for k in have)
+    return {
+        "thread": label.get("thread") == got.get("thread"),
+        "primary_act": label.get("primary_act") == got.get("primary_act"),
+        "targets": sorted(label.get("targets", [])) == sorted(got.get("targets", [])),
+        "ambiguous": bool(label.get("ambiguous")) == bool(got.get("ambiguous")),
+        "change_hits": sum((want & have).values()),
+        "change_labelled": sum(want.values()),
+        "change_emitted": sum(have.values()),
+        "null_hits": sum((want_null & have_null).values()),
+        "null_labelled": sum(want_null.values()),
+        "null_emitted": sum(have_null.values()),
+        "number_for_relative": relative and numbered,
+    }
+
+
+def wilson(k: int, n: int, z: float = 1.96) -> tuple[float, float] | None:
+    if n <= 0:
+        return None
+    p = k / n
+    den = 1 + z * z / n
+    centre = (p + z * z / (2 * n)) / den
+    half = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / den
+    return (round(max(0.0, centre - half), 3), round(min(1.0, centre + half), 3))
+
+
+def rate(k: int, n: int) -> dict[str, Any]:
+    return {"k": k, "n": n, "rate": round(k / n, 3) if n else None, "wilson95": wilson(k, n)}
+
+
+# --- rularea -------------------------------------------------------------------------------------
+
+
+def state_summary(state: ConversationStateV2) -> dict[str, Any]:
+    """Forma stării după tur, doar numere (P12): câte produse pe ecran, câte seturi de mai devreme,
+    câte nevoi active, dacă e un subiect parcat."""
+    refs = state.references
+    return {
+        "shown": len(refs.displayed_products),
+        "recent_sets": len(refs.recent_sets),
+        "needs": len(state.active_needs()),
+        "parked": state.parked is not None,
+    }
+
+
+@dataclass
+class ArmChain:
+    state: ConversationStateV2 = field(default_factory=ConversationStateV2)
+    diverged_at: int | None = None
+
+
+def _v1_search(turn: CorpusTurn) -> dict[str, Any] | None:
+    for call in turn.tool_calls:
+        if call.get("name") == "search_products":
+            return dict(call.get("args") or {})
+    return None
+
+
+def versus_v1(turn: CorpusTurn, kernel: KernelTurn | None) -> dict[str, Any]:
+    """Comparația FĂRĂ etichete cu ce a căutat v1 pe același tur: același raft, raftul ghicit de v1
+    scos, o nevoie căutată de v1 pe care kernelul n-o mai poartă."""
+    v1 = _v1_search(turn)
+    plan = None
+    if kernel and kernel.planned:
+        plan = kernel.planned.plans[kernel.planned.primary]
+    args = plan.search_args if plan is not None else None
+    if v1 is None or args is None:
+        return {"compared": False}
+    v1_needs = {str(c) for c in (v1.get("concerns") or []) if c}
+    kernel_needs = set(args.concerns or []) | {
+        str(v) for values in (args.prefer or {}).values() for v in values
+    }
+    return {
+        "compared": True,
+        "same_shelf": (v1.get("category") or None) == (args.category or None),
+        "v1_shelf_dropped": bool(v1.get("category")) and not args.category,
+        "need_lost": bool(v1_needs - kernel_needs),
+    }
+
+
+async def run(
+    snap: Snapshot,
+    llm: Any,
+    *,
+    efforts: Sequence[str],
+    facts: FactsFn,
+    labels: Mapping[str, Mapping[str, Any]],
+    seed: int,
+    dry_run: bool,
+    limit: int | None = None,
+) -> list[dict[str, Any]]:
+    """Un rând de raport per tur și braț. `dry_run` ⇒ ZERO apeluri: se construiește doar promptul
+    (cu ecranul rotit din `recommended`), pentru tokeni și cost."""
+    rng = random.Random(seed)
+    rows: list[dict[str, Any]] = []
+    for conversation in snap.conversations()[: limit or None]:
+        chains = {arm: ArmChain() for arm in efforts}
+        for index, turn in enumerate(conversation):
+            order = list(efforts)
+            rng.shuffle(order)
+            for arm in order:
+                chain = chains[arm]
+                inp = make_input(snap, chain.state, conversation[:index], turn)
+                row: dict[str, Any] = {
+                    "turn_id": turn.turn_id,
+                    "conversation_id": turn.conversation_id,
+                    "seq": turn.seq,
+                    "arm": arm,
+                    "order": order,
+                    "system_chars": len(system_prompt(inp)),
+                    "user_chars": len(user_prompt(inp)),
+                }
+                if dry_run:
+                    kernel = await kernel_turn(
+                        chain.state,
+                        None,
+                        words=user_words(inp),
+                        pack=snap.pack,
+                        vocab=snap.vocab,
+                        locale=inp.locale,
+                        facts=facts,
+                        recommended=turn.recommended,
+                        turn_id=turn.turn_id,
+                    )
+                    chain.state = kernel.state_after
+                    row["state"] = state_summary(chain.state)
+                    rows.append(row)
+                    continue
+                acc, token = usage.push()
+                try:
+                    out: InterpretedTurn = await interpret_turn(
+                        llm, inp, business_id=snap.business.id, effort=arm
+                    )
+                finally:
+                    usage.pop(token)
+                before = chain.state
+                kernel = await kernel_turn(
+                    before,
+                    out.interpretation,
+                    words=user_words(inp),
+                    pack=snap.pack,
+                    vocab=snap.vocab,
+                    locale=inp.locale,
+                    facts=facts,
+                    recommended=turn.recommended,
+                    turn_id=turn.turn_id,
+                )
+                chain.state = kernel.state_after
+                got = observed(out.interpretation, kernel, before)
+                label = labels.get(turn.turn_id)
+                verdict = None
+                if label and not label.get("uncertain"):
+                    verdict = compare(label, got)
+                    ok = all(verdict[k] for k in ("thread", "primary_act", "targets"))
+                    if not ok and chain.diverged_at is None:
+                        chain.diverged_at = turn.seq
+                call = acc.call_rows[-1] if acc.call_rows else {}
+                row.update(
+                    {
+                        "outcome": out.outcome,
+                        "event": out.event,
+                        "observed": got,
+                        "verdict": verdict,
+                        "first_divergence": chain.diverged_at,
+                        "ms": call.get("ms"),
+                        "tokens_in": call.get("tokens_in"),
+                        "cached": call.get("cached"),
+                        "tokens_out": call.get("tokens_out"),
+                        "cost_usd": round(acc.cost_usd, 6),
+                        "versus_v1": versus_v1(turn, kernel),
+                        "state": state_summary(chain.state),
+                    }
+                )
+                rows.append(row)
+    return rows
+
+
+def _pct(values: Sequence[float], q: float) -> float | None:
+    xs = sorted(v for v in values if v is not None)
+    return round(xs[min(len(xs) - 1, int(q * len(xs)))], 1) if xs else None
+
+
+def summarize(rows: Sequence[Mapping[str, Any]], efforts: Sequence[str]) -> dict[str, Any]:
+    """Per braț: acordul pe actul principal, `thread`, ținte (cu `n` și interval Wilson), precizia
+    și recall-ul schimbărilor, proveniența, respingerile, `unmapped`, `unknown_reference`,
+    `outcome` ≠ `ok`, latența și costul, comparația cu v1. Doar numere (P12)."""
+    out: dict[str, Any] = {}
+    for arm in efforts:
+        mine = [r for r in rows if r["arm"] == arm and "outcome" in r]
+        scored = [r["verdict"] for r in mine if r.get("verdict")]
+        hits = sum(v["change_hits"] for v in scored)
+        labelled = sum(v["change_labelled"] for v in scored)
+        emitted = sum(v["change_emitted"] for v in scored)
+        precision = hits / emitted if emitted else None
+        recall = hits / labelled if labelled else None
+        f1 = (
+            2 * precision * recall / (precision + recall)
+            if precision and recall
+            else (0.0 if precision == 0 or recall == 0 else None)
+        )
+        provenance: Counter[str] = Counter()
+        rejected: Counter[str] = Counter()
+        unmapped = changes = unknown = 0
+        for r in mine:
+            ev = r["event"]
+            provenance.update(ev["provenance"])
+            rejected.update({k: v for k, v in ev["rejected"].items() if v})
+            unknown += int(ev["unknown_reference"] > 0)
+            for c in (r.get("observed") or {}).get("changes", []):
+                changes += 1
+                unmapped += int(c[1] == "unmapped")
+        vs = [r["versus_v1"] for r in mine if r.get("versus_v1", {}).get("compared")]
+        outcomes = Counter(r["outcome"] for r in mine)
+        out[arm] = {
+            "turns": len(mine),
+            "outcomes": dict(outcomes),
+            "not_ok": rate(len(mine) - outcomes.get("ok", 0), len(mine)),
+            "primary_act": rate(sum(v["primary_act"] for v in scored), len(scored)),
+            "thread": rate(sum(v["thread"] for v in scored), len(scored)),
+            "targets": rate(sum(v["targets"] for v in scored), len(scored)),
+            "ambiguity": rate(sum(v["ambiguous"] for v in scored), len(scored)),
+            "changes": {
+                "precision": round(precision, 3) if precision is not None else None,
+                "recall": round(recall, 3) if recall is not None else None,
+                "f1": round(f1, 3) if f1 is not None else None,
+                "labelled": labelled,
+                "emitted": emitted,
+            },
+            "null_valued_changes": {
+                "hits": sum(v["null_hits"] for v in scored),
+                "labelled": sum(v["null_labelled"] for v in scored),
+                "emitted": sum(v["null_emitted"] for v in scored),
+            },
+            "number_for_relative": sum(v["number_for_relative"] for v in scored),
+            "provenance": dict(provenance),
+            "rejected": dict(rejected),
+            "unmapped": rate(unmapped, changes),
+            "unknown_reference": rate(unknown, len(mine)),
+            "ms_p50": _pct([r["ms"] for r in mine], 0.5),
+            "ms_p90": _pct([r["ms"] for r in mine], 0.9),
+            "cost_usd_total": round(sum(r["cost_usd"] for r in mine), 4),
+            "cost_usd_per_turn": round(sum(r["cost_usd"] for r in mine) / len(mine), 6)
+            if mine
+            else None,
+            "versus_v1": {
+                "compared": len(vs),
+                "same_shelf": sum(v["same_shelf"] for v in vs),
+                "v1_shelf_dropped": sum(v["v1_shelf_dropped"] for v in vs),
+                "need_lost": sum(v["need_lost"] for v in vs),
+            },
+            "first_divergence": {
+                r["conversation_id"]: r["first_divergence"]
+                for r in mine
+                if r["first_divergence"] is not None
+            },
+        }
+    return {"thresholds": THRESHOLDS, "arms": out}
+
+
+def estimate(rows: Sequence[Mapping[str, Any]], model: str) -> dict[str, Any]:
+    """Tokenii și costul ESTIMATE ale unei rulări (≈ 4 caractere pe token, ieșire ~400)."""
+    from src.agent.pricing import cost_for  # noqa: PLC0415
+
+    ins = [(r["system_chars"] + r["user_chars"]) // CHARS_PER_TOKEN for r in rows]
+    cached = [r["system_chars"] // CHARS_PER_TOKEN for r in rows]
+    total = sum(cost_for(model, i, 0, EST_OUTPUT_TOKENS) for i in ins)
+    warm = sum(cost_for(model, i, c, EST_OUTPUT_TOKENS) for i, c in zip(ins, cached, strict=True))
+    return {
+        "calls": len(rows),
+        "tokens_in_p50": _pct([float(i) for i in ins], 0.5),
+        "tokens_in_max": max(ins) if ins else 0,
+        "system_tokens": cached[0] if cached else 0,
+        "cost_usd_no_cache": round(total, 4),
+        "cost_usd_cached_prefix": round(warm, 4),
+    }
+
+
+class _TenantDeps:
+    """`deps.db(op)` = checkout tenant-scoped, ca `fetch_reference_facts` să citească exact ca
+    producția (un checkout, `business_id = $1`)."""
+
+    def __init__(self, business_id: str):
+        self._bid = business_id
+
+    def db(self, _op: str):
+        from src.db.connection import tenant_conn  # noqa: PLC0415
+
+        return tenant_conn(self._bid)
+
+
+def _parse_efforts(raw: str) -> tuple[str, ...]:
+    out = tuple(e.strip() for e in raw.split(",") if e.strip())
+    if not out or len(set(out)) != len(out) or set(out) - set(INTERPRET_EFFORTS):
+        raise SystemExit(f"--efforts: valori distincte din {INTERPRET_EFFORTS}, nu {raw!r}")
+    return out
+
+
+async def _empty_facts(_lookup: CatalogLookup) -> ReferenceFacts:
+    return ReferenceFacts()
+
+
+async def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
+    ap.add_argument("--business", default="sole-ro")
+    ap.add_argument(
+        "--snapshot", action="store_true", help="instantaneul (DB read-only, 0 apeluri)"
+    )
+    ap.add_argument("--dir", type=Path, default=None, help="directorul instantaneului")
+    ap.add_argument("--efforts", default="none")
+    ap.add_argument("--seed", type=int, default=335)
+    ap.add_argument("--limit", type=int, default=None, help="câte conversații")
+    ap.add_argument("--dry-run", action="store_true", help="implicit; zero apeluri de model")
+    ap.add_argument("--yes", action="store_true", help="confirmă că rularea consumă credite")
+    args = ap.parse_args(argv)
+    directory = args.dir or (OUT_DIR / args.business)
+
+    if args.snapshot:
+        counts = await take_snapshot(args.business, directory)
+        print(json.dumps(counts, indent=2))
+        print(f"instantaneu: {directory} (LOCAL, nu intră în repo: conține texte de client)")
+        return 0
+
+    efforts = _parse_efforts(args.efforts)
+    snap = load_snapshot(directory)
+    labels = load_labels(args.business)
+    live = args.yes and not args.dry_run
+    llm = None
+    facts: FactsFn = _empty_facts
+    if live:
+        from src.agent.llm import get_llm  # noqa: PLC0415
+        from src.catalog.reference_facts import fetch_reference_facts  # noqa: PLC0415
+
+        llm = get_llm()
+        if llm is None:
+            raise SystemExit("lipsește OPENAI_API_KEY")
+        deps = _TenantDeps(snap.business.id)
+
+        async def facts(lookup: CatalogLookup) -> ReferenceFacts:
+            return await fetch_reference_facts(deps, snap.business.id, lookup)
+
+    try:
+        rows = await run(
+            snap,
+            llm,
+            efforts=efforts,
+            facts=facts,
+            labels=labels,
+            seed=args.seed,
+            dry_run=not live,
+            limit=args.limit,
+        )
+    finally:
+        if live:
+            from src.db.connection import close_pool  # noqa: PLC0415
+
+            await close_pool()
+
+    from src.config import get_settings  # noqa: PLC0415
+
+    model = get_settings().model_agent
+    scored = sum(1 for t in snap.turns if t.turn_id in labels)
+    uncertain = sum(1 for t in snap.turns if labels.get(t.turn_id, {}).get("uncertain"))
+    print(
+        f"ture: {len(snap.turns)}  conversații: {len(snap.conversations())}  "
+        f"etichetate: {scored} (nesigure: {uncertain})  brațe: {efforts}  apeluri: {len(rows)}"
+    )
+    print(f"vocabulary_snapshot (instantaneu): {snap.vocabulary_snapshot}")
+    print(json.dumps(estimate(rows, model), indent=2))
+    if not live:
+        if not args.dry_run:
+            print("Rularea reală consumă credite OpenAI. Repornește cu --yes (o pornește Adi).")
+        return 0
+
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    out_dir = directory / f"run-{stamp}"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    summary = summarize(rows, efforts)
+    (out_dir / "results.json").write_text(
+        json.dumps(
+            {"model": model, "efforts": list(efforts), "summary": summary, "rows": rows},
+            ensure_ascii=False,
+            indent=2,
+            default=str,
+        ),
+        encoding="utf-8",
+    )
+    print(json.dumps(summary, ensure_ascii=False, indent=2))
+    print(f"\nraport: {out_dir}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(asyncio.run(main()))

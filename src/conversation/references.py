@@ -25,7 +25,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from src.catalog.query_terms import (
     any_locale_stopwords,
@@ -43,6 +43,9 @@ from src.catalog.vocabulary import (
 )
 from src.conversation.interpretation import Act, Reference, ResolvedRef
 from src.domain.pack import DEFAULT_REFERENCE_DIMENSIONS
+
+if TYPE_CHECKING:
+    from src.conversation.state_v2 import ConversationStateV2
 
 Outcome = Literal["exact", "ambiguous", "not_found", "stale"]
 Source = Literal["action", "shown_now", "shown_earlier", "parked", "page", "catalog"]
@@ -826,6 +829,31 @@ def plan_lookup(
     )
 
 
+def sources_from_state(state: ConversationStateV2, thread: str) -> ReferenceSources:
+    """Sursele resolverului din starea REDUSĂ (NX-335, promovat din helperul de test NX-331):
+    ecranul (`displayed_products`), seturile de mai devreme (`recent_sets`), setul parcat și
+    focusul (`selected_product`). PUR.
+
+    Ecranul are O singură sursă, aceeași din care adaptorul de interpretare randează `#i`, deci
+    poziția din prompt și `ordinal=i` de aici nu pot diverge. Pagina și acțiunea nu sunt în stare:
+    le adaugă apelantul care le are (pe calea v2, `deterministic._state_v2_sources`)."""
+
+    def items(refs: Iterable[object]) -> tuple[ShownItem, ...]:
+        return tuple(
+            ShownItem(d.product_id, d.name, d.price)  # type: ignore[attr-defined]
+            for d in refs
+        )
+
+    parked = state.parked
+    return ReferenceSources(
+        shown_now=items(state.references.displayed_products),
+        shown_earlier=tuple(items(s) for s in state.references.recent_sets),
+        parked=items(parked.shown) if parked is not None else (),
+        focus=state.references.selected_product,
+        thread=thread,  # type: ignore[arg-type]
+    )
+
+
 def resolve_references(
     refs: Sequence[Reference],
     sources: ReferenceSources,
@@ -906,4 +934,5 @@ __all__ = [
     "name_key",
     "plan_lookup",
     "resolve_references",
+    "sources_from_state",
 ]

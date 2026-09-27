@@ -8,7 +8,7 @@ direct prin cod — totul prin `settings`.
 import os
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, get_args
 
 from pydantic import AliasChoices, Field, model_validator
 from pydantic.fields import FieldInfo
@@ -82,6 +82,12 @@ def _env_aliases(name: str, field: FieldInfo) -> tuple[str, ...]:
 #: Valorile lui `ENV` care înseamnă „producție". Duplicat controlat în `scripts/migrate.py`
 #: (care nu importă nimic din `src/`); egalitatea lor e verificată de un test.
 _PROD_ENVS = frozenset({"prod", "production"})
+
+#: NX-335: eforturile de raționament pe care familiile declarate le acceptă pe apelul de
+#: interpretare (`gpt-6-luna`/`gpt-6-sol`: none…max; `.env.example`). Închis, ca o valoare goală
+#: sau greșită să pice la boot, nu să omită tăcut parametrul (implicitul modelului raționează).
+InterpretEffort = Literal["none", "low", "medium", "high", "xhigh", "max"]
+INTERPRET_EFFORTS: tuple[str, ...] = get_args(InterpretEffort)
 
 
 class Settings(BaseSettings):
@@ -1489,6 +1495,21 @@ class Settings(BaseSettings):
         default=0.2, validation_alias="LLM_TEMPERATURE_BACKGROUND"
     )
     llm_temperature_agent: float = Field(default=0.7, validation_alias="LLM_TEMPERATURE_AGENT")
+    # NX-335 (kernel pasul 5): apelul de INTERPRETARE a turului (`turn_interpreter`) are efortul și
+    # temperatura lui, per apel, fiindcă moștenite de la agent ar fi raționat la `low` din prima zi,
+    # adică exact decizia pe care designul o amână (§A, D15). `none` = paritate cu runda 1 de azi
+    # (ceasul NX-311 de 30 s); trecerea pe `low` e decizia pasului 7, pe replay. Temperatura e cea
+    # de fundal, nu 0,7: e o clasificare, iar zgomotul de eșantionare ar intra în cifrele de acord.
+    # Se trimite doar cu raționamentul oprit, ca orice temperatură (vezi `llm._sampling`).
+    # Vocabular ÎNCHIS (recenzia NX-335): un `LLM_REASONING_EFFORT_INTERPRET=` gol ar omite
+    # parametrul, iar pe `gpt-6-luna` absența înseamnă raționament PORNIT implicit (vezi
+    # `llm._MODEL_PROFILES`), adică exact decizia amânată. Gol sau necunoscut ⇒ pică la boot.
+    llm_reasoning_effort_interpret: InterpretEffort = Field(
+        default="none", validation_alias="LLM_REASONING_EFFORT_INTERPRET"
+    )
+    llm_temperature_interpret: float = Field(
+        default=0.2, validation_alias="LLM_TEMPERATURE_INTERPRET"
+    )
     # Plafonul de output al apelurilor de agent. **0 = FĂRĂ plafon** (parametrul nu se trimite).
     #
     # A fost 800 din NX-125, ca un completion patologic să nu scape de ceiling. Premisa aia s-a
