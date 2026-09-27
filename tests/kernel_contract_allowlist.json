@@ -1,0 +1,4 @@
+{
+  "$comment": "NX-328: exceptii de la portile tests/test_kernel_contract.py. Fiecare intrare are gate, file, detail (exact textul Violation.detail) si reason nevid. O intrare care nu mai prinde nimic pica testul. Porneste GOALA: kernelul nu are datorie de mostenit.",
+  "entries": []
+}
