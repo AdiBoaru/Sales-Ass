@@ -169,6 +169,11 @@ def field_errors_view(exc: ValidationError) -> str:
     return "Argumente invalide, corectează câmpurile: " + "; ".join(parts) + tail + "."
 
 
+def _is_args_error(exc: ValidationError) -> bool:
+    """Convenția uneltelor: argumentele modelului se validează pe un model `*Args`."""
+    return str(exc.title).endswith("Args")
+
+
 async def run_tool(
     ctx: TurnContext, deps: PipelineDeps, name: str, args: dict[str, Any]
 ) -> ToolResult:
@@ -184,7 +189,10 @@ async def run_tool(
     try:
         return await fn(ctx, deps, args or {})
     except ValidationError as e:
-        if not getattr(get_settings(), "tool_field_errors_enabled", False):
+        # Doar validarea ARGUMENTELOR (`*Args`; titlul e al modelului de nivel superior și pe
+        # erorile imbricate) e o greșeală a modelului. Un model Pydantic construit mai adânc
+        # (serviciul de coș, date din DB) e o eroare internă: modelul n-are ce corecta.
+        if not getattr(get_settings(), "tool_field_errors_enabled", False) or not _is_args_error(e):
             log.warning("tool %s a eșuat (%s)", name, type(e).__name__)
             return ToolResult(ok=False, error=type(e).__name__, llm_view="Unealta a eșuat.")
         errors = e.errors(include_url=False, include_input=False)

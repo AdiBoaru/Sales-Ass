@@ -161,3 +161,23 @@ async def test_a_search_turn_reads_the_catalog_end_to_end(flag, monkeypatch):
 
     assert ctx.retrieval is not None and ctx.retrieval.catalog_read is True
     assert _after(ctx)["active_search"] is None
+
+
+# --- evenimentul are nume PROPRIU ----------------------------------------------------------------
+
+
+async def test_the_aside_event_does_not_reuse_the_pagination_event_name(flag, monkeypatch):
+    """`search_session` e evenimentul paginării (`{action, page_index, ...}`), citit de sondele
+    NX-303. Paranteza are evenimentul ei, altfel cele două forme s-ar amesteca sub același tip."""
+    from tests.test_processor_state import _run
+
+    seen: dict = {}
+
+    async def stage(ctx, deps):
+        seen["ctx"] = ctx
+        ctx.set_reply("Livrarea durează câteva zile lucrătoare.")
+
+    await _run(monkeypatch, stage, initial_state={"active_search": dict(SESSION)})
+    events = {e.type: e.properties for e in seen["ctx"].events}
+    assert events.get("search_session_aside", {}).get("outcome") == "kept_aside"
+    assert "outcome" not in events.get("search_session", {})

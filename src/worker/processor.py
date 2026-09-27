@@ -960,8 +960,11 @@ async def _run_turn(  # noqa: PLR0913 — o fază, mulți parametri deja valida�
         and snap.state.get("active_search")
     ):
         # NX-326: o singură dată, aici, nu în `_build_new_state` (se re-aplică la StateConflict).
+        # Nume PROPRIU: `search_session` e deja evenimentul paginării (`catalog_tools`, forma
+        # `{action, page_index, pool_size, served, unseen}`), citit de sondele NX-303. Două forme
+        # sub același tip s-ar fi amestecat tăcut în analytics.
         outcome = "kept_aside" if _keeps_search_session(ctx) else "cleared"
-        ctx.emit("search_session", outcome=outcome)
+        ctx.emit("search_session_aside", outcome=outcome)
     commit = TurnCommit(
         business_id=business.id,
         conversation_id=conversation_id,
