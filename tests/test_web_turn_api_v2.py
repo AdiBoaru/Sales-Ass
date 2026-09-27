@@ -12,7 +12,9 @@ Garanțiile verificate AICI:
     o singură dată, zero tokeni/draft.
 """
 
+import base64
 import json
+import re
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
@@ -733,8 +735,18 @@ def test_projection_emits_submit_actions_only_with_the_flag_on(monkeypatch):
     parse_view(on)
     dumped = json.dumps(on)
     assert '"type": "submit"' in dumped
-    # Tokenul e opac: nici kind-ul, nici id-ul de catalog nu se citesc din el.
-    assert "request_details" not in dumped and "p-1" not in dumped
+    # Tokenul e opac: nici kind-ul, nici id-ul de catalog nu se citesc din el. Nu se caută însă
+    # în TEXTUL tokenului: e base64url, iar `completed_at` e „acum", deci la ~300 de caractere
+    # „p-1" apare din întâmplare cam o dată la 900 de rulări (test instabil). Restul vederii se
+    # verifică strict; tokenul, după decodare, unde o potrivire întâmplătoare e practic imposibilă.
+    tokens = re.findall(r'"token": "([^"]+)"', dumped)
+    assert tokens
+    rest = dumped
+    for token in tokens:
+        rest = rest.replace(token, "")
+        sealed = base64.urlsafe_b64decode(token.rsplit(".", 1)[-1] + "==")
+        assert b"request_details" not in sealed and b"p-1" not in sealed
+    assert "request_details" not in rest and "p-1" not in rest
 
 
 def test_projection_of_actions_is_byte_deterministic(monkeypatch):
