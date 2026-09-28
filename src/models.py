@@ -161,13 +161,20 @@ def _hydrate_active_search(raw: Any) -> dict[str, Any] | None:
     pool = raw.get("pool")
     if not isinstance(pool, list) or not pool:
         return None
-    return {
+    out = {
         "filters": raw.get("filters") if isinstance(raw.get("filters"), dict) else {},
         "pool": [str(x) for x in pool][:MAX_SEARCH_POOL],
         "cursor": _safe_int(raw.get("cursor")),
         "fp": str(raw.get("fp") or ""),
         "page": _safe_int(raw.get("page")),
     }
+    # NX-342: deciziile paginii 1 (`inherit`: filtrele efective, revizia și turul sesiunii) trec
+    # prin hidratare, altfel `inheritable_filters` n-ar vedea niciodată `inherit` pe turul următor
+    # (starea se reîncarcă de aici la fiecare tur). Absentă pe o sesiune veche ⇒ moștenirea citește
+    # `filters`, ca înainte.
+    if isinstance(raw.get("inherit"), dict):
+        out["inherit"] = dict(raw["inherit"])
+    return out
 
 
 @dataclass

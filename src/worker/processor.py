@@ -768,7 +768,10 @@ def _commit_facts(ctx: TurnContext) -> CommitFacts:
     pending = getattr(ctx.reply, "pending_question", None) if ctx.reply is not None else None
     pending = pending if isinstance(pending, dict) else None
     session = ctx.state_patch.get("active_search")
-    if not isinstance(session, dict):
+    # NX-342: un `None` EXPLICIT în patch înseamnă „sesiune închisă" (setul ascuns NX-306, NX-167),
+    # nu „nicio veste", deci nu cade pe sesiunea turului trecut: altfel s-ar oferi un buton de
+    # paginare pentru o sesiune pe care turul următor o refuză ca învechită.
+    if not isinstance(session, dict) and "active_search" not in ctx.state_patch:
         session = ctx.state.active_search if isinstance(ctx.state.active_search, dict) else None
     return CommitFacts(
         pending_field=str(pending.get("field")) if pending and pending.get("field") else None,

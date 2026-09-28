@@ -701,10 +701,12 @@ DETERMINIST de `cheaper_intent`, iar a suprima ar ascunde răspunsul corect. Fil
 ÎNAINTE de `rich_from_facts`, altfel NX-302 ar fi AGRAVAT refuzul (aceleași pensule, dar cu badge,
 rating și motiv sub card).
 **NX-342 (342a)** — sesiunea de căutare reține DECIZIILE paginii 1, nu doar intrările: un set ascuns
-de NX-306 închide sesiunea (altfel „mai arată-mi" servea restul setului refuzat); `active_search`
-poartă `inherit` = filtrele EFECTIVE (fără raftul/fațetele scoase de NX-305/313, care altfel reveneau
-la căutarea următoare ca ROSTITE, NX-299) și `rev` = revizia stării, ca o nevoie retrasă după sesiune
-(`revocations`, starea v2) să nu mai fie moștenită. Amprenta rămâne a cererii. Kill-switch
+de NX-306 închide sesiunea (`search_session_closed`; altfel „mai arată-mi" servea restul setului
+refuzat); `active_search.inherit` = filtrele EFECTIVE (fără raftul/fațetele scoase de NX-305/313, care
+altfel reveneau la căutarea următoare ca ROSTITE, NX-299) plus `rev`/`turn` ai sesiunii, ca o nevoie
+ne-numerică retrasă pe un tur ULTERIOR (`revocations`, starea v2) să nu mai fie moștenită. Deciziile
+trec prin `ConversationState.from_jsonb` (prima versiune le pierdea la reîncărcare, prinsă de
+recenzie). Amprenta și marginea de preț a sesiunii (NX-319) rămân ale cererii. Kill-switch
 `SEARCH_SESSION_CONTRACT_ENABLED` (ON; OFF sau o sesiune veche = ca înainte).
 **NX-307** — `explain` era în `ObligationKind` de la început, cu doi CONSUMATORI și niciun
 PRODUCĂTOR, deci „cum folosesc" ieșea `answer` generic și turul rula cu `retrieval_ids: []`, deși

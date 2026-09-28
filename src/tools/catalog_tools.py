@@ -48,7 +48,7 @@ from src.catalog.vocabulary_cache import get_vocabulary
 from src.commerce.project import delivery_for
 from src.config import card_slots, get_settings
 from src.config import max_per_type as cfg_max_per_type
-from src.conversation.needs import MAX_UNMAPPED_PER_TOPIC, corroborated_by
+from src.conversation.needs import MAX_UNMAPPED_PER_TOPIC, NeedVocabulary, corroborated_by
 from src.db.queries.catalog import (
     get_products_by_ids,
     get_substitutes,
@@ -1462,6 +1462,7 @@ def _safety_gate(
 def session_decisions(
     filters: Mapping[str, Any],
     state_v2: Any,
+    turn_id: str,
     *,
     category_dropped: bool,
     facets_dropped: bool,
@@ -1470,38 +1471,60 @@ def session_decisions(
 
     `inherit` = filtrele EFECTIVE, cele pe care a căutat pagina după salvarea NX-305/313: un raft
     sau o fațetă scoase ca ghicitură greșită nu mai sunt moștenite de căutarea următoare, unde
-    NX-299 le-ar fi tratat drept rostite de client. `rev` = revizia stării la crearea sesiunii,
-    ca o nevoie retrasă DUPĂ ea să nu mai fie moștenită. Amprenta rămâne a cererii, deci aceeași
-    cerere repetată paginează în continuare pool-ul (care e deja cel salvat). Flag stins ⇒ `{}`."""
+    NX-299 le-ar fi tratat drept rostite de client. `rev` (revizia stării DE DINAINTEA turului) și
+    `turn` (turul care a creat sesiunea) spun ce retrageri sunt MAI NOI decât sesiunea. Amprenta
+    rămâne a cererii, deci aceeași cerere repetată paginează în continuare pool-ul (deja cel
+    salvat). Flag stins ⇒ `{}`."""
     if not getattr(get_settings(), "search_session_contract_enabled", False):
         return {}
-    out: dict[str, Any] = {
-        "inherit": {
-            "category": None if category_dropped else filters.get("category"),
-            "concerns": None if facets_dropped else filters.get("concerns"),
-        }
+    inherit: dict[str, Any] = {
+        "category": None if category_dropped else filters.get("category"),
+        "concerns": None if facets_dropped else filters.get("concerns"),
+        "turn": turn_id,
     }
     revision = getattr(state_v2, "revision", None)
     if isinstance(revision, int):
-        out["rev"] = revision
-    return out
+        inherit["rev"] = revision
+    return {"inherit": inherit}
 
 
-def inheritable_filters(active_search: Mapping[str, Any] | None, state_v2: Any) -> dict[str, Any]:
+def _retracted_since(inherit: Mapping[str, Any], state_v2: Any, pack: object) -> bool:
+    """O nevoie ne-numerică retrasă DUPĂ sesiune? Trei condiții, fiecare cu motivul ei (recenzia
+    NX-342): retragerea vine din ALT tur decât cel care a creat sesiunea (una din același tur e
+    deja în argumentele căutării lui: «de fapt tenul gras» retrage `dry` și caută `oily`); revizia
+    ei e peste cea de dinaintea acelui tur (reducerul numerotează retragerea cu revizia turului
+    care o face, iar un tur „aside" nu crește revizia, deci comparația cu `turn` e cea exactă);
+    cheia nu e o limită numerică (bugetul nu atinge nevoile moștenite; dimensiunea se citește din
+    vocabular, nu din sufix, NX-334)."""
+    rev = inherit.get("rev")
+    if not isinstance(rev, int):
+        return False
+    needs = NeedVocabulary.from_pack(pack)
+    for r in getattr(state_v2, "revocations", ()) or ():
+        same_turn = getattr(r, "source_turn_id", None) == inherit.get("turn")
+        if getattr(r, "revision", 0) <= rev or same_turn:
+            continue
+        if needs.bounds_for(needs.dimension_of(getattr(r, "key", ""))) is None:
+            return True
+    return False
+
+
+def inheritable_filters(
+    active_search: Mapping[str, Any] | None, state_v2: Any, pack: object = None
+) -> dict[str, Any]:
     """NX-342: filtrele pe care o căutare nouă le poate moșteni din sesiune. Flag stins sau o
     sesiune scrisă înainte de NX-342 (fără `inherit`) ⇒ `filters`, ca înainte. Altfel filtrele
-    efective ale paginii 1, fără nevoi dacă starea are o retragere mai nouă decât sesiunea (sursa
-    e starea v2, `revocations`; fără ea, nimic nu știe de retragere și totul rămâne ca azi)."""
+    efective ale paginii 1, fără nevoi dacă o nevoie a fost retrasă după sesiune (sursa e starea
+    v2, `revocations`; fără ea, nimic nu știe de retragere și totul rămâne ca azi)."""
     sess = active_search or {}
     filters = dict(sess.get("filters") or {})
     if not getattr(get_settings(), "search_session_contract_enabled", False):
         return filters
     if "inherit" not in sess:
         return filters
-    inherit = dict(sess.get("inherit") or {})
-    rev = sess.get("rev")
-    revocations = getattr(state_v2, "revocations", ()) or ()
-    if isinstance(rev, int) and any(getattr(r, "revision", 0) > rev for r in revocations):
+    decided = dict(sess.get("inherit") or {})
+    inherit = {"category": decided.get("category"), "concerns": decided.get("concerns")}
+    if _retracted_since(decided, state_v2, pack):
         inherit["concerns"] = None
     return inherit
 
@@ -1719,7 +1742,9 @@ async def _search(
     sessions_on = (
         get_settings().search_sessions_enabled
     )  # kill-switch (OFF → fiecare căutare fresh)
-    sess_filters = inheritable_filters(ctx.state.active_search, ctx.state_v2)
+    sess_filters = inheritable_filters(
+        ctx.state.active_search, ctx.state_v2, getattr(ctx.business, "domain_pack", None)
+    )
     inherited: list[str] = []
     if sessions_on and sess_filters and not planned:
         if a.category is None and sess_filters.get("category"):
@@ -1750,7 +1775,10 @@ async def _search(
                 a.price_max,
                 texts=texts,
                 relative_request=_is_relative_price_request(texts[0]),
-                session_price_max=sess_filters.get("price_max"),
+                # NX-342: marginea sesiunii e a CERERII (`filters`), nu a moștenirii.
+                session_price_max=((ctx.state.active_search or {}).get("filters") or {}).get(
+                    "price_max"
+                ),
             )
         ctx.emit(
             "price_bound_provenance",
@@ -2471,6 +2499,7 @@ async def _search(
             **session_decisions(
                 filters,
                 ctx.state_v2,
+                ctx.turn_id,
                 category_dropped=guessed_category_dropped,
                 facets_dropped=guessed_facets_dropped,
             ),
