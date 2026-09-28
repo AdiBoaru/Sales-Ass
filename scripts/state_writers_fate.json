@@ -129,6 +129,27 @@
     },
     {
       "file": "src/agent/deterministic.py",
+      "function": "_serve_exact_anchor",
+      "field": "focus",
+      "why": "NX-336: acelasi apel indirect catre `_resolve_anchor`, pe scurtatura EXACTA dinaintea interpretarii, prin `ShortcutMemo`. Pe ancora nerezolvata efectele (propunerea, evenimentul) se detaseaza din context si se redau o singura data de trecerea completa; pe cea rezolvata turul e servit de scurtatura, pe calea de azi (`reduce_all` la commit).",
+      "fate": "stays"
+    },
+    {
+      "file": "src/conversation/ambiguity_gate.py",
+      "function": "memory_proposal",
+      "field": "clarification",
+      "why": "NX-336: memoria intrebarii portii (`set_pending_question` / `note_asked`), mutata din `fixture_catalog` ca sa aiba UN proprietar. Propunere spre reducer; commit-ul pasului 6 (PR B) o aplica in a doua trecere.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/conversation/ambiguity_gate.py",
+      "function": "question_answered",
+      "field": "clarification",
+      "why": "NX-336 §1: pe turul interpretat o intrebare VIE se inchide (`resolve_question`) cand turul nu e paranteza, ca `clarify_resume` pe calea de azi. Propunere spre reducer; in PR A doar in starea portii (memorie), in PR B in commit.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/agent/deterministic.py",
       "function": "_resolve_anchor",
       "field": "focus",
       "why": "Rezolvarea de referinte v2 (`reference_precedence_v2_enabled`, NX-235/236): o referinta REZOLVATA explicit e memorata prin `StateUpdateProposal(\"set_references\", payload={\"selected_product\":...})`. Conceptul de \"produs selectat\" nu exista in v1 -- nimic de migrat, mecanismul e nascut deja pe forma tinta.",

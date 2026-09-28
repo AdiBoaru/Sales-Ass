@@ -28,10 +28,13 @@ from pydantic import BaseModel, ConfigDict
 from src.tools.catalog_tools import SearchArgs
 
 #: `kernel.v1.1` (NX-333, MINOR): două câmpuri aditive în `SearchArgs`, scrise doar de planner
-#: (`rank_terms`, `prefer`), și două rânduri aditive în tabelul plannerului. Schema scrisă de model
-#: (`TurnInterpretation`) e identică cu cea din v1.0; snapshotul din `tests/kernel/schema/` diferă
-#: doar prin versiune.
-KERNEL_CONTRACT_VERSION = "kernel.v1.1"
+#: (`rank_terms`, `prefer`), și două rânduri aditive în tabelul plannerului.
+#: `kernel.v1.2` (NX-336, MINOR): `KernelTrace` primește câmpuri aditive (planurile, golurile,
+#: dezvăluirile, actele scoase, contoarele deltei, memoria porții, `truncated`), plafon și
+#: redactare; rolul `orchestrator`; clarificări la I5, I15a, I20 și „Answer policy". Schema
+#: scrisă de model (`TurnInterpretation`) e identică cu cea din v1.0; snapshotul din
+#: `tests/kernel/schema/` diferă doar prin versiune.
+KERNEL_CONTRACT_VERSION = "kernel.v1.2"
 
 # --- scrise de model ----------------------------------------------------------------------------
 

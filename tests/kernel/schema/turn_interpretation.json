@@ -1,5 +1,5 @@
 {
-  "contract_version": "kernel.v1.1",
+  "contract_version": "kernel.v1.2",
   "dimensions": [
     "size",
     "color",

@@ -389,7 +389,7 @@ Each act has one executor, and every executor already exists:
 
 | Act | Executor (existing) |
 | --- | --- |
-| `find` | `search_products_tool` via `ToolRun.execute` (keeps budget, telemetry, safety backstop) |
+| `find` | `search_products_tool` via `ToolRun.execute_planned(SearchArgs)` (corrected in step 6, NX-336: `ToolRun.execute` takes the MODEL's arguments and feeds `observed_constraints`; the planned variant keeps the accumulation of `_execute_serialized`: budget, telemetry, safety backstop, `retrieved`, relevance, `state_patch`, without `run.search_args`) |
 | `show_more` | `continue_search_session` |
 | `compare` | `serve_comparison(ids)` |
 | `detail` | `_handle_detail_intent` / `serve_reviews` with ids |
@@ -401,6 +401,8 @@ Each act has one executor, and every executor already exists:
 
 The regex shortcuts stay as an optimization: a shortcut may skip the interpret call only when its target is exact without the model (pure pagination, a single shown product, a name `match_name` resolves uniquely) and `carries_new_constraints` is false. Otherwise the same handler runs as the executor, after interpretation. That removes the B1/B2 class („all shown links”, „first two compared”) without deleting a handler.
 
+**As built (step 6, NX-336).** The stage is a **branch in `agent_stage`**, not a new stage: a new file in `src/worker/stages/` that calls the tool loop (the `delegate` executor) fails the NX-297 gate. The logic lives in `src/agent/interpreted_turn.py` (role `orchestrator`). Order inside the branch: the EXACT shortcuts first (`try_pre_intents(exact_only=True)`: a recognized chip, our compare-with-similar chip, reviews/detail on a resolved anchor with no new constraints, link/compare on the v2 resolver's `served` verdict; 0 model calls), then the interpretation; every guessing branch returns `False` without effects and is left to the interpretation. When the kernel does not serve, the full `try_pre_intents` runs again as today, so a failed interpretation gives exactly the v1 turn. Signed action turns, recognized chips and pure pagination never enter the branch.
+
 ### Code mapping
 
 | Status | File | Current symbol | Change |
@@ -409,7 +411,7 @@ The regex shortcuts stay as an optimization: a shortcut may skip the interpret c
 | new | `src/conversation/delta.py` | — | `StateChange` → `StateUpdateProposal` (source from the quote check) |
 | new | `src/conversation/ambiguity_gate.py` | — | Rules above; calls `decide_clarification` |
 | new | `src/agent/turn_planner.py` | — | acts → `TurnPlan`; `SearchArgs` derivation |
-| new | `src/worker/stages/interpret.py` (or a branch in `agent_stage`) | — | Orchestrates interpret → resolve → reduce → gate → plan → execute |
+| new | `src/agent/interpreted_turn.py` + a branch in `agent_stage` (NX-336; a stage file would fail the NX-297 gate) | — | Orchestrates interpret → resolve → reduce → gate → plan → execute |
 | extend | `src/conversation/state_v2.py` | `Topic`, `References` | `Topic.goal` as the enum; `parked_topic`; `References.recent_sets` |
 | extend | `src/conversation/state_reducer.py` | `set_topic`, `reduce_all` | park/resume; aside = no-op; facet scope from the pack |
 | extend | `src/conversation/needs.py` | `_spec_from_facet`, `concern_map` special case | Per-facet `scope`; move `concerns` specifics into the pack |

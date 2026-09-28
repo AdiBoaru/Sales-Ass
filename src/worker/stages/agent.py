@@ -24,7 +24,9 @@ from src.agent.deterministic import (
     _COMPARE_RE,  # noqa: F401 — re-export (teste)
     _LINK_RE,  # noqa: F401 — re-export (teste)
     _MORE_RE,  # noqa: F401 — re-export (teste)
+    ShortcutMemo,
     carries_new_constraints,
+    is_pure_pagination,
     is_show_more,
     show_more_phrase,
     try_pre_intents,
@@ -109,6 +111,7 @@ from src.tools import (  # noqa: F401 — importul înregistrează tool-urile
     routine_tools,
 )
 from src.tools.base import enabled_tools
+from src.web.action_models import action_command
 from src.worker.context import context_blocks, conversation_transcript
 
 if TYPE_CHECKING:
@@ -935,8 +938,36 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     # handlerul să primească produsele din `move_id`, nu să le ghicească din text sau din poziție.
     await _recognize_chip_press(ctx, deps)
 
+    # NX-336 (kernel pasul 6): turul interpretat, ca RAMURĂ (un stagiu nou ar pica poarta NX-297).
+    # Nu intră: butoanele semnate (o decizie, nu text), chip-urile recunoscute (mutări emise de
+    # server) și paginarea pură (§1.1). Scurtăturile EXACTE rulează înaintea interpretării, cu zero
+    # apeluri; cele ghicitoare pleacă la interpretare. Import leneș: flag stins = zero import.
+    s = get_settings()
+    kernel = (
+        getattr(s, "interpreted_turn_enabled", False)
+        and ctx.state_v2 is not None
+        and action_command(ctx) is None
+        and ctx.chip_move is None
+        and not is_pure_pagination(ctx)
+    )
+    memo = None
+    if kernel:
+        # Pașii scurtăturilor exacte se memorează: dacă kernelul nu servește, trecerea completă
+        # de mai jos îi refolosește, deci turul căzut e turul cu flagul stins (fără citiri și
+        # evenimente dublate).
+        memo = ShortcutMemo()
+        if await try_pre_intents(ctx, deps, exact_only=True, memo=memo):
+            return
+        from src.agent.interpreted_turn import run_interpreted_turn  # noqa: PLC0415
+
+        if await run_interpreted_turn(ctx, deps):
+            return
+    # Calea v1 EXACT ca azi; după un `False` al kernelului, ramurile ghicitoare rulează aici.
+
     # Faza B (NX-143): intenții deterministe PRE-loop (link/compare) → early-exit, $0 inferență.
-    if await try_pre_intents(ctx, deps):
+    if await (
+        try_pre_intents(ctx, deps) if memo is None else try_pre_intents(ctx, deps, memo=memo)
+    ):
         return
 
     # NX-275 felia 7 (D2): fapt exact pe un produs ANCORAT → răspuns fără niciun apel de model.

@@ -1,6 +1,19 @@
 {
   "$comment": "NX-328: exceptii de la portile tests/test_kernel_contract.py. Fiecare intrare are gate, file, detail (exact textul Violation.detail) si reason nevid. O intrare care nu mai prinde nimic pica testul. Porneste GOALA: kernelul nu are datorie de mostenit. NX-332: `raw_text_readers` declara functiile care au voie sa citeasca un camp de text brut (quote, query, readings, text, body), fiecare cu motiv; poarta `raw_readers` pica pe orice alta citire, iar un cititor declarat care nu mai exista pica testul.",
-  "entries": [],
+  "entries": [
+    {
+      "gate": "state_writes",
+      "file": "src/agent/interpreted_turn.py",
+      "detail": "nerezolvabil static: dynamic_patch_mutating_call",
+      "reason": "NX-336 §2: ContextSnapshot.restore readuce `state_patch` la valoarea de DINAINTEA ramurii pe fallback (executorii PR C scriu `active_search` inainte de verdictul servit). Nu e o scriere noua de stare: e anularea uneia, vizibila portii in loc de un setattr ascuns; testul compara toate campurile contextului."
+    },
+    {
+      "gate": "state_writes",
+      "file": "src/agent/interpreted_turn.py",
+      "detail": "nerezolvabil static: dynamic_patch_update_arg",
+      "reason": "NX-336 §2: perechea lui `.clear()` din ContextSnapshot.restore: continutul restaurat e copia facuta la intrarea in ramura, nimic calculat de kernel."
+    }
+  ],
   "raw_text_readers": [
     {
       "file": "src/conversation/provenance.py",
@@ -26,6 +39,21 @@
       "file": "src/conversation/kernel_trace.py",
       "function": "_change",
       "reason": "NX-328: afisarea traceului pentru om (scripts/kernel_trace.py); citatul apare ca text, nu intra in nicio decizie."
+    },
+    {
+      "file": "src/conversation/kernel_trace.py",
+      "function": "_redacted",
+      "reason": "NX-336: redactarea traceului inainte de stocare (P12): citatul, textul/numele/valoarea referintei, cererea actului, lecturile si cuvintele de cautare ale planului trec prin frontiera NX-230. Se inlocuiesc, nu se compara."
+    },
+    {
+      "file": "src/agent/interpreted_turn.py",
+      "function": "_turn_words",
+      "reason": "NX-336: constructia InterpretInput: mesajul curent (brut, D6, ca pentru agent) si istoricul de dinaintea lui, redactat la citire ca in conversation_transcript. Ies neschimbate spre adaptor; nicio decizie nu ramifica pe cuvinte."
+    },
+    {
+      "file": "src/agent/interpreted_turn.py",
+      "function": "_redact",
+      "reason": "NX-336: frontiera NX-230 (make_safe, profilul persist = categoriile apply_boundary) data lui redact_trace; citeste `.text` al rezultatului redactat, nu decide nimic."
     }
   ]
 }

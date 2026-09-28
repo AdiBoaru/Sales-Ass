@@ -57,13 +57,17 @@ def facts_from_row(row: dict[str, Any]) -> ProductFacts:
 
 
 async def fetch_reference_facts(
-    deps: Any, business_id: str, lookup: CatalogLookup
+    deps: Any, business_id: str, lookup: CatalogLookup, *, op: str = "reference_facts"
 ) -> ReferenceFacts:
     """Faptele pe care le cere `lookup`, pentru tenantul `business_id`. Ridică excepția DB-ului:
-    apelantul decide degradarea (pe scurtături: calea NX-326, P6)."""
+    apelantul decide degradarea (pe scurtături: calea NX-326, P6).
+
+    `op` = eticheta operației (NX-336): turul interpretat își numește citirea separat de cea a
+    scurtăturilor, ca un tur căzut pe v1 să poată fi comparat cu flagul stins fără citirile
+    kernelului (suprafața I16, excepția declarată în card)."""
     ids = [i for i in lookup.ids if _is_uuid(i)]
     named: dict[str, tuple[tuple[str, int], ...]] = {}
-    async with deps.db("reference_facts") as conn:
+    async with deps.db(op) as conn:
         for name in lookup.names:
             hits = await find_products_named(conn, business_id, name)
             if hits:

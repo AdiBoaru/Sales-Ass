@@ -16,10 +16,12 @@ follow-up de preț («mai ieftin») NU e link/compare/paginare, ci re-căutare (
 
 from __future__ import annotations
 
+import contextvars
+import inspect
 import logging
 import re
 from collections.abc import Callable, Iterable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal
 
 from src.agent.compare_narrative import compose_comparison
@@ -366,7 +368,7 @@ async def serve_reviews(
 async def _handle_review_intent(ctx: TurnContext, deps: PipelineDeps, query: str) -> None:
     """Răspunde din recenziile produsului afișat; nu lasă modelul să aleagă ancora."""
     refs = _anchor_refs(ctx)  # NX-234: setul afișat + produsul PAGINII (dacă există)
-    selected = _resolve_anchor(ctx, query)
+    selected = await _memo(ctx, ("anchor",), lambda: _resolve_anchor(ctx, query))
     if selected is None:
         ctx.set_clarify(
             _review_copy(ctx.language)["which"],
@@ -505,7 +507,7 @@ async def serve_details(
 
 async def _handle_detail_intent(ctx: TurnContext, deps: PipelineDeps, query: str) -> None:
     refs = _anchor_refs(ctx)  # NX-234: setul afișat + produsul PAGINII (dacă există)
-    selected = _resolve_anchor(ctx, query)
+    selected = await _memo(ctx, ("anchor",), lambda: _resolve_anchor(ctx, query))
     if selected is None:
         ctx.set_clarify(
             _detail_copy(ctx.language)["which"],
@@ -584,7 +586,7 @@ async def _handle_compare_intent(ctx: TurnContext, deps: PipelineDeps, query: st
     cade pe bucla LLM (caută/compară fresh). True = a servit turul."""
     n = 4 if _FOUR_RE.search(query) else (3 if _THREE_RE.search(query) else 2)
     ids = [p.product_id for p in ctx.state.displayed_products][:n]
-    return await serve_comparison(ctx, deps, ids)
+    return await _memo(ctx, ("compare", tuple(ids)), lambda: serve_comparison(ctx, deps, ids))
 
 
 async def serve_comparison(ctx: TurnContext, deps: PipelineDeps, ids: list[str]) -> bool:
@@ -890,10 +892,123 @@ async def serve_chip_move(ctx: TurnContext, deps: PipelineDeps, move: Any) -> bo
     return served
 
 
-async def try_pre_intents(ctx: TurnContext, deps: PipelineDeps) -> bool:
+@dataclass
+class ShortcutMemo:
+    """NX-336 (recenzia, constatarea 2): deciziile trecerii `exact_only`, refolosite de trecerea
+    COMPLETĂ de după un `False` al kernelului, ca un tur căzut pe v1 să fie turul cu flagul stins:
+    fără citiri dublate și fără evenimente dublate.
+
+    Trecerea exactă ÎNREGISTREAZĂ fiecare pas cu I/O sau cu efecte (verdictul `_v2_shortcut`,
+    rezolvarea ancorei, comparația cu un similar, comparația servită și refuzată): rezultatul și
+    efectele lui (evenimentele și propunerile adăugate în context). Dacă trecerea nu servește
+    turul, efectele se DETAȘEAZĂ din context (contextul rămâne cel de dinainte) și se păstrează pe
+    cheie; trecerea completă, ajunsă la același pas, primește rezultatul și REDĂ efectele în locul
+    în care le-ar fi produs ea, fără să recitească. Fiecare cheie se consumă o dată. Fără memo
+    (flag stins) pașii rulează ca azi, byte cu byte."""
+
+    recording: bool = True
+    entries: dict[Any, tuple[Any, list[Any], list[Any]]] = field(default_factory=dict)
+    ranges: list[tuple[Any, Any, int, int, int, int]] = field(default_factory=list)
+
+    def detach(self, ctx: TurnContext, events_from: int, proposals_from: int) -> None:
+        """Scoate din context efectele trecerii exacte și le păstrează pe cheie."""
+        for key, result, e0, e1, p0, p1 in self.ranges:
+            self.entries[key] = (result, ctx.events[e0:e1], ctx.state_proposals[p0:p1])
+        del ctx.events[events_from:]
+        del ctx.state_proposals[proposals_from:]
+        self.ranges.clear()
+
+
+_ACTIVE_MEMO: contextvars.ContextVar[ShortcutMemo | None] = contextvars.ContextVar(
+    "shortcut_memo", default=None
+)
+
+
+async def _memo(ctx: TurnContext, key: Any, compute: Callable[[], Any]) -> Any:
+    """Un pas memorat al scurtăturilor (vezi `ShortcutMemo`). Fără memo activ: `compute()`."""
+    memo = _ACTIVE_MEMO.get()
+    if memo is None:
+        result = compute()
+        return await result if inspect.isawaitable(result) else result
+    if not memo.recording and key in memo.entries:
+        result, events, proposals = memo.entries.pop(key)
+        ctx.events.extend(events)
+        ctx.state_proposals.extend(proposals)
+        return result
+    e0, p0 = len(ctx.events), len(ctx.state_proposals)
+    result = compute()
+    result = await result if inspect.isawaitable(result) else result
+    if memo.recording:
+        memo.ranges.append((key, result, e0, len(ctx.events), p0, len(ctx.state_proposals)))
+    return result
+
+
+async def _serve_exact_anchor(
+    ctx: TurnContext,
+    deps: PipelineDeps,
+    query: str,
+    route: Any,
+    serve: Callable[[ProductRef], Any],
+) -> bool:
+    """NX-336 (`exact_only`): recenzii / detaliu DOAR pe o ancoră rezolvată determinist și fără
+    constrângeri noi în mesaj (`turn_has_new_constraints`, predicatul porților ancorate). Altfel
+    `False`: nicio întrebare (întrebarea e a porții kernelului); rezolvarea e memorată, iar
+    efectele ei (propunerea de selecție, evenimentul) se detașează și se redau pe trecerea
+    completă."""
+    if turn_has_new_constraints(ctx, route):
+        return False
+    selected = await _memo(ctx, ("anchor",), lambda: _resolve_anchor(ctx, query))
+    if selected is None:
+        return False
+    await serve(selected)
+    return True
+
+
+def is_pure_pagination(ctx: TurnContext) -> bool:
+    """NX-336 §1.1: «mai arată-mi» FĂRĂ reziduu rămâne pe v1, întreg. E exact predicatul paginării
+    de azi (`is_show_more`, care include `carries_new_constraints`, NX-251): o paginare cu reziduu
+    pleacă la interpretare. Numit separat ca ramura kernelului să spună ce întreabă."""
+    return is_show_more(ctx)
+
+
+async def try_pre_intents(
+    ctx: TurnContext,
+    deps: PipelineDeps,
+    *,
+    exact_only: bool = False,
+    memo: ShortcutMemo | None = None,
+) -> bool:
     """Faza B: intenții deterministe PRE-loop (link + compare). True = tratat (early-exit din
     `stage.py`); False = lasă bucla LLM. Doar SALES; toate exclud «mai ieftin» (cheaper_intent) și
-    o căutare nouă (`route.filters`)."""
+    o căutare nouă (`route.filters`).
+
+    NX-336: `exact_only=True` (ramura turului interpretat) păstrează DOAR ramurile al căror rezultat
+    nu depinde de ghicit: chip-ul recunoscut și chip-ul nostru «compară-l cu un produs similar»,
+    recenzii/detaliu pe o ancoră rezolvată fără constrângeri noi, link/comparație pe verdictul
+    `served` al resolverului v2 (și `fallback`-ul lor când ecranul are o singură ancoră, respectiv
+    exact două carduri). Restul întorc `False` fără efecte în context: pașii cu I/O se MEMOREAZĂ
+    (`memo`), iar trecerea completă de după un `False` al kernelului, chemată cu ACELAȘI `memo`,
+    îi refolosește fără să recitească și fără să re-emită. Fără memo și fără `exact_only` e funcția
+    de azi, neatinsă."""
+    if exact_only and memo is None:
+        memo = ShortcutMemo()
+    if memo is None:
+        return await _pre_intents(ctx, deps, exact_only=exact_only)
+    token = _ACTIVE_MEMO.set(memo)
+    events_from, proposals_from = len(ctx.events), len(ctx.state_proposals)
+    try:
+        served = await _pre_intents(ctx, deps, exact_only=exact_only)
+    finally:
+        _ACTIVE_MEMO.reset(token)
+    if memo.recording:
+        if not served:
+            memo.detach(ctx, events_from, proposals_from)
+        memo.ranges.clear()
+        memo.recording = False
+    return served
+
+
+async def _pre_intents(ctx: TurnContext, deps: PipelineDeps, *, exact_only: bool) -> bool:
     route = ctx.route
     if route is None or route.route != Route.SALES:
         return False
@@ -918,7 +1033,10 @@ async def try_pre_intents(ctx: TurnContext, deps: PipelineDeps) -> bool:
         and is_compare_with_similar(query, ctx.language)
     ):
         refs = _anchor_refs(ctx)
-        if len(refs) == 1 and await serve_compare_with_similar(ctx, deps, refs[0].product_id):
+        anchor = refs[0].product_id if len(refs) == 1 else None
+        if anchor is not None and await _memo(
+            ctx, ("similar", anchor), lambda: serve_compare_with_similar(ctx, deps, anchor)
+        ):
             return True
 
     # Un follow-up de recenzii se referă la setul deja afișat chiar dacă triajul a propagat filtre
@@ -940,6 +1058,10 @@ async def try_pre_intents(ctx: TurnContext, deps: PipelineDeps) -> bool:
         and (explicit_review or resolves_pending_review)
     )
     if review_intent:
+        if exact_only:
+            return await _serve_exact_anchor(
+                ctx, deps, query, route, lambda p: serve_reviews(ctx, deps, p.product_id, p.name)
+            )
         await _handle_review_intent(ctx, deps, query)
         return True
 
@@ -954,6 +1076,10 @@ async def try_pre_intents(ctx: TurnContext, deps: PipelineDeps) -> bool:
         and (explicit_detail or resolves_pending_detail)
     )
     if detail_intent:
+        if exact_only:
+            return await _serve_exact_anchor(
+                ctx, deps, query, route, lambda p: serve_details(ctx, deps, p.product_id)
+            )
         await _handle_detail_intent(ctx, deps, query)
         return True
 
@@ -978,14 +1104,22 @@ async def try_pre_intents(ctx: TurnContext, deps: PipelineDeps) -> bool:
     )
     if link_intent:
         if _resolver_v2_enabled():
-            decision = await _v2_shortcut(ctx, deps, query, "link")
+            decision = await _memo(
+                ctx, ("v2", "link"), lambda: _v2_shortcut(ctx, deps, query, "link")
+            )
             if decision is not None:
                 if decision.action == "model":
+                    return False
+                if exact_only and decision.action != "served" and len(anchorable) != 1:
+                    # `fallback` = toate ancorele: o ghicire, cu excepția unei singure ancore
+                    # (recenzia NX-336, constatarea 3: «Trimite-mi linkul» sub un detaliu).
                     return False
                 await _handle_link_intent(
                     ctx, deps, list(decision.ids) if decision.action == "served" else None
                 )
                 return True
+        if exact_only:
+            return False  # `_link_targets` (NX-326) ghicește pe cuvinte, fără catalog
         ids = _link_targets(ctx, query, anchorable)
         if ids is None:
             await _handle_link_intent(ctx, deps)  # apelul de dinainte, neschimbat
@@ -1006,13 +1140,24 @@ async def try_pre_intents(ctx: TurnContext, deps: PipelineDeps) -> bool:
     if not compare_intent:
         return False
     if _resolver_v2_enabled():
-        decision = await _v2_shortcut(ctx, deps, query, "compare")
+        decision = await _memo(
+            ctx, ("v2", "compare"), lambda: _v2_shortcut(ctx, deps, query, "compare")
+        )
         if decision is not None:
             if decision.action == "served":
-                return await serve_comparison(ctx, deps, list(decision.ids)[:4])
+                ids = list(decision.ids)[:4]
+                return await _memo(
+                    ctx, ("compare", tuple(ids)), lambda: serve_comparison(ctx, deps, ids)
+                )
             if decision.action == "model":
                 return False
+            if exact_only and len(ctx.state.displayed_products) != 2:
+                # `fallback` = primele două afișate: o ghicire, cu excepția a exact două
+                # carduri (recenzia NX-336, constatarea 3).
+                return False
             return await _handle_compare_intent(ctx, deps, query)
+    if exact_only:
+        return False  # calea NX-326 (`named_targets`) și „primele două" ghicesc
     if getattr(get_settings(), "named_shortcut_targets_enabled", False):
         displayed_refs = list(ctx.state.displayed_products)
         targets = named_targets(query, displayed_refs, locale=ctx.language)
@@ -1119,6 +1264,15 @@ def _paired_ambiguity(resolved: Sequence[ResolvedRef]) -> tuple[str, ...]:
     return tuple(first) if same and len(set(first)) == len(resolved) else ()
 
 
+def page_source(ctx: TurnContext) -> ShownItem | None:
+    """Produsul PAGINII (NX-234) ca sursă a resolverului, din snapshotul rehidratat al turului.
+    O singură construcție pentru scurtăturile v2 și pentru turul interpretat (NX-336), care o
+    adaugă la `references.sources_from_state` (starea nu știe de pagină). Prețul necunoscut al
+    ancorei (`ProductRef.price == 0.0`) rămâne necunoscut, nu zero."""
+    page = _page_anchor_ref(ctx)
+    return ShownItem(page.product_id, page.name, page.price or None) if page else None
+
+
 def _state_v2_sources(ctx: TurnContext) -> dict[str, Any]:
     """NX-331: seturile de mai devreme, setul parcat și focusul, din starea v2 (când e aprinsă).
 
@@ -1150,12 +1304,11 @@ async def _v2_shortcut(
     )
     resolved: list[ResolvedRef] = []
     if refs:
-        page = _page_anchor_ref(ctx)
         sources = ReferenceSources(
             shown_now=tuple(
                 ShownItem(p.product_id, p.name, p.price) for p in ctx.state.displayed_products
             ),
-            page=ShownItem(page.product_id, page.name, page.price or None) if page else None,
+            page=page_source(ctx),
             **_state_v2_sources(ctx),
         )
         pack = getattr(ctx.business, "domain_pack", None)

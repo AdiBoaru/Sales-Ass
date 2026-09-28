@@ -349,7 +349,10 @@ def test_the_step_5_modules_are_registered_and_no_longer_planned():
     assert "src/conversation/interpretation_check.py" in roles["pure"]
     assert roles["adapter"] == ["src/conversation/turn_interpreter.py"]
     assert "src/conversation/turn_interpreter.py" not in registry["planned"]
-    assert not registry["planned"], "niciun modul de kernel planificat rămas nescris"
+    # NX-336: singurul modul planificat rămas e commit-ul kernelului, al pasului 6 PR B.
+    assert set(registry["planned"]) <= {"src/worker/kernel_commit.py"}, (
+        "niciun modul de kernel al pașilor 1-5 planificat rămas nescris"
+    )
 
 
 def test_the_pure_check_module_does_not_load_a_model_client_even_transitively():

@@ -42,12 +42,19 @@ def clear_vocabulary_cache() -> None:
     _cache.clear()
 
 
-async def get_vocabulary(deps: Any, business_id: str) -> CatalogVocabulary:
+async def get_vocabulary(
+    deps: Any, business_id: str, *, op: str = "load_vocabulary", fail_open: bool = True
+) -> CatalogVocabulary:
     """Vocabularul servabil al tenantului, din cache sau proaspăt.
 
     Două tururi concurente pot încărca amândouă la prima cerere; e acceptabil — încărcarea e
     idempotentă și fără efecte secundare, iar un lock ar ține o conexiune ocupată exact în momentul
     în care nu trebuie (NX-231: checkout scurt, nimic extern înăuntru).
+
+    NX-336: `op` = eticheta operației (turul interpretat își numește citirea), iar
+    `fail_open=False` ridică eroarea în loc să întoarcă un vocabular gol: interpretarea pe un
+    vocabular gol ar fi un apel de model pe o intrare degradată tăcut, deci turul cade pe v1
+    ÎNAINTEA apelului. Implicitele sunt comportamentul de azi.
     """
     now = time.monotonic()
     hit = _cache.get(business_id)
@@ -55,9 +62,11 @@ async def get_vocabulary(deps: Any, business_id: str) -> CatalogVocabulary:
         return hit[1]
 
     try:
-        async with deps.db("load_vocabulary") as conn:
+        async with deps.db(op) as conn:
             vocab = await load_vocabulary(conn, business_id)
     except Exception:  # noqa: BLE001 — DB indisponibil/înlocuit: degradăm, nu picăm turul (P6)
+        if not fail_open:
+            raise
         # Vocabular gol ⇒ rezolvarea întoarce `UNKNOWN` pentru tot ⇒ NICIUN filtru dur. E singura
         # degradare corectă: dacă nu putem verifica un cuvânt, nu avem voie să constrângem pe el.
         # Alternativa (aplicăm tokenul neverificat) e exact defectul pe care modulul îl elimină —

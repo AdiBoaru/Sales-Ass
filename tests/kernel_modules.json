@@ -42,7 +42,15 @@
         "src/tools/routine_tools.py",
         "src/agent/deterministic.py"
       ]
+    },
+    "orchestrator": {
+      "doc": "NX-336: orchestratorul turului interpretat (ramura din agent_stage). Cheama adaptorul si executorii, deci I13 nu i se aplica; nu construieste SearchArgs (I2), nu scrie starea decat prin propuneri si restaurarea declarata (I3), citeste textul brut doar in cititorii declarati si nu contine literali de vertical (I14). Inscrierea face `kernel_differential.applies` sa se declanseze pe orice PR care atinge orchestratorul sau commit-ul kernelului, fara calea v1 din agent.py.",
+      "modules": [
+        "src/agent/interpreted_turn.py"
+      ]
     }
   },
-  "planned": {}
+  "planned": {
+    "src/worker/kernel_commit.py": "orchestrator"
+  }
 }
