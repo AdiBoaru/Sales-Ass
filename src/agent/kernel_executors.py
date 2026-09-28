@@ -1,4 +1,4 @@
-"""NX-336 PR C (feliile C1 + C2) — executorii de CITIRE ai turului interpretat.
+"""NX-336 PR C (C1 + C2) și PR D (D1) — executorii turului interpretat, fără mutații.
 
 Planul turului (`PlannedTurn`, scris de `turn_planner`) spune CE se servește; aici se leagă la
 executorii de azi, fără niciun apel de model în plus și fără a re-deduce intenția:
@@ -16,7 +16,8 @@ executorii de azi, fără niciun apel de model în plus și fără a re-deduce i
 **Bucla restrânsă (PR D1):** `delegate` (actul `other`), `faq` (`store_info`) și `order`
 (`order_status`) rulează bucla de unelte a căii v1 (același system, același mesaj de user), cu
 schema restrânsă la uneltele permise ∩ uneltele tenantului: `DELEGATE_TOOLS` pe `delegate`,
-`faq_lookup` pe `faq`, `check_order` pe `order`. `execute` e ÎNVELIT într-un allowlist: un nume din
+`faq_lookup` pe `faq`, `check_order` + `faq_lookup` pe `order` (setul v1 de comandă, FAQ întâi).
+`execute` e ÎNVELIT într-un allowlist: un nume din
 afara lui nu ajunge la `run_tool` (care execută orice unealtă înregistrată), se numără
 (`delegate_tool_refused{name}`) și modelul primește un refuz structurat. Niciuna nu e mutație și
 niciuna nu citește catalogul, deci niciun `product_id` nu vine de la model (I1, I10). Compunerea e a
@@ -74,7 +75,7 @@ if TYPE_CHECKING:
     from src.models import TurnContext
     from src.worker.runner import PipelineDeps
 
-#: Executorii legați în C1. Oricare altul ⇒ `None` (calea v1).
+#: Executorii legați (C1, C2, D1). Oricare altul ⇒ `None` (calea v1).
 READ_EXECUTORS: frozenset[str] = frozenset(
     {"search", "page", "detail", "compare", "link", "ask", "faq", "order", "delegate"}
 )

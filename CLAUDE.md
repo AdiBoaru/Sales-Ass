@@ -414,13 +414,13 @@ marcator, `{dimension}`; fără etichetă, `verdict_unknown_any`). Structural e 
 subtitlul rămân pe prompt (declarat). Un act cu ≥ 2 ținte din care una s-a pierdut fără dezvăluire
 rămâne `dark`. Confirmarea implicită a porții e ultima frază a răspunsului (`note_asked`).
 **PR D1 (bucla restrânsă):** `delegate`/`faq`/`order` rulează bucla v1 de unelte cu schema
-restrânsă la `DELEGATED_TOOLS` (`DELEGATE_TOOLS`; `faq_lookup`; `check_order` + `faq_lookup`) ∩ uneltele tenantului,
-iar `execute` e învelit într-un allowlist (un nume din afara lui nu ajunge la `run_tool`,
-`delegate_tool_refused{name}`); compunerea e a căii v1, o vedere de comandă trece prin ramura ORDER,
-iar o buclă picată servește fallback-ul v1 fără a doua buclă. Rămân `dark`: `reply_only`, mutațiile,
-multi-act (D2), `bundle` (D3). Frazele
-vin din `DomainPack.kernel_sentences` (vocabular închis `KERNEL_SENTENCE_CODES`, P11), puse o dată
-înaintea răspunsului și în câmpul citit de widget. Un tur căzut după ce un executor a rulat își scoate
+restrânsă la `DELEGATED_TOOLS` (`DELEGATE_TOOLS`; `faq_lookup`; `check_order` + `faq_lookup`) ∩
+uneltele tenantului, iar `execute` e învelit într-un allowlist (un nume din afara lui nu ajunge la
+`run_tool`, `delegate_tool_refused{name}`); compunerea e a căii v1, o vedere de comandă trece prin
+ramura ORDER, iar o buclă picată servește fallback-ul v1 fără a doua buclă. Rămân `dark`:
+`reply_only`, mutațiile, multi-act (D2), `bundle` (D3). Frazele vin din
+`DomainPack.kernel_sentences` (vocabular închis `KERNEL_SENTENCE_CODES`, P11), puse o dată înaintea
+răspunsului și în câmpul citit de widget. Un tur căzut după ce un executor a rulat își scoate
 evenimentele (citirile de DB rămân, declarat). Probă: `pytest tests/test_interpreted_turn_c.py
 tests/test_interpreted_turn_a.py tests/test_interpreted_turn_b.py tests/test_kernel_contract.py -q`.
 
