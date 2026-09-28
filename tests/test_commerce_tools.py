@@ -88,7 +88,9 @@ async def test_cart_add_quantity_capped_at_99(monkeypatch):
     assert res.state_patch["cart"][0]["quantity"] == 99  # min(99 + 5, 99)
 
 
-async def test_cart_add_caps_at_10_lines(monkeypatch):
+async def test_cart_add_refuses_an_eleventh_line_instead_of_dropping_it(monkeypatch):
+    """NX-341: înainte, a 11-a linie se tăia în tăcere (`cart[:10]`) iar unealta răspundea
+    `ok=True` cu produsul pierdut. Acum e refuz explicat, ca `CartService` (`cart_full`)."""
     products = [
         {"id": f"p{i}", "name": f"P{i}", "price": 10.0, "availability": "in_stock"}
         for i in range(12)
@@ -100,7 +102,11 @@ async def test_cart_add_caps_at_10_lines(monkeypatch):
         for i in range(10)
     ]
     res = await run_tool(ctx, _deps(), "cart_add", {"product_id": "p11", "quantity": 1})
-    assert len(res.state_patch["cart"]) == 10  # cap dur
+    assert res.ok is False and res.error == "cart_full"
+    assert "cart" not in res.state_patch  # coșul rămâne cel de dinainte
+    # o linie EXISTENTĂ se poate încă mări pe un coș plin
+    more = await run_tool(ctx, _deps(), "cart_add", {"product_id": "p3", "quantity": 1})
+    assert more.ok and len(more.state_patch["cart"]) == 10
 
 
 async def test_cart_add_product_not_found(monkeypatch):

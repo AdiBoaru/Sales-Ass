@@ -150,14 +150,18 @@ async def checkout_link_tool(
     # Validăm produsele contra catalogului (scoped pe business) — nu linkuim ce nu există.
     ids = list(dict.fromkeys(it.product_id for it in a.cart_items))
     async with deps.db("checkout_link_products") as conn:
-        products = await get_products_by_ids(conn, ctx.business.id, ids, limit=6)
+        # NX-341: TOATE produsele coșului (≤ 10), nu primele 6: plafonul ascuns pierdea produsele
+        # 7-10 pe ramura „produs dispărut", iar linkul, totalul și atribuirea acopereau 6.
+        products = await get_products_by_ids(conn, ctx.business.id, ids, limit=len(ids))
     by_id = {p["id"]: p for p in products}
 
     cart: list[dict[str, Any]] = []
     total = 0.0
+    dropped = 0
     for it in a.cart_items:
         p = by_id.get(it.product_id)
         if p is None or p.get("price") is None:
+            dropped += 1  # chiar dispărut din catalog (sau fără preț): numărat, nu tăcut
             continue
         # NX-118: nu linkuim un `variant_id` fabricat (orice variantă cerută trebuie să existe).
         if not _variant_known(p, it.variant_id):
@@ -215,6 +219,7 @@ async def checkout_link_tool(
     ctx.emit(
         "checkout_link_created",
         items=len(cart),
+        dropped=dropped,
         value=total,
         product_ids=clean_ids(c["product_id"] for c in cart),
     )
@@ -226,6 +231,12 @@ async def checkout_link_tool(
         f"Link de checkout creat: {url}\n"
         f"Coș: {lines} | total {amount_text(total, ctx.language)} lei"
     )
+    if dropped:
+        # NX-341: totalul acoperă doar liniile de mai sus; clientul trebuie să afle ce lipsește.
+        llm_view += (
+            f"\n{dropped} produs(e) cerut(e) nu mai sunt în catalog și NU sunt în link; spune-i "
+            "clientului, nu prezenta totalul ca fiind al întregului coș."
+        )
     # `products` (cart) → prețurile produselor sunt grounded; `links` → linkul permis;
     # `prices=[total]` → TOTALUL coșului e grounded (altfel validatorul l-ar respinge).
     return ToolResult(
@@ -291,6 +302,11 @@ async def cart_add_tool(ctx: TurnContext, deps: PipelineDeps, args: dict[str, An
             line["quantity"] = min(line["quantity"] + a.quantity, 99)
             break
     else:
+        if len(cart) >= _CART_MAX_LINES:
+            # NX-341: coș plin ⇒ refuz explicat, ca `CartService` (`cart_full`). Înainte, linia
+            # nouă se tăia în tăcere (`cart[:10]`) iar unealta răspundea `ok=True` cu produsul
+            # pierdut, deci botul confirma o adăugare care nu avusese loc.
+            return ToolResult(ok=False, error="cart_full", llm_view=_CART_CODE_VIEWS["cart_full"])
         cart.append(
             {
                 "product_id": a.product_id,
@@ -300,7 +316,6 @@ async def cart_add_tool(ctx: TurnContext, deps: PipelineDeps, args: dict[str, An
                 "quantity": a.quantity,
             }
         )
-    cart = cart[:_CART_MAX_LINES]
     total = round(sum(line["price"] * line["quantity"] for line in cart), 2)
     # NX-163: ce s-a adăugat în coș, ca ref-uri (P8) — semnal de add-to-cart per produs (NX-164).
     ctx.emit(

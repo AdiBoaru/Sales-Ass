@@ -313,10 +313,12 @@ async def test_get_products_by_ids_respects_content_status_only_on_demand(shop):
             bid,
         )
         # re-hidratare (validator/deixis): draft NU se filtrează
-        rehydrate = await get_products_by_ids(conn, bid, [pub, draft])
+        rehydrate = await get_products_by_ids(conn, bid, [pub, draft], limit=2)
         assert {r["id"] for r in rehydrate} == {pub, draft}
         # pagină nouă (continue_search_session): draft ascuns
-        new_page = await get_products_by_ids(conn, bid, [pub, draft], respect_content_status=True)
+        new_page = await get_products_by_ids(
+            conn, bid, [pub, draft], limit=2, respect_content_status=True
+        )
         assert {r["id"] for r in new_page} == {pub}
 
 

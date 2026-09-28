@@ -1598,6 +1598,9 @@ Orice stagiu poate seta `reply` → early exit direct la Sender (stagiul 9).
       o rundă poate emite N apeluri și toate se execută. Plafoanele separate pe apeluri/mutații
       există în src/runtime/turn_budget.py (NX-241), dar sunt OFF (turn_budget_enforced=false)
     • tool results: max 6 produse × 8 câmpuri (nu obiecte complete)
+      NX-341: plafonul e al APELANTULUI (`SearchArgs.limit` ≤ 8, `card_slots`), nu al hidratării:
+      `get_products_by_ids` nu mai taie ascuns la 6 (`limit` obligatoriu, ≤ `PRODUCTS_BY_IDS_MAX`=12,
+      poartă AST pe apelanți), fiindcă tăia checkout-ul (7-10) și paginarea (7-8) în tăcere
     • P0-safety CONTRAINDICAȚII (NX-173, src/safety/) — UN SINGUR punct de decizie:
       `SafetyPolicy.for_turn(ctx).evaluate(products, purpose)` → `Decision` tipizat. Context
       (sarcină/alăptare) detectat DETERMINIST + PERSISTAT în state.safety (istoricul de 8 e

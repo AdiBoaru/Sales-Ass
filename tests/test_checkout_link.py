@@ -106,6 +106,7 @@ async def test_checkout_link_happy(monkeypatch):
     # NX-163: + product_ids (ref-uri, P8) pt raportul de cerere; fără PII.
     assert ev and ev[0].properties == {
         "items": 1,
+        "dropped": 0,  # NX-341: câte linii cerute n-au mai fost găsite
         "value": round(82.99 * 2, 2),
         "product_ids": ["p1"],
         "turn_id": "t",

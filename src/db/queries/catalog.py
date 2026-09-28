@@ -1179,26 +1179,39 @@ _DETAIL_SELECT = f"""
 """
 
 
+#: NX-341: câte produse hidratează `get_products_by_ids` într-un apel. Aliniat cu
+#: `db/queries/carts.load_cart_facts_rows` (12), deci un coș plin (10 linii) și o pagină (≤ 8)
+#: încap.
+PRODUCTS_BY_IDS_MAX = 12
+
+
 async def get_products_by_ids(
     conn: asyncpg.Connection,
     business_id: str,
     product_ids: list[str],
     *,
-    limit: int = 6,
+    limit: int,
     respect_content_status: bool = False,
 ) -> list[dict[str, Any]]:
     """Produse active după id (tool-uri get_product_details / compare_products), cu detalii
-    bogate (rating + rezumat recenzii D3). `business_id = $1` (izolare; RLS plasa). Max
-    `limit` (hard cap 6). Ordinea ÎN care s-au cerut id-urile e PĂSTRATĂ (`array_position`) —
-    deixis-ul ordinal („a doua"/„compară primele două") rezolvă produsul corect.
+    bogate (rating + rezumat recenzii D3). `business_id = $1` (izolare; RLS plasa). Ordinea ÎN
+    care s-au cerut id-urile e PĂSTRATĂ (`array_position`) — deixis-ul ordinal („a doua"/
+    „compară primele două") rezolvă produsul corect.
+
+    NX-341: `limit` e OBLIGATORIU și nu se mai taie în tăcere. Plafonul ascuns `min(limit, 6)`
+    pierdea produsele 7-10 ale unui checkout și 7-8 ale unei pagini, fără eroare și fără
+    eveniment. Acum apelantul spune cât îi trebuie; peste `PRODUCTS_BY_IDS_MAX` e o eroare de
+    programare (`ValueError`), nu o tăiere. Primele `limit` id-uri se citesc, deci un apelant care
+    trece candidați și vrea primii N o face explicit.
 
     `respect_content_status` (NX-171c): DEFAULT off — re-hidratarea produselor DEJA afișate
     (validator de preț, deixis, compare) NU trebuie filtrată (un produs arătat, devenit draft, tot
     are nevoie de preț validat). Calea care SERVEȘTE produse NOI nevăzute (`continue_search_session`
     — „mai arată-mi") trece `True` → aplică filtrul published (per-tenant), ca discovery."""
+    if not 1 <= limit <= PRODUCTS_BY_IDS_MAX:
+        raise ValueError(f"limit în afara [1, {PRODUCTS_BY_IDS_MAX}]: {limit}")
     if not product_ids:
         return []
-    limit = min(limit, 6)
     cs = _content_status_pred() if respect_content_status else None
     rows = await conn.fetch(
         _DETAIL_SELECT
@@ -1213,9 +1226,11 @@ async def get_products_by_ids(
     return [_row_to_product(r) for r in rows]
 
 
-#: Plafonul bazinului de retrieval. NU e plafonul de context al agentului (acela e 6, în
-#: `get_products_by_ids`, și apără promptul). Un bazin de ranking are nevoie de mai mulți candidați
-#: decât intră în răspuns, altfel „rerank" înseamnă reordonarea celor șase deja aleși.
+#: Plafonul bazinului de retrieval. NU e plafonul de context al agentului: acela e al
+#: APELANȚILOR (`SearchArgs.limit` ≤ 8, `card_slots`), nu al hidratării. NX-341:
+#: `get_products_by_ids` avea un 6 ascuns „care apăra promptul", dar tăia și checkout-ul (7-10) și
+#: paginarea (7-8), unde nu era niciun prompt de apărat. Un bazin de ranking are nevoie de mai mulți
+#: candidați decât intră în răspuns, altfel „rerank" înseamnă reordonarea celor șase deja aleși.
 MAX_POOL_HYDRATION = 100
 
 
