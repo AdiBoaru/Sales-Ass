@@ -310,10 +310,12 @@ tests/test_nx335_review.py tests/test_kernel_contract.py tests/test_kernel_repla
 dominantă e `other`/`aside` unde clientul cere un produs sau întreabă despre unul de pe ecran.
 Reparația e NX-339 ([`tasks/stage1/NX-339.md`](tasks/stage1/NX-339.md)), cu măsurare pre-înregistrată:
 setul SOLE e contaminat de analiză, deci verdictul cere și un set NEVĂZUT. **339a** l-a construit:
-`--journeys` rulează journey-urile kernelului (103 ture pe patru pachete ≠ SOLE, set `B`; 5 pe
-`sole-ro`, `A-bis`) pe starea din `stage_harness.chain`, cu eticheta = interpretarea așteptată prin
-ACELAȘI pas pur ca a modelului (un model care răspunde exact eticheta iese 1,0 pe toate, testat), un
-câmp absent din journey nu se evaluează; `--regressions` dă turele corect → greșit între două
+`--journeys` rulează journey-urile kernelului (81 de ture pe patru pachete ≠ SOLE, set `B`; 2 pe
+`sole-ro`, `A-bis`; excluse cele care pornesc din stare scrisă de mână) pe starea din
+`stage_harness.chain`, cu eticheta = interpretarea așteptată prin ACELAȘI pas pur ca a modelului (un
+model care răspunde exact eticheta iese 1,0 pe toate, testat); un câmp absent din journey nu se
+evaluează, un apel eșuat e greșit pe fiecare câmp evaluat, țintele din afara ecranului se compară prin
+id. `--regressions` recalculează pe etichetele de acum și dă turele corect → greșit între două
 rapoarte; rândurile păstrează interpretarea brută și verdictul validatorului (local, gitignored).
 **Pasul 6 PR A (NX-336) — schela turului interpretat, DARK: lanțul rulează pe un tur real, v1
 răspunde.** `INTERPRETED_TURN_ENABLED` (OFF; poarta de boot cere stările v2 citite ȘI scrise,

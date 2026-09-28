@@ -537,10 +537,17 @@ def observed_parts(
     checked: Sequence[Any],
     resolved: Sequence[ResolvedRef],
     state_before: ConversationStateV2,
+    *,
+    offscreen_ids: bool = False,
 ) -> dict[str, Any]:
     """`observed` pe straturile deja calculate. NX-339: aceeași funcție scrie și eticheta unui
     journey (interpretarea AȘTEPTATĂ, trecută prin același validator și același resolver), deci
-    eticheta și modelul se compară în aceeași formă canonică."""
+    eticheta și modelul se compară în aceeași formă canonică.
+
+    `offscreen_ids`: o țintă care nu e pe ecranul curent (parcat, de mai devreme, catalog) se
+    numește prin id, nu prin „catalog". Altfel două produse DIFERITE din afara ecranului ar părea
+    aceeași țintă (recenzia NX-339, constatarea 2). Doar pe journey-uri, unde eticheta e derivată;
+    etichetele SOLE sunt scrise de mână cu „catalog", deci acolo limita rămâne, declarată."""
     positions = screen_positions(state_before)
     by_ref = {r.ref_id: r for r in resolved}
     primary = interp.acts[-1] if interp.acts else None
@@ -548,7 +555,7 @@ def observed_parts(
     for t in primary.targets if primary else []:
         ref = by_ref.get(t)
         for pid in ref.product_ids if ref else []:
-            targets.append(positions.get(pid, "catalog"))
+            targets.append(positions.get(pid, f"id:{pid}" if offscreen_ids else "catalog"))
     changes = []
     for c in checked:
         if c.rejected:
@@ -565,6 +572,7 @@ def observed_parts(
         "targets": sorted(set(targets)),
         "changes": changes,
         "ambiguous": bool(interp.ambiguities),
+        "corrects": interp.corrects_previous_turn,
     }
 
 
@@ -600,10 +608,12 @@ def _split(changes: Iterable[Sequence[Any]]) -> tuple[Counter, Counter]:
 
 
 #: Câmpurile de acord ale comparatorului.
-AGREEMENT_FIELDS: tuple[str, ...] = ("thread", "primary_act", "targets", "ambiguous")
+AGREEMENT_FIELDS: tuple[str, ...] = ("thread", "primary_act", "targets", "ambiguous", "corrects")
 
 
-def compare(label: Mapping[str, Any], got: Mapping[str, Any]) -> dict[str, Any]:
+def compare(
+    label: Mapping[str, Any], got: Mapping[str, Any], *, failed: bool = False
+) -> dict[str, Any]:
     """Comparatorul propriu al etichetelor (nu `first_divergence`, care compară straturile unui
     singur trace, pe egalitate exactă): acord pe câmpuri, apoi potriviri pe (clasa op-ului,
     dimensiune, valoare, clasa relației). Perechile cu valoare nulă se numără separat, pe
@@ -612,25 +622,27 @@ def compare(label: Mapping[str, Any], got: Mapping[str, Any]) -> dict[str, Any]:
 
     NX-339: un câmp ABSENT din etichetă nu se evaluează (`None`), unul prezent, chiar gol, da. Un
     journey fixează doar ce testează; etichetele SOLE au toate câmpurile, deci cifrele lor nu se
-    schimbă."""
+    schimbă. Un apel EȘUAT (`failed`, fără interpretare) e greșit pe fiecare câmp evaluat: altfel
+    o etichetă goală („nicio țintă", „nicio schimbare") ar număra tăcerea ca acord (recenzia
+    NX-339, constatarea 3)."""
     evaluated = "changes" in label
     want, want_null = _split(label.get("changes", []) if evaluated else [])
     have, have_null = _split(got.get("changes", []) if evaluated else [])
     relative = any(k[1] == "price" for k in want_null)
     numbered = any(k[1] == "price" for k in have)
+
+    def agree(name: str, same: Callable[[Any, Any], bool]) -> bool | None:
+        if name not in label:
+            return None
+        return False if failed else same(label[name], got.get(name))
+
     return {
-        "thread": label["thread"] == got.get("thread") if "thread" in label else None,
-        "primary_act": (
-            label["primary_act"] == got.get("primary_act") if "primary_act" in label else None
-        ),
-        "targets": (
-            sorted(label["targets"]) == sorted(got.get("targets", []))
-            if "targets" in label
-            else None
-        ),
-        "ambiguous": (
-            bool(label["ambiguous"]) == bool(got.get("ambiguous")) if "ambiguous" in label else None
-        ),
+        "failed": failed,
+        "thread": agree("thread", lambda a, b: a == b),
+        "primary_act": agree("primary_act", lambda a, b: a == b),
+        "targets": agree("targets", lambda a, b: sorted(a) == sorted(b or [])),
+        "ambiguous": agree("ambiguous", lambda a, b: bool(a) == bool(b)),
+        "corrects": agree("corrects", lambda a, b: bool(a) == bool(b)),
         "changes_evaluated": evaluated,
         "change_hits": sum((want & have).values()),
         "change_labelled": sum(want.values()),
@@ -798,7 +810,7 @@ async def run(
                 label = labels.get(turn.turn_id)
                 verdict = None
                 if label and not label.get("uncertain"):
-                    verdict = compare(label, got)
+                    verdict = compare(label, got, failed=out.interpretation is None)
                     if not _agrees(verdict) and chain.diverged_at is None:
                         chain.diverged_at = turn.seq
                 call = acc.call_rows[-1] if acc.call_rows else {}
@@ -833,9 +845,10 @@ TUNED_PACKS: frozenset[str] = frozenset({"sole-ro"})
 _LABEL_FIELDS: dict[str, str] = {
     "thread": "thread",
     "primary_act": "acts",
-    "targets": "acts",
+    "targets": "references",
     "changes": "changes",
     "ambiguous": "ambiguities",
+    "corrects": "corrects_previous_turn",
 }
 
 
@@ -874,9 +887,22 @@ def journey_fields(directory: Path = JOURNEYS_DIR) -> dict[tuple[str, int], froz
     return out
 
 
-def journey_cases(directory: Path = JOURNEYS_DIR) -> list[JourneyCase]:
-    """Toate turele cu interpretare așteptată, pe catalogul de fixture al pachetului lor
-    (`stage_harness.catalog`: pachet, vocabular, meniu, fapte), fără DB și fără model."""
+def injected_state(journey: Any) -> bool:
+    """Journey-ul pornește dintr-o stare SCRISĂ de mână (`sources`: ecran, seturi de mai devreme,
+    parcat, pagină, focus; `state_before`: handle-uri, subiect), nu din turele lui. Sunt fixture-uri
+    pentru UN strat (resolverul, secțiunea C), iar `chain` pornește mereu dintr-o stare goală:
+    turul ar fi pus în fața modelului pe un ecran gol, iar eticheta s-ar prăbuși la fel (recenzia
+    NX-339, constatarea 1). Pagina și focusul nici nu sunt stare a conversației, deci nu se pot
+    reconstrui."""
+    return any(t.sources or t.state_before for t in journey.turns)
+
+
+def journey_cases(
+    directory: Path = JOURNEYS_DIR, *, excluded: Counter | None = None
+) -> list[JourneyCase]:
+    """Turele cu interpretare așteptată, pe catalogul de fixture al pachetului lor
+    (`stage_harness.catalog`: pachet, vocabular, meniu, fapte), fără DB și fără model. Journey-urile
+    cu stare injectată se sar; `excluded` numără turele sărite, pe set, ca să fie raportate."""
     from tests.kernel import replay  # noqa: PLC0415 — precedent: kernel_plan_snapshot.py
     from tests.kernel import stage_harness as sh  # noqa: PLC0415
 
@@ -884,13 +910,24 @@ def journey_cases(directory: Path = JOURNEYS_DIR) -> list[JourneyCase]:
     catalogs: dict[str, Any] = {}
     cases: list[JourneyCase] = []
     for journey in replay.load_journeys(directory):
+        if injected_state(journey):
+            if excluded is not None:
+                set_name = "A-bis" if journey.pack in TUNED_PACKS else "B"
+                excluded[set_name] += sum(
+                    1 for i in range(len(journey.turns)) if (journey.journey_id, i) in fields
+                )
+            continue
         cat = catalogs.setdefault(journey.pack, sh.catalog(journey.pack))
         for ct in sh.chain(journey, cat):
             keys = fields.get((journey.journey_id, ct.index))
             if keys is None:
                 continue
             full = observed_parts(
-                ct.step.interpretation, ct.step.checked, ct.step.resolved, ct.state_before
+                ct.step.interpretation,
+                ct.step.checked,
+                ct.step.resolved,
+                ct.state_before,
+                offscreen_ids=True,
             )
             label = {k: full[k] for k, source in _LABEL_FIELDS.items() if source in keys}
             inp = InterpretInput(
@@ -983,7 +1020,11 @@ async def run_journeys(
                 )
                 checked = list(step.checked)
                 got = observed_parts(
-                    out.interpretation, step.checked, step.resolved, case.state_before
+                    out.interpretation,
+                    step.checked,
+                    step.resolved,
+                    case.state_before,
+                    offscreen_ids=True,
                 )
             call = acc.call_rows[-1] if acc.call_rows else {}
             row.update(
@@ -997,7 +1038,7 @@ async def run_journeys(
                     ),
                     "checked": [c.model_dump(mode="json") for c in checked],
                     "observed": got,
-                    "verdict": compare(case.label, got),
+                    "verdict": compare(case.label, got, failed=out.interpretation is None),
                     "ms": call.get("ms"),
                     "tokens_in": call.get("tokens_in"),
                     "cached": call.get("cached"),
@@ -1024,10 +1065,39 @@ def summarize_sets(rows: Sequence[Mapping[str, Any]], efforts: Sequence[str]) ->
 def _exact_changes(verdict: Mapping[str, Any]) -> bool | None:
     if not verdict.get("changes_evaluated", True):
         return None
+    if verdict.get("failed"):
+        return False
     return (
         verdict["change_hits"] == verdict["change_labelled"] == verdict["change_emitted"]
         and verdict["null_hits"] == verdict["null_labelled"] == verdict["null_emitted"]
     )
+
+
+def current_labels(rows: Sequence[Mapping[str, Any]], business: str) -> dict[str, dict[str, Any]]:
+    """Etichetele de ACUM pentru rândurile unui raport: ale journey-urilor (derivate) pentru
+    rândurile cu `set`, ale tenantului (fără `uncertain`) pentru rest."""
+    labels: dict[str, dict[str, Any]] = {}
+    if any("set" in r for r in rows):
+        labels.update({c.turn_id: c.label for c in journey_cases()})
+    if any("set" not in r for r in rows):
+        labels.update({k: v for k, v in load_labels(business).items() if not v.get("uncertain")})
+    return labels
+
+
+def rescore(
+    rows: Sequence[Mapping[str, Any]], labels: Mapping[str, Mapping[str, Any]]
+) -> list[dict[str, Any]]:
+    """Verdictele RECALCULATE pe etichetele de acum, din `observed` salvat în rând. Protocolul
+    NX-339 permite corectarea etichetelor între rularea v1 și v2; fără recalcul, o etichetă
+    schimbată ar arăta ca o schimbare a modelului (recenzia NX-339, constatarea 4)."""
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        label = labels.get(r["turn_id"])
+        verdict = None
+        if label is not None and "outcome" in r:
+            verdict = compare(label, r.get("observed") or {}, failed=r["outcome"] != "ok")
+        out.append({**r, "verdict": verdict})
+    return out
 
 
 def regressions(
@@ -1108,7 +1178,10 @@ def summarize(rows: Sequence[Mapping[str, Any]], efforts: Sequence[str]) -> dict
             ev = r["event"]
             provenance.update(ev["provenance"])
             rejected.update({k: v for k, v in ev["rejected"].items() if v})
-            unknown += int(ev["unknown_reference"] > 0)
+            # NX-339: doar pe turele reușite; un apel eșuat nu declară referințe, deci ar fi
+            # numărat ca „zero necunoscute" și ar fi trecut pragul (`not_ok` e poarta lui).
+            if r["outcome"] == "ok":
+                unknown += int(ev["unknown_reference"] > 0)
             for c in (r.get("observed") or {}).get("changes", []):
                 changes += 1
                 unmapped += int(c[1] == "unmapped")
@@ -1122,6 +1195,7 @@ def summarize(rows: Sequence[Mapping[str, Any]], efforts: Sequence[str]) -> dict
             "thread": _field_rate(scored, "thread"),
             "targets": _field_rate(scored, "targets"),
             "ambiguity": _field_rate(scored, "ambiguous"),
+            "corrects": _field_rate(scored, "corrects"),
             "changes_turns": len(with_changes),
             "changes": {
                 "precision": round(precision, 3) if precision is not None else None,
@@ -1139,7 +1213,7 @@ def summarize(rows: Sequence[Mapping[str, Any]], efforts: Sequence[str]) -> dict
             "provenance": dict(provenance),
             "rejected": dict(rejected),
             "unmapped": rate(unmapped, changes),
-            "unknown_reference": rate(unknown, len(mine)),
+            "unknown_reference": rate(unknown, sum(1 for r in mine if r["outcome"] == "ok")),
             "ms_p50": _pct([r["ms"] for r in mine], 0.5),
             "ms_p90": _pct([r["ms"] for r in mine], 0.9),
             "cost_usd_total": round(sum(r["cost_usd"] for r in mine), 4),
@@ -1234,7 +1308,9 @@ async def main(argv: list[str] | None = None) -> int:
         before, after = (
             json.loads(p.read_text(encoding="utf-8"))["rows"] for p in args.regressions
         )
-        print(json.dumps(regressions(before, after), ensure_ascii=False, indent=2))
+        labels = current_labels([*before, *after], args.business)
+        report = regressions(rescore(before, labels), rescore(after, labels))
+        print(json.dumps(report, ensure_ascii=False, indent=2))
         return 0
 
     if args.journeys:
@@ -1332,7 +1408,8 @@ async def _main_journeys(args: argparse.Namespace) -> int:
     from src.config import get_settings  # noqa: PLC0415
 
     efforts = _parse_efforts(args.efforts)
-    cases = journey_cases()
+    excluded: Counter = Counter()
+    cases = journey_cases(excluded=excluded)
     live = args.yes and not args.dry_run
     llm = None
     if live:
@@ -1348,6 +1425,7 @@ async def _main_journeys(args: argparse.Namespace) -> int:
         f"journey-uri: ture {len(cases)}  seturi {dict(sorted(per_set.items()))}  "
         f"pachete {dict(sorted(per_pack.items()))}  brațe: {efforts}  apeluri: {len(rows)}"
     )
+    print(f"excluse (stare injectată, NX-339): {dict(sorted(excluded.items()))}")
     model = get_settings().model_agent
     print(json.dumps(estimate(rows, model), indent=2))
     if not live:
@@ -1357,7 +1435,7 @@ async def _main_journeys(args: argparse.Namespace) -> int:
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     out_dir = OUT_DIR / "journeys" / f"run-{stamp}"
     out_dir.mkdir(parents=True, exist_ok=True)
-    summary = summarize_sets(rows, efforts)
+    summary = {**summarize_sets(rows, efforts), "excluded_injected_state": dict(excluded)}
     (out_dir / "results.json").write_text(
         json.dumps(
             {"model": model, "efforts": list(efforts), "summary": summary, "rows": rows},

@@ -488,13 +488,30 @@ def test_the_journeys_split_into_the_unseen_set_and_the_tuned_tenant(cases):
     assert {c.set_name for c in cases} == {"B", "A-bis"}
     assert all(c.set_name == ("A-bis" if c.pack in rp.TUNED_PACKS else "B") for c in cases)
     fields = rp.journey_fields()
-    assert len(cases) == len(fields)
     # regula câmpurilor parțiale: eticheta poartă doar ce fixează journey-ul
     for c in cases:
         keys = fields[(c.journey_id, c.index)]
         assert ("changes" in c.label) == ("changes" in keys)
         assert ("thread" in c.label) == ("thread" in keys)
+        assert ("targets" in c.label) == ("references" in keys)
         assert ("ambiguous" in c.label) == ("ambiguities" in keys)
+        assert ("corrects" in c.label) == ("corrects_previous_turn" in keys)
+
+
+def test_journeys_with_an_injected_state_are_excluded_and_counted(cases):
+    """Recenzia NX-339, constatarea 1: `chain` pornește din stare goală, deci un journey scris pe
+    `sources`/`state_before` (resolverul, secțiunea C) ar fi pus în fața modelului pe un ecran gol.
+    Se exclude întreg, iar turele sărite se numără, ca să fie raportate."""
+    journeys = {j.journey_id: j for j in replay.load_journeys()}
+    kept = {c.journey_id for c in cases}
+    injected = {jid for jid, j in journeys.items() if rp.injected_state(j)}
+    assert injected and not (kept & injected)
+    assert all(not j.turns[0].sources for jid, j in journeys.items() if jid in kept)
+    excluded = rp.Counter()
+    again = rp.journey_cases(excluded=excluded)
+    fields = rp.journey_fields()
+    assert len(again) + sum(excluded.values()) == len(fields)
+    assert excluded["B"] > 0
 
 
 def test_the_state_of_a_later_turn_carries_what_the_earlier_turn_showed(cases):
@@ -509,7 +526,8 @@ async def test_journeys_dry_run_makes_zero_calls(monkeypatch, capsys):
     assert await rp.main(["--journeys"]) == 0
     assert fake.calls == 0
     out = capsys.readouterr().out
-    assert "'A-bis': 5" in out and "'B': " in out
+    assert "'A-bis': " in out and "'B': " in out
+    assert "excluse (stare injectată" in out
 
 
 def _expected_of(case) -> TurnInterpretation:
@@ -577,10 +595,90 @@ def test_regressions_list_the_turns_that_got_worse_on_the_intersection():
     assert rep["turns"] == [{"turn_id": "a", "arm": "none", "fields": ["thread", "changes"]}]
 
 
-async def test_the_regressions_cli_reads_two_reports(tmp_path, capsys):
-    good = {"rows": [{"turn_id": "a", "arm": "none", "verdict": _verdict()}]}
-    bad = {"rows": [{"turn_id": "a", "arm": "none", "verdict": _verdict(primary_act=False)}]}
-    (tmp_path / "a.json").write_text(json.dumps(good), encoding="utf-8")
-    (tmp_path / "b.json").write_text(json.dumps(bad), encoding="utf-8")
+async def test_the_regressions_cli_rescores_both_reports_on_the_current_labels(
+    tmp_path, capsys, cases
+):
+    """Recenzia NX-339, constatarea 4: verdictele salvate sunt pe etichetele din ziua rulării.
+    CLI-ul le recalculează din `observed`, deci un verdict vechi (aici fals „corect") nu
+    contează."""
+    case = next(c for c in cases if c.set_name == "B")
+    right = {**case.label, "primary_act": case.label["primary_act"]}
+    wrong = {**case.label, "primary_act": "chitchat"}
+
+    def row(observed, stale):
+        return {
+            "turn_id": case.turn_id,
+            "arm": "none",
+            "set": "B",
+            "outcome": "ok",
+            "observed": observed,
+            "verdict": _verdict(primary_act=stale),
+        }
+
+    # verdictele salvate spun opusul adevărului; recalculul trebuie să le ignore
+    (tmp_path / "a.json").write_text(json.dumps({"rows": [row(right, False)]}), encoding="utf-8")
+    (tmp_path / "b.json").write_text(json.dumps({"rows": [row(wrong, True)]}), encoding="utf-8")
     assert await rp.main(["--regressions", str(tmp_path / "a.json"), str(tmp_path / "b.json")]) == 0
-    assert '"regressed": 1' in capsys.readouterr().out
+    report = json.loads(capsys.readouterr().out)
+    assert report["regressed"] == 1 and report["turns"][0]["fields"] == ["primary_act"]
+
+
+# --- NX-339: constatările recenziei, fiecare cu testul ei -----------------------------------------
+
+
+async def test_a_different_off_screen_product_is_not_the_same_target(cases):
+    """Recenzia NX-339, constatarea 2: în afara ecranului, două produse DIFERITE nu mai devin
+    amândouă „catalog". Pe k01#2 («cel mai ieftin» din setul parcat) un extrem întors (`max`)
+    alege alt telefon, iar ținta trebuie să iasă greșită."""
+    case = next(
+        c for c in cases if c.journey_id == "k01-electronics-park-and-resume" and c.index == 2
+    )
+    assert any(t.startswith("id:") for t in case.label["targets"])
+    expected = _expected_of(case)
+    refs = [
+        r.model_copy(update={"direction": "max"}) if r.kind == "extreme" else r
+        for r in expected.references
+    ]
+    flipped = expected.model_copy(update={"references": refs})
+    rows = await rp.run_journeys(
+        [case], CountingLLM([flipped]), efforts=("none",), seed=1, dry_run=False
+    )
+    assert rows[0]["verdict"]["targets"] is False
+
+
+async def test_a_failed_call_scores_wrong_and_never_passes_the_reference_gate(cases):
+    """Recenzia NX-339, constatarea 3: un apel eșuat nu e „acord" pe o etichetă goală, iar
+    `unknown_reference` se numără doar pe turele reușite (`not_ok` e poarta lor)."""
+    rows = await rp.run_journeys(cases, CountingLLM(), efforts=("none",), seed=1, dry_run=False)
+    arm = rp.summarize_sets(rows, ("none",))["sets"]["B"]["none"]
+    assert arm["not_ok"]["rate"] == 1.0
+    for field in ("primary_act", "targets", "ambiguity"):
+        assert arm[field]["k"] == 0, (field, arm[field])
+    assert arm["unknown_reference"]["n"] == 0 and arm["unknown_reference"]["rate"] is None
+    assert all(rp._exact_changes(r["verdict"]) in (False, None) for r in rows)
+
+
+async def test_the_model_side_validates_with_the_same_earlier_words_as_the_label(
+    cases, monkeypatch
+):
+    """Recenzia NX-339, constatarea 7: niciun journey nu citează un tur anterior, deci paritatea
+    cuvintelor de dinainte se fixează direct, pe argumentul pasat validatorului."""
+    from tests.kernel import fixture_catalog
+
+    seen: list[tuple[str, ...]] = []
+    real = fixture_catalog.kernel_step
+
+    def spy(*a, **kw):
+        seen.append(kw["earlier"])
+        return real(*a, **kw)
+
+    monkeypatch.setattr(fixture_catalog, "kernel_step", spy)
+    later = [c for c in cases if c.index > 0][:3]
+    await rp.run_journeys(
+        later,
+        CountingLLM([_expected_of(c) for c in later]),
+        efforts=("none",),
+        seed=1,
+        dry_run=False,
+    )
+    assert seen == [c.earlier for c in later] and all(seen)
