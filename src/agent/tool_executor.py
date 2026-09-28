@@ -126,6 +126,8 @@ class ToolRun:
     retrieved: list[dict[str, Any]] = field(default_factory=list)
     generated_links: set[str] = field(default_factory=set)  # linkuri bot (checkout) → validator
     grounded_prices: set[float] = field(default_factory=set)  # sume DB (total comandă) → validator
+    # NX-346: textele magazinului servite în tur (FAQ) → validatorul de proză le acceptă citate.
+    grounded_sources: list[str] = field(default_factory=list)
     order_views: list[str] = field(default_factory=list)  # vederi grounded de comandă (fallback)
     compared: list[dict[str, Any]] = field(default_factory=list)  # setul EXPLICIT comparat
     order_gated_login: bool = False  # web anonim a încercat lookup de comandă → login wall
@@ -315,6 +317,7 @@ class ToolRun:
             self.search_relevance = result.relevance
         self.generated_links.update(result.links)
         self.grounded_prices.update(result.prices)
+        self.grounded_sources.extend(getattr(result, "sources", None) or ())
         if result.state_patch:
             ctx.state_patch.update(result.state_patch)
         ctx.emit(
@@ -382,6 +385,7 @@ class ToolRun:
             self.search_args.append(kept)
         self.generated_links.update(result.links)
         self.grounded_prices.update(result.prices)
+        self.grounded_sources.extend(getattr(result, "sources", None) or ())  # NX-346
         if result.state_patch:  # NX-79: cart_add → mutație de state (persistată de processor)
             ctx.state_patch.update(result.state_patch)
         # NX-237: coșul canonic al turului (sub flag). `getattr` — testele duck-type-uiesc

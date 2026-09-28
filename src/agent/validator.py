@@ -26,6 +26,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
+from src.catalog.folding import fold_text
 from src.config import get_settings
 from src.observability import turn_latency
 from src.worker.text_scrub import has_medical_claim, has_stock_claim, has_text_claim
@@ -249,6 +250,67 @@ def _claims_ok(reply: str) -> bool:
     return not has_text_claim(reply)
 
 
+# --- NX-346: propoziții CITATE LITERAL din regulile magazinului ---------------------------------
+#
+# `faq_lookup` îi arată modelului TOATE regulile active ale magazinului (pe SOLE, 20) și îi cere să
+# o redea fidel. O propoziție a prozei iese de sub porțile de cifre și de afirmații DOAR dacă e un
+# CITAT LITERAL: e egală cu o propoziție ÎNTREAGĂ a unui răspuns al magazinului (după pliere: fără
+# diacritice, litere mici, punctuația ca spațiu, zecimalele păstrate). Nu un fragment: tăiat din
+# mijloc, „Costul de 49,9 lei îl suporți tu." se citește lângă un produs ca prețul lui, iar un
+# fragment peste granița a două propoziții ale regulii îi schimbă sensul („gratuit peste 199 lei
+# dacă ai mai comandat", când pragul acela e 149). Orice criteriu APROXIMATIV a
+# fost spart de recenzia adversarială a PR-ului: întemeierea globală a cifrelor corpusului
+# („Crema X costă 199 lei") și apoi cea pe acoperire de cuvinte + vecin comun („Crema Aqua costă
+# 49,9 lei și se scade din rambursare", servită de `render`). Un citat literal nu poate purta numele
+# unui produs pe care regula nu-l conține. Prețul parafrazei e declarat: o regulă reformulată e
+# judecată ca înainte de NX-346, adică nicio regresie față de `main`.
+#
+# Propozițiile se despart DOAR după punctuație de sfârșit urmată de spațiu, niciodată la rând nou:
+# „…9 sau 12\nlei" ar fi lăsat „lei." orfan, iar suma ar fi ieșit din poartă. Un citat cere cel
+# puțin `QUOTE_MIN_WORDS` cuvinte în afara sumelor, ca „199 lei." singur să nu fie scutit doar
+# fiindcă apare într-o regulă. Poarta medicală, linkurile și stocul se judecă pe TOT textul.
+
+_SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+")
+_NON_WORD = re.compile(r"[\W_]+")
+_DECIMAL_MARK = re.compile(r"(?<=\d)[.,](?=\d)")
+_QUOTE_WORD = re.compile(r"[^\W\d_]+")
+_DIGIT = re.compile(r"\d")
+QUOTE_MIN_WORDS = 3
+
+
+def _normal(text: str) -> str:
+    """Forma de comparație: pliată, litere mici, orice rulare de non-alfanumerice = UN spațiu, dar
+    semnul zecimal rămâne („3,6" ≠ „3, 6"). PUR."""
+    folded = _DECIMAL_MARK.sub("d", fold_text(text).lower())
+    return " ".join(_NON_WORD.sub(" ", folded).split())
+
+
+def _quoted(sentence: str, source_sentences: frozenset[str]) -> bool:
+    words = _QUOTE_WORD.findall(fold_text(_PRICE_RE.sub(" ", sentence)).lower())
+    if len(words) < QUOTE_MIN_WORDS:
+        return False
+    return _normal(sentence) in source_sentences
+
+
+def strip_quoted(reply: str, sources: tuple[str, ...] | list[str]) -> str:
+    """NX-346: `reply` fără propozițiile citate LITERAL dintr-o regulă a magazinului. Fără surse,
+    sau fără nicio propoziție citată, întoarce textul NESCHIMBAT, deci porțile rulează exact ca
+    înainte. Doar propozițiile cu o cifră sau o afirmație se caută: celelalte nu schimbă nicio
+    poartă. PUR."""
+    if not sources or not reply:
+        return reply
+    source_sentences = frozenset(
+        _normal(sentence) for source in sources for sentence in _SENTENCE_SPLIT.split(source)
+    )
+    parts = _SENTENCE_SPLIT.split(reply)
+    kept = [
+        part
+        for part in parts
+        if not ((_DIGIT.search(part) or has_text_claim(part)) and _quoted(part, source_sentences))
+    ]
+    return reply if len(kept) == len(parts) else " ".join(kept)
+
+
 def _safety_ok(reply: str) -> bool:
     """P0-safety (CONV-COMMERCE): niciun claim MEDICAL/terapeutic în răspuns (produsul „tratează/
     vindecă" o afecțiune, e „sigur în sarcină/alăptare", „fără alergeni", „recomandat de medic") —
@@ -291,6 +353,7 @@ def validate_prose(
     grounded_prices: set[float] | None = None,
     check_bare: bool = True,
     check_claims: bool = True,
+    grounded_sources: tuple[str, ...] | list[str] = (),
 ) -> ValidationResult:
     """SURSA UNICĂ DE ADEVĂR a validării de proză: preț + link grounded (mereu) + cifre bare
     grounded (NX-91, doar SALES) + claim-uri de text neverificabile (NX-117) + stoc availability-
@@ -304,15 +367,23 @@ def validate_prose(
     (NX-121) e DOAR detectare/observabilitate, nu apărarea reală."""
     with turn_latency.span("validation"):  # NX-241: faza de validare, măsurată acolo unde se face
         reasons: list[str] = []
+        sources = (  # NX-346: setarea se citește doar când există surse
+            tuple(grounded_sources)
+            if grounded_sources and getattr(get_settings(), "faq_grounding_enabled", True)
+            else ()
+        )
+        # Cifrele și afirmațiile se judecă pe textul FĂRĂ propozițiile citate dintr-o regulă a
+        # magazinului; fără surse `checked` e chiar `reply`.
+        checked = strip_quoted(reply, sources)
         if not _safety_ok(reply):  # P0-safety: claim medical = invalid pe ORICE rută (răspundere)
             reasons.append("medical_claim")
-        if not _prices_ok(reply, products, grounded_prices):
+        if not _prices_ok(checked, products, grounded_prices):
             reasons.append("ungrounded_price")
         if not _links_ok(reply, products, generated_links):
             reasons.append("invented_link")
-        if check_bare and not _bare_numbers_ok(reply, products, grounded_prices or set()):
+        if check_bare and not _bare_numbers_ok(checked, products, grounded_prices or set()):
             reasons.append("bare_number")
-        if check_claims and not _claims_ok(reply):
+        if check_claims and not _claims_ok(checked):
             reasons.append("text_claim")
         if check_claims and not _stock_claim_ok(reply, products):  # NX-118: stoc availability-aware
             reasons.append("stock_claim")
@@ -327,6 +398,7 @@ def _valid(
     *,
     check_bare: bool = True,
     check_claims: bool = True,
+    grounded_sources: tuple[str, ...] | list[str] = (),
 ) -> bool:
     """Shim bool peste `validate_prose` (API-ul folosit de `agent._finalize*` — o singură sursă de
     adevăr). Argumentele poziționale `allowed_links`/`allowed_prices` = `generated_links`/
@@ -338,4 +410,5 @@ def _valid(
         grounded_prices=allowed_prices,
         check_bare=check_bare,
         check_claims=check_claims,
+        grounded_sources=grounded_sources,
     ).ok

@@ -36,6 +36,7 @@ from src.agent.validator import (
     _claims_ok,
     _stock_claim_ok,
     _valid,
+    strip_quoted,
     validate_prose,
 )
 from src.analytics.demand import clean_ids, product_ids_from_dicts
@@ -208,6 +209,27 @@ def _rich_schema(
     return _with_question(slim) if question else slim
 
 
+def _rules_block(sources: list[str]) -> str:
+    """NX-346: regulile magazinului servite în tur, pentru mesajul de RETRY. Fără ele, o proză care
+    pica din alt motiv se recompunea fără regula pe care clientul o ceruse. Fără surse = șir gol,
+    deci mesajul e byte-identic."""
+    if not sources:
+        return ""
+    rules = "\n".join(f"{i}. {s}" for i, s in enumerate(sources, 1))
+    return (
+        "\n\nRegulile magazinului. Dacă una răspunde la întrebare, copiază fraza ei cuvânt cu "
+        f"cuvânt, cu cifrele ei, și nu le muta lângă un produs:\n{rules}"
+    )
+
+
+def _sources(plan: Any) -> list[str]:
+    """NX-346: textele magazinului servite în tur (FAQ), cu kill-switch-ul aplicat O DATĂ aici,
+    pentru contoarele de mai jos; `validate_prose` îl reaplică pe gating."""
+    if not getattr(get_settings(), "faq_grounding_enabled", True):
+        return []
+    return list(getattr(plan, "grounded_sources", None) or ())
+
+
 async def _finalize(
     llm,
     reco_system: str,
@@ -220,6 +242,7 @@ async def _finalize(
     allowed_prices: set[float] | None = None,
     *,
     recompose: bool = True,
+    allowed_sources: list[str] = (),
 ) -> tuple[str, ValidationResult]:
     """Validează textul final (preț + link). Invalid → 1 retry (recompune din produse cu
     prețuri permise) → fallback determinist. Invariantul: zero prețuri/linkuri inventate.
@@ -237,7 +260,9 @@ async def _finalize(
     Poarta de trecere/eșec rămâne `_valid` (shim monkeypatch-uit de proba anti-teatru NX-121 —
     `test_golden.test_injection_case_fails_without_its_guard`); `validate_prose` se cheamă
     SEPARAT doar pe calea de eșec, ca să raporteze motivele fără să schimbe gating-ul testat."""
-    if text and _valid(text, products, allowed_links, allowed_prices):
+    if text and _valid(
+        text, products, allowed_links, allowed_prices, grounded_sources=allowed_sources
+    ):
         return text, ValidationResult(ok=True, reasons=[])
     if not text and not recompose:
         return _deterministic_reply(products), ValidationResult(ok=False, reasons=["empty_text"])
@@ -249,13 +274,15 @@ async def _finalize(
         f"Limba clientului: {language}\n{history_block}"
         f"Întrebare: {query}\nProduse:\n{_products_brief(products, language)}\n\n"
         f"FOLOSEȘTE EXACT doar aceste prețuri: {allowed}. Niciun alt preț, niciun link inventat."
-    )
+    ) + _rules_block(allowed_sources)
     try:
         reply2 = await llm.complete(reco_system, user)
     except Exception as e:  # noqa: BLE001 — retry eșuat → fallback determinist
         log.warning("agent: retry compunere eșuat (%s)", type(e).__name__)
         reply2 = ""
-    if reply2 and _valid(reply2, products, allowed_links, allowed_prices):
+    if reply2 and _valid(
+        reply2, products, allowed_links, allowed_prices, grounded_sources=allowed_sources
+    ):
         return reply2, ValidationResult(ok=True, reasons=[])
 
     log.warning("agent: validator a eșuat → fallback determinist")
@@ -266,6 +293,7 @@ async def _finalize(
             products=products,
             generated_links=allowed_links,
             grounded_prices=allowed_prices,
+            grounded_sources=allowed_sources,
         ).reasons
         if failed_text
         else ["empty_text"]
@@ -280,6 +308,7 @@ async def _finalize_grounded(
     language: str,
     allowed_links: set[str],
     allowed_prices: set[float],
+    allowed_sources: list[str] = (),
 ) -> tuple[str, ValidationResult]:
     """Cale fără produse, dar cu date grounded (status comandă): validează textul; invalid →
     1 retry order-shaped (din `facts` + sume permise) → fallback SIGUR (non-tăcere, fără numere,
@@ -288,7 +317,13 @@ async def _finalize_grounded(
     raportate separat prin `validate_prose` — vezi docstring-ul `_finalize`."""
     # NX-117: ORDER → fără claims-check (faptele de livrare/stoc din check_order sunt grounded).
     if text and _valid(
-        text, [], allowed_links, allowed_prices, check_bare=False, check_claims=False
+        text,
+        [],
+        allowed_links,
+        allowed_prices,
+        check_bare=False,
+        check_claims=False,
+        grounded_sources=allowed_sources,
     ):
         return text, ValidationResult(ok=True, reasons=[])
 
@@ -299,14 +334,20 @@ async def _finalize_grounded(
     user = (
         f"Limba clientului: {language}\nDate comandă:\n{facts}\n\n"
         f"FOLOSEȘTE EXACT doar aceste sume: {allowed}. Niciun alt număr, AWB sau link inventat."
-    )
+    ) + _rules_block(allowed_sources)
     try:
         reply2 = await llm.complete(prompt_builder.ORDER_RECO_SYSTEM, user)
     except Exception as e:  # noqa: BLE001 — retry eșuat → fallback sigur
         log.warning("agent: retry status comandă eșuat (%s)", type(e).__name__)
         reply2 = ""
     if reply2 and _valid(
-        reply2, [], allowed_links, allowed_prices, check_bare=False, check_claims=False
+        reply2,
+        [],
+        allowed_links,
+        allowed_prices,
+        check_bare=False,
+        check_claims=False,
+        grounded_sources=allowed_sources,
     ):
         return reply2, ValidationResult(ok=True, reasons=[])
 
@@ -320,6 +361,7 @@ async def _finalize_grounded(
             grounded_prices=allowed_prices,
             check_bare=False,
             check_claims=False,
+            grounded_sources=allowed_sources,
         ).reasons
         if failed_text
         else ["empty_text"]
@@ -1115,11 +1157,12 @@ async def render(
                 ctx.trace["rich_downgraded"] = reason  # NX-256: lângă `rich_raw`, în captura full
         # NX-91: dacă textul brut al modelului are cifre bare negroundate, semnalează (P12: doar
         # contorul, NU corpul). _finalize declanșează retry-ul/fallback-ul pe baza validării.
-        bare = _bad_bare_numbers(final, products, plan.grounded_prices) if final else []
+        judged = strip_quoted(final, _sources(plan))  # NX-346: fără regulile citate
+        bare = _bad_bare_numbers(judged, products, plan.grounded_prices) if final else []
         if bare:
             ctx.emit("validator_rejected", kind="bare_number", n=len(bare))
         # NX-117: claim ne-numeric neverificabil pe proză → semnalează (P12: doar contorul).
-        if final and not _claims_ok(final):
+        if final and not _claims_ok(judged):
             ctx.emit("validator_rejected", kind="claim")
         # NX-118: claim de stoc nefondat (niciun produs pe stoc) → semnalează (P12: doar contorul).
         if final and not _stock_claim_ok(final, products):
@@ -1135,6 +1178,7 @@ async def render(
             plan.generated_links,
             plan.grounded_prices,
             recompose=not plan.prose_skipped,
+            allowed_sources=_sources(plan),
         )
         # NX-306: un set pe care modelul l-a REFUZAT, și pe care retrievalul îl dăduse deja ca
         # pe un COMPROMIS, nu se servește — nici ca fapte, nici ca text.
@@ -1258,12 +1302,19 @@ async def render(
                 ctx.language,
                 plan.generated_links,
                 plan.grounded_prices,
+                allowed_sources=_sources(plan),  # NX-346: regula FAQ citată pe ruta de comandă
             )
             ctx.set_reply(reply)
             return result
         # Gating pe `_valid` (monkeypatch-uit de proba anti-teatru NX-121); motivele raportate
         # separat prin `validate_prose`, fără să schimbe gating-ul testat (vezi `_finalize`).
-        if _valid(final, [], plan.generated_links, plan.grounded_prices):
+        if _valid(
+            final,
+            [],
+            plan.generated_links,
+            plan.grounded_prices,
+            grounded_sources=_sources(plan),
+        ):
             # SALES: text fără produse și fără sumă inventată (clarificare) → servim
             ctx.set_reply(final)
             return ValidationResult(ok=True, reasons=[])
@@ -1277,6 +1328,7 @@ async def render(
             products=[],
             generated_links=plan.generated_links,
             grounded_prices=plan.grounded_prices,
+            grounded_sources=_sources(plan),
         )
     elif is_order and web_unidentified(ctx):
         # ORDER pe web anonim, fără rezultat (modelul n-a chemat un tool) → login, NU „dă-mi numărul

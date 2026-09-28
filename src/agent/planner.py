@@ -257,6 +257,7 @@ class ResponsePlan:
     compared: list[dict[str, Any]] = field(default_factory=list)
     generated_links: set[str] = field(default_factory=set)
     grounded_prices: set[float] = field(default_factory=set)
+    grounded_sources: list[str] = field(default_factory=list)  # NX-346: textele FAQ servite
     order_views: list[str] = field(default_factory=list)
     checkout_url: str | None = None
     successful_action_ids: set[str] = field(default_factory=set)
@@ -636,6 +637,7 @@ def _plan_mode(
     is_order: bool,
     generated_links: set[str],
     grounded_prices: set[float],
+    grounded_sources: list[str] = (),
 ) -> str:
     """Derivă `mode`-ul de render din aceleași condiții pe care le dispecerizează `render` (faza F).
     Best-effort pentru observabilitate/teste: `comparison` poate cădea în `render` pe produse dacă
@@ -648,7 +650,7 @@ def _plan_mode(
     if final:
         if is_order:
             return "order"
-        if _valid(final, [], generated_links, grounded_prices):
+        if _valid(final, [], generated_links, grounded_prices, grounded_sources=grounded_sources):
             return "prose"
         return "fallback"
     if is_order and web_unidentified(ctx):
@@ -824,7 +826,16 @@ async def build_plan(
         and not cheaper_intent
         and not show_more
         and ctx.state.displayed_products
-        and not (final and _valid(final, [], run.generated_links, run.grounded_prices))
+        and not (
+            final
+            and _valid(
+                final,
+                [],
+                run.generated_links,
+                run.grounded_prices,
+                grounded_sources=run.grounded_sources,
+            )
+        )
     ):
         products = await rehydrate_displayed(ctx, deps, policy=policy)
         rehydrated = True
@@ -857,6 +868,7 @@ async def build_plan(
             is_order=is_order,
             generated_links=run.generated_links,
             grounded_prices=run.grounded_prices,
+            grounded_sources=run.grounded_sources,
         ),
         products=products,
         final=final,
@@ -868,6 +880,7 @@ async def build_plan(
         compared=run.compared,
         generated_links=run.generated_links,
         grounded_prices=run.grounded_prices,
+        grounded_sources=list(run.grounded_sources),
         order_views=run.order_views,
         checkout_url=run.checkout_url,
         successful_action_ids=set(run.successful_action_ids),

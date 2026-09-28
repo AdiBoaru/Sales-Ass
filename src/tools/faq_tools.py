@@ -45,17 +45,25 @@ class FaqArgs(BaseModel):
     query: str = Field(min_length=1, max_length=400)
 
 
-def render_view(rows: list[dict[str, Any]]) -> str:
-    """Setul de FAQ → textul uneltei. PUR. Intrările care nu mai încap în plafon se lasă afară
-    ÎNTREGI (niciodată un răspuns tăiat la mijloc: o regulă pe jumătate e o regulă falsă)."""
-    parts = [_HEADER, ""]
+def _fitting(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Intrările care încap în plafonul vederii, ÎNTREGI, în ordine (aceeași tăiere ca vederea)."""
+    kept: list[dict[str, Any]] = []
     used = len(_HEADER)
     for i, r in enumerate(rows, 1):
         entry = f"{i}. Întrebare: {r['question'].strip()}\n   Răspuns: {r['answer'].strip()}"
         if used + len(entry) > MAX_VIEW_CHARS:
             break
-        parts.append(entry)
+        kept.append(r)
         used += len(entry)
+    return kept
+
+
+def render_view(rows: list[dict[str, Any]]) -> str:
+    """Setul de FAQ → textul uneltei. PUR. Intrările care nu mai încap în plafon se lasă afară
+    ÎNTREGI (niciodată un răspuns tăiat la mijloc: o regulă pe jumătate e o regulă falsă)."""
+    parts = [_HEADER, ""]
+    for i, r in enumerate(_fitting(rows), 1):
+        parts.append(f"{i}. Întrebare: {r['question'].strip()}\n   Răspuns: {r['answer'].strip()}")
     return "\n".join(parts)
 
 
@@ -77,4 +85,10 @@ async def faq_lookup_tool(ctx: TurnContext, deps: PipelineDeps, args: dict[str, 
             rows = await list_active(conn, ctx.business.id, default_locale, limit=MAX_FAQS)
     if not rows:
         return ToolResult(ok=True, llm_view=_EMPTY)
-    return ToolResult(ok=True, llm_view=render_view(rows))
+    # NX-346: răspunsurile ARĂTATE modelului sunt sursele turului: proza care le citează (cifre,
+    # „livrare", „zile") e întemeiată, nu inventată.
+    return ToolResult(
+        ok=True,
+        llm_view=render_view(rows),
+        sources=[r["answer"].strip() for r in _fitting(rows)],
+    )

@@ -1794,6 +1794,7 @@ domain_pack_enabled = true
 embed_job_enabled = true
 facet_search_enabled = true
 faq_enabled = true
+faq_grounding_enabled = true
 faq_locale_fallback_enabled = false
 fast_path_exact_enabled = false
 framing_labels_enabled = true
