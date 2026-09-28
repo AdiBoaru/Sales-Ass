@@ -83,6 +83,8 @@ ProposalOp = Literal[
     "clear_all",
     # NX-331: „am întrebat cheia asta" (întrebarea de îngustare NX-315, emisă de `finalize`).
     "note_asked",
+    # NX-336 PR B (kernel.v2.0, I5): prune-ul de siguranță pe calea kernelului, ca ELIMINARE.
+    "prune_products",
 ]
 
 ALLOWED_OPS: frozenset[str] = frozenset(
@@ -100,6 +102,7 @@ ALLOWED_OPS: frozenset[str] = frozenset(
         "clear_topic",
         "clear_all",
         "note_asked",
+        "prune_products",
     }
 )
 
@@ -129,6 +132,9 @@ REJECT_REASONS: frozenset[str] = frozenset(
         "subject_owned",
         # NX-331 (I20): un executor a propus altceva decât referințe / `active_search`.
         "executor_state_scope",
+        # NX-336 PR B: a doua trecere a commit-ului kernelului a primit altceva decât memoria
+        # întrebării sau prune-ul de siguranță (aruncată și numărată, turul nu se pierde, P6).
+        "second_pass_scope",
     }
 )
 
@@ -1052,6 +1058,48 @@ def _handle_set_cart_ref(
     )
 
 
+def _handle_prune_products(
+    state: ConversationStateV2, proposal: StateUpdateProposal, policy: ReducerPolicy
+) -> _Outcome:
+    """NX-336 PR B (kernel.v2.0, I5): prune-ul de siguranță NX-173 pe calea kernelului, ca ELIMINARE
+    a produselor blocate (`payload.product_ids`) din ecran, din seturile de mai devreme și din setul
+    parcat, oriunde ar fi ajuns după prima trecere a turului. Pe v1 prune-ul e o ÎNLOCUIRE a listei
+    cu ecranul de dinainte minus blocatele (`set_references`, `source="policy"`), care pe un tur cu
+    carduri noi, o parcare sau o reluare ar pune ecranul vechi peste cel nou; aici nu se înlocuiește
+    nimic. Lista afișată schimbată primește revizia turului (un ordinal pe lista veche e `stale`);
+    fără nimic de scos, starea rămâne neatinsă (`unchanged`)."""
+    payload = proposal.payload if isinstance(proposal.payload, Mapping) else None
+    raw = payload.get("product_ids") if payload is not None else None
+    if not isinstance(raw, (list, tuple, frozenset, set)) or not raw:
+        return RejectedUpdate("prune_products", "invalid_payload", None, proposal.source)
+    blocked = frozenset(str(p) for p in raw)
+    current = state.references
+    displayed = tuple(d for d in current.displayed_products if d.product_id not in blocked)
+    recent = tuple(
+        kept
+        for shown_before in current.recent_sets
+        if (kept := tuple(d for d in shown_before if d.product_id not in blocked))
+    )
+    parked = state.parked
+    if parked is not None:
+        parked = replace(
+            parked, shown=tuple(d for d in parked.shown if d.product_id not in blocked)
+        )
+    screen_changed = displayed != current.displayed_products
+    if not (screen_changed or recent != current.recent_sets or parked != state.parked):
+        return state, Applied("prune_products", None, SOFT, proposal.source, "unchanged")
+    references = replace(
+        current,
+        displayed_products=displayed,
+        displayed_revision=state.revision if screen_changed else current.displayed_revision,
+        recent_sets=recent,
+    )
+    return (
+        replace(state, references=references, parked=parked),
+        Applied("prune_products", None, SOFT, proposal.source, "applied"),
+    )
+
+
 _HANDLERS: Mapping[str, Any] = {
     "set_need": _handle_set_need,
     "supersede": _handle_supersede,
@@ -1066,6 +1114,7 @@ _HANDLERS: Mapping[str, Any] = {
     "clear_topic": _handle_clear_topic,
     "clear_all": _handle_clear_all,
     "note_asked": _handle_note_asked,
+    "prune_products": _handle_prune_products,
 }
 
 

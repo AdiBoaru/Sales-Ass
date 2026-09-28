@@ -31,7 +31,7 @@
       "label_ro": "referinte",
       "card_rows": ["referinte"],
       "v1_attrs": ["displayed_products", "offered_chips"],
-      "v2_ops": ["set_references"],
+      "v2_ops": ["set_references", "prune_products"],
       "v2_state_fields": ["references"],
       "v2_payload_keys": ["displayed_products", "compared_products", "last_action", "page_product"]
     },
@@ -80,6 +80,7 @@
     "resolve_question": "clarification",
     "note_asked": "clarification",
     "set_references": "references",
+    "prune_products": "references",
     "set_active_search": "active_search",
     "set_cart_ref": "cart"
   },

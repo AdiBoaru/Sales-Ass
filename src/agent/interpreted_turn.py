@@ -1,4 +1,4 @@
-"""Kernel `kernel.v1.2`, pasul 6 (NX-336) — orchestratorul turului interpretat (rol `orchestrator`).
+"""Kernel `kernel.v2.0`, pasul 6 (NX-336) — orchestratorul turului interpretat (rol `orchestrator`).
 
 Pașii 1-5 au construit fiecare strat ca funcție pură, fără apelant. Aici un tur REAL trece prin
 lanț: `InterpretInput` din context → UN apel de interpretare (`turn_interpreter`, I13) → sursele
@@ -7,18 +7,25 @@ server-side) → `resolve_references` → `to_delta` (+ `resolve_question` pe o 
 `reduce_turn` DOAR în memorie (starea porții) → `decide_ambiguity` → `plan_turn`.
 
 **PR A (dark):** lanțul rulează întreg, traceul (`kernel.v1.2`, redactat cu frontiera NX-230 și
-plafonat la 16 KB) și evenimentele se scriu, iar ramura întoarce MEREU `False`: calea v1 răspunde și
-persistă ca azi. Nimic din lanț nu ajunge în stare (`ctx.kernel_turn` e al PR-ului B). Orice eșec
-(interpretare, citire, excepție) se scrie ca `kernel_fallback{reason}`, fără trace.
+plafonat la 16 KB) și evenimentele se scriu. Orice eșec (interpretare, citire, excepție) se scrie ca
+`kernel_fallback{reason}`, fără trace.
+
+**PR B (starea):** după lanț, orchestratorul scrie vederea de citire a turului
+(`_apply_turn_view`: câmpurile v1 derivate din nevoi și subiect + `ctx.kernel_view`), ÎNAINTEA
+executorilor, fiindcă un tur servit își compune răspunsul în executor; apoi `execute_plans`
+(seam-ul executorilor, gol până la PR C: întoarce `None`, deci turul rămâne `dark` și ramura
+întoarce `False` în producție). Când un executor servește turul, ultimul se scrie `ctx.kernel_turn`,
+intrarea commit-ului (`worker/kernel_commit.py`): starea se persistă DOAR prin reducer.
 
 Ciclul de viață (§2): rezultatul lanțului e o variabilă LOCALĂ. Contextul se fotografiază la
-intrare (`ContextSnapshot`) și se restaurează la ieșire, ca executorii (PR C/D), care scriu în
-context înainte ca orchestratorul să știe dacă turul e servit, să nu lase urme căii v1. Testul
+intrare (`ContextSnapshot`) și se restaurează pe orice ieșire neservită, ca executorii, care scriu
+în context înainte ca orchestratorul să știe dacă turul e servit, să nu lase urme căii v1. Testul
 compară TOATE câmpurile contextului, nu lista de aici.
 
 Textul clientului se citește în DOI cititori declarați (`_turn_words`, `_redact`); deciziile
 ramifică pe structuri. Modulul nu construiește `SearchArgs` (I2) și nu scrie starea (I3), în afara
-restaurării declarate a lui `state_patch`."""
+celor două situri declarate: restaurarea (`_restore_state_fields`) și vederea de citire
+(`_apply_turn_view`)."""
 
 from __future__ import annotations
 
@@ -58,8 +65,13 @@ from src.conversation.references import (
     resolve_references,
     sources_from_state,
 )
-from src.conversation.state_reducer import ReducedState, ReducerPolicy, reduce_turn
-from src.conversation.state_v2 import ConversationStateV2
+from src.conversation.state_reducer import (
+    ReducedState,
+    ReducerPolicy,
+    StateUpdateProposal,
+    reduce_turn,
+)
+from src.conversation.state_v2 import ConversationStateV2, project_v1
 from src.conversation.turn_interpreter import (
     InterpretedTurn,
     InterpretInput,
@@ -67,8 +79,9 @@ from src.conversation.turn_interpreter import (
     interpret_turn,
 )
 from src.db.queries.catalog import list_category_menu
-from src.models import Direction, TurnContext
+from src.models import ConversationState, Direction, TurnContext
 from src.privacy.boundary import make_safe
+from src.worker.kernel_commit import KernelTurn
 
 if TYPE_CHECKING:
     from src.worker.runner import PipelineDeps
@@ -79,8 +92,8 @@ log = logging.getLogger(__name__)
 #: `kernel_turn.fallback_reason`). Vocabular ÎNCHIS: `outcome`-urile interpretării (fără `ok`),
 #: `exception` (o citire sau un strat care aruncă), `vocabulary_unavailable` (vocabularul nu s-a
 #: putut citi: fallback ÎNAINTEA apelului), `snapshot_error` (instantaneul contextului a picat),
-#: `executor_refused` și `no_sentence` (PR C), și `dark` (PR A: lanțul a mers, dar ramura nu
-#: servește încă).
+#: `executor_refused` (niciun executor n-a servit turul), `no_sentence` (PR C) și `dark` (lanțul a
+#: mers, dar niciun executor nu există încă: `execute_plans` întoarce `None` până la PR C).
 FALLBACK_REASONS: tuple[str, ...] = (
     *(o for o in OUTCOMES if o != "ok"),
     "exception",
@@ -97,12 +110,13 @@ MENU_OP = "kernel_category_menu"
 FACTS_OP = "kernel_reference_facts"
 VOCABULARY_OP = "kernel_load_vocabulary"
 KERNEL_READS: frozenset[str] = frozenset({MENU_OP, FACTS_OP, VOCABULARY_OP})
-#: În PR A niciun executor nu rulează.
+#: Traceul unui tur neservit (`dark`): niciun executor n-a rulat.
 NO_EXECUTOR = "none"
 _DARK = "dark"
 _EXCEPTION = "exception"
 _VOCABULARY_UNAVAILABLE = "vocabulary_unavailable"
 _SNAPSHOT_ERROR = "snapshot_error"
+_EXECUTOR_REFUSED = "executor_refused"
 
 _ROLES: Mapping[Direction, str] = {Direction.INBOUND: "user", Direction.OUTBOUND: "bot"}
 
@@ -124,22 +138,47 @@ EXECUTOR_WRITABLE: tuple[str, ...] = (
     "fast_path",
     "brain_signals",
 )
+#: Câmpurile ORCHESTRATORULUI, restaurate tot prin `setattr`: vederea de citire a turului
+#: (`_apply_turn_view`) și intrarea commit-ului (scrisă ultima, deci niciodată pe fallback).
+ORCHESTRATOR_WRITABLE: tuple[str, ...] = ("kernel_view", "kernel_turn")
+#: Câmpurile vederii v1 pe care le scrie `_apply_turn_view` (și le restaurează
+#: `_restore_state_fields`): cele DERIVATE din nevoi și subiect pe care le citește compunerea
+#: (`compose._allowed_client_numbers`, `finalize._known_facets`,
+#: `compare_narrative.comparison_needs`, `subject.spoken_needs`, `clarify_menu.menu_for_turn`).
+#: Restul vederii v1 (ecranul, sesiunea, clarificarea, chips-urile) nu e al nevoilor sau al
+#: subiectului și nu se rescrie în tur.
+VIEW_FIELDS: tuple[str, ...] = ("constraints", "search_constraints")
+
+
+@dataclass(frozen=True)
+class KernelView:
+    """Vederea de CITIRE a unui tur servit de kernel (`ctx.kernel_view`): starea PORȚII (după
+    reducerea turului, înaintea executorilor) și dacă turul e primul al subiectului curent."""
+
+    gate_state: ConversationStateV2
+    subject_is_new: bool
 
 
 @dataclass(frozen=True)
 class ContextSnapshot:
-    """Contextul de dinaintea ramurii, pe câmpurile pe care executorii le pot scrie."""
+    """Contextul de dinaintea ramurii, pe câmpurile pe care executorii și orchestratorul le pot
+    scrie."""
 
     fields: Mapping[str, Any]
     patch: dict[str, Any]
     proposals: list[Any]
+    view: Mapping[str, Any]
 
     @classmethod
     def take(cls, ctx: TurnContext) -> ContextSnapshot:
         return cls(
-            fields={name: copy.deepcopy(getattr(ctx, name)) for name in EXECUTOR_WRITABLE},
+            fields={
+                name: copy.deepcopy(getattr(ctx, name))
+                for name in (*EXECUTOR_WRITABLE, *ORCHESTRATOR_WRITABLE)
+            },
             patch=copy.deepcopy(ctx.state_patch),
             proposals=list(ctx.state_proposals),
+            view={name: copy.deepcopy(getattr(ctx.state, name)) for name in VIEW_FIELDS},
         )
 
     def restore(self, ctx: TurnContext) -> tuple[str, ...]:
@@ -148,15 +187,16 @@ class ContextSnapshot:
         changed = [name for name, value in self.fields.items() if getattr(ctx, name) != value]
         for name in changed:
             setattr(ctx, name, copy.deepcopy(self.fields[name]))
-        return (*changed, *_restore_state_fields(ctx, self.patch, self.proposals))
+        return (*changed, *_restore_state_fields(ctx, self.patch, self.proposals, self.view))
 
 
 def _restore_state_fields(
-    ctx: TurnContext, patch: dict[str, Any], proposals: list[Any]
+    ctx: TurnContext, patch: dict[str, Any], proposals: list[Any], view: Mapping[str, Any]
 ) -> tuple[str, ...]:
-    """SINGURUL loc în care orchestratorul atinge câmpuri de stare ale contextului: le readuce la
-    valoarea de DINAINTEA ramurii (anularea scrierilor unui executor pe fallback, nu o scriere
-    nouă). Scris explicit, ca poarta I3 să-l vadă; excepțiile ei sunt declarate în allowlist."""
+    """Unul din cele DOUĂ situri în care orchestratorul atinge câmpuri de stare ale contextului: le
+    readuce la valoarea de DINAINTEA ramurii (anularea scrierilor unui executor și a vederii de
+    citire pe fallback, nu o scriere nouă). Scris explicit, câmp cu câmp, ca poarta I3 să-l vadă;
+    excepțiile ei sunt declarate în allowlist."""
     restored: list[str] = []
     if ctx.state_patch != patch:
         restored.append("state_patch")
@@ -166,7 +206,55 @@ def _restore_state_fields(
         restored.append("state_proposals")
         del ctx.state_proposals[:]
         ctx.state_proposals.extend(proposals)
+    if ctx.state.constraints != view["constraints"]:
+        restored.append("state.constraints")
+        ctx.state.constraints = copy.deepcopy(view["constraints"])
+    if ctx.state.search_constraints != view["search_constraints"]:
+        restored.append("state.search_constraints")
+        ctx.state.search_constraints = copy.deepcopy(view["search_constraints"])
     return tuple(restored)
+
+
+def _subject_is_new(before: ConversationStateV2, gate: ConversationStateV2, thread: str) -> bool:
+    """„Primul tur al subiectului": subiectul porții (raft, tip) diferă de cel de dinaintea
+    turului, sau nu există (în dubiu, ca `subject.subject_is_new`: comportamentul de azi). Un
+    subiect RELUAT (`resume`) nu e nou: clientul l-a mai discutat, deci nu primește raftul vecin
+    oferit ca la începutul unui subiect."""
+    if thread == "resume":
+        return False
+    now = (gate.topic.category_key, gate.topic.product_type)
+    if now == (None, None):
+        return True
+    return now != (before.topic.category_key, before.topic.product_type)
+
+
+def _apply_turn_view(
+    ctx: TurnContext, before: ConversationStateV2, gate: ConversationStateV2, thread: str
+) -> None:
+    """Al doilea sit declarat (§3): vederea de CITIRE a turului, pentru compunere. Obiectul
+    `ctx.state` NU se înlocuiește (ar șterge scrierile de mai devreme din tur: contextul de
+    siguranță, setul curățat, vederea lui `clarify_resume`); se copiază doar `VIEW_FIELDS`, din
+    proiecția stării porții. Persistența trece prin `reduce_turn` (`kernel_commit`); cu scrierea v2
+    aprinsă (cerută de flag), `_build_new_state` întoarce documentul v2 înainte să citească
+    `ctx.state`. Chemat ÎNAINTEA executorilor (compunerea rulează în executor și o citește), după
+    instantaneu, deci orice ieșire neservită o anulează."""
+    view = ConversationState.from_jsonb(project_v1(gate))
+    ctx.state.constraints = view.constraints
+    ctx.state.search_constraints = view.search_constraints
+    ctx.kernel_view = KernelView(
+        gate_state=gate, subject_is_new=_subject_is_new(before, gate, thread)
+    )
+
+
+def _asked_in_reply(reply: Any, question: str | None) -> bool:
+    """Cititorul DECLARAT al răspunsului servit, pentru memoria întrebării: întrebarea de
+    confirmare a porții e chiar în textul trimis clientului (în `text` sau în `intro`-ul
+    răspunsului bogat, unde o pune compunerea). Iese un bool; nimic nu ramifică pe cuvinte."""
+    if reply is None or not question:
+        return False
+    rich = reply.rich
+    shown = [reply.text or "", (rich.intro if rich is not None else "") or ""]
+    return any(question in part for part in shown)
 
 
 # --- cititorii declarați ai textului -------------------------------------------------------------
@@ -232,6 +320,7 @@ class _Chain:
     outcome: GateOutcome
     policy: AnswerPolicy | None
     planned: PlannedTurn
+    primary: str | None = None
 
 
 class _VocabularyUnavailable(Exception):
@@ -375,6 +464,7 @@ async def _chain(
         outcome=outcome,
         policy=_answer_policy(interp, resolved, known, outcome, inp),
         planned=planned,
+        primary=primary,
     )
 
 
@@ -395,7 +485,10 @@ def _delta_counters(chain: _Chain) -> dict[str, int]:
     return counters
 
 
-def build_trace(chain: _Chain, turn_id: str) -> KernelTrace:
+def build_trace(chain: _Chain, turn_id: str, *, served: bool = False) -> KernelTrace:
+    """Traceul lanțului. `state_after` = starea PORȚII (fără ecranul turului: starea de sfârșit
+    de tur o scrie commit-ul); `executor` = executorul planului principal când turul e servit,
+    altfel `NO_EXECUTOR`."""
     interp = chain.interpreted.interpretation
     validated = chain.interpreted.validated
     assert interp is not None and validated is not None
@@ -413,7 +506,7 @@ def build_trace(chain: _Chain, turn_id: str) -> KernelTrace:
         state_after=state_view(chain.reduced.state),
         ambiguity=chain.outcome.decision,
         plan=planned.plans[planned.primary],
-        executor=NO_EXECUTOR,
+        executor=planned.plans[planned.primary].executor if served else NO_EXECUTOR,
         answer_policy=chain.policy,
         plans=list(planned.plans),
         gaps=list(planned.gaps),
@@ -427,10 +520,12 @@ def build_trace(chain: _Chain, turn_id: str) -> KernelTrace:
 Event = tuple[str, dict[str, Any]]
 
 
-def _chain_record(ctx: TurnContext, chain: _Chain) -> tuple[dict[str, Any], list[Event]]:
+def _chain_record(
+    ctx: TurnContext, chain: _Chain, *, served: bool = False
+) -> tuple[dict[str, Any], list[Event]]:
     """Traceul stocat și evenimentele lanțului, CALCULATE fără să atingă contextul: se scriu
     abia când rezultatul e cunoscut (niciun set emis pe jumătate înaintea unei excepții)."""
-    trace = cap_trace(redact_trace(build_trace(chain, ctx.turn_id), _redact))
+    trace = cap_trace(redact_trace(build_trace(chain, ctx.turn_id, served=served), _redact))
     decision = chain.outcome.decision
     events: list[Event] = [
         ("ambiguity_decision", {"verdict": decision.verdict, "reason": decision.reason})
@@ -443,10 +538,10 @@ def _chain_record(ctx: TurnContext, chain: _Chain) -> tuple[dict[str, Any], list
         (
             "kernel_turn",
             {
-                "served": False,
+                "served": served,
                 "executor": planned.plans[planned.primary].executor,
                 "plans": len(planned.plans),
-                "fallback_reason": _DARK,
+                "fallback_reason": None if served else _DARK,
             },
         )
     )
@@ -460,14 +555,94 @@ def _record_fallback(ctx: TurnContext, reason: str, snapshot: str) -> None:
     ctx.emit("kernel_turn", served=False, executor=None, plans=0, fallback_reason=reason)
 
 
+# --- executorii și commit-ul (PR B) ---------------------------------------------------------------
+
+
+async def execute_plans(
+    ctx: TurnContext, deps: PipelineDeps, planned: PlannedTurn, outcome: GateOutcome
+) -> bool | None:
+    """Seam-ul executorilor: rulează planurile turului (cu decizia porții, a cărei întrebare o pune
+    executorul `ask` sau compunerea, la confirmare). `None` = niciun executor pentru plan (turul
+    rămâne `dark`), `False` = executorul a refuzat, `True` = a servit. Compunerea rulează în
+    executor, deci citește vederea de citire deja scrisă (`_apply_turn_view`).
+
+    PR B: niciun executor nu e legat încă (citirile sunt ale PR-ului C, mutațiile ale PR-ului D),
+    deci întoarce mereu `None` și ramura întoarce `False` în producție. Testele commit-ului îl
+    înlocuiesc cu un executor sintetic."""
+    return None
+
+
+def _question_memory(ctx: TurnContext, outcome: GateOutcome) -> tuple[StateUpdateProposal, ...]:
+    """Memoria întrebării, DOAR dacă întrebarea a fost chiar pusă: `set_pending_question` când
+    răspunsul servit poartă întrebarea în așteptare (`ask`), `note_asked` când confirmarea e în
+    textul trimis. Altfel anti-bucla ar număra o întrebare pe care clientul n-a văzut-o."""
+    memory = memory_proposal(outcome, ctx.turn_id)
+    if memory is None:
+        return ()
+    reply = ctx.reply
+    if outcome.asked_kind == "pending":
+        asked = reply is not None and bool(reply.pending_question)
+    else:
+        asked = _asked_in_reply(reply, outcome.decision.question)
+    return (memory,) if asked else ()
+
+
+def _executor_added(ctx: TurnContext, saved: ContextSnapshot) -> tuple[StateUpdateProposal, ...]:
+    """Propunerile adăugate de executori în `ctx.state_proposals` în tur (I20: trec prin commit ca
+    propuneri de executor, deci ce nu e referință sau sesiune se respinge CU înregistrare)."""
+    before = saved.proposals
+    now = list(ctx.state_proposals)
+    if now[: len(before)] == before:
+        return tuple(now[len(before) :])
+    return tuple(p for p in now if p not in before)
+
+
+def kernel_turn_of(chain: _Chain, ctx: TurnContext, saved: ContextSnapshot) -> KernelTurn:
+    """Intrarea commit-ului (`kernel_commit.commit_kernel_turn`) din lanțul turului și din ce au
+    făcut executorii: delta (cu `resolve_question` pe o întrebare vie, §1), referințele rezolvate,
+    ținta principală, corecția, memoria întrebării (doar dacă a fost pusă) și propunerile
+    executorilor."""
+    interp = chain.interpreted.interpretation
+    assert interp is not None
+    return KernelTurn(
+        delta=chain.delta,
+        resolved=chain.resolved,
+        primary=chain.primary,
+        corrects_previous_turn=interp.corrects_previous_turn,
+        memory=_question_memory(ctx, chain.outcome),
+        executor_proposals=_executor_added(ctx, saved),
+    )
+
+
+_SERVED = "served"
+
+
+async def _serve(
+    ctx: TurnContext, deps: PipelineDeps, chain: _Chain, saved: ContextSnapshot
+) -> str:
+    """Vederea de citire, apoi executorii (care compun și o citesc). Întoarce `_SERVED`, `_DARK`
+    (niciun executor) sau `_EXECUTOR_REFUSED`. Turul e servit doar dacă executorul a pus un
+    răspuns NOU (P6: un `True` fără răspuns ar fi tăcere; un `False` CU răspuns e servit, §4); un
+    răspuns rămas neschimbat de dinaintea ramurii nu contează."""
+    _apply_turn_view(ctx, chain.state, chain.reduced.state, chain.delta.thread)
+    verdict = await execute_plans(ctx, deps, chain.planned, chain.outcome)
+    if verdict is None:
+        return _DARK
+    if ctx.reply is None or ctx.reply == saved.fields.get("reply"):
+        return _EXECUTOR_REFUSED
+    return _SERVED
+
+
 # --- ramura ---------------------------------------------------------------------------------------
 
 
 async def run_interpreted_turn(ctx: TurnContext, deps: PipelineDeps) -> bool:
-    """Turul pe calea interpretată. PR A: rulează lanțul DARK și întoarce mereu `False` (calea v1
-    răspunde și persistă ca azi). Nu aruncă (P6): orice eșec e un `kernel_fallback{reason}`, iar
-    contextul predat căii v1 e cel de dinaintea ramurii (o restaurare picată se numără,
-    `kernel_restore_failed`, iar calea v1 continuă)."""
+    """Turul pe calea interpretată. Întoarce `True` doar când un executor a servit turul; atunci
+    `ctx.kernel_turn` e scris (ultimul), iar commit-ul trece doar prin reducer. PR B: niciun
+    executor nu e legat (`execute_plans` ⇒ `None`), deci în producție turul rămâne DARK și ramura
+    întoarce `False` (calea v1 răspunde și persistă ca azi). Nu aruncă (P6): orice eșec e un
+    `kernel_fallback{reason}`, iar contextul predat căii v1 e cel de dinaintea ramurii (o
+    restaurare picată se numără, `kernel_restore_failed`, iar calea v1 continuă)."""
     try:
         saved = ContextSnapshot.take(ctx)
     except Exception as e:  # noqa: BLE001 — P6: fără instantaneu nu se atinge nimic
@@ -493,18 +668,25 @@ async def run_interpreted_turn(ctx: TurnContext, deps: PipelineDeps) -> bool:
             except Exception as e:  # noqa: BLE001 — P6: după apel, tot un fallback
                 log.warning("interpreted_turn: lanțul (%s)", type(e).__name__)
                 reason = _EXCEPTION
-    try:
-        saved.restore(ctx)
-    except Exception as e:  # noqa: BLE001 — P6: numărat, calea v1 continuă (declarat)
-        log.warning("interpreted_turn: restaurarea (%s)", type(e).__name__)
-        ctx.emit("kernel_restore_failed", error=type(e).__name__)
-    record = None
+    served, record, kernel_turn = False, None, None
     if chain is not None:
         try:
-            record = _chain_record(ctx, chain)
-        except Exception as e:  # noqa: BLE001 — P6: traceul e diagnoză, nu are voie să rupă turul
-            log.warning("interpreted_turn: traceul (%s)", type(e).__name__)
-            reason = _EXCEPTION
+            verdict = await _serve(ctx, deps, chain, saved)
+            if verdict == _EXECUTOR_REFUSED:
+                reason = _EXECUTOR_REFUSED
+            else:
+                served = verdict == _SERVED
+                record = _chain_record(ctx, chain, served=served)
+                kernel_turn = kernel_turn_of(chain, ctx, saved) if served else None
+        except Exception as e:  # noqa: BLE001 — P6: un executor sau traceul picat ⇒ fallback
+            log.warning("interpreted_turn: executorii/traceul (%s)", type(e).__name__)
+            served, record, kernel_turn, reason = False, None, None, _EXCEPTION
+    if not served:
+        try:
+            saved.restore(ctx)
+        except Exception as e:  # noqa: BLE001 — P6: numărat, calea v1 continuă (declarat)
+            log.warning("interpreted_turn: restaurarea (%s)", type(e).__name__)
+            ctx.emit("kernel_restore_failed", error=type(e).__name__)
     if record is None:
         _record_fallback(ctx, reason, snapshot)
         return False
@@ -512,7 +694,11 @@ async def run_interpreted_turn(ctx: TurnContext, deps: PipelineDeps) -> bool:
     ctx.trace["kernel"] = trace
     for name, properties in events:
         ctx.emit(name, **properties)
-    return False
+    if not served:
+        return False
+    # Ultimul: intrarea commit-ului există DOAR pe un tur servit (§2).
+    ctx.kernel_turn = kernel_turn
+    return True
 
 
 __all__ = [
@@ -522,9 +708,14 @@ __all__ = [
     "KERNEL_READS",
     "MENU_OP",
     "NO_EXECUTOR",
+    "ORCHESTRATOR_WRITABLE",
+    "VIEW_FIELDS",
     "VOCABULARY_OP",
     "ContextSnapshot",
+    "KernelView",
     "build_trace",
+    "execute_plans",
+    "kernel_turn_of",
     "reducer_policy",
     "run_interpreted_turn",
 ]

@@ -794,8 +794,13 @@ def active_needs(ctx: object) -> tuple[Need, ...]:
 
     Tolerant la `state_v2=None`/obiect străin DELIBERAT, ca `page_anchor_from_snapshot` (NX-234):
     `TurnContext.state_v2` e tipizat `Any` (ca să nu importăm `src.conversation` în models), iar
-    consumatorii sunt pe hot path. Absența stării înseamnă „fără nevoi moștenite", nu o excepție."""
-    state = getattr(ctx, "state_v2", None)
+    consumatorii sunt pe hot path. Absența stării înseamnă „fără nevoi moștenite", nu o excepție.
+
+    NX-336 PR B: pe un tur servit de kernel (`ctx.kernel_view`), nevoile sunt cele ale stării
+    PORȚII (după reducerea turului), nu ale stării de dinainte: compunerea descrie cererea turului
+    ăsta. Fără vedere (calea de azi), neschimbat."""
+    gate = getattr(getattr(ctx, "kernel_view", None), "gate_state", None)
+    state = gate if isinstance(gate, ConversationStateV2) else getattr(ctx, "state_v2", None)
     return state.active_needs() if isinstance(state, ConversationStateV2) else ()
 
 

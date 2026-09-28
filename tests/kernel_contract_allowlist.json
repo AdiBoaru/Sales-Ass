@@ -12,6 +12,12 @@
       "file": "src/agent/interpreted_turn.py",
       "detail": "nerezolvabil static: dynamic_patch_update_arg",
       "reason": "NX-336 §2: perechea lui `.clear()` din ContextSnapshot.restore: continutul restaurat e copia facuta la intrarea in ramura, nimic calculat de kernel."
+    },
+    {
+      "gate": "state_writes",
+      "file": "src/agent/interpreted_turn.py",
+      "detail": "needs_topic prin assign",
+      "reason": "NX-336 PR B §3: vedere de citire pentru compunere; persistenta trece prin `reduce_turn` (`worker/kernel_commit.py`), iar cu scrierea v2 aprinsa (ceruta de flag) `_build_new_state` intoarce documentul v2 inainte sa citeasca `ctx.state`. Doua situri, fixate de test (`test_the_view_writes_live_only_in_the_two_declared_sites`): `_apply_turn_view` copiaza `constraints`/`search_constraints` din proiectia starii portii dupa ce executorii au servit turul, iar `_restore_state_fields` le readuce la valoarea de dinaintea ramurii pe fallback."
     }
   ],
   "raw_text_readers": [
@@ -49,6 +55,11 @@
       "file": "src/agent/interpreted_turn.py",
       "function": "_turn_words",
       "reason": "NX-336: constructia InterpretInput: mesajul curent (brut, D6, ca pentru agent) si istoricul de dinaintea lui, redactat la citire ca in conversation_transcript. Ies neschimbate spre adaptor; nicio decizie nu ramifica pe cuvinte."
+    },
+    {
+      "file": "src/agent/interpreted_turn.py",
+      "function": "_asked_in_reply",
+      "reason": "NX-336 PR B (recenzia, constatarea 3): memoria intrebarii se scrie doar daca intrebarea de confirmare a portii e chiar in raspunsul trimis (textul sau `intro`). Citeste raspunsul BOTULUI, nu cuvintele clientului; iese un bool, nicio decizie nu ramifica pe cuvinte."
     },
     {
       "file": "src/agent/interpreted_turn.py",

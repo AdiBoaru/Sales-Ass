@@ -303,6 +303,17 @@ def _keeps_search_session(ctx: TurnContext) -> bool:
     return retrieval is None or not retrieval.catalog_read
 
 
+def _search_session_aside_outcome(ctx: TurnContext) -> str:
+    """Ce s-a întâmplat cu sesiunea de căutare pe un tur fără produse (`search_session_aside`).
+    Pe calea de azi: regula NX-326 (`_keeps_search_session`). Pe un tur servit de kernel, commit-ul
+    o decide: un `aside` e identitatea (I5), deci sesiunea rămâne oricum; altfel, coada Sender-ului
+    o închide exact când regula NX-326 n-o păstrează."""
+    kernel_turn = getattr(ctx, "kernel_turn", None)
+    if kernel_turn is not None and kernel_turn.delta.thread == "aside":
+        return "kept_aside"
+    return "kept_aside" if _keeps_search_session(ctx) else "cleared"
+
+
 def _turn_proposals(
     ctx: TurnContext, *, is_rich: bool, has_products: bool
 ) -> list[StateUpdateProposal]:
@@ -311,8 +322,22 @@ def _turn_proposals(
 
     Subiectul (`set_topic`) și nevoile din filtrele turului sunt propuse de stagiul AGENT — el
     știe ruta și e cel care azi rulează `merge_constraints` (NX-133: doar pe SALES). Aici rămân
-    deltele deținute de Sender: setul afișat, sesiunea de căutare, prune-ul de siguranță."""
-    proposals: list[StateUpdateProposal] = list(ctx.state_proposals)
+    deltele deținute de Sender (`_sender_tail`): setul afișat, sesiunea de căutare, prune-ul de
+    siguranță."""
+    return [
+        *ctx.state_proposals,
+        *_sender_tail(ctx, is_rich=is_rich, has_products=has_products),
+    ]
+
+
+def _sender_tail(
+    ctx: TurnContext, *, is_rich: bool, has_products: bool
+) -> list[StateUpdateProposal]:
+    """NX-336 PR B: coada deținută de Sender, extrasă din `_turn_proposals` fără schimbare de
+    comportament (paritate testată), ca și commit-ul unui tur servit de kernel (`kernel_commit`)
+    s-o citească din același loc: setul afișat din `reply.products`, sesiunea de căutare din
+    `state_patch` (sau închisă), prune-ul de siguranță (`source="policy"`), ultimul."""
+    proposals: list[StateUpdateProposal] = []
 
     if (is_rich or has_products) and ctx.reply is not None and ctx.reply.products:
         proposals.append(
@@ -363,11 +388,30 @@ def _build_state_v2(base_state: dict, ctx: TurnContext, *, is_rich: bool, has_pr
     e re-derivat — fără să rerulăm modelul și fără să repetăm un efect deja produs (P6)."""
     vocab = _need_vocabulary(ctx)
     hydrated = hydrate_state_v2(base_state, vocab)
-    reduced = reduce_all(
-        hydrated,
-        _turn_proposals(ctx, is_rich=is_rich, has_products=has_products),
-        _reducer_policy(ctx),
-    )
+    kernel_turn = getattr(ctx, "kernel_turn", None)
+    if kernel_turn is not None:
+        # NX-336 PR B: tur SERVIT de kernel ⇒ reducerul e singurul scriitor, pe intrarea scrisă de
+        # orchestrator; `ctx.state_proposals` (inclusiv ale lui `clarify_resume`) NU intră. Import
+        # leneș: fără tur de kernel, calea de azi nu atinge modulul.
+        from src.worker.kernel_commit import commit_kernel_turn  # noqa: PLC0415
+
+        # Ecranul de la ÎNCĂRCARE (proprietar: procesorul), nu cel al bazei: la conflict, baza e
+        # proaspătă, iar produsele blocate în tur se calculează tot din ecranul pe care l-a curățat
+        # `_prune_displayed`.
+        loaded = ctx.state_v2.references.displayed_products if ctx.state_v2 is not None else ()
+        reduced = commit_kernel_turn(
+            hydrated,
+            kernel_turn,
+            _sender_tail(ctx, is_rich=is_rich, has_products=has_products),
+            _reducer_policy(ctx),
+            screen_before=[d.product_id for d in loaded],
+        )
+    else:
+        reduced = reduce_all(
+            hydrated,
+            _turn_proposals(ctx, is_rich=is_rich, has_products=has_products),
+            _reducer_policy(ctx),
+        )
     state = reduced.state
     # `cart` (NX-237) și `safety` (NX-173) NU sunt modelate de v2 — au proprietarii lor. Le CĂRĂM
     # neatinse din starea de bază + `state_patch`, ca migrarea de format să nu devină o rescriere
@@ -979,8 +1023,7 @@ async def _run_turn(  # noqa: PLR0913 — o fază, mulți parametri deja valida�
         # Nume PROPRIU: `search_session` e deja evenimentul paginării (`catalog_tools`, forma
         # `{action, page_index, pool_size, served, unseen}`), citit de sondele NX-303. Două forme
         # sub același tip s-ar fi amestecat tăcut în analytics.
-        outcome = "kept_aside" if _keeps_search_session(ctx) else "cleared"
-        ctx.emit("search_session_aside", outcome=outcome)
+        ctx.emit("search_session_aside", outcome=_search_session_aside_outcome(ctx))
     commit = TurnCommit(
         business_id=business.id,
         conversation_id=conversation_id,

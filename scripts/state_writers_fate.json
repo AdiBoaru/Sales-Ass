@@ -184,6 +184,20 @@
       "fate": "stays"
     },
     {
+      "file": "src/agent/interpreted_turn.py",
+      "function": "_apply_turn_view",
+      "field": "needs_topic",
+      "why": "NX-336 PR B §3: vederea de CITIRE a unui tur servit de kernel. Copiaza `constraints`/`search_constraints` (derivate din nevoi si subiect) din proiectia starii portii, dupa ce executorii au servit turul, pentru cititorii compunerii. Nu persista nimic: persistenta trece prin `reduce_turn` (`worker/kernel_commit.py`), iar cu scrierea v2 aprinsa (ceruta de flag) `_build_new_state` nu citeste `ctx.state`. Declansatorul retragerii: compunerea citeste starea v2 (`ctx.kernel_view`) in locul vederii v1, adica retragerea formatului v1 dupa promovarea kernelului (pasul 7+).",
+      "fate": "retired"
+    },
+    {
+      "file": "src/agent/interpreted_turn.py",
+      "function": "_restore_state_fields",
+      "field": "needs_topic",
+      "why": "NX-336 PR B §2: anularea vederii de citire pe fallback (aceleasi campuri ca `_apply_turn_view`, readuse la copia facuta la intrarea in ramura). Nu e o scriere noua de stare: turul cazut pe v1 primeste contextul de dinaintea ramurii (testul compara toate campurile). Dispare odata cu `_apply_turn_view`.",
+      "fate": "retired"
+    },
+    {
       "file": "src/conversation/delta.py",
       "function": "_need_proposals",
       "field": "needs_topic",
@@ -293,6 +307,20 @@
       "function": "_handle_set_pending_question",
       "field": "clarification",
       "why": "Handler intern al reducerului -- vezi `_handle_confirm`.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/conversation/state_reducer.py",
+      "function": "_handle_prune_products",
+      "field": "needs_topic",
+      "why": "NX-336 PR B (kernel.v2.0, I5): handler intern al reducerului pentru eliminarea produselor blocate; atinge `parked` doar ca sa scoata blocatele din setul parcat (nevoile si subiectul parcat raman neatinse). Vezi `_handle_confirm`.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/conversation/state_reducer.py",
+      "function": "_handle_prune_products",
+      "field": "references",
+      "why": "NX-336 PR B (kernel.v2.0, I5): prune-ul de siguranta NX-173 pe calea kernelului, ca ELIMINARE din ecran si din seturile de mai devreme (nu inlocuire de lista, ca pe v1). Handler intern al reducerului -- vezi `_handle_confirm`.",
       "fate": "stays"
     },
     {
@@ -485,6 +513,20 @@
       "fate": "stays"
     },
     {
+      "file": "src/worker/kernel_commit.py",
+      "function": "commit_kernel_turn",
+      "field": "references",
+      "why": "NX-336 PR B: commit-ul unui tur servit de kernel. Apelul fabricii `second_pass_input` (eliminarea produselor blocate, ca propunere `prune_products`) spre `reduce_all`: starea o scrie reducerul, modulul doar compune intrarea celor doua treceri.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/worker/kernel_commit.py",
+      "function": "second_pass_input",
+      "field": "references",
+      "why": "NX-336 PR B (kernel.v2.0, I5): construieste propunerea `prune_products` (source=policy) din produsele blocate calculate din ecranul de la incarcare; o aplica reducerul, ultima, si pe `aside`.",
+      "fate": "stays"
+    },
+    {
       "file": "src/worker/processor.py",
       "function": "_build_new_state",
       "field": "active_search",
@@ -542,16 +584,30 @@
     },
     {
       "file": "src/worker/processor.py",
+      "function": "_sender_tail",
+      "field": "active_search",
+      "why": "NX-336 PR B: coada detinuta de Sender, extrasa din `_turn_proposals` fara schimbare de comportament (paritate testata). Propuneri typed (`set_active_search` din `state_patch` sau inchisa), citite de ambele commit-uri: `reduce_all` pe calea de azi si `kernel_commit.commit_kernel_turn` pe un tur servit de kernel, unde trec prin `reduce_turn` ca propuneri de EXECUTOR (I20, `EXECUTOR_OPS`).",
+      "fate": "executor_output"
+    },
+    {
+      "file": "src/worker/processor.py",
+      "function": "_sender_tail",
+      "field": "references",
+      "why": "Acelasi `_sender_tail`: setul afisat din `reply.products` (`source=catalog`, iesirea executorului, I20) si prune-ul de siguranta NX-173 (`source=policy`), pe care commit-ul kernelului il aplica in a doua trecere, cu memoria intrebarii (si pe `aside`).",
+      "fate": "executor_output"
+    },
+    {
+      "file": "src/worker/processor.py",
       "function": "_turn_proposals",
       "field": "active_search",
-      "why": "\"Deltele turului, ca PROPUNERI typed -- aceleasi delte pe care _build_new_state le scrie in v1, doar exprimate in vocabularul reducerului\" (docstring-ul functiei). Exact forma pe care pasul 3 o vrea peste tot -- Sender-ul (P3) emite deja propuneri, nu scrie direct.",
+      "why": "\"Deltele turului, ca PROPUNERI typed -- aceleasi delte pe care _build_new_state le scrie in v1, doar exprimate in vocabularul reducerului\" (docstring-ul functiei). NX-336 PR B: `ctx.state_proposals` + `_sender_tail`; extractorul vede apelul fabricii. Commit-ul de azi (`reduce_all`), deci ramane cat ramane calea v1.",
       "fate": "stays"
     },
     {
       "file": "src/worker/processor.py",
       "function": "_turn_proposals",
       "field": "references",
-      "why": "Acelasi `_turn_proposals`, jumatatea `displayed_products` -- vezi active_search.",
+      "why": "Acelasi `_turn_proposals`, jumatatea `displayed_products` (prin `_sender_tail`) -- vezi active_search.",
       "fate": "stays"
     },
     {
