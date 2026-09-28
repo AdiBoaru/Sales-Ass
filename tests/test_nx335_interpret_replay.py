@@ -390,3 +390,197 @@ def test_the_labels_cover_the_local_corpus_when_it_is_present():
     }
     labelled = set(_labels()["turns"])
     assert labelled <= corpus
+
+
+# --- NX-339: interpretarea brută în raport --------------------------------------------------------
+
+
+async def test_the_rows_keep_the_raw_interpretation_and_the_validator_verdicts(tmp_path):
+    """Fără citat și fără verdictul pe schimbare, o respingere `semantic_mismatch` nu se poate
+    explica (NX-339, clasa E). Raportul e local și ignorat de git; evenimentul rămâne fără text."""
+    directory, journey = _k01_snapshot(tmp_path)
+    snap = rp.load_snapshot(directory)
+    expected = [t.expect["interpretation"] for t in journey.turns]
+    rows = await rp.run(
+        snap,
+        CountingLLM(expected),
+        efforts=("none",),
+        facts=_facts("electronics"),
+        labels={},
+        seed=1,
+        dry_run=False,
+    )
+    first = rows[0]
+    assert first["interpretation"] == expected[0].model_dump(mode="json")
+    assert len(first["checked"]) == len(expected[0].changes)
+    assert all({"change", "rejected", "provenance"} <= set(c) for c in first["checked"])
+    assert first["checked"][0]["change"]["quote"] == expected[0].changes[0].quote
+    assert "quote" not in json.dumps(first["event"])
+
+
+async def test_a_missing_local_snapshot_exits_clearly_with_zero_calls(
+    tmp_path, monkeypatch, capsys
+):
+    fake = CountingLLM()
+    monkeypatch.setattr("src.agent.llm.get_llm", lambda: fake)
+    assert await rp.main(["--dir", str(tmp_path / "absent"), "--yes"]) == 2
+    assert fake.calls == 0
+    assert "--snapshot" in capsys.readouterr().err
+
+
+def test_the_raw_interpretation_is_gitignored():
+    ignore = (Path(__file__).resolve().parents[1] / ".gitignore").read_text(encoding="utf-8")
+    assert "reports/nx335/" in ignore.splitlines()
+
+
+# --- NX-339: câmpurile parțiale ale comparatorului ------------------------------------------------
+
+
+def test_an_absent_field_is_not_evaluated_and_an_empty_one_is():
+    got = {
+        "thread": "aside",
+        "primary_act": "find",
+        "targets": [],
+        "changes": [["set", "price", "9", "lte"]],
+    }
+    absent = rp.compare({"primary_act": "find", "targets": []}, got)
+    assert absent["thread"] is None and absent["ambiguous"] is None
+    assert absent["changes_evaluated"] is False
+    assert (absent["change_emitted"], absent["change_labelled"]) == (0, 0)
+    empty = rp.compare({"primary_act": "find", "targets": [], "changes": []}, got)
+    assert empty["changes_evaluated"] is True
+    assert (empty["change_hits"], empty["change_emitted"]) == (0, 1)  # un fals pozitiv
+
+
+def test_the_summary_rates_only_the_evaluated_turns():
+    def row(verdict):
+        return {
+            "arm": "none",
+            "outcome": "ok",
+            "event": {"provenance": {}, "rejected": {}, "unknown_reference": 0},
+            "observed": {"changes": []},
+            "verdict": verdict,
+            "first_divergence": None,
+            "ms": 1.0,
+            "cost_usd": 0.0,
+        }
+
+    got = {"primary_act": "find", "targets": [], "changes": []}
+    with_thread = rp.compare(
+        {"thread": "continue", "primary_act": "find", "targets": []}, {**got, "thread": "aside"}
+    )
+    without = rp.compare({"primary_act": "find", "targets": []}, got)
+    arm = rp.summarize([row(with_thread), row(without)], ("none",))["arms"]["none"]
+    assert (arm["thread"]["k"], arm["thread"]["n"]) == (0, 1)
+    assert (arm["primary_act"]["k"], arm["primary_act"]["n"]) == (2, 2)
+    assert arm["changes_turns"] == 0
+
+
+# --- NX-339: journey-urile ca set nevăzut ---------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def cases():
+    return rp.journey_cases()
+
+
+def test_the_journeys_split_into_the_unseen_set_and_the_tuned_tenant(cases):
+    assert {c.set_name for c in cases} == {"B", "A-bis"}
+    assert all(c.set_name == ("A-bis" if c.pack in rp.TUNED_PACKS else "B") for c in cases)
+    fields = rp.journey_fields()
+    assert len(cases) == len(fields)
+    # regula câmpurilor parțiale: eticheta poartă doar ce fixează journey-ul
+    for c in cases:
+        keys = fields[(c.journey_id, c.index)]
+        assert ("changes" in c.label) == ("changes" in keys)
+        assert ("thread" in c.label) == ("thread" in keys)
+        assert ("ambiguous" in c.label) == ("ambiguities" in keys)
+
+
+def test_the_state_of_a_later_turn_carries_what_the_earlier_turn_showed(cases):
+    later = next(c for c in cases if c.index > 0 and c.state_before.references.displayed_products)
+    assert later.inp.history and later.inp.history[0][0] == "user"
+    assert len(later.earlier) == later.index  # toate turele de dinainte, ca în `chain`
+
+
+async def test_journeys_dry_run_makes_zero_calls(monkeypatch, capsys):
+    fake = CountingLLM()
+    monkeypatch.setattr("src.agent.llm.get_llm", lambda: fake)
+    assert await rp.main(["--journeys"]) == 0
+    assert fake.calls == 0
+    out = capsys.readouterr().out
+    assert "'A-bis': 5" in out and "'B': " in out
+
+
+def _expected_of(case) -> TurnInterpretation:
+    journey = next(j for j in replay.load_journeys() if j.journey_id == case.journey_id)
+    return journey.turns[case.index].expect["interpretation"]
+
+
+async def test_a_model_that_answers_the_label_scores_one_on_every_metric(cases):
+    """Paritatea căii de comparare: eticheta și modelul trec prin același pas pur, deci un model
+    care răspunde EXACT interpretarea așteptată iese 1,0 peste tot. Orice altă cifră ar fi o
+    asimetrie a unealtei, adică ratări puse pe seama modelului."""
+    fake = CountingLLM([_expected_of(c) for c in cases])
+    rows = await rp.run_journeys(cases, fake, efforts=("none",), seed=1, dry_run=False)
+    assert fake.calls == len(cases)
+    for name, arms in rp.summarize_sets(rows, ("none",))["sets"].items():
+        arm = arms["none"]
+        assert arm["outcomes"] == {"ok": sum(1 for c in cases if c.set_name == name)}
+        for field in ("primary_act", "thread", "targets", "ambiguity"):
+            assert arm[field]["rate"] in (1.0, None), (name, field, arm[field])
+        assert arm["changes"]["f1"] in (1.0, None), (name, arm["changes"])
+        assert arm["unknown_reference"]["k"] == 0
+
+
+async def test_a_wrong_act_is_counted_on_that_turn_only(cases):
+    wrong = next(i for i, c in enumerate(cases) if c.set_name == "B")
+    scripted = [_expected_of(c) for c in cases]
+    acts = [a.model_copy(update={"kind": "other", "targets": []}) for a in scripted[wrong].acts]
+    scripted[wrong] = scripted[wrong].model_copy(update={"acts": acts})
+    rows = await rp.run_journeys(
+        cases, CountingLLM(scripted), efforts=("none",), seed=1, dry_run=False
+    )
+    arm = rp.summarize_sets(rows, ("none",))["sets"]["B"]["none"]
+    assert arm["primary_act"]["n"] - arm["primary_act"]["k"] == 1
+
+
+# --- NX-339: regresiile între două rapoarte -------------------------------------------------------
+
+
+def _verdict(**changed) -> dict:
+    base = {
+        "thread": True,
+        "primary_act": True,
+        "targets": True,
+        "ambiguous": True,
+        "changes_evaluated": True,
+        "change_hits": 1,
+        "change_labelled": 1,
+        "change_emitted": 1,
+        "null_hits": 0,
+        "null_labelled": 0,
+        "null_emitted": 0,
+    }
+    return {**base, **changed}
+
+
+def test_regressions_list_the_turns_that_got_worse_on_the_intersection():
+    def row(tid, **changed):
+        return {"turn_id": tid, "arm": "none", "verdict": _verdict(**changed)}
+
+    before = [row("a"), row("b", primary_act=False), row("c"), row("only-before")]
+    after = [row("a", thread=False, change_emitted=2), row("b"), row("c"), row("only-after")]
+    rep = rp.regressions(before, after)
+    assert rep["compared"] == 3 and rep["only_before"] == 1 and rep["only_after"] == 1
+    assert rep["regressed"] == 1 and rep["improved"] == 1
+    assert rep["turns"] == [{"turn_id": "a", "arm": "none", "fields": ["thread", "changes"]}]
+
+
+async def test_the_regressions_cli_reads_two_reports(tmp_path, capsys):
+    good = {"rows": [{"turn_id": "a", "arm": "none", "verdict": _verdict()}]}
+    bad = {"rows": [{"turn_id": "a", "arm": "none", "verdict": _verdict(primary_act=False)}]}
+    (tmp_path / "a.json").write_text(json.dumps(good), encoding="utf-8")
+    (tmp_path / "b.json").write_text(json.dumps(bad), encoding="utf-8")
+    assert await rp.main(["--regressions", str(tmp_path / "a.json"), str(tmp_path / "b.json")]) == 0
+    assert '"regressed": 1' in capsys.readouterr().out

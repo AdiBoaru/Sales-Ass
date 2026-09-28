@@ -306,6 +306,15 @@ Probă: `pytest tests/test_turn_interpreter.py tests/test_interpretation_check.p
 tests/test_llm_interpret_effort.py tests/test_usage_purpose.py tests/test_nx335_interpret_replay.py
 tests/test_nx335_review.py tests/test_kernel_contract.py tests/test_kernel_replay.py -q` +
 `python scripts/kernel_prompt_snapshot.py`.
+**Raportul NX-335 pe `sole-ro` a picat 3 din 4 praguri** (act 0,867, fir 0,933, F1 0,80); clasa
+dominantă e `other`/`aside` unde clientul cere un produs sau întreabă despre unul de pe ecran.
+Reparația e NX-339 ([`tasks/stage1/NX-339.md`](tasks/stage1/NX-339.md)), cu măsurare pre-înregistrată:
+setul SOLE e contaminat de analiză, deci verdictul cere și un set NEVĂZUT. **339a** l-a construit:
+`--journeys` rulează journey-urile kernelului (103 ture pe patru pachete ≠ SOLE, set `B`; 5 pe
+`sole-ro`, `A-bis`) pe starea din `stage_harness.chain`, cu eticheta = interpretarea așteptată prin
+ACELAȘI pas pur ca a modelului (un model care răspunde exact eticheta iese 1,0 pe toate, testat), un
+câmp absent din journey nu se evaluează; `--regressions` dă turele corect → greșit între două
+rapoarte; rândurile păstrează interpretarea brută și verdictul validatorului (local, gitignored).
 **Pasul 6 PR A (NX-336) — schela turului interpretat, DARK: lanțul rulează pe un tur real, v1
 răspunde.** `INTERPRETED_TURN_ENABLED` (OFF; poarta de boot cere stările v2 citite ȘI scrise,
 scurtăturile pe resolverul v2 + `NAMED_SHORTCUT_TARGETS_ENABLED` și gardul de rafinare, refuză
