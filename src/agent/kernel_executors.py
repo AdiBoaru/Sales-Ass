@@ -1,4 +1,4 @@
-"""NX-336 PR C (felia C1) — executorii de CITIRE ai turului interpretat.
+"""NX-336 PR C (feliile C1 + C2) — executorii de CITIRE ai turului interpretat.
 
 Planul turului (`PlannedTurn`, scris de `turn_planner`) spune CE se servește; aici se leagă la
 executorii de azi, fără niciun apel de model în plus și fără a re-deduce intenția:
@@ -7,7 +7,8 @@ executorii de azi, fără niciun apel de model în plus și fără a re-deduce i
   (`build_plan(kernel=True)` → `render`);
 - `page`: `continue_search_session` pe sesiunea stării, apoi aceeași compunere;
 - `detail`: un id ⇒ `serve_details`; ≥ 2 (`act_both`) ⇒ `serve_comparison`;
-- `compare`: ≥ 2 id-uri ⇒ `serve_comparison` (partenerul similar al unei singure ținte: C2);
+- `compare`: ≥ 2 id-uri ⇒ `serve_comparison`; o singură țintă ⇒ partenerul similar
+  (`similar_candidates` → `pick_similar_partner`, ca chip-ul NX-319), apoi aceeași comparație;
 - `link`: `_handle_link_intent(ids=…)`, niciodată `ids=None`;
 - `ask`: întrebarea porții (`set_clarify`), cu candidații ca CARDURI (`_card_products`: identitate
   `product_id`, nume scurt), ca pe orice alt răspuns cu produse.
@@ -15,9 +16,20 @@ executorii de azi, fără niciun apel de model în plus și fără a re-deduce i
 Ce nu e legat aici întoarce `None` (turul rămâne pe calea v1, motivul `dark`): `faq`/`order` (azi
 răspunsul lor e proza modelului, iar planul nu poartă cuvintele clientului), `reply_only` (vine din
 `chitchat`, unde v1 răspunde în context, sau dintr-o MUTAȚIE refuzată de poartă fără întrebare,
-unde răspunsul e al mutației: PR D), mutațiile, `bundle`, `delegate` și planurile multiple (PR D),
-comparația cu un similar (C2). O căutare care nu e o căutare nouă (aceeași amprentă, sesiune
-epuizată) refuză (`False`): răspunsul „nu mai am" e al căii v1, nu „nu am găsit în catalog".
+unde răspunsul e al mutației: PR D), mutațiile, `bundle`, `delegate` și planurile multiple (PR D).
+O căutare care nu e o căutare nouă (aceeași amprentă, sesiune epuizată) refuză (`False`): răspunsul
+„nu mai am" e al căii v1, nu „nu am găsit în catalog".
+
+**I12 (C2), structural:** orice comparație primește `withhold`, care judecă politica de răspuns pe
+produsele ÎNCĂRCATE (țintele + partenerul, `policy_for` al orchestratorului). Fără drept de verdict,
+compunerea pierde sloturile de verdict (schemă și reguli, `compose_comparison(verdict=False)`), iar
+închiderea devine fraza pachetului `verdict_unknown`, cu eticheta de rând a dimensiunii lipsă. Fără
+frază sau fără etichetă, închiderea rămâne goală și se numără: verdictul tot nu se scrie.
+
+**Confirmarea implicită (C2):** când poarta acționează și cere confirmarea unei nevoi `implicit`
+(`asked_kind="noted"`), întrebarea e ULTIMA frază a răspunsului (`text`, plus câmpul citit de
+widget), deci memoria ei se scrie (`note_asked`). Pe o căutare fără rezultate, întrebarea e
+răspunsul.
 
 Frazele kernelului vin DOAR din pachet (`DomainPack.kernel_sentences`, P11): fail-open pe o
 dezvăluire (turul pleacă fără ea, `kernel_sentence_missing{code}`), fail-closed pe `no_results`
@@ -25,16 +37,20 @@ dezvăluire (turul pleacă fără ea, `kernel_sentence_missing{code}`), fail-clo
 nu servește niciodată ecranul vechi (R3 e oprit prin `kernel=True`), nici „Îți recomand:" cu o listă
 goală, și nici o dezvăluire în plus: fraza `no_results` spune deja tot.
 
-Id-urile date executorilor vin EXCLUSIV din `TurnPlan.product_ids` (I1), iar executorii nu scriu
-nevoi sau subiect (I20): sesiunea de căutare și referințele trec prin commit-ul kernelului."""
+Id-urile date executorilor vin din `TurnPlan.product_ids` (I1); singura excepție e partenerul unei
+comparații cu o țintă, ales de interogarea de catalog, nu de model. Executorii nu scriu nevoi sau
+subiect (I20): sesiunea de căutare și referințele trec prin commit-ul kernelului."""
 
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Any
 
 from src.agent import deterministic as det
 from src.agent.fallbacks import _card_products
 from src.agent.tool_executor import ToolRun
+from src.config import get_settings
+from src.conversation.answer_policy import dimension_label
 from src.db.queries.catalog import get_products_by_ids
 from src.models import RetrievalResult
 from src.safety.policy import SafetyPolicy
@@ -52,9 +68,12 @@ READ_EXECUTORS: frozenset[str] = frozenset({"search", "page", "detail", "compare
 _REQUIRED = frozenset({"no_results"})
 #: Evenimentele KERNELULUI emise în faza executorilor: rămân și pe un tur căzut (restul
 #: evenimentelor executorilor se scot, ca turul căzut să fie turul cu flagul stins).
-KERNEL_EXECUTOR_EVENTS: frozenset[str] = frozenset({"kernel_sentence_missing"})
-#: Executorii care servesc o comparație când primesc ≥ 2 ținte, deci un verdict scris de compunere.
-_COMPARING: frozenset[str] = frozenset({"compare", "detail"})
+KERNEL_EXECUTOR_EVENTS: frozenset[str] = frozenset(
+    {"kernel_sentence_missing", "kernel_similar_partner", "verdict_withheld"}
+)
+#: Politica de răspuns a orchestratorului pe produsele unei comparații: (partenerii adăugați de
+#: executor, rândurile încărcate) → `AnswerPolicy` sau `None` (nu e o judecată).
+PolicyFor = Callable[[Sequence[str], Sequence[dict[str, Any]]], "AnswerPolicy | None"]
 #: Câte produse arată o pagină a sesiunii (ca paginarea v1).
 _PAGE_SIZE = 6
 
@@ -155,7 +174,82 @@ async def _compose(
         await render(ctx, deps, plan)
 
 
-async def _search(ctx: TurnContext, deps: PipelineDeps, plan: TurnPlan) -> bool:
+def _pack(ctx: TurnContext) -> Any:
+    return getattr(ctx.business, "domain_pack", None)
+
+
+def _verdict_note(ctx: TurnContext, missing: Sequence[str]) -> str:
+    """Închiderea unei comparații fără verdict. Cu eticheta de rând a dimensiunii: fraza
+    `verdict_unknown`, care o citează ca atare (o etichetă de rând nu e mereu un substantiv:
+    „Potrivit pentru"). Fără etichetă (ratingul nu e o fațetă): fraza generică
+    `verdict_unknown_any`. Fără frază ⇒ închidere goală, numărată; verdictul tot nu se scrie."""
+    label = dimension_label(_pack(ctx), missing[0], ctx.language) if missing else None
+    code = "verdict_unknown" if label is not None else "verdict_unknown_any"
+    template = kernel_sentence(_pack(ctx), ctx.language, code)
+    if template is None:
+        ctx.emit("kernel_sentence_missing", code=code)
+        return ""
+    return template.replace("{dimension}", label, 1) if label is not None else template
+
+
+def _withhold(
+    ctx: TurnContext, policy_for: PolicyFor | None, partners: Sequence[str] = ()
+) -> Callable[[list[dict[str, Any]]], str | None] | None:
+    """`serve_comparison(withhold=)`: politica pe produsele încărcate (după siguranță). `None` ⇒
+    verdictul e permis sau nu e o judecată; altfel închiderea care îl înlocuiește."""
+    if policy_for is None:
+        return None
+
+    def withhold(rows: list[dict[str, Any]]) -> str | None:
+        policy = policy_for(tuple(partners), rows)
+        if policy is None or policy.verdict_allowed:
+            return None
+        ctx.emit("verdict_withheld", missing=list(policy.missing))
+        return _verdict_note(ctx, policy.missing)
+
+    return withhold
+
+
+async def _compare(
+    ctx: TurnContext, deps: PipelineDeps, ids: list[str], policy_for: PolicyFor | None
+) -> bool | None:
+    """≥ 2 ținte ⇒ comparația lor. O țintă ⇒ partenerul similar (NX-319), sub același kill-switch
+    ca pe v1; ajunge aici doar când ACTUL are o singură țintă (orchestratorul lasă `dark` un act cu
+    mai multe ținte din care una s-a pierdut, `_target_lost`)."""
+    if len(ids) >= 2:
+        return await det.serve_comparison(ctx, deps, ids, withhold=_withhold(ctx, policy_for))
+    if not ids or not get_settings().compare_with_similar_enabled:
+        return None
+    async with deps.db("similar_candidates") as conn:
+        candidates = await det.similar_candidates(conn, ctx.business.id, ids[0])
+    partner = det.pick_similar_partner(candidates)
+    ctx.emit("kernel_similar_partner", found=partner is not None, n=len(candidates))
+    if partner is None:
+        return False
+    return await det.serve_comparison(
+        ctx, deps, [ids[0], partner], withhold=_withhold(ctx, policy_for, (partner,))
+    )
+
+
+def _confirm(ctx: TurnContext, question: str) -> None:
+    """Întrebarea de confirmare ca ULTIMA frază (C2): în `text` (istoricul și memoria întrebării) și
+    în câmpul citit de widget (`rich.intro`, ultimul paragraf al comparației)."""
+    reply = ctx.reply
+    if reply is None or question in (reply.text or ""):
+        return
+    reply.text = f"{reply.text}\n\n{question}".strip() if reply.text else question
+    rich = getattr(reply, "rich", None)
+    if rich is not None:
+        rich.intro = f"{rich.intro} {question}".strip() if rich.intro else question
+    comparison = getattr(reply, "comparison", None)
+    if comparison is not None:
+        comparison.closing = [*(comparison.closing or []), question]
+    reply.cacheable = False
+
+
+async def _search(
+    ctx: TurnContext, deps: PipelineDeps, plan: TurnPlan, outcome: GateOutcome
+) -> bool:
     from src.tools import catalog_tools  # noqa: PLC0415 — ciclul unelte ↔ agent
 
     if plan.search_args is None:
@@ -166,7 +260,8 @@ async def _search(ctx: TurnContext, deps: PipelineDeps, plan: TurnPlan) -> bool:
         if result.llm_view == catalog_tools._NO_MORE_VIEW:
             # aceeași amprentă ca sesiunea activă, pool epuizat: nu e „nu am găsit în catalog"
             return False
-        text = _required_sentence(ctx, "no_results")
+        # confirmarea unei nevoi implicite, cu setul gol, e chiar răspunsul (cardul §5)
+        text = _confirmation(outcome) or _required_sentence(ctx, "no_results")
         ctx.retrieval = RetrievalResult(products=[], source="kernel", catalog_read=True)
         ctx.set_reply(text, cacheable=False)
         return True
@@ -205,12 +300,21 @@ async def _ask(ctx: TurnContext, deps: PipelineDeps, plan: TurnPlan, outcome: Ga
     return True
 
 
+def _confirmation(outcome: GateOutcome) -> str | None:
+    question = outcome.decision.question
+    return question if outcome.asked_kind == "noted" and question else None
+
+
 async def _run_plan(
-    ctx: TurnContext, deps: PipelineDeps, plan: TurnPlan, outcome: GateOutcome
+    ctx: TurnContext,
+    deps: PipelineDeps,
+    plan: TurnPlan,
+    outcome: GateOutcome,
+    policy_for: PolicyFor | None,
 ) -> bool | None:
     kind, ids = plan.executor, list(plan.product_ids)
     if kind == "search":
-        return await _search(ctx, deps, plan)
+        return await _search(ctx, deps, plan, outcome)
     if kind == "page":
         return await _page(ctx, deps)
     if kind == "ask":
@@ -224,23 +328,10 @@ async def _run_plan(
         if len(ids) == 1:
             await det.serve_details(ctx, deps, ids[0])
             return ctx.reply is not None
-        return await det.serve_comparison(ctx, deps, ids) if len(ids) >= 2 else False
+        return await _compare(ctx, deps, ids, policy_for) if len(ids) >= 2 else False
     if kind == "compare":
-        return await det.serve_comparison(ctx, deps, ids) if len(ids) >= 2 else None
+        return await _compare(ctx, deps, ids, policy_for)
     return None
-
-
-def verdict_blocked(plan: TurnPlan, policy: AnswerPolicy | None) -> bool:
-    """I12, până la C2: pe o comparație (≥ 2 ținte) politica interzice verdictul (dimensiunea
-    decisivă necunoscută pe un candidat), dar compunerea de azi (`compose_comparison`) îl scrie
-    oricum. Turul rămâne pe calea v1 (`dark`), fără ca vreun executor să ruleze; C2 duce politica
-    în `serve_comparison` și scoate poarta."""
-    return (
-        plan.executor in _COMPARING
-        and len(plan.product_ids) >= 2
-        and policy is not None
-        and not policy.verdict_allowed
-    )
 
 
 async def execute_read_plans(
@@ -248,22 +339,28 @@ async def execute_read_plans(
     deps: PipelineDeps,
     planned: PlannedTurn,
     outcome: GateOutcome,
-    policy: AnswerPolicy | None = None,
+    policy_for: PolicyFor | None = None,
 ) -> bool | None:
     """Rulează planul turului. `None` = niciun executor legat (calea v1, `dark`), `False` =
-    executorul a refuzat, `True` = a servit. `NoSentence` urcă la orchestrator."""
+    executorul a refuzat, `True` = a servit. `NoSentence` urcă la orchestrator. `policy_for` =
+    politica de răspuns a orchestratorului, judecată pe produsele unei comparații (I12)."""
     if len(planned.plans) != 1:
         return None  # multi-act: PR D
     plan = planned.plans[0]
-    if plan.executor not in READ_EXECUTORS or verdict_blocked(plan, policy):
+    if plan.executor not in READ_EXECUTORS:
         return None
-    verdict = await _run_plan(ctx, deps, plan, outcome)
+    verdict = await _run_plan(ctx, deps, plan, outcome, policy_for)
+    if not verdict:
+        return verdict
     no_results = (
         plan.executor == "search" and ctx.retrieval is not None and not ctx.retrieval.products
     )
-    if verdict and not no_results:
+    if not no_results:
         # pe `no_results` fraza spune deja tot: o dezvăluire în plus ar contrazice-o
         _prefix(ctx, _disclosure_text(ctx, planned))
+        question = _confirmation(outcome)
+        if question is not None and plan.executor != "ask":
+            _confirm(ctx, question)
     return verdict
 
 
@@ -272,6 +369,6 @@ __all__ = [
     "READ_EXECUTORS",
     "NoSentence",
     "execute_read_plans",
+    "PolicyFor",
     "kernel_sentence",
-    "verdict_blocked",
 ]

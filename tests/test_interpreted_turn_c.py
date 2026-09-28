@@ -227,7 +227,7 @@ async def test_detail_and_compare_route_to_the_existing_handlers(
         seen.append(("details", [pid]))
         ctx.set_reply("detalii", cacheable=False)
 
-    async def comparison(ctx, deps, pids):
+    async def comparison(ctx, deps, pids, *, withhold=None):
         seen.append(("comparison", list(pids)))
         ctx.set_reply("comparatie", cacheable=False)
         return True
@@ -240,35 +240,224 @@ async def test_detail_and_compare_route_to_the_existing_handlers(
     assert seen == [(called, list(ids))]
 
 
-@pytest.mark.parametrize("executor", ["compare", "detail"])
-async def test_a_comparison_without_a_verdict_right_stays_dark_until_c2(
-    monkeypatch, electronics, executor
-):
-    """Recenzia, constatarea 3 (I12): politica interzice verdictul, iar compunerea de azi l-ar
-    scrie. Turul rămâne pe v1 fără ca vreun handler să ruleze; cu verdictul permis, servește."""
+# --- 2b. C2: I12 structural, comparația pe o țintă, confirmarea ----------------------------------
+
+
+def _pair(cat):
+    """Două produse din același raft al catalogului de fixture (comparația refuză rafturi diferite
+    doar prin rădăcini, stub-uite goale)."""
+    return tuple(list(cat.items)[:2])
+
+
+def _policy(allowed: bool, missing=("screen",)):
     from src.conversation.interpretation import AnswerPolicy
 
-    ran = []
+    return AnswerPolicy(verdict_allowed=allowed, missing=[] if allowed else list(missing))
 
-    async def comparison(ctx, deps, pids):
-        ran.append(list(pids))
-        ctx.set_reply("comparatie", cacheable=False)
-        return True
 
-    monkeypatch.setattr(kx.det, "serve_comparison", comparison)
-    planned = _planned(_plan(executor=executor, product_ids=("p1", "p2")))
-    blocked = AnswerPolicy(verdict_allowed=False, missing=["screen"])
-    allowed = AnswerPolicy(verdict_allowed=True, missing=[])
+def _spy_compose(monkeypatch):
+    calls = []
+
+    async def compose(llm, ctx, comparison, products, **kw):
+        calls.append(kw)
+        return comparison
+
+    monkeypatch.setattr(kx.det, "compose_comparison", compose)
+    return calls
+
+
+@pytest.mark.parametrize("executor", ["compare", "detail"])
+async def test_a_comparison_without_a_verdict_right_is_composed_without_one(
+    monkeypatch, electronics, executor
+):
+    """I12 (cardul §5): politica interzice verdictul ⇒ compunerea cerută FĂRĂ sloturile de verdict
+    (`verdict=False`), iar închiderea e fraza pachetului care numește dimensiunea lipsă."""
+    calls = _spy_compose(monkeypatch)
+    judged = []
+
+    def policy_for(partners, rows):
+        judged.append((tuple(partners), [r["id"] for r in rows]))
+        return _policy(False)
+
     ctx = _ctx(electronics)
-    assert await kx.execute_read_plans(ctx, _deps(), planned, _outcome(), blocked) is None
-    assert ran == [] and ctx.reply is None
-    assert await kx.execute_read_plans(ctx, _deps(), planned, _outcome(), allowed) is True
-    assert ran == [["p1", "p2"]]
+    ids = _pair(electronics)
+    planned = _planned(_plan(executor=executor, product_ids=ids))
+    assert await kx.execute_read_plans(ctx, _deps(), planned, _outcome(), policy_for) is True
+    assert calls == [{"facets": calls[0]["facets"], "query": "x", "verdict": False}]
+    assert judged == [((), list(ids))]
+    template = kx.kernel_sentence(electronics.pack, "ro", "verdict_unknown")
+    assert ctx.reply.comparison.closing == [template.replace("{dimension}", "Ecran")]
+    assert {"missing": ["screen"], "turn_id": "t0"} in _events(ctx, "verdict_withheld")
 
 
-async def test_compare_on_a_single_target_stays_dark_until_c2(electronics):
+async def test_a_comparison_with_a_verdict_right_is_todays_request(monkeypatch, electronics):
+    calls = _spy_compose(monkeypatch)
+    ctx = _ctx(electronics)
+    planned = _planned(_plan(executor="compare", product_ids=_pair(electronics)))
+    policy_for = lambda partners, rows: _policy(True)  # noqa: E731
+    assert await kx.execute_read_plans(ctx, _deps(), planned, _outcome(), policy_for) is True
+    assert "verdict" not in calls[0], "verdictul permis = cererea de azi, fără argumentul nou"
+    assert _events(ctx, "verdict_withheld") == []
+
+
+async def test_a_missing_verdict_sentence_leaves_the_closing_empty_and_counts(
+    monkeypatch, electronics
+):
+    """Fără frază (sau fără etichetă) verdictul tot NU se scrie: închiderea e goală, numărată."""
+    calls = _spy_compose(monkeypatch)
+    cat = _with_sentences(electronics, {})
+    ctx = _ctx(cat)
+    planned = _planned(_plan(executor="compare", product_ids=_pair(cat)))
+    policy_for = lambda partners, rows: _policy(False)  # noqa: E731
+    assert await kx.execute_read_plans(ctx, _deps(), planned, _outcome(), policy_for) is True
+    assert calls[0]["verdict"] is False and ctx.reply.comparison.closing == []
+    assert {"code": "verdict_unknown", "turn_id": "t0"} in _events(ctx, "kernel_sentence_missing")
+
+
+async def test_compare_on_a_single_target_uses_the_similar_partner(monkeypatch, electronics):
+    """C2: o țintă ⇒ partenerul similar (ca chip-ul NX-319), iar politica îl judecă și pe el."""
+    _spy_compose(monkeypatch)
+    anchor, partner = _pair(electronics)
+
+    async def candidates(conn, business_id, anchor_id):
+        assert anchor_id == anchor
+        return [{"id": partner, "name": electronics.items[partner]["name"], "anchor_name": "x"}]
+
+    monkeypatch.setattr(kx.det, "similar_candidates", candidates)
+    judged = []
+
+    def policy_for(partners, rows):
+        judged.append(tuple(partners))
+        return _policy(True)
+
+    ctx = _ctx(electronics)
+    planned = _planned(_plan(executor="compare", product_ids=(anchor,)))
+    assert await kx.execute_read_plans(ctx, _deps(), planned, _outcome(), policy_for) is True
+    assert judged == [(partner,)]
+    assert [c.product_id for c in ctx.reply.comparison.columns] == [anchor, partner]
+
+
+async def test_compare_on_a_single_target_without_a_partner_refuses(electronics):
+    ctx = _ctx(electronics)
     planned = _planned(_plan(executor="compare", product_ids=("p1",)))
-    assert await kx.execute_read_plans(_ctx(electronics), _deps(), planned, _outcome()) is None
+    assert await kx.execute_read_plans(ctx, _deps(), planned, _outcome()) is False
+    # recenzia C2: evenimentul e al kernelului, deci rămâne și pe turul căzut
+    assert "kernel_similar_partner" in kx.KERNEL_EXECUTOR_EVENTS
+    assert {"found": False, "n": 0, "turn_id": "t0"} in _events(ctx, "kernel_similar_partner")
+
+
+async def test_the_similar_partner_obeys_the_v1_kill_switch(monkeypatch, electronics):
+    """`COMPARE_WITH_SIMILAR_ENABLED` stins oprește și calea kernelului, fără nicio citire."""
+    from src.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "compare_with_similar_enabled", False)
+    deps = _deps()
+    planned = _planned(_plan(executor="compare", product_ids=("p1",)))
+    assert await kx.execute_read_plans(_ctx(electronics), deps, planned, _outcome()) is None
+    assert deps.db.ops == []
+
+
+def test_a_dimension_without_a_label_gets_the_generic_sentence(electronics):
+    """Ratingul nu e o fațetă, deci n-are etichetă de rând: fraza generică, nu o închidere goală
+    și nu un `kernel_sentence_missing` fals (recenzia C2)."""
+    ctx = _ctx(electronics)
+    note = kx._verdict_note(ctx, ["rating"])
+    assert note == kx.kernel_sentence(electronics.pack, "ro", "verdict_unknown_any")
+    assert _events(ctx, "kernel_sentence_missing") == []
+
+
+def test_a_row_label_that_is_not_a_noun_is_quoted(electronics):
+    """O etichetă de rând nu e mereu un substantiv („Potrivit pentru"): se citează ca atare."""
+    ctx = _ctx(electronics)
+    template = kx.kernel_sentence(electronics.pack, "ro", "verdict_unknown")
+    assert "„{dimension}”" in template
+    assert kx._verdict_note(ctx, ["screen"]) == template.replace("{dimension}", "Ecran")
+
+
+def test_a_lost_target_keeps_the_turn_dark():
+    """Recenzia C2, P1: actul numește două ținte, dar una s-a pierdut fără dezvăluire (o referință
+    `earlier` fără set, un atribut negăsit), deci planul a rămas cu un produs. Servit, turul ar
+    compara ancora cu un similar pe care clientul nu l-a numit."""
+    from src.agent.interpreted_turn import _target_lost
+
+    def chain(targets, executor, ids):
+        return NS(
+            interpreted=NS(interpretation=NS(acts=[NS(targets=targets)])),
+            outcome=_outcome(),
+            planned=_planned(_plan(executor=executor, product_ids=ids)),
+        )
+
+    assert _target_lost(chain(["r1", "r2"], "compare", ("p1",)))
+    assert _target_lost(chain(["r1", "r2"], "detail", ("p1",)))
+    assert not _target_lost(chain(["r1"], "compare", ("p1",)))
+    assert not _target_lost(chain(["r1", "r2"], "compare", ("p1", "p2")))
+    assert not _target_lost(chain(["r1", "r2"], "search", ()))
+
+
+def test_the_policy_judges_only_the_products_on_the_table(electronics):
+    """Recenzia C2: un candidat scos de siguranță nu e în tabel, deci nu reține verdictul."""
+    from src.agent.interpreted_turn import _policy_for
+    from src.conversation.interpretation import ResolvedRef
+    from src.conversation.turn_interpreter import InterpretInput
+
+    # «Care e mai bun la ecran, primul sau al doilea?» (g12): el-25 n-are `screen`
+    interp = JOURNEYS["g12-electronics-better-screen"].turns[1].expect["interpretation"]
+    resolved = tuple(
+        ResolvedRef(
+            ref_id=r,
+            kind="ordinal",
+            outcome="exact",
+            product_ids=[p],
+            source="shown_now",
+            reason=None,
+        )
+        for r, p in (("r1", "el-01"), ("r2", "el-25"))
+    )
+    inp = InterpretInput(
+        locale="ro",
+        pack=electronics.pack,
+        vocab=electronics.vocab,
+        category_menu=electronics.menu,
+        state=ConversationStateV2(),
+        history=(),
+        message="x",
+    )
+    policy_for = _policy_for(interp, resolved, _outcome(), inp)
+    both = sh.product_rows(electronics, ["el-01", "el-25"])
+    assert policy_for((), both).verdict_allowed is False
+    assert policy_for((), both[:1]) is None, "un singur produs în tabel: nimic de judecat"
+
+
+def _noted(question: str) -> GateOutcome:
+    return GateOutcome(
+        decision=AmbiguityDecision(verdict="act", reason="implicit_need", question=question),
+        asked_key="skin_type",
+        asked_kind="noted",
+    )
+
+
+async def test_the_confirmation_is_the_last_sentence_of_the_reply(monkeypatch, electronics):
+    """`confirm_implicit` (cardul §5): poarta acționează și cere confirmarea ⇒ întrebarea e ultima
+    frază (text + câmpul citit de widget), deci memoria ei (`note_asked`) se scrie."""
+    from src.agent.interpreted_turn import _asked_in_reply
+
+    async def details(ctx, deps, pid, *, lead=None):
+        ctx.set_reply("detalii", cacheable=True)
+
+    monkeypatch.setattr(kx.det, "serve_details", details)
+    ctx = _ctx(electronics)
+    planned = _planned(_plan(executor="detail", product_ids=("p1",)))
+    assert await kx.execute_read_plans(ctx, _deps(), planned, _noted("E pentru tine?")) is True
+    assert ctx.reply.text == "detalii\n\nE pentru tine?"
+    assert _asked_in_reply(ctx.reply, "E pentru tine?")
+
+
+async def test_with_no_results_the_confirmation_is_the_answer(monkeypatch, electronics):
+    _stub_search(monkeypatch, electronics, ())
+    ctx = _ctx(electronics)
+    planned = _planned(_plan(executor="search", search_args=_args()))
+    assert await kx.execute_read_plans(ctx, _deps(), planned, _noted("E pentru tine?")) is True
+    assert ctx.reply.text == "E pentru tine?"
 
 
 @pytest.mark.parametrize("executor", ["cart", "bundle", "delegate", "faq", "order", "reply_only"])
@@ -383,7 +572,7 @@ async def test_the_disclosure_reaches_the_comparison_the_widget_shows(monkeypatc
     `reply.text`, deci fraza trebuie pusă și acolo."""
     from src.models import Comparison
 
-    async def comparison(ctx, deps, pids):
+    async def comparison(ctx, deps, pids, *, withhold=None):
         ctx.set_reply("comparatie", cacheable=False)
         ctx.reply.comparison = Comparison(columns=[], rows=[], intro="Lead.")
         return True
@@ -513,3 +702,72 @@ async def test_build_plan_in_kernel_mode_does_not_re_derive_the_intent(
 async def test_the_production_seam_serves_reads_and_keeps_the_rest_dark(electronics):
     planned = _planned(_plan(executor="cart", product_ids=("p1",)))
     assert await it.execute_plans(_ctx(electronics), _deps(), planned, _outcome()) is None
+
+
+# --- 6. cererea de compunere a comparației (I12 structural, cardul §5) ---------------------------
+
+
+@pytest.mark.parametrize("axes_v2", [False, True])
+def test_the_no_verdict_prompt_loses_the_closing_and_the_choice(axes_v2):
+    from src.agent import prompt_builder as pb
+
+    inp = pb.PromptInputs(business_name="X", vertical="ecommerce", locale="ro")
+    today = pb.build_compare_system(inp, axes_v2=axes_v2)
+    none = pb.build_compare_system(inp, axes_v2=axes_v2, verdict=False)
+    rules = pb._COMPARE_RULES_V2 if axes_v2 else pb._COMPARE_RULES
+    assert rules in today, "implicit = promptul de azi"
+    assert "`closing` =" in today and "`closing` =" not in none
+    assert "și ce ar trebui să aleagă" not in none
+    assert "Pe comparația asta NU există verdict" in none
+    assert "NATURAL:" in none
+
+
+async def test_the_no_verdict_request_has_no_closing_slot(monkeypatch, electronics):
+    """Snapshot al cererii: schema fără `closing` (nici în `required`), iar un `closing` întors
+    totuși de model nu ajunge în comparație. Implicit, schema e cea de azi."""
+    from src.agent import compare_narrative as cn
+    from src.config import get_settings
+    from src.models import Comparison
+
+    monkeypatch.setattr(get_settings(), "comparison_narrative_enabled", True)
+    seen = []
+
+    class LLM:
+        async def complete_schema(self, system, user, schema, **kw):
+            seen.append((system, schema))
+            return {"lead": "Lead.", "subtitle": None, "axes": [], "closing": ["Ia-l pe primul."]}
+
+    # axele trec, ca bucla de închidere să ruleze chiar (recenzia C2: altfel testul trecea degeaba)
+    monkeypatch.setattr(cn, "lead_failures", lambda *a, **k: ())
+    monkeypatch.setattr(cn, "assemble_axes", lambda *a, **k: (["axa"], {}))
+    ctx = _ctx(electronics)
+    base = Comparison(columns=[], rows=[], intro="Tabel.")
+    out = await cn.compose_comparison(LLM(), ctx, base, [], verdict=False)
+    system, schema = seen[0]
+    props = schema["schema"]["properties"]
+    assert "closing" not in props and "closing" not in schema["schema"]["required"]
+    assert set(props) == {"lead", "subtitle", "axes"}
+    assert "Ia-l pe primul." not in (out.closing or [])
+    today = await cn.compose_comparison(LLM(), ctx, base, [])
+    assert seen[1][1] is cn._NARRATIVE_SCHEMA
+    assert today.closing == ["Ia-l pe primul."], "cu verdictul permis închiderea e a modelului"
+
+
+async def test_the_real_better_screen_turn_is_served_without_a_verdict(monkeypatch, electronics):
+    """Journey-ul g12, prin `agent_stage` REAL: «Care e mai bun la ecran, primul sau al doilea?»
+    pe două telefoane din care unul n-are `screen`. Politica lanțului interzice verdictul, deci
+    comparația se compune FĂRĂ el, iar închiderea spune că lipsește ecranul (I12, C2)."""
+    calls = _spy_compose(monkeypatch)
+    journey = JOURNEYS["g12-electronics-better-screen"]
+    step = next(ct for ct in sh.chain(journey, electronics) if ct.index == 1)
+    ctx = sh.build_ctx(
+        electronics, step.state_before, step.turn.user_input, step.previous, turn_id="t1"
+    )
+    run = await sh.run_turn(
+        monkeypatch, electronics, ctx, sh.StageLLM(step.turn.expect["interpretation"])
+    )
+    assert run.branch_result is True, _events(ctx, "kernel_turn")
+    assert [kw.get("verdict") for kw in calls] == [False]
+    template = kx.kernel_sentence(electronics.pack, "ro", "verdict_unknown")
+    assert ctx.reply.comparison.closing == [template.replace("{dimension}", "Ecran")]
+    assert _events(ctx, "answer_policy")[0]["verdict_allowed"] is False

@@ -68,6 +68,11 @@
     },
     {
       "file": "src/agent/kernel_executors.py",
+      "function": "_confirm",
+      "reason": "NX-336 C2: pune intrebarea de confirmare a portii (sablon de pachet) ca ULTIMA fraza a raspunsului BOTULUI, o singura data. Citeste raspunsul compus de executor ca sa nu o dubleze; nu citeste cuvintele clientului si nicio decizie nu ramifica pe ele."
+    },
+    {
+      "file": "src/agent/kernel_executors.py",
       "function": "_compose",
       "reason": "NX-336 PR C: mesajul curent pleaca neschimbat ca `query` spre compunerea v1 (build_plan + render), exact ca pe calea de azi (agent_stage), ca modelul de compunere sa scrie despre ce a cerut clientul. Kernelul nu ramifica pe el: planul turului e deja decis."
     },

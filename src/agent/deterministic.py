@@ -21,7 +21,7 @@ import inspect
 import logging
 import re
 from collections.abc import Callable, Iterable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any, Literal
 
 from src.agent.compare_narrative import compose_comparison
@@ -599,12 +599,23 @@ async def _handle_compare_intent(ctx: TurnContext, deps: PipelineDeps, query: st
     return await _memo(ctx, ("compare", tuple(ids)), lambda: serve_comparison(ctx, deps, ids))
 
 
-async def serve_comparison(ctx: TurnContext, deps: PipelineDeps, ids: list[str]) -> bool:
+async def serve_comparison(
+    ctx: TurnContext,
+    deps: PipelineDeps,
+    ids: list[str],
+    *,
+    withhold: Callable[[list[dict[str, Any]]], str | None] | None = None,
+) -> bool:
     """Tabelul de comparație pe ID-uri DEJA rezolvate (extras pentru NX-236, ca `serve_reviews`).
 
     Aceleași porți ca pe calea text: safety gate, coerență de categorie, `build_comparison`. O
     acțiune opacă poartă `product_refs` explicite, deci reordonarea listei afișate între emitere
-    și click NU poate schimba ce se compară — exact invariantul din failure matrix."""
+    și click NU poate schimba ce se compară — exact invariantul din failure matrix.
+
+    `withhold` (NX-336 C2, I12, calea kernelului): judecă produsele încărcate și întoarce `None`
+    când verdictul e permis, altfel închiderea care îl înlocuiește (fraza care numește ce lipsește,
+    sau `""` fără frază). Verdictul reținut ⇒ compunerea fără sloturi de verdict. Fără `withhold` ⇒
+    comportamentul de azi."""
     n = max(2, len(ids))
     async with deps.db("compare_intent_products") as conn:
         products = await get_products_by_ids(conn, ctx.business.id, ids, limit=n)
@@ -639,11 +650,24 @@ async def serve_comparison(ctx: TurnContext, deps: PipelineDeps, ids: list[str])
     if comparison is None:
         return False
     ctx.retrieval = RetrievalResult(products=products, source="compare_intent")
+    note = withhold(products) if withhold is not None else None
     # Tabelul determinist e plasa; peste el, agentul compune axele pe care perechea chiar se
     # desparte + îndrumarea de sub tabel (respins/eșuat → exact tabelul de mai sus, P6).
-    comparison = await compose_comparison(
-        deps.llm, ctx, comparison, products, facets=facets, query=(ctx.message.body or "")
-    )
+    if note is None:
+        comparison = await compose_comparison(
+            deps.llm, ctx, comparison, products, facets=facets, query=(ctx.message.body or "")
+        )
+    else:
+        comparison = await compose_comparison(
+            deps.llm,
+            ctx,
+            comparison,
+            products,
+            facets=facets,
+            query=(ctx.message.body or ""),
+            verdict=False,
+        )
+        comparison = replace(comparison, closing=[note] if note else [])
     ctx.set_comparison_reply(
         comparison,
         text=compose.flatten_comparison(comparison, ctx.language),
