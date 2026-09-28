@@ -6,7 +6,8 @@ Fiecare test de aici a fost scris ÎNAINTE de reparație și a picat pe codul li
 1. redactarea: `CheckedChange.canonical_value` (și etichetele nevoilor din stare) scăpau în trace;
 2. fallback ≠ OFF: scurtăturile exacte rulau de două ori (citiri + evenimente dublate);
 3. o singură ancoră: verdictul `fallback` al linkului / al comparației pe exact 2 carduri e exact;
-6. chip-urile: cu `CHIP_MOVES_V2_ENABLED` stins (implicitul) textul unui chip ajunge la ramură;
+6. chip-urile: cu `CHIP_MOVES_V2_ENABLED` stins (implicitul) textul unui chip ajungea la ramură
+   (reparat de NX-338: recunoașterea e independentă de flag, servirea nu);
 7. vocabularul indisponibil e un fallback ÎNAINTEA apelului;
 8. instantaneul nu restaurează prin `setattr` niciun câmp de stare;
 9. instantaneul picat, restaurarea picată, evenimentele emise o singură dată.
@@ -328,17 +329,19 @@ async def test_r6_with_v2_chips_on_a_recognized_chip_stays_on_v1(monkeypatch, el
     assert ctx.chip_move is not None and branch == []
 
 
-async def test_r6_pin_with_v2_chips_off_the_default_a_chip_text_reaches_the_branch(
+async def test_r6_with_v2_chips_off_the_default_a_recognized_chip_stays_on_v1(
     monkeypatch, electronics, branch
 ):
-    """BLOCANT pentru PR C: cu `CHIP_MOVES_V2_ENABLED` stins (implicitul de producție) chip-ul nu e
-    recunoscut, deci textul lui intră în kernel. Înainte ca ramura să servească ture, apăsările
-    trebuie recunoscute independent de flag, sau flagul cerut la boot."""
-    _recognizing(monkeypatch)
+    """NX-338 (era pinul blocant al PR C): cu `CHIP_MOVES_V2_ENABLED` stins (implicitul de
+    producție) apăsarea e totuși RECUNOSCUTĂ, deci nu intră în kernel. v1 n-o servește ca mutare
+    (`chip_move` None), ci pe calea de text, ca azi."""
+    move = _recognizing(monkeypatch)
     assert get_settings().chip_moves_v2_enabled is False
     ctx = sh.build_ctx(electronics, _shown_state(electronics, 3), "Vreau un telefon.")
     await agent_mod.agent_stage(ctx, _deps(sh.StageLLM(FIND)))
-    assert ctx.chip_move is None and branch == ["t0"]
+    assert ctx.chip_recognized is move and ctx.chip_move is None and branch == []
+    pressed = [{k: v for k, v in e.items() if k != "turn_id"} for e in _events(ctx, "chip_pressed")]
+    assert pressed == [{"kind": "reviews", "recognized": True, "handler": "text_path"}]
 
 
 # --- 7. vocabularul indisponibil: fallback ÎNAINTEA apelului --------------------------------------

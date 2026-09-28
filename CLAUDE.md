@@ -810,6 +810,9 @@ când graful are o laterală, pe recommend după primul tur al subiectului. Felu
 vocea clientului sub `chip_templates_v2` (doar cu flagul, fallback per fel, testat că regexurile de
 azi le prind în continuare). Pe `sole-ro`, turul 3 al conversației reale oferă acum
 `routine_next` pentru SOME BY MI Yuja Niacin.
+**NX-338:** recunoașterea e independentă de flag, servirea nu. `ctx.chip_recognized` (FAPTUL) îl
+citește doar condiția ramurii kernelului, iar `ctx.chip_move` (ce servește v1 ca mutare) rămâne al
+lui V2; recunoașterea rulează doar dacă are consumator (V2 sau `INTERPRETED_TURN_ENABLED`).
 `CHIP_MOVES_V2_ENABLED=false` = byte-identic. Card: [`tasks/stage1/NX-316.md`](tasks/stage1/NX-316.md);
 probe: `pytest tests/test_chip_press.py tests/test_chip_moves_v2.py tests/test_relation_chips.py -q`
 + `NX_TESTS_READ_ENV_FILE=1 pytest tests/test_relation_chips_db.py -m integration -q`.
