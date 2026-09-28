@@ -196,8 +196,18 @@ class RecordingDb:
         return _cm()
 
 
-def install(monkeypatch: Any, cat: Catalog, *, flags: Mapping[str, bool] = FLAGS) -> None:
-    """Stub-urile pe pachet + profilul de flaguri. Fiecare citire trece prin `deps.db`."""
+def install(
+    monkeypatch: Any,
+    cat: Catalog,
+    *,
+    flags: Mapping[str, bool] = FLAGS,
+    executors: bool = False,
+) -> None:
+    """Stub-urile pe pachet + profilul de flaguri. Fiecare citire trece prin `deps.db`.
+
+    `executors=False` (implicit) ține seam-ul executorilor DARK, ca în PR A/B: testele lor verifică
+    lanțul, traceul și fallback-ul, nu servirea. PR C (`executors=True`) lasă executorii de citire
+    de producție să ruleze."""
     from src.agent import deterministic as det  # noqa: PLC0415
     from src.agent import interpreted_turn as it  # noqa: PLC0415
     from src.config import get_settings  # noqa: PLC0415
@@ -264,6 +274,16 @@ def install(monkeypatch: Any, cat: Catalog, *, flags: Mapping[str, bool] = FLAGS
     monkeypatch.setattr("src.agent.planner.search_cheaper_than", nothing_cheaper)
     monkeypatch.setattr(agent_mod, "get_vocabulary", vocabulary)
     monkeypatch.setattr(catalog_tools, "continue_search_session", next_page)
+    if executors:
+        from src.agent import kernel_executors  # noqa: PLC0415
+
+        monkeypatch.setattr(kernel_executors, "get_products_by_ids", by_ids)
+    else:
+
+        async def dark(ctx, deps, planned, outcome, *_):
+            return None
+
+        monkeypatch.setattr(it, "execute_plans", dark)
 
 
 # --- turul ---------------------------------------------------------------------------------------
@@ -418,7 +438,7 @@ def synthetic_executor(cat: Catalog, shown: tuple[str, ...]) -> Callable[..., An
     Nu scrie nevoi sau subiect: acelea sunt ale reducerului (I20)."""
     from src.models import RetrievalResult  # noqa: PLC0415
 
-    async def execute(ctx: TurnContext, deps: Any, planned: Any, outcome: Any) -> bool:
+    async def execute(ctx: TurnContext, deps: Any, planned: Any, outcome: Any, *_: Any) -> bool:
         executors = {p.executor for p in planned.plans}
         rows = product_rows(cat, list(shown))
         question = outcome.decision.question

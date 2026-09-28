@@ -39,6 +39,23 @@
       "bound_gte": "at least {value}"
     }
   },
+  "_kernel_sentences_note": "NX-336 PR C: frazele turului interpretat, locale -> cod -> fraza fara niciun marcator. Codurile sunt vocabular inchis (KERNEL_SENTENCE_CODES): dezvaluirile plannerului (not_exact_match, invalid_target, dropped_act, no_target) si raspunsul unei cautari fara rezultate (no_results). O dezvaluire lipsa inseamna turul fara ea; no_results lipsa inseamna ca turul fara rezultate nu e servit de kernel si raspunde calea v1. Fara liniuta de pauza si fara punct si virgula (P13), fara promisiuni pe care nu le onoreaza nimeni.",
+  "kernel_sentences": {
+    "ro": {
+      "not_exact_match": "Nu am găsit exact produsul pe care l-ai numit, așa că îți arăt ce am cel mai aproape.",
+      "invalid_target": "Nu am putut lega o parte din cerere de un produs anume.",
+      "dropped_act": "Am răspuns acum doar la o parte din cerere. Spune-mi dacă vrei și restul.",
+      "no_target": "Nu știu sigur la ce produs te referi.",
+      "no_results": "Nu am găsit în catalog ce ai cerut. Spune-mi mai multe și caut altfel."
+    },
+    "en": {
+      "not_exact_match": "I couldn't find the exact product you named, so here is what comes closest.",
+      "invalid_target": "I couldn't tie part of your request to a specific product.",
+      "dropped_act": "I've only answered part of your request for now. Tell me if you want the rest too.",
+      "no_target": "I'm not sure which product you mean.",
+      "no_results": "I couldn't find that in the catalog. Tell me a bit more and I'll search differently."
+    }
+  },
   "_chip_templates_note": "NX-296: copy-ul chips-urilor, per mutare si per locale. Un chip e MESAJUL pe care clientul il retrimite la apasare, deci se scrie la persoana I, in vocea lui. {slot} se completeaza de server din catalog (fraza de meniu, nume scurt de produs, prag de pret), niciodata de model. Mutare fara sablon = mutare care nu se ofera (P11: limba e configuratie, nu constanta in cod). Moneda face parte din sablon fiindca e a tenantului.",
   "chip_templates": {
     "refine_facet": {"ro": "Caut ceva pentru {slot}", "en": "Show me something for {slot}"},

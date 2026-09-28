@@ -24,6 +24,20 @@ from src.domain.routine_steps import EMPTY_ROUTINE_STEPS, RoutineSpec
 #: marca și tipul produsului. Restul (culoare, mărime, nuanță) le declară pachetul.
 DEFAULT_REFERENCE_DIMENSIONS: tuple[str, ...] = ("brand", "product_type")
 
+#: NX-336 PR C: codurile frazelor kernelului (`DomainPack.kernel_sentences`), vocabular ÎNCHIS.
+#: Dezvăluirile plannerului (`turn_planner.DISCLOSURES`, verificat de test că sunt incluse) plus
+#: răspunsul unei căutări fără rezultate (`no_results`). Domeniul nu importă kernelul, deci lista se
+#: repetă aici, iar testul ține cele două liste de acord.
+KERNEL_SENTENCE_CODES: frozenset[str] = frozenset(
+    {
+        "not_exact_match",
+        "invalid_target",
+        "dropped_act",
+        "no_target",
+        "no_results",
+    }
+)
+
 
 @dataclass(frozen=True)
 class FacetSpec:
@@ -148,6 +162,12 @@ class DomainPack:
     # completează doar `{options}` din etichete canonice. Loaderul aruncă per intrare un șablon cu
     # alt marcator (fail-closed pe șablon), iar poarta coboară determinist când lipsește (P6).
     clarify_templates: dict[str, dict[str, str]] = field(default_factory=dict)
+    # NX-336 PR C: frazele kernelului, `locale` → cod → frază fără niciun marcator (forma
+    # `clarify_templates`). Codurile sunt vocabular ÎNCHIS (`KERNEL_SENTENCE_CODES`): dezvăluirile
+    # plannerului plus răspunsul unei căutări fără rezultate. Fail-open pe o dezvăluire (fără
+    # frază, turul pleacă fără ea), fail-closed pe `no_results` (fără frază, kernelul nu servește
+    # turul și răspunde calea v1). Kernelul nu ține nicio frază (P11).
+    kernel_sentences: dict[str, dict[str, str]] = field(default_factory=dict)
     # NX-205: câmpurile OBLIGATORII per categorie — contractul de completitudine al catalogului.
     # Frunza BATE rădăcina (override, NU cumul — vezi `CategoryRequirements.required_for`): o
     # categorie de ochi cere `key_benefit`, dar NU moștenește `finish`-ul rădăcinii `machiaj`.

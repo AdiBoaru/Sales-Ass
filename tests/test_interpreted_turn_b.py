@@ -502,9 +502,9 @@ async def test_a_served_turn_writes_the_commit_input_and_returns_true(monkeypatc
     assert trace.executor == "search" and "kernel_fallback" not in ctx.trace
 
 
-async def test_the_production_seam_serves_nothing_yet(monkeypatch, electronics):
-    """PR B: `execute_plans` de producție întoarce `None`, deci turul rămâne DARK (PR A)."""
-    assert await it.execute_plans(None, None, None, None) is None
+async def test_a_dark_seam_keeps_the_turn_dark(monkeypatch, electronics):
+    """Un seam care întoarce `None` (harnessul implicit; în producție, un executor încă nelegat,
+    vezi `test_interpreted_turn_c`) lasă turul DARK, ca în PR A."""
     turn = JOURNEYS[K01[0]].turns[0]
     ctx = sh.build_ctx(electronics, ConversationStateV2(), turn.user_input)
     run = await sh.run_turn(

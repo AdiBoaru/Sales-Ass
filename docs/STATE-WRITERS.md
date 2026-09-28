@@ -5,7 +5,7 @@
 
 Fiecare loc din `src/**/*.py` care scrie starea conversației (v1 sau v2), derivat MECANIC prin `ast` (nu grep). Pregătește I3/I20 din [`docs/KERNEL-CONTRACT-v1.md`](KERNEL-CONTRACT-v1.md): pasul 3 nu poate face din reducer singurul scriitor peste o stare pe care o mai scriu și alții, fără să știe cine sunt aceia.
 
-**Totaluri:** 158 scriitori găsiți, 101 intrări de soartă declarate, 5 `unresolved`.
+**Totaluri:** 158 scriitori găsiți, 101 intrări de soartă declarate, 6 `unresolved`.
 - `becomes_proposal`: 0
 - `executor_output`: 9
 - `retired`: 16
@@ -218,4 +218,5 @@ Fiecare loc din `src/**/*.py` care scrie starea conversației (v1 sau v2), deriv
 | `src/agent/interpreted_turn.py:_restore_state_fields` | `dynamic_patch_mutating_call` |
 | `src/agent/interpreted_turn.py:_restore_state_fields` | `dynamic_patch_update_arg` |
 | `src/agent/tool_executor.py:_execute_serialized` | `dynamic_patch_update_arg` |
+| `src/agent/tool_executor.py:execute_planned` | `dynamic_patch_update_arg` |
 

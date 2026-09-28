@@ -280,6 +280,39 @@ class ToolRun:
             if seq is not None:
                 await self._finish_ticket(seq)
 
+    async def execute_planned(self, args: Any) -> Any:
+        """NX-336 PR C: căutarea PLANULUI kernelului (`SearchArgs` scris de planner, I2), cu
+        aceeași acumulare ca o unealtă chemată de model: plasa de siguranță, `retrieved`,
+        relevanța, `called`, linkurile și sumele grounded, `state_patch` (sesiunea de căutare) și
+        `tool_call`. NU intră în `search_args`: acolo stau argumentele MODELULUI, din care calea v1
+        învață stiva de constrângeri (`observed_constraints`); pe calea kernelului starea o scrie
+        doar reducerul. Întoarce `ToolResult`-ul căutării."""
+        from src.tools.catalog_tools import run_planned_search  # noqa: PLC0415 — ciclul unelte
+
+        ctx, deps = self.ctx, self.deps
+        started = perf_counter()
+        with turn_latency.span("tools"):
+            result = await run_planned_search(ctx, deps, args)
+        self.called.append("search_products")
+        products = self._safe_products(result.products)
+        self.retrieved.extend(products)
+        if result.relevance is not None:
+            self.search_relevance = result.relevance
+        self.generated_links.update(result.links)
+        self.grounded_prices.update(result.prices)
+        if result.state_patch:
+            ctx.state_patch.update(result.state_patch)
+        ctx.emit(
+            "tool_call",
+            name="search_products",
+            ok=result.ok,
+            args=_safe_tool_args("search_products", args.model_dump(exclude_none=True)),
+            n_results=len(products),
+            latency_ms=round((perf_counter() - started) * 1000, 1),
+            error=(result.error if not result.ok else None),
+        )
+        return result
+
     async def _execute_serialized(
         self, name: str, args: dict[str, Any], *, seq: int | None = None
     ) -> str:
