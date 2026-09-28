@@ -171,6 +171,14 @@ cu declanșatorul scris. Resolverul NX-329 primește `recent_sets`/`parked`/focu
 `park_resume.json` (electronice + modă). Probă: `pytest tests/test_state_reducer_park.py
 tests/test_state_writes_parity.py tests/test_kernel_replay.py tests/test_state_writers_inventory.py
 -q`.
+**Fix NX-337 — I6 avea o gaură exact în turul care parchează.** Ordinea contractului („subiectul
+întâi") parca nevoia ÎNAINTEA retragerii ei; `_revoke` nu mai găsea nimic activ și scria
+tombstone-ul cu valoarea din PROPUNERE (a delta-ei), nu a nevoii parcate — la `resume`,
+`_retracted_since_parking` nu potrivea amprenta și reînvia exact ce clientul tocmai retrăsese.
+`_handle_revoke` caută acum și în `state.parked` când parcarea e din ACEST tur; găsit ⇒ amprenta
+nevoii + scoatere din parcat; negăsit pe o cheie scalară ⇒ tombstone fără amprentă. Prins de
+proprietatea Hypothesis a lui I6, pinuit cu `@example` ca să ruleze la fiecare CI, nu doar când
+shrinking-ul îl regăsește.
 **NX-334 — direcția unei limite numerice ajunge neschimbată în stare.** Pe pașii 3a/3b «minim 256
 GB» se persista `storage lte 256`: delta păstra relația doar pe preț, iar orice fațetă numerică era
 plafon. Acum o dimensiune numerică are DOUĂ chei, ca bugetul (`<fațetă>_min` / `<fațetă>_max`,
