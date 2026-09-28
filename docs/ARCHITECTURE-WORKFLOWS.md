@@ -1876,6 +1876,7 @@ search_one_card_per_family_enabled = true
 search_price_bound_provenance_enabled = true
 search_relax_by_provenance_enabled = true
 search_semantic_enabled = false
+search_session_contract_enabled = true
 search_sessions_enabled = true
 search_shadow_enabled = false
 search_sort_mode_enabled = true

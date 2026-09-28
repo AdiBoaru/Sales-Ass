@@ -184,6 +184,13 @@
       "fate": "stays"
     },
     {
+      "file": "src/agent/finalize.py",
+      "function": "render",
+      "field": "active_search",
+      "why": "NX-342: cand NX-306 ascunde setul refuzat, randarea inchide sesiunea (`ctx.state_patch[\"active_search\"] = None`), altfel `mai arata-mi` ar pagina chiar setul refuzat. Aceeasi cheie si acelasi proprietar (stagiul agent) ca iesirea uneltei de cautare; procesorul o aplica prin scriitorul unic. Iesire de executor, permisa de I20.",
+      "fate": "executor_output"
+    },
+    {
       "file": "src/agent/interpreted_turn.py",
       "function": "_apply_turn_view",
       "field": "needs_topic",

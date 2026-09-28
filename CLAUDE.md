@@ -700,6 +700,12 @@ filtre). Singur, refuzul nu ajunge, și suita a arătat de ce: pe „ceva mai ie
 DETERMINIST de `cheaper_intent`, iar a suprima ar ascunde răspunsul corect. Filtrul se aplică
 ÎNAINTE de `rich_from_facts`, altfel NX-302 ar fi AGRAVAT refuzul (aceleași pensule, dar cu badge,
 rating și motiv sub card).
+**NX-342 (342a)** — sesiunea de căutare reține DECIZIILE paginii 1, nu doar intrările: un set ascuns
+de NX-306 închide sesiunea (altfel „mai arată-mi" servea restul setului refuzat); `active_search`
+poartă `inherit` = filtrele EFECTIVE (fără raftul/fațetele scoase de NX-305/313, care altfel reveneau
+la căutarea următoare ca ROSTITE, NX-299) și `rev` = revizia stării, ca o nevoie retrasă după sesiune
+(`revocations`, starea v2) să nu mai fie moștenită. Amprenta rămâne a cererii. Kill-switch
+`SEARCH_SESSION_CONTRACT_ENABLED` (ON; OFF sau o sesiune veche = ca înainte).
 **NX-307** — `explain` era în `ObligationKind` de la început, cu doi CONSUMATORI și niciun
 PRODUCĂTOR, deci „cum folosesc" ieșea `answer` generic și turul rula cu `retrieval_ids: []`, deși
 `product_sections.usage` există pe **2.746 din 2.758** de produse. În plus, `detail_sections` tăia

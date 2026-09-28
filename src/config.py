@@ -882,6 +882,13 @@ class Settings(BaseSettings):
     # NX-119: sesiuni de căutare (pool + paginare „mai arată-mi"). OFF → fără sesiune persistată
     # (fiecare căutare e fresh) ȘI fără ramura deterministă de paginare (cade pe bucla LLM normală).
     search_sessions_enabled: bool = Field(default=True, validation_alias="SEARCH_SESSIONS_ENABLED")
+    # NX-342: sesiunea reține DECIZIILE paginii 1, nu doar intrările ei: filtrele efective (după
+    # salvarea NX-305/313) pentru moștenire, închiderea pe un set ascuns (NX-306) și revizia stării,
+    # ca o nevoie retrasă după crearea sesiunii să nu mai fie moștenită. ON implicit (defecte
+    # măsurate, comportamentul de azi e strict mai prost); OFF = sesiunea de dinainte, byte-identic.
+    search_session_contract_enabled: bool = Field(
+        default=True, validation_alias="SEARCH_SESSION_CONTRACT_ENABLED"
+    )
     # Gardul care distinge o SCURTĂTURĂ („mai arată-mi") de o RAFINARE („mai arată-mi, dar sub 100
     # lei"): a doua trebuie să ajungă la model, altfel constrângerea se pierde tăcut în paginarea
     # pool-ului vechi. Avea un singur producător — sloturile triajului (`RouteDecision.filters`) —

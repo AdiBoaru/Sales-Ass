@@ -1172,6 +1172,13 @@ async def render(
         if downgrade_reason == "no-items-selected" and getattr(_relevance, "relaxed", False):
             servable = compose.named_products(reply, products)
             ctx.emit("refused_set_withheld", retrieved=len(products), named=len(servable))
+            if get_settings().search_session_contract_enabled:
+                # NX-342: pool-ul sesiunii e chiar setul refuzat. Lăsată deschisă, „mai arată-mi"
+                # ar servi restul lui (`pool[6:]`), iar pagina n-are `relevance`, deci NX-306 n-ar
+                # mai putea prinde. Același proprietar (stagiul agent), aceeași cheie pe care
+                # procesorul o aplică prin scriitorul unic al stării.
+                ctx.state_patch["active_search"] = None
+                ctx.emit("search_session", action="closed", closed_reason="withheld")
         # NX-302: degradarea e PARȚIALĂ, nu totală. Modelul rich lipsește, FAPTELE nu — deci
         # cardurile se construiesc din catalog (motiv din `best_for`, rating, badge, preț de listă,
         # variante, gramaj) și clientul primește contractul bogat, minus proza narată.

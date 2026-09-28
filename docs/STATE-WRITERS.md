@@ -5,9 +5,9 @@
 
 Fiecare loc din `src/**/*.py` care scrie starea conversației (v1 sau v2), derivat MECANIC prin `ast` (nu grep). Pregătește I3/I20 din [`docs/KERNEL-CONTRACT-v1.md`](KERNEL-CONTRACT-v1.md): pasul 3 nu poate face din reducer singurul scriitor peste o stare pe care o mai scriu și alții, fără să știe cine sunt aceia.
 
-**Totaluri:** 158 scriitori găsiți, 101 intrări de soartă declarate, 5 `unresolved`.
+**Totaluri:** 159 scriitori găsiți, 102 intrări de soartă declarate, 5 `unresolved`.
 - `becomes_proposal`: 0
-- `executor_output`: 9
+- `executor_output`: 10
 - `retired`: 16
 - `stays`: 133
 
@@ -107,6 +107,7 @@ Fiecare loc din `src/**/*.py` care scrie starea conversației (v1 sau v2), deriv
 
 | Scriitor (fișier:funcție) | Cale | Formă AST | Cheie brută | De ce | Soartă |
 | --- | --- | --- | --- | --- | --- |
+| `src/agent/finalize.py:render` | v1 | `patch_subscript` | `active_search` | NX-342: cand NX-306 ascunde setul refuzat, randarea inchide sesiunea (`ctx.state_patch["active_search"] = None`), altfel `mai arata-mi` ar pagina chiar setul refuzat. Aceeasi cheie si acelasi proprietar (stagiul agent) ca iesirea uneltei de cautare; procesorul o aplica prin scriitorul unic. Iesire de executor, permisa de I20. | `executor_output` |
 | `src/evals/golden.py:advance_turn` | v1 | `assign` | `active_search` | Harness de teste (`ScriptedLLM`/golden): re-implementeaza DELIBERAT merge-ul lui `processor._build_new_state`/`_turn_proposals` ca sa avanseze starea intre ture scriptate, fara DB/worker real. Nu ruleaza in pipeline-ul de productie -- invariantele I3/I20 vizeaza pipeline-ul, nu dublura de test; daca productia isi schimba mecanismul de scriere, harness-ul se actualizeaza separat, dar nu e el insusi o tinta a pasului 3. | `stays` |
 | `src/tools/catalog_tools.py:_search` | v1 | `patch_mutating_call` | `active_search` | Tool-ul de cautare scrie/sterge `ctx.state_patch["active_search"]` (sesiunea de paginare) ca parte din executia cautarii -- iesire de executor, permisa explicit de I20. NX-333: corpul comun al uneltei (`search_products_tool`, intrarea modelului) si al plannerului (`run_planned_search`), deci acelasi scriitor pe ambele cai. | `executor_output` |
 | `src/tools/catalog_tools.py:_search` | v1 | `patch_subscript` | `active_search` | Tool-ul de cautare scrie/sterge `ctx.state_patch["active_search"]` (sesiunea de paginare) ca parte din executia cautarii -- iesire de executor, permisa explicit de I20. NX-333: corpul comun al uneltei (`search_products_tool`, intrarea modelului) si al plannerului (`run_planned_search`), deci acelasi scriitor pe ambele cai. | `executor_output` |

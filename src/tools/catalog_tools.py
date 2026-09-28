@@ -1459,6 +1459,53 @@ def _safety_gate(
     return kept, safety_model_hint(decision)
 
 
+def session_decisions(
+    filters: Mapping[str, Any],
+    state_v2: Any,
+    *,
+    category_dropped: bool,
+    facets_dropped: bool,
+) -> dict[str, Any]:
+    """NX-342: ce a DECIS pagina 1, pe lângă intrările ei (`filters`, baza amprentei).
+
+    `inherit` = filtrele EFECTIVE, cele pe care a căutat pagina după salvarea NX-305/313: un raft
+    sau o fațetă scoase ca ghicitură greșită nu mai sunt moștenite de căutarea următoare, unde
+    NX-299 le-ar fi tratat drept rostite de client. `rev` = revizia stării la crearea sesiunii,
+    ca o nevoie retrasă DUPĂ ea să nu mai fie moștenită. Amprenta rămâne a cererii, deci aceeași
+    cerere repetată paginează în continuare pool-ul (care e deja cel salvat). Flag stins ⇒ `{}`."""
+    if not getattr(get_settings(), "search_session_contract_enabled", False):
+        return {}
+    out: dict[str, Any] = {
+        "inherit": {
+            "category": None if category_dropped else filters.get("category"),
+            "concerns": None if facets_dropped else filters.get("concerns"),
+        }
+    }
+    revision = getattr(state_v2, "revision", None)
+    if isinstance(revision, int):
+        out["rev"] = revision
+    return out
+
+
+def inheritable_filters(active_search: Mapping[str, Any] | None, state_v2: Any) -> dict[str, Any]:
+    """NX-342: filtrele pe care o căutare nouă le poate moșteni din sesiune. Flag stins sau o
+    sesiune scrisă înainte de NX-342 (fără `inherit`) ⇒ `filters`, ca înainte. Altfel filtrele
+    efective ale paginii 1, fără nevoi dacă starea are o retragere mai nouă decât sesiunea (sursa
+    e starea v2, `revocations`; fără ea, nimic nu știe de retragere și totul rămâne ca azi)."""
+    sess = active_search or {}
+    filters = dict(sess.get("filters") or {})
+    if not getattr(get_settings(), "search_session_contract_enabled", False):
+        return filters
+    if "inherit" not in sess:
+        return filters
+    inherit = dict(sess.get("inherit") or {})
+    rev = sess.get("rev")
+    revocations = getattr(state_v2, "revocations", ()) or ()
+    if isinstance(rev, int) and any(getattr(r, "revision", 0) > rev for r in revocations):
+        inherit["concerns"] = None
+    return inherit
+
+
 def _session_filters(
     a: SearchArgs,
     concern_keys: list[str] | None,
@@ -1672,7 +1719,7 @@ async def _search(
     sessions_on = (
         get_settings().search_sessions_enabled
     )  # kill-switch (OFF → fiecare căutare fresh)
-    sess_filters = (ctx.state.active_search or {}).get("filters") or {}
+    sess_filters = inheritable_filters(ctx.state.active_search, ctx.state_v2)
     inherited: list[str] = []
     if sessions_on and sess_filters and not planned:
         if a.category is None and sess_filters.get("category"):
@@ -1912,6 +1959,7 @@ async def _search(
     lexical_pool_n = vector_pool_n = 0  # mărimea pool-urilor la treapta finală
     top_cosine = None  # cea mai mică distanță cosine (cel mai apropiat vector) — semnal de calitate
     guessed_category_dropped = False  # raftul GHICIT a fost scos de NX-305/313 (vezi `Relevance`)
+    guessed_facets_dropped = False  # NX-342: fațetele GHICITE scoase de aceeași salvare
     # NX-231: treptele de relaxare sunt PUR DB (fuziunea/rankarea sunt cod pur, fără await extern)
     # → un singur checkout pentru toată scara, eliberat înainte de restul tool-ului. Embed-ul a
     # rulat deja, mai sus, cu poolul liber.
@@ -2082,6 +2130,7 @@ async def _search(
                 reason, adopt = "better_rung", rescue_wins(ranked_final, rescued)
             if adopt:
                 guessed_category_dropped = bool(category_keys) and category_guessed
+                guessed_facets_dropped = bool(facet_filters) and facets_guessed
                 ctx.emit(
                     "guessed_filter_rescued",
                     dropped_category=bool(category_keys) and category_guessed,
@@ -2419,6 +2468,12 @@ async def _search(
             "cursor": cursor,
             "fp": fp,
             "page": 0,
+            **session_decisions(
+                filters,
+                ctx.state_v2,
+                category_dropped=guessed_category_dropped,
+                facets_dropped=guessed_facets_dropped,
+            ),
         }
         ctx.emit(
             "search_session",
