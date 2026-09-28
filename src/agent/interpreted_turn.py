@@ -60,6 +60,7 @@ from src.conversation.interpretation_check import OUTCOMES
 from src.conversation.kernel_trace import KernelTrace, cap_trace, redact_trace, state_view
 from src.conversation.needs import NeedVocabulary
 from src.conversation.references import (
+    MUTATING_ACTS,
     ReferenceFacts,
     plan_lookup,
     resolve_references,
@@ -433,6 +434,31 @@ def _policy_for(
 _TARGETED: frozenset[str] = frozenset({"compare", "detail"})
 
 
+#: Executorii care SCRIU (I10: doar pe ținte `exact`).
+_MUTATING: frozenset[str] = frozenset({"cart"})
+
+
+def _mutating_turn(chain: _Chain) -> bool:
+    """Interpretarea turului are un act care SCRIE, printre actele rămase după poartă: pe un refuz
+    al porții fără întrebare, răspunsul e al kernelului, niciodată o buclă v1 cu `cart_add`."""
+    interp = chain.interpreted.interpretation
+    if interp is None:
+        return False
+    skipped = set(chain.outcome.skipped_acts)
+    return any(a.kind in MUTATING_ACTS for i, a in enumerate(interp.acts) if i not in skipped)
+
+
+def _mutations_exact(chain: _Chain) -> bool:
+    """I10 la rulare (D2): fiecare id al unei mutații vine dintr-o referință rezolvată `exact`.
+    Plannerul pune în planul `cart` doar ținte `exact`, deci garda nu schimbă nimic azi; e plasa
+    pentru ziua în care un rând de planner sau o poartă se schimbă (o mutație pe un candidat ambiguu
+    ar scrie în coșul clientului un produs pe care nu l-a ales)."""
+    exact = {p for r in chain.resolved if r.outcome == "exact" for p in r.product_ids}
+    return all(
+        set(plan.product_ids) <= exact for plan in chain.planned.plans if plan.executor in _MUTATING
+    )
+
+
 def _target_lost(chain: _Chain) -> bool:
     """Actul principal numește ≥ 2 ținte, dar planul (`compare`/`detail`) a rămas cu sub 2 produse:
     o țintă s-a pierdut FĂRĂ dezvăluire (`_read` din planner dezvăluie doar un nume negăsit sau o
@@ -632,6 +658,7 @@ async def execute_plans(
     planned: PlannedTurn,
     outcome: GateOutcome,
     policy_for: PolicyFor | None = None,
+    mutating: bool = False,
 ) -> bool | None:
     """Seam-ul executorilor: rulează planurile turului (cu decizia porții, a cărei întrebare o pune
     executorul `ask` sau compunerea, la confirmare). `None` = niciun executor pentru plan (turul
@@ -644,7 +671,7 @@ async def execute_plans(
     `NoSentence` (fraza fail-closed lipsă din pachet) urcă la `_serve`."""
     from src.agent.kernel_executors import execute_read_plans  # noqa: PLC0415 — ciclul agent
 
-    return await execute_read_plans(ctx, deps, planned, outcome, policy_for)
+    return await execute_read_plans(ctx, deps, planned, outcome, policy_for, mutating)
 
 
 def _question_memory(ctx: TurnContext, outcome: GateOutcome) -> tuple[StateUpdateProposal, ...]:
@@ -715,9 +742,14 @@ async def _serve(
 
     if _target_lost(chain):
         return _DARK
+    if not _mutations_exact(chain):
+        ctx.emit("kernel_i10_blocked")
+        return _DARK
     _apply_turn_view(ctx, chain.state, chain.reduced.state, chain.delta.thread)
     try:
-        verdict = await execute_plans(ctx, deps, chain.planned, chain.outcome, chain.policy_for)
+        verdict = await execute_plans(
+            ctx, deps, chain.planned, chain.outcome, chain.policy_for, _mutating_turn(chain)
+        )
     except NoSentence as e:
         ctx.emit("kernel_sentence_missing", code=e.code)
         return _NO_SENTENCE
@@ -763,7 +795,7 @@ async def run_interpreted_turn(ctx: TurnContext, deps: PipelineDeps) -> bool:
             except Exception as e:  # noqa: BLE001 — P6: după apel, tot un fallback
                 log.warning("interpreted_turn: lanțul (%s)", type(e).__name__)
                 reason = _EXCEPTION
-    served, record, kernel_turn = False, None, None
+    served, record, kernel_turn, dark = False, None, None, False
     mark = len(ctx.events)
     if chain is not None:
         try:
@@ -771,19 +803,44 @@ async def run_interpreted_turn(ctx: TurnContext, deps: PipelineDeps) -> bool:
             if verdict in (_EXECUTOR_REFUSED, _NO_SENTENCE):
                 reason = verdict
             else:
-                served = verdict == _SERVED
-                record = _chain_record(ctx, chain, served=served)
-                kernel_turn = kernel_turn_of(chain, ctx, saved) if served else None
-        except Exception as e:  # noqa: BLE001 — P6: un executor sau traceul picat ⇒ fallback
-            log.warning("interpreted_turn: executorii/traceul (%s)", type(e).__name__)
-            served, record, kernel_turn, reason = False, None, None, _EXCEPTION
-    if not served:
-        _drop_executor_events(ctx, mark)
+                served, dark = verdict == _SERVED, verdict == _DARK
+        except Exception as e:  # noqa: BLE001 — P6: un executor picat ⇒ fallback
+            log.warning("interpreted_turn: executorii (%s)", type(e).__name__)
+            served, reason = False, _EXCEPTION
+    if served:
+        # Turul e SERVIT: un executor poate fi scris deja (coșul, NX-336 D2), deci de aici nimic nu
+        # mai cade pe v1, care ar putea repeta mutația. Un trace sau o intrare de commit picate se
+        # numără; fără `kernel_turn`, commit-ul e cel de azi (`reduce_all`), declarat.
         try:
-            saved.restore(ctx)
-        except Exception as e:  # noqa: BLE001 — P6: numărat, calea v1 continuă (declarat)
-            log.warning("interpreted_turn: restaurarea (%s)", type(e).__name__)
-            ctx.emit("kernel_restore_failed", error=type(e).__name__)
+            record = _chain_record(ctx, chain, served=True)
+        except Exception as e:  # noqa: BLE001
+            log.warning("interpreted_turn: traceul (%s)", type(e).__name__)
+            ctx.emit("kernel_record_failed", error=type(e).__name__)
+        try:
+            kernel_turn = kernel_turn_of(chain, ctx, saved)
+        except Exception as e:  # noqa: BLE001
+            log.warning("interpreted_turn: intrarea commit-ului (%s)", type(e).__name__)
+            ctx.emit("kernel_commit_input_failed", error=type(e).__name__)
+        if record is not None:
+            trace, events = record
+            ctx.trace["kernel"] = trace
+            for name, properties in events:
+                ctx.emit(name, **properties)
+        # Ultimul: intrarea commit-ului există DOAR pe un tur servit (§2).
+        ctx.kernel_turn = kernel_turn
+        return True
+    if dark:
+        try:
+            record = _chain_record(ctx, chain, served=False)
+        except Exception as e:  # noqa: BLE001 — P6: traceul picat ⇒ fallback fără trace
+            log.warning("interpreted_turn: traceul (%s)", type(e).__name__)
+            reason = _EXCEPTION
+    _drop_executor_events(ctx, mark)
+    try:
+        saved.restore(ctx)
+    except Exception as e:  # noqa: BLE001 — P6: numărat, calea v1 continuă (declarat)
+        log.warning("interpreted_turn: restaurarea (%s)", type(e).__name__)
+        ctx.emit("kernel_restore_failed", error=type(e).__name__)
     if record is None:
         _record_fallback(ctx, reason, snapshot)
         return False
@@ -791,11 +848,7 @@ async def run_interpreted_turn(ctx: TurnContext, deps: PipelineDeps) -> bool:
     ctx.trace["kernel"] = trace
     for name, properties in events:
         ctx.emit(name, **properties)
-    if not served:
-        return False
-    # Ultimul: intrarea commit-ului există DOAR pe un tur servit (§2).
-    ctx.kernel_turn = kernel_turn
-    return True
+    return False
 
 
 __all__ = [

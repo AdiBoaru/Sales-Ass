@@ -28,8 +28,9 @@ DEFAULT_REFERENCE_DIMENSIONS: tuple[str, ...] = ("brand", "product_type")
 #: Dezvăluirile plannerului (`turn_planner.DISCLOSURES`, verificat de test că sunt incluse) plus
 #: răspunsul unei căutări fără rezultate (`no_results`) și închiderea unei comparații fără verdict
 #: (`verdict_unknown`, cu eticheta dimensiunii, și `verdict_unknown_any`, fără ea: NX-336 C2,
-#: I12). Domeniul nu importă kernelul, deci lista se repetă aici, iar testul ține cele două liste
-#: de acord.
+#: I12), plus mutația coșului (D2): `cart_added`, `cart_failed` și refuzul porții fără întrebare
+#: (`mutation_unavailable`, `mutation_not_exact`). Domeniul nu importă kernelul, deci lista se
+#: repetă aici, iar testul ține cele două liste de acord.
 KERNEL_SENTENCE_CODES: frozenset[str] = frozenset(
     {
         "not_exact_match",
@@ -39,11 +40,16 @@ KERNEL_SENTENCE_CODES: frozenset[str] = frozenset(
         "no_results",
         "verdict_unknown",
         "verdict_unknown_any",
+        "cart_added",
+        "cart_failed",
+        "mutation_unavailable",
+        "mutation_not_exact",
     }
 )
 #: Singurele coduri cu un marcator, fiecare exact o dată (loaderul respinge orice alt marcator):
-#: `verdict_unknown` numește dimensiunea care lipsește, cu eticheta ei de rând din pachet.
-KERNEL_SENTENCE_MARKERS: dict[str, str] = {"verdict_unknown": "dimension"}
+#: `verdict_unknown` numește dimensiunea care lipsește, cu eticheta ei de rând din pachet, iar
+#: `cart_added` produsul adăugat, cu numele lui scurt (NX-336 D2).
+KERNEL_SENTENCE_MARKERS: dict[str, str] = {"verdict_unknown": "dimension", "cart_added": "product"}
 
 
 @dataclass(frozen=True)

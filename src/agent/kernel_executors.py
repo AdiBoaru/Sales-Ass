@@ -23,9 +23,19 @@ afara lui nu ajunge la `run_tool` (care execută orice unealtă înregistrată),
 niciuna nu citește catalogul, deci niciun `product_id` nu vine de la model (I1, I10). Compunerea e a
 căii v1 (`build_plan(kernel=True)` + `render`), pe proza buclei.
 
-Ce nu e legat aici întoarce `None` (turul rămâne pe calea v1, motivul `dark`): `reply_only` (vine
-din `chitchat`, unde v1 răspunde în context, sau dintr-o MUTAȚIE refuzată de poartă fără întrebare,
-unde răspunsul e al mutației: PR D2), mutațiile, `bundle` și planurile multiple (PR D2/D3).
+**Coșul și planurile multiple (PR D2):** `cart` adaugă produsele planului (țintele `exact`, I10)
+prin `cart_add` (ambele căi ale coșului, cu idempotența lor), cu fraza pachetului `cart_added` /
+`cart_failed`, verificate ÎNAINTEA oricărei scrieri. Cu complementare, cross-sell-ul căii v1
+(reacție la produsul adăugat efectiv) pune el răspunsul. Două planuri = mutația întâi, apoi al
+doilea plan, sărit dacă depinde de o mutație picată; fraza mutației vine ÎNAINTEA răspunsului
+lui, iar după o mutație reușită turul NU mai cade pe v1 (ar dubla mutația): orice eșec al celui
+de-al doilea plan lasă răspunsul mutației. O mutație refuzată de poartă fără întrebare
+(`reply_only` cu motivul `mutation_unavailable` / `mutation_not_exact`) primește fraza pachetului
+cu același nume.
+
+Ce nu e legat aici întoarce `None` (turul rămâne pe calea v1, motivul `dark`): restul lui
+`reply_only` (din `chitchat`, unde v1 răspunde în context), două planuri fără mutație și `bundle`
+(PR D3).
 O căutare care nu e o căutare nouă (aceeași amprentă, sesiune epuizată) refuză (`False`): răspunsul
 „nu mai am" e al căii v1, nu „nu am găsit în catalog".
 
@@ -52,8 +62,10 @@ subiect (I20): sesiunea de căutare și referințele trec prin commit-ul kernelu
 
 from __future__ import annotations
 
+import copy
 import json
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from src.agent import deterministic as det
@@ -62,6 +74,7 @@ from src.agent.observability import agent_prompt_event
 from src.agent.tool_definitions import TOOL_NAMES
 from src.agent.tool_executor import ToolRun
 from src.agent.turn_planner import DELEGATE_TOOLS
+from src.catalog.render_text import display_name
 from src.config import get_settings
 from src.conversation.answer_policy import dimension_label
 from src.db.queries.catalog import get_products_by_ids
@@ -75,10 +88,24 @@ if TYPE_CHECKING:
     from src.models import TurnContext
     from src.worker.runner import PipelineDeps
 
-#: Executorii legați (C1, C2, D1). Oricare altul ⇒ `None` (calea v1).
+#: Executorii legați (C1, C2, D1, D2). Oricare altul ⇒ `None` (calea v1).
 READ_EXECUTORS: frozenset[str] = frozenset(
-    {"search", "page", "detail", "compare", "link", "ask", "faq", "order", "delegate"}
+    {
+        "search",
+        "page",
+        "detail",
+        "compare",
+        "link",
+        "ask",
+        "faq",
+        "order",
+        "delegate",
+        "cart",
+        "reply_only",
+    }
 )
+#: Motivele porții pentru o mutație refuzată fără întrebare; fraza lor are același cod (D2).
+_REFUSED_MUTATION: frozenset[str] = frozenset({"mutation_unavailable", "mutation_not_exact"})
 #: Codurile fail-closed: SUNT răspunsul, deci fără frază turul nu e servit de kernel.
 _REQUIRED = frozenset({"no_results"})
 #: Evenimentele KERNELULUI emise în faza executorilor: rămân și pe un tur căzut (restul
@@ -90,6 +117,8 @@ KERNEL_EXECUTOR_EVENTS: frozenset[str] = frozenset(
         "verdict_withheld",
         "delegate_tool_refused",
         "delegate_loop_failed",
+        "kernel_second_plan_failed",
+        "kernel_i10_blocked",
     }
 )
 #: Politica de răspuns a orchestratorului pe produsele unei comparații: (partenerii adăugați de
@@ -165,6 +194,20 @@ def _prefix(ctx: TurnContext, text: str) -> None:
     for shown in (getattr(reply, "rich", None), getattr(reply, "comparison", None)):
         if shown is not None and text not in (shown.intro or ""):
             shown.intro = _lead(text, shown.intro)
+    reply.cacheable = False
+
+
+def _append(ctx: TurnContext, text: str) -> None:
+    """Dezvăluirile DUPĂ fraza unei mutații (fraza mutației e prima, recenzia D2)."""
+    reply = ctx.reply
+    if not text or reply is None:
+        return
+    if text not in (reply.text or ""):
+        reply.text = f"{reply.text}\n\n{text}".strip() if reply.text else text
+    rich = getattr(reply, "rich", None)
+    if rich is not None and text not in (rich.intro or ""):
+        # pe web, un răspuns bogat se citește din `rich`, nu din `text` (recenzia D2)
+        rich.intro = f"{rich.intro}\n\n{text}".strip() if rich.intro else text
     reply.cacheable = False
 
 
@@ -417,6 +460,202 @@ async def _ask(ctx: TurnContext, deps: PipelineDeps, plan: TurnPlan, outcome: Ga
     return True
 
 
+@dataclass(frozen=True)
+class _Mutation:
+    """Rezultatul executorului `cart`: produsele adăugate (rândurile uneltei), câte au picat și
+    `ToolRun`-ul lui (cross-sell-ul citește produsul adăugat de acolo)."""
+
+    added: tuple[dict[str, Any], ...]
+    failed: int
+    run: ToolRun
+
+
+async def _cart(ctx: TurnContext, deps: PipelineDeps, plan: TurnPlan) -> _Mutation:
+    """`cart_add` pe fiecare id al planului (ținte `exact`, I10), prin `ToolRun`: aceeași unealtă
+    ca v1, care alege singură `CartService` (idempotent per tur și comandă) sau coșul din stare.
+
+    Reușita se citește din unealtă (o acțiune reușită în plus), nu din `added_product`, care
+    rămâne de la id-ul anterior: un replay idempotent al serviciului întoarce `ok` FĂRĂ produse, iar
+    produsul lui se recitește din catalog (recenzia D2)."""
+    run = ToolRun(ctx, deps)
+    added: list[dict[str, Any]] = []
+    failed = 0
+    for pid in plan.product_ids:
+        before, previous = len(run.successful_action_ids), run.added_product
+        await run.execute("cart_add", {"product_id": pid})
+        if len(run.successful_action_ids) == before:
+            failed += 1
+            continue
+        row = run.added_product if run.added_product is not previous else None
+        if row is None or str(row.get("id")) != pid:
+            async with deps.db("kernel_cart_product") as conn:
+                rows = await get_products_by_ids(conn, ctx.business.id, [pid], limit=1)
+            row = rows[0] if rows else {"id": pid, "name": ""}
+        added.append(row)
+    return _Mutation(added=tuple(added), failed=failed, run=run)
+
+
+def _cart_lead(ctx: TurnContext, mutation: _Mutation) -> str:
+    """Fraza mutației: un `cart_added` pe produs adăugat (numele scurt) și `cart_failed` dacă a
+    picat ceva. Frazele au fost verificate înaintea scrierii (`_require_cart_sentences`)."""
+    pack = _pack(ctx)
+    added = kernel_sentence(pack, ctx.language, "cart_added") or ""
+    parts = [
+        added.replace("{product}", display_name(str(p.get("name") or "")), 1)
+        for p in mutation.added
+    ]
+    if mutation.failed:
+        parts.append(kernel_sentence(pack, ctx.language, "cart_failed") or "")
+    return " ".join(p for p in parts if p)
+
+
+def _require_cart_sentences(ctx: TurnContext) -> None:
+    """Fail-closed ÎNAINTEA oricărei scrieri: după o mutație turul nu mai are voie să cadă pe v1."""
+    for code in ("cart_added", "cart_failed"):
+        _required_sentence(ctx, code)
+
+
+def _set_cart_reply(ctx: TurnContext, mutation: _Mutation) -> None:
+    products = list(mutation.added)
+    ctx.retrieval = RetrievalResult(products=products, source="kernel_cart", catalog_read=False)
+    ctx.set_reply(
+        _cart_lead(ctx, mutation),
+        products=_card_products(products, n=len(products)) or None,
+        cacheable=False,
+    )
+
+
+async def _cross_sell(ctx: TurnContext, deps: PipelineDeps, mutation: _Mutation) -> bool:
+    """Cross-sell-ul căii v1 după un produs adăugat EFECTIV (nu o intenție dedusă): complementarele
+    ca carduri. Intro-ul lui (confirmarea din codul v1, cu numele întreg al ULTIMULUI produs) devine
+    fraza pachetului pe TOATE produsele adăugate. Orice eșec ⇒ `False` (răspunsul coșului),
+    niciodată o cădere pe v1 după mutație."""
+    from src.agent.fallbacks import _cart_confirm_msg  # noqa: PLC0415
+    from src.agent.planner import maybe_cross_sell  # noqa: PLC0415 — ciclul agent
+    from src.worker.context import conversation_transcript  # noqa: PLC0415
+    from src.worker.stages.agent import _load_prompt_inputs  # noqa: PLC0415
+
+    try:
+        inp = await _load_prompt_inputs(deps, ctx)
+        served = await maybe_cross_sell(
+            ctx,
+            deps,
+            run=mutation.run,
+            inp=inp,
+            history=conversation_transcript(ctx.history),
+            policy=SafetyPolicy.for_turn(ctx),
+        )
+    except Exception as e:  # noqa: BLE001 — după mutație: răspunsul coșului (P6)
+        ctx.emit("kernel_second_plan_failed", error=type(e).__name__)
+        return False
+    reply = ctx.reply
+    if not served or reply is None:
+        return False
+    old = _cart_confirm_msg(mutation.run.added_product or {}, ctx.language)
+    _replace_lead(reply, old, _cart_lead(ctx, mutation))
+    return True
+
+
+def _replace_lead(reply: Any, old: str, lead: str) -> None:
+    """Confirmarea din codul v1 → fraza pachetului, în `text` și în `rich.intro`. Lipsă: fraza
+    pachetului se pune înainte."""
+    rich = getattr(reply, "rich", None)
+    if rich is not None:
+        intro = rich.intro or ""
+        rich.intro = intro.replace(old, lead, 1) if old and old in intro else _lead(lead, intro)
+    text = reply.text or ""
+    reply.text = text.replace(old, lead, 1) if old and old in text else _lead(lead, text)
+    reply.cacheable = False
+
+
+async def _serve_cart(ctx: TurnContext, deps: PipelineDeps, plan: TurnPlan) -> bool:
+    _require_cart_sentences(ctx)
+    mutation = await _cart(ctx, deps, plan)
+    # cross-sell doar pe o mutație reușită integral: un eșec parțial se spune (recenzia D2)
+    if mutation.added and not mutation.failed and await _cross_sell(ctx, deps, mutation):
+        return True
+    _set_cart_reply(ctx, mutation)
+    return True
+
+
+@dataclass(frozen=True)
+class _SecondPlan:
+    """Ce poate scrie al doilea plan în context înainte să știm dacă servește: sesiunea (în
+    `state_patch`), propunerile și evenimentele. Se anulează dacă nu servește (recenzia D2)."""
+
+    patch: dict[str, Any]
+    proposals: list[Any]
+    events: int
+
+    @classmethod
+    def take(cls, ctx: TurnContext) -> _SecondPlan:
+        return cls(
+            patch=copy.deepcopy(ctx.state_patch),
+            proposals=list(ctx.state_proposals),
+            events=len(ctx.events),
+        )
+
+    def restore(self, ctx: TurnContext) -> None:
+        _restore_second_plan(ctx, self.patch, self.proposals, self.events)
+
+
+def _restore_second_plan(
+    ctx: TurnContext, patch: dict[str, Any], proposals: list[Any], events: int
+) -> None:
+    """Anularea scrierilor celui de-al doilea plan (nu o scriere nouă de stare): `state_patch` și
+    propunerile revin la valoarea de după mutație, iar evenimentele lui se scot, în afara celor ale
+    kernelului. Explicit, câmp cu câmp, ca poarta I3 să-l vadă."""
+    ctx.state_patch.clear()
+    ctx.state_patch.update(copy.deepcopy(patch))
+    ctx.state_proposals[:] = list(proposals)
+    kept = [e for e in ctx.events[events:] if e.type in KERNEL_EXECUTOR_EVENTS]
+    ctx.events[events:] = kept
+
+
+async def _serve_mutation_then(
+    ctx: TurnContext,
+    deps: PipelineDeps,
+    planned: PlannedTurn,
+    outcome: GateOutcome,
+    policy_for: PolicyFor | None,
+) -> bool:
+    """Două planuri, mutația întâi (plannerul le ordonează). Al doilea se sare dacă depinde de o
+    mutație picată; fraza mutației vine ÎNAINTEA răspunsului lui. După o mutație reușită nimic nu
+    mai cade pe v1: un al doilea plan refuzat sau picat lasă răspunsul mutației, iar ce scrisese el
+    în context (sesiunea de căutare, propunerile, evenimentele) se anulează."""
+    first, second = planned.plans
+    _require_cart_sentences(ctx)
+    mutation = await _cart(ctx, deps, first)
+    served = False
+    saved = _SecondPlan.take(ctx)
+    if not (second.depends_on == 0 and not mutation.added):
+        try:
+            served = bool(await _run_plan(ctx, deps, second, outcome, policy_for))
+        except NoSentence:
+            served = False
+        except Exception as e:  # noqa: BLE001 — o mutație picată n-a scris nimic: v1 poate relua
+            if not mutation.added:
+                raise
+            ctx.emit("kernel_second_plan_failed", error=type(e).__name__)
+            served = False
+    no_results = (
+        second.executor == "search" and ctx.retrieval is not None and not ctx.retrieval.products
+    )
+    disclosure = "" if no_results else _disclosure_text(ctx, planned)
+    if served and ctx.reply is not None:
+        # ordinea citită de client: mutația, apoi dezvăluirile, apoi răspunsul celui de-al doilea
+        _prefix(ctx, disclosure)
+        _prefix(ctx, _cart_lead(ctx, mutation))
+        question = _confirmation(outcome)
+        if question is not None and second.executor != "ask":
+            _confirm(ctx, question)
+    else:
+        saved.restore(ctx)
+        _set_cart_reply(ctx, mutation)
+        _append(ctx, disclosure)
+    return True
+
+
 def _confirmation(outcome: GateOutcome) -> str | None:
     question = outcome.decision.question
     return question if outcome.asked_kind == "noted" and question else None
@@ -428,8 +667,22 @@ async def _run_plan(
     plan: TurnPlan,
     outcome: GateOutcome,
     policy_for: PolicyFor | None,
+    mutating: bool = False,
 ) -> bool | None:
     kind, ids = plan.executor, list(plan.product_ids)
+    if kind == "reply_only":
+        # Doar răspunsul unei MUTAȚII oprite de poartă fără întrebare (orice motiv: epuizat, țintă
+        # neexactă, fără opțiuni, fără șablon, întrebare deja pusă). Căderea pe v1 ar da turul unei
+        # bucle care are `cart_add`, exact pe turul pe care poarta l-a oprit (I10/I11, recenzia D2).
+        # Restul lui `reply_only` (din `chitchat`) rămâne pe v1.
+        if outcome.decision.verdict != "must_ask" or not mutating:
+            return None
+        reason = outcome.decision.reason
+        code = reason if reason in _REFUSED_MUTATION else "mutation_not_exact"
+        ctx.set_reply(_required_sentence(ctx, code), cacheable=False)
+        return True
+    if kind == "cart":
+        return await _serve_cart(ctx, deps, plan) if ids else False
     if kind == "search":
         return await _search(ctx, deps, plan, outcome)
     if kind == "page":
@@ -459,22 +712,30 @@ async def execute_read_plans(
     planned: PlannedTurn,
     outcome: GateOutcome,
     policy_for: PolicyFor | None = None,
+    mutating: bool = False,
 ) -> bool | None:
-    """Rulează planul turului. `None` = niciun executor legat (calea v1, `dark`), `False` =
+    """Rulează planul turului. `mutating` = interpretarea turului are un act care SCRIE (coșul).
+    `None` = niciun executor legat (calea v1, `dark`), `False` =
     executorul a refuzat, `True` = a servit. `NoSentence` urcă la orchestrator. `policy_for` =
     politica de răspuns a orchestratorului, judecată pe produsele unei comparații (I12)."""
-    if len(planned.plans) != 1:
-        return None  # multi-act: PR D
-    plan = planned.plans[0]
+    plans = planned.plans
+    if len(plans) == 2 and plans[0].executor == "cart" and plans[0].product_ids:
+        return await _serve_mutation_then(ctx, deps, planned, outcome, policy_for)
+    if len(plans) != 1:
+        return None  # două planuri fără mutație: calea v1
+    plan = plans[0]
     if plan.executor not in READ_EXECUTORS:
         return None
-    verdict = await _run_plan(ctx, deps, plan, outcome, policy_for)
+    verdict = await _run_plan(ctx, deps, plan, outcome, policy_for, mutating)
     if not verdict:
         return verdict
     no_results = (
         plan.executor == "search" and ctx.retrieval is not None and not ctx.retrieval.products
     )
-    if not no_results:
+    if plan.executor == "cart":
+        # fraza mutației e prima; dezvăluirile după ea
+        _append(ctx, _disclosure_text(ctx, planned))
+    elif not no_results:
         # pe `no_results` fraza spune deja tot: o dezvăluire în plus ar contrazice-o
         _prefix(ctx, _disclosure_text(ctx, planned))
         question = _confirmation(outcome)

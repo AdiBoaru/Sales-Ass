@@ -460,7 +460,7 @@ async def test_with_no_results_the_confirmation_is_the_answer(monkeypatch, elect
     assert ctx.reply.text == "E pentru tine?"
 
 
-@pytest.mark.parametrize("executor", ["cart", "bundle", "reply_only"])
+@pytest.mark.parametrize("executor", ["bundle", "reply_only"])
 async def test_unbound_executors_stay_dark(electronics, executor):
     """`reply_only` inclus (recenzia, constatarea 1): vine din `chitchat` sau dintr-o MUTAȚIE
     refuzată de poartă fără întrebare (coș pe un produs epuizat), unde o frază generică ar înlocui
@@ -701,7 +701,7 @@ async def test_build_plan_in_kernel_mode_does_not_re_derive_the_intent(
 
 
 async def test_the_production_seam_serves_reads_and_keeps_the_rest_dark(electronics):
-    planned = _planned(_plan(executor="cart", product_ids=("p1",)))
+    planned = _planned(_plan(executor="bundle"))  # rutina: PR D3
     assert await it.execute_plans(_ctx(electronics), _deps(), planned, _outcome()) is None
 
 

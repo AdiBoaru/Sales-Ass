@@ -551,23 +551,36 @@ async def test_a_false_verdict_with_a_reply_is_served(monkeypatch, electronics):
 
 
 async def test_a_failure_after_the_view_restores_everything(monkeypatch, electronics):
-    """Vederea se scrie înaintea executorilor și intră în instantaneu: traceul picat ⇒ fallback
-    `exception`, iar contextul predat căii v1 e cel de dinaintea ramurii (inclusiv
+    """Vederea se scrie înaintea executorilor și intră în instantaneu: un executor picat DUPĂ ce a
+    scris ⇒ fallback `exception`, iar contextul predat căii v1 e cel de dinaintea ramurii (inclusiv
     `constraints`/`search_constraints` și `kernel_view`)."""
-    original = it._chain_record
 
-    def broken(ctx, chain, *, served=False):
+    async def broken(ctx, deps, planned, *rest):
         assert ctx.kernel_view is not None and ctx.state.search_constraints, "vederea e scrisă"
-        raise RuntimeError("trace")
+        ctx.set_reply("pe jumătate", cacheable=False)
+        raise RuntimeError("executor")
 
-    monkeypatch.setattr(it, "_chain_record", broken)
-    run = await _served(monkeypatch, electronics)
-    monkeypatch.setattr(it, "_chain_record", original)
+    run = await _served(monkeypatch, electronics, executor=broken)
     ctx = run.ctx
     assert run.branch_result is False and ctx.kernel_turn is None and ctx.kernel_view is None
     assert ctx.trace["kernel_fallback"]["reason"] == "exception"
     diff = sorted(k for k in run.before_branch if run.before_branch[k] != run.after_branch[k])
     assert diff == []
+
+
+async def test_a_trace_failure_on_a_served_turn_keeps_it_served(monkeypatch, electronics):
+    """NX-336 D2: un tur SERVIT poate fi scris deja (coșul), deci un trace picat nu-l mai trimite pe
+    v1 (care ar putea repeta mutația): se numără, iar commit-ul trece tot prin reducer."""
+
+    def broken(ctx, chain, *, served=False):
+        raise RuntimeError("trace")
+
+    monkeypatch.setattr(it, "_chain_record", broken)
+    run = await _served(monkeypatch, electronics)
+    ctx = run.ctx
+    assert run.branch_result is True and isinstance(ctx.kernel_turn, _kc().KernelTurn)
+    assert "kernel" not in ctx.trace and "kernel_fallback" not in ctx.trace
+    assert _events(ctx, "kernel_record_failed") == [{"error": "RuntimeError", "turn_id": "t0"}]
 
 
 async def test_the_view_copies_only_the_needs_and_subject_fields(monkeypatch, electronics):

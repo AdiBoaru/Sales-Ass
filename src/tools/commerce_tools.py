@@ -284,7 +284,11 @@ async def cart_add_tool(ctx: TurnContext, deps: PipelineDeps, args: dict[str, An
         return ToolResult(ok=False, error="safety_excluded", llm_view=_SAFETY_REFUSED_VIEW)
 
     # Coșul curent din state (ref-uri compacte, NU obiectul complet — P8). Copie → nu mutăm state.
-    cart: list[dict[str, Any]] = [dict(line) for line in (ctx.state.cart or [])]
+    # NX-336 D2: un al doilea `cart_add` în ACELAȘI tur pornește de la coșul scris de primul
+    # (`ctx.state_patch["cart"]`, încă nepersistat), altfel îl suprascria: „adaugă primul și al
+    # treilea" lăsa în coș doar ultimul produs.
+    current = ctx.state_patch["cart"] if "cart" in ctx.state_patch else ctx.state.cart
+    cart: list[dict[str, Any]] = [dict(line) for line in (current or [])]
     key = (a.product_id, a.variant_id)
     for line in cart:
         if (line["product_id"], line.get("variant_id")) == key:
