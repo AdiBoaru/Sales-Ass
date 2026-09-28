@@ -37,7 +37,7 @@ from typing import TYPE_CHECKING, Any
 
 from src.agent.deterministic import page_source
 from src.agent.turn_planner import PlannedTurn, plan_turn
-from src.catalog.reference_facts import fetch_reference_facts
+from src.catalog.reference_facts import facts_from_row, fetch_reference_facts
 from src.catalog.vocabulary_cache import get_vocabulary
 from src.config import get_settings
 from src.conversation.ambiguity_gate import (
@@ -84,6 +84,9 @@ from src.privacy.boundary import make_safe
 from src.worker.kernel_commit import KernelTurn
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from src.agent.kernel_executors import PolicyFor
     from src.worker.runner import PipelineDeps
 
 log = logging.getLogger(__name__)
@@ -322,6 +325,7 @@ class _Chain:
     policy: AnswerPolicy | None
     planned: PlannedTurn
     primary: str | None = None
+    policy_for: PolicyFor | None = None
 
 
 class _VocabularyUnavailable(Exception):
@@ -381,6 +385,68 @@ def _answer_policy(
         references=interp.references,
         ambiguity=outcome.decision,
         locale=inp.locale,
+    )
+
+
+def _primary_act(interp: TurnInterpretation, outcome: GateOutcome) -> Any:
+    remaining = [a for i, a in enumerate(interp.acts) if i not in outcome.skipped_acts]
+    return remaining[-1] if remaining else None
+
+
+def _policy_for(
+    interp: TurnInterpretation,
+    resolved: tuple[ResolvedRef, ...],
+    outcome: GateOutcome,
+    inp: InterpretInput,
+) -> PolicyFor | None:
+    """Politica de răspuns pe produsele unei COMPARAȚII (NX-336 C2, I12): aceeași ca
+    `_answer_policy`, dar judecată DOAR pe rândurile arătate de executor (după siguranță), cu
+    partenerul unei comparații cu o țintă (`partners`). Un candidat scos de siguranță nu e în
+    tabel, deci nu are voie să rețină verdictul (recenzia C2)."""
+    act = _primary_act(interp, outcome)
+    if act is None:
+        return None
+
+    def policy_for(partners: Sequence[str], rows: Sequence[Mapping[str, Any]]) -> Any:
+        shown = {str(r["id"]) for r in rows}
+        facts = {str(r["id"]): facts_from_row(dict(r)) for r in rows}
+        on_table = tuple(
+            r.model_copy(update={"product_ids": [p for p in r.product_ids if p in shown]})
+            for r in resolved
+        )
+        return answer_policy(
+            act,
+            on_table,
+            facts,
+            vocab=inp.vocab,
+            pack=inp.pack,
+            references=interp.references,
+            ambiguity=outcome.decision,
+            locale=inp.locale,
+            partners=tuple(p for p in partners if p in shown),
+        )
+
+    return policy_for
+
+
+#: Executorii care servesc o comparație sau detaliul unei ținte.
+_TARGETED: frozenset[str] = frozenset({"compare", "detail"})
+
+
+def _target_lost(chain: _Chain) -> bool:
+    """Actul principal numește ≥ 2 ținte, dar planul (`compare`/`detail`) a rămas cu sub 2 produse:
+    o țintă s-a pierdut FĂRĂ dezvăluire (`_read` din planner dezvăluie doar un nume negăsit sau o
+    țintă `stale`). Servit, turul ar compara ancora cu un similar ales de cod sau ar arăta detaliul
+    doar al uneia (recenzia C2, P1), deci rămâne `dark`: calea v1 răspunde."""
+    interp = chain.interpreted.interpretation
+    act = _primary_act(interp, chain.outcome) if interp is not None else None
+    planned = chain.planned
+    plan = planned.plans[planned.primary]
+    return (
+        act is not None
+        and len(act.targets) >= 2
+        and plan.executor in _TARGETED
+        and len(plan.product_ids) < 2
     )
 
 
@@ -466,6 +532,7 @@ async def _chain(
         policy=_answer_policy(interp, resolved, known, outcome, inp),
         planned=planned,
         primary=primary,
+        policy_for=_policy_for(interp, resolved, outcome, inp),
     )
 
 
@@ -564,19 +631,20 @@ async def execute_plans(
     deps: PipelineDeps,
     planned: PlannedTurn,
     outcome: GateOutcome,
-    policy: AnswerPolicy | None = None,
+    policy_for: PolicyFor | None = None,
 ) -> bool | None:
     """Seam-ul executorilor: rulează planurile turului (cu decizia porții, a cărei întrebare o pune
     executorul `ask` sau compunerea, la confirmare). `None` = niciun executor pentru plan (turul
     rămâne `dark`), `False` = executorul a refuzat, `True` = a servit. Compunerea rulează în
     executor, deci citește vederea de citire deja scrisă (`_apply_turn_view`).
 
-    PR C: executorii de CITIRE (`kernel_executors`, un singur plan), cu politica de răspuns (I12).
+    PR C: executorii de CITIRE (`kernel_executors`, un singur plan), cu politica de răspuns
+    judecată pe produsele comparate (`policy_for`, I12).
     Mutațiile, `bundle`, `delegate`, `faq`/`order` și planurile multiple întorc `None` până la PR D.
     `NoSentence` (fraza fail-closed lipsă din pachet) urcă la `_serve`."""
     from src.agent.kernel_executors import execute_read_plans  # noqa: PLC0415 — ciclul agent
 
-    return await execute_read_plans(ctx, deps, planned, outcome, policy)
+    return await execute_read_plans(ctx, deps, planned, outcome, policy_for)
 
 
 def _question_memory(ctx: TurnContext, outcome: GateOutcome) -> tuple[StateUpdateProposal, ...]:
@@ -645,9 +713,11 @@ async def _serve(
     răspuns rămas neschimbat de dinaintea ramurii nu contează."""
     from src.agent.kernel_executors import NoSentence  # noqa: PLC0415 — ciclul agent
 
+    if _target_lost(chain):
+        return _DARK
     _apply_turn_view(ctx, chain.state, chain.reduced.state, chain.delta.thread)
     try:
-        verdict = await execute_plans(ctx, deps, chain.planned, chain.outcome, chain.policy)
+        verdict = await execute_plans(ctx, deps, chain.planned, chain.outcome, chain.policy_for)
     except NoSentence as e:
         ctx.emit("kernel_sentence_missing", code=e.code)
         return _NO_SENTENCE

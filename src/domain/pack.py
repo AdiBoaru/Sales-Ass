@@ -26,8 +26,10 @@ DEFAULT_REFERENCE_DIMENSIONS: tuple[str, ...] = ("brand", "product_type")
 
 #: NX-336 PR C: codurile frazelor kernelului (`DomainPack.kernel_sentences`), vocabular ÎNCHIS.
 #: Dezvăluirile plannerului (`turn_planner.DISCLOSURES`, verificat de test că sunt incluse) plus
-#: răspunsul unei căutări fără rezultate (`no_results`). Domeniul nu importă kernelul, deci lista se
-#: repetă aici, iar testul ține cele două liste de acord.
+#: răspunsul unei căutări fără rezultate (`no_results`) și închiderea unei comparații fără verdict
+#: (`verdict_unknown`, cu eticheta dimensiunii, și `verdict_unknown_any`, fără ea: NX-336 C2,
+#: I12). Domeniul nu importă kernelul, deci lista se repetă aici, iar testul ține cele două liste
+#: de acord.
 KERNEL_SENTENCE_CODES: frozenset[str] = frozenset(
     {
         "not_exact_match",
@@ -35,8 +37,13 @@ KERNEL_SENTENCE_CODES: frozenset[str] = frozenset(
         "dropped_act",
         "no_target",
         "no_results",
+        "verdict_unknown",
+        "verdict_unknown_any",
     }
 )
+#: Singurele coduri cu un marcator, fiecare exact o dată (loaderul respinge orice alt marcator):
+#: `verdict_unknown` numește dimensiunea care lipsește, cu eticheta ei de rând din pachet.
+KERNEL_SENTENCE_MARKERS: dict[str, str] = {"verdict_unknown": "dimension"}
 
 
 @dataclass(frozen=True)

@@ -108,6 +108,18 @@ _NARRATIVE_SCHEMA: dict[str, Any] = {
         },
     },
 }
+#: NX-336 C2 (I12): aceeași schemă fără `closing`, pentru comparația pe care politica de răspuns
+#: nu o lasă să aleagă. Verdictul nu se cere, deci nu se poate scrie (STRUCTURAL, nu pe text).
+_NO_VERDICT_SCHEMA: dict[str, Any] = {
+    **_NARRATIVE_SCHEMA,
+    "schema": {
+        **_NARRATIVE_SCHEMA["schema"],
+        "required": ["lead", "subtitle", "axes"],
+        "properties": {
+            k: v for k, v in _NARRATIVE_SCHEMA["schema"]["properties"].items() if k != "closing"
+        },
+    },
+}
 
 
 #: NX-317: peste cât două valori-SURSĂ ale aceleiași surse înseamnă „același lucru". Măsurat pe
@@ -526,8 +538,13 @@ async def compose_comparison(
     facets: Sequence[FacetSpec] = (),
     query: str = "",
     needs: Sequence[tuple[str, str]] | None = None,
+    verdict: bool = True,
 ) -> Comparison:
     """Comparația NARATIVĂ: axe semantice + proză de încadrare + îndrumare finală.
+
+    `verdict=False` (NX-336 C2, I12): cererea pierde sloturile de verdict (schema fără
+    `closing`, regulile fără alegere), iar închiderea iese goală; ce lipsește o spune apelantul.
+    Implicit True ⇒ cererea de azi, byte-identică.
 
     Nu ridică niciodată și nu întoarce niciodată mai puțin decât intrarea: un apel eșuat, un JSON
     stricat sau o poartă care respinge leadul duc la `comparison` neatinsă, adică la tabelul
@@ -540,14 +557,16 @@ async def compose_comparison(
     v2 = bool(getattr(settings, "comparison_axes_v2_enabled", False))
     if needs is None:
         needs = comparison_needs(ctx) if v2 else ()
+    extra = {} if verdict else {"verdict": False}
     if v2:
-        system = prompt_builder.build_compare_system(_prompt_inputs(ctx), axes_v2=True)
+        system = prompt_builder.build_compare_system(_prompt_inputs(ctx), axes_v2=True, **extra)
         user = _user_block(ctx, comparison, products, facets, query, needs)
     else:
-        system = prompt_builder.build_compare_system(_prompt_inputs(ctx))
+        system = prompt_builder.build_compare_system(_prompt_inputs(ctx), **extra)
         user = _user_block(ctx, comparison, products, facets, query)
+    schema = _NARRATIVE_SCHEMA if verdict else _NO_VERDICT_SCHEMA
     try:
-        payload = await llm.complete_schema(system, user, _NARRATIVE_SCHEMA)
+        payload = await llm.complete_schema(system, user, schema)
     except Exception as e:  # noqa: BLE001 — apel structurat eșuat → tabelul determinist (P6)
         log.warning("compare_narrative: apel structurat eșuat (%s)", type(e).__name__)
         ctx.emit("comparison_narrative", source="deterministic", reason=type(e).__name__)
@@ -596,7 +615,7 @@ async def compose_comparison(
     # NX-317: un singur paragraf de verdict. Primul trece, al doilea (de obicei verdictul spus
     # încă o dată) nu mai intră.
     max_closing = 1 if v2 else _MAX_CLOSING
-    for paragraph in payload.get("closing") or []:
+    for paragraph in (payload.get("closing") or []) if verdict else []:
         if len(closing) >= max_closing:
             break
         text = _clean(paragraph, _MAX_CLOSING_CHARS)

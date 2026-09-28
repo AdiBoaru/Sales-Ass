@@ -86,6 +86,25 @@ def _row_labels(pack: object | None, locale: str | None) -> list[tuple[str, tupl
     return out
 
 
+def dimension_label(pack: object | None, dimension: str, locale: str | None) -> str | None:
+    """Eticheta de rând a unei dimensiuni, în limba turului (NX-336 C2: fraza care spune ce
+    lipsește pe o comparație fără verdict). Aceleași surse și aceeași cădere pe limba de bază ca
+    `_row_labels`; fără etichetă ⇒ `None` (niciodată cheia brută în fața clientului)."""
+    lang = (locale or "").strip().lower()
+    specs = [
+        *(getattr(pack, "facets", ()) or ()),
+        *(getattr(pack, "facet_labels", ()) or getattr(pack, "comparison_facets", ()) or ()),
+    ]
+    for spec in specs:
+        labels = getattr(spec, "labels", None)
+        if getattr(spec, "key", None) != dimension or not isinstance(labels, Mapping):
+            continue
+        label = labels.get(lang) or labels.get(lang.split("-")[0])
+        if isinstance(label, str) and label.strip():
+            return label.strip()
+    return None
+
+
 def _same_word(asked: str, carried: str, suffixes: Collection[str]) -> bool:
     """Același cuvânt, eventual flexionat cu un sufix al locale-i («ecranul» = „ecran" + „ul")."""
     if asked == carried:
@@ -217,4 +236,4 @@ def answer_policy(
     return AnswerPolicy(verdict_allowed=False, missing=[dimension])
 
 
-__all__ = ["QueryEvidence", "answer_policy", "read_query"]
+__all__ = ["QueryEvidence", "answer_policy", "dimension_label", "read_query"]

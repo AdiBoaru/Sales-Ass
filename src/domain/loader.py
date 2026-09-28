@@ -27,6 +27,7 @@ from src.domain.normalize import normalize
 from src.domain.pack import (
     DEFAULT_REFERENCE_DIMENSIONS,
     KERNEL_SENTENCE_CODES,
+    KERNEL_SENTENCE_MARKERS,
     DomainPack,
     FacetSpec,
     SectionSpec,
@@ -203,9 +204,10 @@ def _norm_clarify_templates(raw: Any) -> dict[str, dict[str, str]]:
 
 def _norm_kernel_sentences(raw: Any) -> dict[str, dict[str, str]]:
     """NX-336 PR C: `locale` → cod → frază. Fail-closed PER FRAZĂ: un cod din afara
-    `KERNEL_SENTENCE_CODES` sau o frază cu un marcator (`{`/`}`) se aruncă și se loghează, restul
-    pachetului se încarcă. Frazele kernelului nu se interpolează, deci un marcator ar ajunge la
-    client ca atare."""
+    `KERNEL_SENTENCE_CODES` sau o frază cu alt marcator decât cel declarat pentru codul ei
+    (`KERNEL_SENTENCE_MARKERS`: exact o dată, restul fără niciunul) se aruncă și se loghează,
+    restul pachetului se încarcă. Un marcator nedeclarat nu s-ar interpola și ar ajunge la client
+    ca atare."""
     if not isinstance(raw, dict):
         return {}
     out: dict[str, dict[str, str]] = {}
@@ -219,7 +221,9 @@ def _norm_kernel_sentences(raw: Any) -> dict[str, dict[str, str]]:
             if code not in KERNEL_SENTENCE_CODES:
                 log.warning("kernel_sentences[%s][%s] respins: cod necunoscut", locale, code)
                 continue
-            if "{" in phrase or "}" in phrase:
+            marker = KERNEL_SENTENCE_MARKERS.get(code)
+            rest = phrase.replace("{" + marker + "}", "", 1) if marker else phrase
+            if "{" in rest or "}" in rest or (marker and rest == phrase):
                 log.warning("kernel_sentences[%s][%s] respins: marcator în frază", locale, code)
                 continue
             kept[code] = phrase.strip()

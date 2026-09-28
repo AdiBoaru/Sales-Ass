@@ -686,14 +686,45 @@ diferențele", fără „După cum poți observa", fără să-ți anunți proces
 )
 
 
+#: NX-336 C2 (I12): pe o comparație în care politica de răspuns interzice verdictul, schema nu mai
+#: are `closing`, iar regulile nu mai cer alegerea. Se taie pe marcatori din textul existent (poarta
+#: de import de mai jos), ca o rescriere a regulilor să nu lase tăcut verdictul în prompt.
+_VERDICT_ASK = "și ce ar trebui să aleagă"
+_CLOSING_MARK = "`closing` ="
+_NATURAL_MARK = "NATURAL:"
+#: Regula leadului din v2 trimite verdictul la închidere; fără închidere, trimiterea ar minți.
+_CLOSING_DUTY = ": asta e treaba închiderii, iar spus de două ori\nsună a umplutură."
+_NO_VERDICT_RULE = """Pe comparația asta NU există verdict: pentru ce contează aici datele lipsesc
+la cel puțin un produs, iar codul spune singur, sub tabel, ce lipsește. Nu scrie în `lead` sau în
+`subtitle` care e mai bun, pe care să-l ia sau pentru cine e fiecare.
+
+"""
+
+
+def _without_verdict(rules: str) -> str:
+    head, rest = rules.split(_CLOSING_MARK, 1)
+    head = head.replace(_VERDICT_ASK, "fără să alegi între ele", 1).replace(_CLOSING_DUTY, ".", 1)
+    return head + _NO_VERDICT_RULE + rest[rest.index(_NATURAL_MARK) :]
+
+
+for _rules in (_COMPARE_RULES, _COMPARE_RULES_V2):
+    assert all(m in _rules for m in (_VERDICT_ASK, _CLOSING_MARK, _NATURAL_MARK)), (
+        "regulile comparației și-au pierdut marcatorii verdictului (NX-336 C2)"
+    )
+assert _CLOSING_DUTY in _COMPARE_RULES_V2, "regula leadului v2 și-a pierdut marcatorul (NX-336 C2)"
+
+
 @lru_cache(maxsize=256)
-def build_compare_system(inp: PromptInputs, *, axes_v2: bool = False) -> str:
+def build_compare_system(inp: PromptInputs, *, axes_v2: bool = False, verdict: bool = True) -> str:
     """System pt leadul de COMPARAȚIE (`compare_lead`). Antet generat din DB + reguli identice pe
     toți tenanții, ca la rich. Static per (business, locale, currency) → prompt caching.
 
     `axes_v2` (NX-317, `COMPARISON_AXES_V2_ENABLED`): regulile cu verdictul o singură dată și
-    sursele noi. Implicit False ⇒ exact promptul de azi."""
+    sursele noi. Implicit False ⇒ exact promptul de azi. `verdict=False` (NX-336 C2, I12):
+    regulile fără închidere și fără alegere; implicit True ⇒ promptul de azi."""
     rules = _COMPARE_RULES_V2 if axes_v2 else _COMPARE_RULES
+    if not verdict:
+        rules = _without_verdict(rules)
     base = f"{_store_header(inp)}\n{rules}\n{_SAFETY_RULES}\n{VOICE_RULES}"
     style = response_style_block(dict(inp.response_style))
     return f"{base}\n{style}" if style else base
