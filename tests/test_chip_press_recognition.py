@@ -257,6 +257,58 @@ def test_probe_a_text_that_only_looks_like_a_template_is_not_a_move(electronics,
         assert rep["pressable_miss"] == 0
 
 
+def test_probe_two_cards_with_the_same_name_are_a_pressable_miss(electronics, v2_off):
+    """Recenzia NX-338: două carduri cu ACELAȘI nume (pe SOLE: 4 perechi KUNDAL) dau două mutări cu
+    același text, iar recunoașterea le refuză pe amândouă (ambiguu), deci apăsarea ar pleca la
+    kernel. E o ratare de văzut, nu un text care doar seamănă cu șablonul."""
+    from scripts.nx316_chip_press_probe import recognition_report
+
+    ids = list(electronics.items)[:3]
+    twin = electronics.items[ids[0]]["name"]
+    refs = [
+        {"product_id": ids[0], "name": twin, "price": 10.0},
+        {"product_id": ids[1], "name": twin, "price": 12.0},
+        {"product_id": ids[2], "name": electronics.items[ids[2]]["name"], "price": 30.0},
+    ]
+    moves = chip_moves.renderable(
+        chip_moves.from_cards(refs, unique_anchor=_unique_anchor(), locale="ro"),
+        electronics.pack,
+        "ro",
+    )
+    link = next(
+        chip_moves.render_move(m, electronics.pack, "ro") for m in moves if m.kind == "link"
+    )
+    rows = _trace_pair(electronics, [link], link, recommended=refs)
+    rep = recognition_report(rows, electronics.pack, "ro", unique_anchor=_unique_anchor())
+    assert rep["recognized_off"] == 0 and rep["pressable_miss"] == 1, rep
+
+
+def test_probe_a_name_containing_the_template_connector_is_still_a_move(
+    electronics, v2_off, monkeypatch
+):
+    """Recenzia NX-338: pe «Compara Crema cu acid … cu Ser …» un regex taie primul nume la primul
+    «cu». Forma se judecă pe ORICE împărțire, deci o ratare reală nu se ascunde în `not_a_move`."""
+    from scripts import nx316_chip_press_probe as probe
+
+    refs = [
+        {"product_id": "a", "name": "Crema cu acid hialuronic", "price": 10.0},
+        {"product_id": "b", "name": "Ser Vitamina C", "price": 20.0},
+    ]
+    moves = chip_moves.renderable(
+        chip_moves.from_cards(refs, unique_anchor=_unique_anchor(), locale="ro"),
+        electronics.pack,
+        "ro",
+    )
+    compare = next(
+        chip_moves.render_move(m, electronics.pack, "ro") for m in moves if m.kind == "compare"
+    )
+    assert compare.lower().count(" cu ") >= 2  # premisa: conectorul apare și în nume
+    monkeypatch.setattr(probe, "recognize_press", lambda *a, **k: None)
+    rows = _trace_pair(electronics, [compare], compare, recommended=refs)
+    rep = probe.recognition_report(rows, electronics.pack, "ro", unique_anchor=_unique_anchor())
+    assert rep["pressable_miss"] == 1, rep
+
+
 def test_probe_classifies_comparison_chips_apart(electronics, v2_off):
     from scripts.nx316_chip_press_probe import recognition_report
 
@@ -269,13 +321,21 @@ def test_probe_classifies_comparison_chips_apart(electronics, v2_off):
 
 
 def _attribute_uses(name: str) -> tuple[list[str], list[str]]:
-    """(scrieri, citiri) ale atributului `name` în `src/`, pe AST (nu pe text): `x.name = …` e
-    scriere, orice alt `x.name` și `getattr(x, "name", …)` sunt citiri."""
+    """(scrieri, citiri) ale atributului `name` în `src/`, pe AST (nu pe text), ca
+    `fișier::funcție`: `x.name = …` și `setattr(x, "name", …)` sunt scrieri, orice alt `x.name` și
+    `getattr(x, "name", …)` sunt citiri. Pe FUNCȚIE, nu pe fișier: o a doua scriere în alt loc
+    al aceluiași modul (de pildă un reset în `agent_stage`) trebuie să pice."""
     writes: list[str] = []
     reads: list[str] = []
     for path in sorted((ROOT / "src").rglob("*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"))
         rel = path.relative_to(ROOT).as_posix()
+        owner: dict[int, str] = {}
+        for fn in ast.walk(tree):
+            if isinstance(fn, ast.AsyncFunctionDef | ast.FunctionDef):
+                for node in ast.walk(fn):
+                    owner[id(node)] = fn.name  # funcția cea mai interioară câștigă (walk BFS)
+        where = lambda node: f"{rel}::{owner.get(id(node), '<module>')}"  # noqa: E731
         stored = set()
         for node in ast.walk(tree):
             if isinstance(node, ast.Assign | ast.AugAssign | ast.AnnAssign):
@@ -283,10 +343,10 @@ def _attribute_uses(name: str) -> tuple[list[str], list[str]]:
                 for t in targets:
                     if isinstance(t, ast.Attribute) and t.attr == name:
                         stored.add(id(t))
-                        writes.append(f"{rel}:{t.lineno}")
+                        writes.append(where(t))
         for node in ast.walk(tree):
             if isinstance(node, ast.Attribute) and node.attr == name and id(node) not in stored:
-                reads.append(f"{rel}:{node.lineno}")
+                reads.append(where(node))
             if (
                 isinstance(node, ast.Call)
                 and isinstance(node.func, ast.Name)
@@ -295,26 +355,17 @@ def _attribute_uses(name: str) -> tuple[list[str], list[str]]:
                 and isinstance(node.args[1], ast.Constant)
                 and node.args[1].value == name
             ):
-                (writes if node.func.id == "setattr" else reads).append(f"{rel}:{node.lineno}")
+                (writes if node.func.id == "setattr" else reads).append(where(node))
     return writes, reads
 
 
 def test_chip_recognized_has_one_writer_and_one_reader():
     writes, reads = _attribute_uses("chip_recognized")
-    assert [w.split(":")[0] for w in writes] == ["src/worker/stages/agent.py"]
-    assert [r.split(":")[0] for r in reads] == ["src/worker/stages/agent.py"]
-    tree = ast.parse((ROOT / "src/worker/stages/agent.py").read_text(encoding="utf-8"))
-    owners = {
-        fn.name
-        for fn in ast.walk(tree)
-        if isinstance(fn, ast.AsyncFunctionDef | ast.FunctionDef)
-        for node in ast.walk(fn)
-        if isinstance(node, ast.Attribute) and node.attr == "chip_recognized"
-    }
-    # scrie `_recognize_chip_press`, citește condiția ramurii din `agent_stage`
-    assert owners == {"_recognize_chip_press", "agent_stage"}
+    # UN loc de scriere (`_recognize_chip_press`) și UN loc de citire (condiția ramurii)
+    assert writes == ["src/worker/stages/agent.py::_recognize_chip_press"]
+    assert reads == ["src/worker/stages/agent.py::agent_stage"]
 
 
 def test_chip_move_writer_is_unchanged():
     writes, _ = _attribute_uses("chip_move")
-    assert [w.split(":")[0] for w in writes] == ["src/worker/stages/agent.py"]
+    assert writes == ["src/worker/stages/agent.py::_recognize_chip_press"]

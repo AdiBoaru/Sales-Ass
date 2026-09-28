@@ -450,8 +450,10 @@ async def _recognize_chip_press(ctx: TurnContext, deps: PipelineDeps) -> None:
     ctx.chip_recognized = move
     ctx.chip_move = move if serve else None
     if move is not None and not serve:
-        # Pe v1 apăsarea o servește calea de text (regexurile), ca azi; evenimentul arată doar că
-        # a ocolit kernelul. Emis doar sub kernel (`serve` stins ⇒ `kernel` aprins aici).
+        # Pe v1 apăsarea o servește calea de text (regexurile), ca azi. Evenimentul numără o apăsare
+        # recunoscută și neservită ca mutare, cu kernelul aprins; ramura mai are și alte condiții
+        # (stare v2, acțiune, paginare), deci nu e „tur care ar fi intrat în kernel". Emis doar
+        # sub kernel (`serve` stins ⇒ `kernel` aprins aici).
         ctx.emit("chip_pressed", kind=move.kind, recognized=True, handler="text_path")
 
 

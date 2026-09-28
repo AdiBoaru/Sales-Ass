@@ -101,6 +101,36 @@ def _named(slot: str, cards: list[dict[str, Any]]) -> str | None:
     return hits[0] if len(hits) == 1 else None
 
 
+def _move_shaped(chip: str, kind: str, pack: Any, locale: str, cards: list[dict[str, Any]]) -> bool:
+    """NX-338: textul are FORMA unei mutări din carduri? Există o împărțire a lui pe șablonul
+    felului în care fiecare slot e prefixul de cuvinte al numelui scurt al CEL PUȚIN unui produs
+    afișat. Nu unul singur: două carduri cu același nume dau două mutări cu același text, pe care
+    recunoașterea le refuză (ambiguu), deci exact o ratare de văzut. Și nu o singură tăietură: un
+    nume care conține cuvântul de legătură al șablonului («... cu ...») ar fi tăiat greșit de un
+    regex, iar ratarea s-ar ascunde tot în `not_a_move`."""
+    per_locale = (getattr(pack, "chip_templates", None) or {}).get(kind)
+    template = per_locale.get(locale) if isinstance(per_locale, dict) else None
+    if not isinstance(template, str):
+        return False
+    tokens = words_of(template.replace("{slot_b}", " SLOTB ").replace("{slot}", " SLOTA "))
+    said = words_of(chip)
+    names = [words_of(display_name(str(c.get("name") or ""))) for c in cards]
+
+    def names_a_card(part: list[str]) -> bool:
+        return any(n[: len(part)] == part for n in names)
+
+    def match(t: int, s: int) -> bool:
+        if t == len(tokens):
+            return s == len(said)
+        if tokens[t] not in ("slota", "slotb"):
+            return s < len(said) and said[s] == tokens[t] and match(t + 1, s + 1)
+        return any(
+            names_a_card(said[s:end]) and match(t + 1, end) for end in range(s + 1, len(said) + 1)
+        )
+
+    return bool(tokens) and match(0, 0)
+
+
 #: NX-338: felurile din MENIU sunt fraze de căutare (fără handler de mutare): o apăsare a lor pleacă
 #: la interpretare prin construcție, corect.
 _MENU_KINDS = frozenset({"refine_facet", "pivot_shelf", "price_band"})
@@ -156,16 +186,17 @@ _CARD_KINDS = frozenset({"detail", "reviews", "link", "compare"})
 
 def _miss_class(
     kind: str,
-    slots: dict[str, str],
     chip: str,
     reply: dict[str, Any] | None,
     cards: list[dict[str, Any]],
+    pack: Any,
+    locale: str,
 ) -> str:
     """Clasa unei apăsări NErecunoscute. Șablonul singur nu face dintr-un text o mutare: «compară
     {a} cu {b}» prinde și chip-ul scris de model («Compară IUNIK cu BELIF pentru ten uscat»), și pe
     cel determinist de sub detaliu («Compară-l cu un produs similar»), și unul vechi trunchiat cu
-    „…". O mutare din carduri are FIECARE slot = prefixul numelui scurt al unui produs afișat
-    (`_named`, independent de randarea mutărilor, deci o ratare reală rămâne vizibilă). Altfel
+    „…". O mutare din carduri are forma din `_move_shaped` (fiecare slot numește cel puțin un
+    produs afișat, independent de randarea mutărilor, deci o ratare reală rămâne vizibilă). Altfel
     `not_a_move`: text care doar seamănă cu șablonul."""
     from src.conversation.chip_press import PRESSABLE  # noqa: PLC0415
 
@@ -176,7 +207,7 @@ def _miss_class(
     }
     if " ".join(words_of(chip)) in compare_chips:
         return "comparison_chip"
-    if kind in _CARD_KINDS and not (slots and all(_named(v, cards) for v in slots.values())):
+    if kind in _CARD_KINDS and not _move_shaped(chip, kind, pack, locale, cards):
         return "not_a_move"
     if kind in PRESSABLE:
         return "pressable_miss"
@@ -212,7 +243,7 @@ def recognition_report(
         chip = next((c for c in _chips_of(prev.get("reply")) if words_of(c) == said), None)
         if chip is None:
             continue
-        kind, slots = _classify(chip, patterns)
+        kind, _ = _classify(chip, patterns)
         cards = _shown_refs(prev)
         entry: dict[str, Any] = {"kind": kind}
         try:
@@ -230,7 +261,9 @@ def recognition_report(
         finally:
             settings.chip_moves_v2_enabled = saved
         entry["miss"] = (
-            None if entry.get("off") else _miss_class(kind, slots, chip, prev.get("reply"), cards)
+            None
+            if entry.get("off")
+            else _miss_class(kind, chip, prev.get("reply"), cards, pack, locale)
         )
         presses.append(entry)
 
