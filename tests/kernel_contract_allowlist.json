@@ -62,6 +62,16 @@
       "reason": "NX-336 PR B (recenzia, constatarea 3): memoria intrebarii se scrie doar daca intrebarea de confirmare a portii e chiar in raspunsul trimis (textul sau `intro`). Citeste raspunsul BOTULUI, nu cuvintele clientului; iese un bool, nicio decizie nu ramifica pe cuvinte."
     },
     {
+      "file": "src/agent/kernel_executors.py",
+      "function": "_prefix",
+      "reason": "NX-336 PR C: pune fraza de dezvaluire a pachetului inaintea raspunsului BOTULUI (text, rich.intro, comparison.intro), o singura data. Citeste raspunsul compus de executor ca sa nu dubleze fraza; nu citeste cuvintele clientului si nicio decizie nu ramifica pe ele."
+    },
+    {
+      "file": "src/agent/kernel_executors.py",
+      "function": "_compose",
+      "reason": "NX-336 PR C: mesajul curent pleaca neschimbat ca `query` spre compunerea v1 (build_plan + render), exact ca pe calea de azi (agent_stage), ca modelul de compunere sa scrie despre ce a cerut clientul. Kernelul nu ramifica pe el: planul turului e deja decis."
+    },
+    {
       "file": "src/agent/interpreted_turn.py",
       "function": "_redact",
       "reason": "NX-336: frontiera NX-230 (make_safe, profilul persist = categoriile apply_boundary) data lui redact_trace; citeste `.text` al rezultatului redactat, nu decide nimic."

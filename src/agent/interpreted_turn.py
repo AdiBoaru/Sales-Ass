@@ -117,6 +117,7 @@ _EXCEPTION = "exception"
 _VOCABULARY_UNAVAILABLE = "vocabulary_unavailable"
 _SNAPSHOT_ERROR = "snapshot_error"
 _EXECUTOR_REFUSED = "executor_refused"
+_NO_SENTENCE = "no_sentence"
 
 _ROLES: Mapping[Direction, str] = {Direction.INBOUND: "user", Direction.OUTBOUND: "bot"}
 
@@ -559,17 +560,23 @@ def _record_fallback(ctx: TurnContext, reason: str, snapshot: str) -> None:
 
 
 async def execute_plans(
-    ctx: TurnContext, deps: PipelineDeps, planned: PlannedTurn, outcome: GateOutcome
+    ctx: TurnContext,
+    deps: PipelineDeps,
+    planned: PlannedTurn,
+    outcome: GateOutcome,
+    policy: AnswerPolicy | None = None,
 ) -> bool | None:
     """Seam-ul executorilor: rulează planurile turului (cu decizia porții, a cărei întrebare o pune
     executorul `ask` sau compunerea, la confirmare). `None` = niciun executor pentru plan (turul
     rămâne `dark`), `False` = executorul a refuzat, `True` = a servit. Compunerea rulează în
     executor, deci citește vederea de citire deja scrisă (`_apply_turn_view`).
 
-    PR B: niciun executor nu e legat încă (citirile sunt ale PR-ului C, mutațiile ale PR-ului D),
-    deci întoarce mereu `None` și ramura întoarce `False` în producție. Testele commit-ului îl
-    înlocuiesc cu un executor sintetic."""
-    return None
+    PR C: executorii de CITIRE (`kernel_executors`, un singur plan), cu politica de răspuns (I12).
+    Mutațiile, `bundle`, `delegate`, `faq`/`order` și planurile multiple întorc `None` până la PR D.
+    `NoSentence` (fraza fail-closed lipsă din pachet) urcă la `_serve`."""
+    from src.agent.kernel_executors import execute_read_plans  # noqa: PLC0415 — ciclul agent
+
+    return await execute_read_plans(ctx, deps, planned, outcome, policy)
 
 
 def _question_memory(ctx: TurnContext, outcome: GateOutcome) -> tuple[StateUpdateProposal, ...]:
@@ -617,6 +624,18 @@ def kernel_turn_of(chain: _Chain, ctx: TurnContext, saved: ContextSnapshot) -> K
 _SERVED = "served"
 
 
+def _drop_executor_events(ctx: TurnContext, mark: int) -> None:
+    """Pe un tur neservit DUPĂ ce un executor a rulat, evenimentele lui (căutarea, cererea
+    neîmplinită, `tool_call`) se scot: calea v1 le emite din nou pe ale ei, iar dublura ar număra
+    de două ori cererea. Rămân doar evenimentele declarate ale kernelului. Citirile de DB făcute de
+    executor nu se pot anula (declarat, NX-336 PR C)."""
+    from src.agent.kernel_executors import KERNEL_EXECUTOR_EVENTS  # noqa: PLC0415
+
+    kept = [e for e in ctx.events[mark:] if e.type in KERNEL_EXECUTOR_EVENTS]
+    del ctx.events[mark:]
+    ctx.events.extend(kept)
+
+
 async def _serve(
     ctx: TurnContext, deps: PipelineDeps, chain: _Chain, saved: ContextSnapshot
 ) -> str:
@@ -624,8 +643,14 @@ async def _serve(
     (niciun executor) sau `_EXECUTOR_REFUSED`. Turul e servit doar dacă executorul a pus un
     răspuns NOU (P6: un `True` fără răspuns ar fi tăcere; un `False` CU răspuns e servit, §4); un
     răspuns rămas neschimbat de dinaintea ramurii nu contează."""
+    from src.agent.kernel_executors import NoSentence  # noqa: PLC0415 — ciclul agent
+
     _apply_turn_view(ctx, chain.state, chain.reduced.state, chain.delta.thread)
-    verdict = await execute_plans(ctx, deps, chain.planned, chain.outcome)
+    try:
+        verdict = await execute_plans(ctx, deps, chain.planned, chain.outcome, chain.policy)
+    except NoSentence as e:
+        ctx.emit("kernel_sentence_missing", code=e.code)
+        return _NO_SENTENCE
     if verdict is None:
         return _DARK
     if ctx.reply is None or ctx.reply == saved.fields.get("reply"):
@@ -669,11 +694,12 @@ async def run_interpreted_turn(ctx: TurnContext, deps: PipelineDeps) -> bool:
                 log.warning("interpreted_turn: lanțul (%s)", type(e).__name__)
                 reason = _EXCEPTION
     served, record, kernel_turn = False, None, None
+    mark = len(ctx.events)
     if chain is not None:
         try:
             verdict = await _serve(ctx, deps, chain, saved)
-            if verdict == _EXECUTOR_REFUSED:
-                reason = _EXECUTOR_REFUSED
+            if verdict in (_EXECUTOR_REFUSED, _NO_SENTENCE):
+                reason = verdict
             else:
                 served = verdict == _SERVED
                 record = _chain_record(ctx, chain, served=served)
@@ -682,6 +708,7 @@ async def run_interpreted_turn(ctx: TurnContext, deps: PipelineDeps) -> bool:
             log.warning("interpreted_turn: executorii/traceul (%s)", type(e).__name__)
             served, record, kernel_turn, reason = False, None, None, _EXCEPTION
     if not served:
+        _drop_executor_events(ctx, mark)
         try:
             saved.restore(ctx)
         except Exception as e:  # noqa: BLE001 — P6: numărat, calea v1 continuă (declarat)

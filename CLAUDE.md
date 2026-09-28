@@ -389,6 +389,20 @@ e identitatea pe starea CONVERSAȚIEI, dar eliminarea produselor blocate și mem
 se aplică și pe `aside`. Probă: `pytest tests/test_interpreted_turn_b.py
 tests/test_interpreted_turn_b_review.py tests/test_interpreted_turn_a.py tests/test_kernel_contract.py -q`
 (harnessul la nivel de procesor: 103 ture servite × 5 pachete, starea după fiecare == `kernel_step`).
+**Pasul 6 PR C, felia C1 (NX-336) — executorii de CITIRE; flagul rămâne stins.** Seam-ul
+`execute_plans(ctx, deps, planned, outcome, policy)` cheamă `src/agent/kernel_executors.py` (rol
+`orchestrator`: lipici nou, cu porțile kernelului): UN plan, pe executorii de azi, zero apeluri de model
+în plus. `search` = `ToolRun.execute_planned` + compunerea v1 prin `build_plan(kernel=True)` (nu mai
+re-deduce intenția: checkout, cross-sell, chip de set, superlativ, „mai ieftin", R3) + `render`; zero
+rezultate ⇒ fraza `no_results` a pachetului, niciodată ecranul vechi, iar fără frază fallback
+`no_sentence`; `page` = `continue_search_session`; `detail`/`compare` pe handlerele deterministe (o
+comparație fără drept de verdict, I12, rămâne `dark` până la C2); `link` cu id-urile planului; `ask` =
+întrebarea porții cu candidații ca carduri. Rămân `dark`: `reply_only`, `faq`/`order`, mutațiile,
+`bundle`, `delegate`, multi-act (PR D), comparația cu un similar și confirmarea implicită (C2). Frazele
+vin din `DomainPack.kernel_sentences` (vocabular închis `KERNEL_SENTENCE_CODES`, P11), puse o dată
+înaintea răspunsului și în câmpul citit de widget. Un tur căzut după ce un executor a rulat își scoate
+evenimentele (citirile de DB rămân, declarat). Probă: `pytest tests/test_interpreted_turn_c.py
+tests/test_interpreted_turn_a.py tests/test_interpreted_turn_b.py tests/test_kernel_contract.py -q`.
 
 **NX-238 — retrievalul trece printr-un PORT, iar candidatul e inert (verdict `NOT-READY`).**
 `src/retrieval/` e contractul stabil pe care îl consumă NX-239: `RetrievalPort` + `RetrievalBundle`

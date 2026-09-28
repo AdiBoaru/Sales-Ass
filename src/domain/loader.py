@@ -24,7 +24,13 @@ from src.domain.constraints import build_units
 from src.domain.contracts import build_category_requirements
 from src.domain.facets import TypedFacet, build_facets
 from src.domain.normalize import normalize
-from src.domain.pack import DEFAULT_REFERENCE_DIMENSIONS, DomainPack, FacetSpec, SectionSpec
+from src.domain.pack import (
+    DEFAULT_REFERENCE_DIMENSIONS,
+    KERNEL_SENTENCE_CODES,
+    DomainPack,
+    FacetSpec,
+    SectionSpec,
+)
 from src.domain.relation_kinds import load_relation_kinds
 from src.domain.routine_steps import load_routine_steps
 
@@ -195,6 +201,33 @@ def _norm_clarify_templates(raw: Any) -> dict[str, dict[str, str]]:
     return out
 
 
+def _norm_kernel_sentences(raw: Any) -> dict[str, dict[str, str]]:
+    """NX-336 PR C: `locale` → cod → frază. Fail-closed PER FRAZĂ: un cod din afara
+    `KERNEL_SENTENCE_CODES` sau o frază cu un marcator (`{`/`}`) se aruncă și se loghează, restul
+    pachetului se încarcă. Frazele kernelului nu se interpolează, deci un marcator ar ajunge la
+    client ca atare."""
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, dict[str, str]] = {}
+    for locale, per_code in raw.items():
+        if not isinstance(locale, str) or not isinstance(per_code, dict):
+            continue
+        kept: dict[str, str] = {}
+        for code, phrase in per_code.items():
+            if not isinstance(code, str) or not isinstance(phrase, str) or not phrase.strip():
+                continue
+            if code not in KERNEL_SENTENCE_CODES:
+                log.warning("kernel_sentences[%s][%s] respins: cod necunoscut", locale, code)
+                continue
+            if "{" in phrase or "}" in phrase:
+                log.warning("kernel_sentences[%s][%s] respins: marcator în frază", locale, code)
+                continue
+            kept[code] = phrase.strip()
+        if kept:
+            out[locale] = kept
+    return out
+
+
 def _norm_detail_sections(raw: Any) -> tuple[SectionSpec, ...]:
     """Listă de `{kind, max_chars?}` → tuple[SectionSpec]. Intrare fără `kind` string, cu
     `max_chars` ne-întreg sau ≤ 0 → sărită (fail-safe per intrare, ca la fațete). Un `kind`
@@ -305,6 +338,7 @@ def load_domain_pack(business: BusinessConfig) -> DomainPack | None:
         answer_shape_templates=_norm_chip_templates(merged.get("answer_shape_templates")),
         # NX-332: forma INVERSĂ (locale → kind), cu validarea marcatorilor per șablon.
         clarify_templates=_norm_clarify_templates(merged.get("clarify_templates")),
+        kernel_sentences=_norm_kernel_sentences(merged.get("kernel_sentences")),  # NX-336 C
         # NX-205: contractul de completitudine per categorie (fail-closed per intrare).
         required_attributes=build_category_requirements(merged.get("required_attributes")),
         # NX-262: semantica muchiilor din `product_relations` (fail-closed per intrare — o intrare

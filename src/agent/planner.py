@@ -670,9 +670,16 @@ async def build_plan(
     history: str,
     tool_names: list[str],
     prose_skipped: bool = False,
+    kernel: bool = False,
 ) -> ResponsePlan:
     """Faza E: shaping determinist post-loop → `ResponsePlan`. Byte-identic cu vechiul bloc din
-    `agent_stage`. Ramurile care răspund direct setează `ctx.reply` și întorc `handled=True`."""
+    `agent_stage`. Ramurile care răspund direct setează `ctx.reply` și întorc `handled=True`.
+
+    NX-336 PR C, `kernel=True`: turul interpretat a DECIS deja ce se servește (planul, cu țintele
+    rezolvate), deci aici nu rulează nicio formă care RE-DEDUCE intenția din text sau din ecran:
+    checkout-intent, cross-sell, chip-ul de set, superlativul pe ecran, „mai ieftin" și R3 (care pe
+    o căutare cu zero rezultate ar servi ecranul vechi ca răspuns). Rămân porțile de ADEVĂR
+    (siguranța finală, masca de potrivire) și `ctx.retrieval`."""
     route = ctx.route
     # NX-173 (P0): policy-ul turului, o dată. Faza asta aduce produse din DB pe PATRU căi care nu
     # trec prin `ToolRun` (cross-sell, superlativ pe setul afișat, „mai ieftin", rehidratare de
@@ -702,7 +709,8 @@ async def build_plan(
     # are linii și modelul n-a creat linkul, îl creează codul, prin ACELAȘI `execute` (analytics,
     # run.generated_links → cross-sell sare, checkout_offer → CTA pe reply; bookkeeping identic).
     if (
-        not is_order
+        not kernel
+        and not is_order
         and not show_more
         and route.purchase_intent
         and run.checkout_url is None
@@ -729,7 +737,7 @@ async def build_plan(
     # #7b — cross-sell: clientul tocmai a adaugat in cos → complementare ca CARDURI. Extras in
     # `maybe_cross_sell` fiindca are doi apelanti (v1 aici, creierul unic dupa bucla); el emite
     # telemetria si seteaza reply-ul.
-    if await maybe_cross_sell(
+    if not kernel and await maybe_cross_sell(
         ctx,
         deps,
         run=run,
@@ -758,12 +766,15 @@ async def build_plan(
     # NX-316 felia 2/3: un chip de SET apăsat (alegere dintre afișate, pas de rutină, similare).
     # Precede superlativul și «mai ieftin»: comanda e declarată de server, nu dedusă din text.
     chosen = (
-        await resolve_chip_set(ctx, deps, policy=policy) if not is_order and not show_more else []
+        await resolve_chip_set(ctx, deps, policy=policy)
+        if not kernel and not is_order and not show_more
+        else []
     )
     if chosen:
         products = _dedupe(chosen)
     attr_query = (
-        not chosen
+        not kernel
+        and not chosen
         and not is_order
         and get_settings().attr_query_enabled
         and len(ctx.state.displayed_products) >= 2
@@ -787,7 +798,8 @@ async def build_plan(
     # determinist (niciodată tăcere/padding, P6). Sare peste R3 pentru această intenție.
     # NU pe attr_query („care dintre acestea e cea mai ieftină" = superlativ pe set, nu căutare).
     cheaper_intent = (
-        not chosen
+        not kernel
+        and not chosen
         and not is_order
         and not show_more  # „mai arată-mi" deja paginat determinist mai sus
         and not attr_query
@@ -806,7 +818,8 @@ async def build_plan(
     # (gol sau preț negroundat). Rămâne plasa de grounding pentru follow-up-urile neclasificate.
     rehydrated = False
     if (
-        not products
+        not kernel
+        and not products
         and not is_order
         and not cheaper_intent
         and not show_more
