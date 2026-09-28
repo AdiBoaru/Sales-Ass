@@ -64,6 +64,7 @@ from src.conversation.references import (
     VARIANT_DIMENSION,
 )
 from src.conversation.state_v2 import HARD_CAPABLE_SOURCES, ConversationStateV2, Need
+from src.domain.routine_steps import SEP
 from src.tools.base import CATALOG_READ_TOOLS
 from src.tools.catalog_tools import SearchArgs
 
@@ -93,6 +94,11 @@ GAPS: tuple[str, ...] = (
     "no_query",  # nicio cerere, niciun subiect, niciun nume: căutarea n-are ce căuta
     "no_question",  # poarta a cerut o întrebare, dar n-avea cu ce s-o scrie
     "no_subject",  # `find` fără subiect, cuvinte sau nevoi, iar poarta n-a întrebat
+    # D3 (`kernel.v2.1`): bugetul CONVERSAȚIEI e al unui produs; pe o rutină e un plafon pe SUMA
+    # pașilor, deci intră doar o sumă spusă în turul rutinei
+    "routine_budget",
+    # D3: un câmp al cererii fără corespondent într-o rutină (sortare, termeni nemapați)
+    "routine_field",
 )
 
 #: Uneltele buclei delegate (actul `other`): toate, fără cele care citesc catalogul și fără
@@ -375,8 +381,41 @@ class _Planner:
             return self._plan("cart", list(dict.fromkeys(ids)))
         # `bundle`: executorul îl declară pachetul (SOLE: `routine_plan`); fără el, o căutare.
         if bundle_executor(self.state, pack=self.pack, vocab=self.vocab) is not None:
-            return self._plan("bundle")
+            return self._bundle(act)
         return self._search(act, index)
+
+    def _bundle(self, act: Act) -> TurnPlan:
+        """`bundle` (D3, `kernel.v2.1`): familia rutinei din subiect și pachet
+        (`routine_family`), argumentele din STARE ca la căutare (nevoile dure, bugetul dur,
+        preferințele; I2, I7) și ancora = prima țintă `exact` a actului. Fără familie declarată,
+        planul rămâne `bundle` fără argumente, deci pe calea de azi."""
+        family = routine_family(self.state, pack=self.pack, vocab=self.vocab)
+        if family is None:
+            return self._plan("bundle")
+        ids = [p for ref in self._refs_of(act) if ref.outcome == "exact" for p in ref.product_ids]
+        phrase = self._subject_label() or family
+        args = self._search_args(phrase, act, product_name=None)
+        if args.price_max is not None and not self._sum_asked_this_turn():
+            # bugetul conversației (al unui produs, «o cremă sub 50») nu plafonează suma rutinei
+            args = args.model_copy(update={"price_max": None})
+            self._gap("routine_budget")
+        if args.rank_terms or args.sort_mode != "relevance":
+            self._gap("routine_field")
+        return TurnPlan(
+            executor="bundle",
+            product_ids=list(dict.fromkeys(ids))[:1],
+            search_args=args,
+            depends_on=None,
+            family=family,
+        )
+
+    def _sum_asked_this_turn(self) -> bool:
+        """Clientul a spus o SUMĂ în turul ăsta (o limită de preț cu număr, nu relativă la un
+        produs). Doar ea poate fi plafonul total al unei rutine (recenzia D3)."""
+        return any(
+            c.dimension == PRICE_DIMENSION and c.number is not None and c.relative_to is None
+            for c in self.interp.changes
+        )
 
     def _find(self, act: Act, index: int) -> TurnPlan:
         words = read_query(act, pack=self.pack, locale=self.locale).has_words
@@ -649,12 +688,45 @@ def bundle_executor(
     return None
 
 
+def routine_family(
+    state: ConversationStateV2, *, pack: object | None, vocab: CatalogVocabulary | None
+) -> str | None:
+    """Familia rutinei pentru subiectul stării. PUR. Ordinea, de la cel mai precis la cel mai
+    grosier (recenzia D3):
+
+    1. TIPUL subiectului, prin `routine_steps.by_product_type` (tipul → `familie:pas`): o «cremă de
+       față» e a rutinei de față chiar pe raftul `machiaj-fata` (NX-313: „Fata" e machiaj);
+    2. cheia raftului în `family_by_shelf` (o intrare pe un subraft bate rădăcina lui);
+    3. rădăcina raftului în `family_by_shelf`.
+
+    `None` fără subiect sau fără nicio potrivire: planul `bundle` rămâne pe calea de azi."""
+    spec = getattr(pack, "routine_steps", None)
+    families = getattr(spec, "families", None) or {}
+    ptype = state.topic.product_type
+    by_type = getattr(spec, "by_product_type", None) or {}
+    if ptype and ptype in by_type:
+        family = str(by_type[ptype]).partition(SEP)[0]
+        if family in families:
+            return family
+    key = state.topic.category_key
+    table = getattr(spec, "family_by_shelf", None)
+    if not key or not isinstance(table, Mapping) or not table:
+        return None
+    usable = vocab if vocab is not None and not vocab.is_empty() else None
+    root = topic_root_of(usable, key) if usable is not None else None
+    for shelf in (key, root):
+        if shelf and shelf in table:
+            return str(table[shelf])
+    return None
+
+
 __all__ = [
     "DELEGATE_TOOLS",
     "DISCLOSURES",
     "GAPS",
     "MAX_PLANS",
     "TURN_LEVEL",
+    "routine_family",
     "PlannedTurn",
     "bundle_executor",
     "plan_turn",

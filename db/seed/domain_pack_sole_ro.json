@@ -1030,6 +1030,8 @@
   "_product_type_note": "product_type e DERIVAT din numele de catalog (src/catalog/product_type.py), scris de scripts/derive_product_type.py. Valorile de aici sunt cele existente EFECTIV în catalog, citite din DB — nu o listă întreținută separat. Regenerare: rulează jobul, apoi actualizează lista. Fațeta e partitioning fiindcă un cumpărător vrea exact un tip de obiect.",
   "_variant_of_note": "NX-269/270 — alte nuante ale aceluiasi produs. `neighbors`: nuantele sunt vecini directi, nu un drum („alta nuanta a altei nuante\" nu adauga nimic). E felul IEFTIN si REVERSIBIL de a lega nuantele, in locul restructurarii catalogului pe produs-parinte cu variante reale (varianta (b) din NX-269): sursa insasi trateaza fiecare nuanta ca produs separat, deci restructurarea ar fi cost mare cu beneficiu incert. Tipul trebuie DECLARAT aici, nu doar admis de schema (migrarea 048): un tip nedeclarat nu crapa, cade tacut pe comportamentul implicit, deci diferenta dintre „am declarat\" si „ruleaza\" ar fi invizibila — capcana care a prins deja o data pachetul SOLE, cu un `purpose` inexistent respins fail-closed si logat.",
   "routine_steps": {
+    "_family_by_shelf_note": "NX-336 D3: raftul radacina (primul segment din categories.path) -> familia rutinei, pe calea interpretata. Un raft fara intrare (Barbati, Copii) lasa rutina pe calea de azi, unde modelul alege familia.",
+    "family_by_shelf": {"ten": "fata", "par": "par", "corp": "corp", "machiaj": "machiaj"},
     "families": {
       "fata": [
         "curatare",

@@ -429,6 +429,8 @@ def _plan(plan: TurnPlan) -> str:
         body += "  SearchArgs(" + ", ".join(f"{k}={args[k]!r}" for k in sorted(args)) + ")"
     if plan.depends_on is not None:
         body += f"  depends_on={plan.depends_on}"
+    if plan.family is not None:
+        body += f"  family={plan.family}"
     return body
 
 

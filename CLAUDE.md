@@ -63,7 +63,7 @@ gate-ul NX-210**. Direcția aprobată către care migrăm:
 
 **Înghețate până la GO-ul de la NX-210:** enforcement-ul QuerySpec/Match Gate (NX-188, NX-189).
 
-**Kernelul conversațional — contractul `kernel.v1.0` (înghețat 2026-09-25, NORMATIV; azi `kernel.v2.0`, MAJOR, NX-336 PR B: sensul lui I5, poarta de replay derogată de Adi).**
+**Kernelul conversațional — contractul `kernel.v1.0` (înghețat 2026-09-25, NORMATIV; azi `kernel.v2.1`: MAJOR la v2.0, NX-336 PR B, sensul lui I5, poarta de replay derogată de Adi; minor la v2.1, NX-336 D3, `TurnPlan.family`).**
 Sursa: [`docs/KERNEL-CONTRACT-v1.md`](docs/KERNEL-CONTRACT-v1.md); designul din care vine, ca
 referință: [`docs/KERNEL-DESIGN.md`](docs/KERNEL-DESIGN.md). Modelul scrie O interpretare a turului
 (`TurnInterpretation`: acte, schimbări de stare adresate prin handle, referințe, ambiguități); codul
@@ -424,7 +424,14 @@ fără întrebare primește fraza ei; două planuri = coșul întâi, al doilea 
 picat, fraza coșului prima, iar după o mutație reușită nimic nu mai cade pe v1 (nici pe un trace
 picat). Orice refuz fără întrebare al unei mutații primește fraza ei; `cart_add` legacy nu mai
 suprascrie în același tur (defect v1 reparat). Rămân `dark`:
-`reply_only` din `chitchat`, două planuri fără mutație, `bundle` (D3). Frazele vin din
+`reply_only` din `chitchat`, două planuri fără mutație.
+**PR D3 (rutina, `kernel.v2.1`):** familia rutinei e o dată a pachetului
+(`routine_steps.family_by_shelf`, raft → familie), scrisă de planner în `TurnPlan.family` (câmp
+aditiv) împreună cu argumentele din stare; `bundle` rulează `run_planned_routine` (corpul comun cu
+unealta modelului, fără re-judecarea argumentelor pe text) și compunerea v1. Fără familie
+declarată, `bundle` rămâne pe calea de azi. Familia: tipul subiectului, apoi raftul, apoi
+rădăcina; momentul (`am`/`pm`) din nevoile planului; bugetul doar ca sumă spusă în turul rutinei
+(altfel golul `routine_budget`). Frazele vin din
 `DomainPack.kernel_sentences` (vocabular închis `KERNEL_SENTENCE_CODES`, P11), puse o dată înaintea
 răspunsului și în câmpul citit de widget. Un tur căzut după ce un executor a rulat își scoate
 evenimentele (citirile de DB rămân, declarat). Probă: `pytest tests/test_interpreted_turn_c.py

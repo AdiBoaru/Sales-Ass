@@ -353,6 +353,92 @@ def test_the_furniture_bundle_is_only_for_its_shelf():
     assert plan.executor == "search"
 
 
+# --- D3 (`kernel.v2.1`): familia rutinei a planului `bundle` -------------------------------------
+
+
+def _sole_with_family(shelf: str, family: str = "fata") -> Any:
+    pack = fc.pack("sole-ro")
+    spec = dataclasses.replace(pack.routine_steps, family_by_shelf={shelf: family})
+    return dataclasses.replace(pack, routine_steps=spec)
+
+
+def _bundle_turn(changes=()):
+    shelf = _shelf("sole-ro")
+    pid = _ids("sole-ro")[0]
+    needs = (_need("skin_type", "dry", "hard"), _need("budget_max", 200.0, "hard"))
+    interp = _interp(
+        acts=[{"kind": "bundle", "targets": ["r1"]}],
+        references=[{"id": "r1", "text": "asta", "kind": "deictic"}],
+        changes=list(changes),
+    )
+    planned = _plan(
+        "sole-ro",
+        interp,
+        _state(shelf, needs=needs),
+        resolved=(_ref("r1", "exact", [pid]),),
+        loaded=_sole_with_family(shelf),
+    )
+    return planned, pid
+
+
+def test_a_bundle_with_a_declared_family_carries_it_and_the_state_args():
+    """Familia din pachet pe raftul subiectului; argumentele din STARE, ca la căutare (I2);
+    ancora = ținta `exact`. Bugetul intră doar ca SUMĂ spusă în turul rutinei."""
+    price = {"op": "set", "dimension": "price", "relation": "lte", "number": 200.0, "quote": "200"}
+    planned, pid = _bundle_turn([price])
+    plan = _only(planned)
+    assert (plan.executor, plan.family, plan.product_ids) == ("bundle", "fata", [pid])
+    assert plan.search_args is not None and plan.search_args.price_max == 200.0
+    # `skin_type` nu poate filtra dur pe SOLE (`enforce_ready: false`): ordonează, ca la căutare
+    assert plan.search_args.prefer == {"skin_type": ["dry"]}
+    assert "routine_budget" not in planned.gaps
+
+
+def test_a_conversation_budget_does_not_cap_the_routine_total():
+    """Recenzia D3, P1: bugetul CONVERSAȚIEI e al unui produs («o cremă sub 50»); pe o rutină ar
+    plafona SUMA pașilor. Fără o sumă spusă în turul rutinei, nu intră, iar golul se numără."""
+    planned, _ = _bundle_turn()
+    assert _only(planned).search_args.price_max is None
+    assert "routine_budget" in planned.gaps
+
+
+def test_the_subject_type_picks_the_family_before_the_shelf():
+    """Recenzia D3: «cremă de față» e rutina de față chiar pe raftul `machiaj-fata` (NX-313)."""
+    from types import SimpleNamespace as NS
+
+    pack = NS(
+        routine_steps=NS(
+            families={"fata": ("hidratare",), "machiaj": ("baza",)},
+            by_product_type={"crema de fata": "fata:hidratare"},
+            family_by_shelf={"machiaj-fata": "machiaj"},
+        )
+    )
+    state = _state("machiaj-fata", product_type="crema de fata")
+    assert tp.routine_family(state, pack=pack, vocab=None) == "fata"
+    assert tp.routine_family(_state("machiaj-fata"), pack=pack, vocab=None) == "machiaj"
+
+
+def test_a_bundle_without_a_declared_family_stays_on_todays_path():
+    """Fără legătură raft → familie, planul rămâne `bundle` fără argumente: calea de azi."""
+    shelf = _shelf("sole-ro")
+    plan = _only(_plan("sole-ro", _interp(acts=[{"kind": "bundle"}]), _state(shelf)))
+    assert (plan.executor, plan.family, plan.search_args) == ("bundle", None, None)
+
+
+def test_routine_family_reads_the_shelf_then_its_root():
+    from types import SimpleNamespace as NS
+
+    pack = NS(routine_steps=NS(family_by_shelf={"ten": "fata", "machiaj-fata": "machiaj"}))
+    vocab = NS(
+        categories=[NS(key="ten-ingrijirea-tenului", path="ten/ingrijirea-tenului")],
+        is_empty=lambda: False,
+    )
+    assert tp.routine_family(_state("ten-ingrijirea-tenului"), pack=pack, vocab=vocab) == "fata"
+    assert tp.routine_family(_state("machiaj-fata"), pack=pack, vocab=vocab) == "machiaj"
+    assert tp.routine_family(_state("corp-x"), pack=pack, vocab=vocab) is None
+    assert tp.routine_family(_state(), pack=pack, vocab=vocab) is None
+
+
 @pytest.mark.parametrize("name", PACKS)
 @pytest.mark.parametrize(
     "kind,executor",

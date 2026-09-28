@@ -41,7 +41,11 @@ from src.tools.catalog_tools import SearchArgs
 #: ecran, seturile de mai devreme și setul parcat) și memoria întrebării porții se aplică și pe
 #: `aside`. Poarta de replay e DEROGATĂ explicit pentru acest bump: niciun tur interpretat n-a fost
 #: servit în producție (flagul n-a fost aprins niciodată). Schema scrisă de model e neschimbată.
-KERNEL_CONTRACT_VERSION = "kernel.v2.0"
+#: `kernel.v2.1` (NX-336 D3, MINOR): `TurnPlan.family`, câmp aditiv scris doar de planner: familia
+#: rutinei unui plan `bundle`, din subiectul stării și `routine_steps.family_by_shelf` al
+#: pachetului. Niciun invariant, rând de proprietate sau regulă de stare nu se schimbă; schema
+#: scrisă de model e neschimbată.
+KERNEL_CONTRACT_VERSION = "kernel.v2.1"
 
 # --- scrise de model ----------------------------------------------------------------------------
 
@@ -184,6 +188,9 @@ class TurnPlan(_CodeWritten):
     product_ids: list[str]
     search_args: SearchArgs | None
     depends_on: int | None  # indexul unui plan anterior din același tur (multi-act)
+    #: `kernel.v2.1` (D3): familia rutinei pe un plan `bundle` (scrisă de planner din subiect și
+    #: pachet); `None` pe orice alt plan și pe un `bundle` fără familie declarată (calea de azi).
+    family: str | None = None
 
 
 class AnswerPolicy(_CodeWritten):
