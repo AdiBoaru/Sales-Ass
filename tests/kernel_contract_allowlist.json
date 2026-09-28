@@ -73,8 +73,8 @@
     },
     {
       "file": "src/agent/kernel_executors.py",
-      "function": "_compose",
-      "reason": "NX-336 PR C: mesajul curent pleaca neschimbat ca `query` spre compunerea v1 (build_plan + render), exact ca pe calea de azi (agent_stage), ca modelul de compunere sa scrie despre ce a cerut clientul. Kernelul nu ramifica pe el: planul turului e deja decis."
+      "function": "_message",
+      "reason": "NX-336 PR C/D1: mesajul curent pleaca neschimbat ca `query` spre compunerea v1 (build_plan + render) si spre bucla restransa (delegate/faq/order), exact ca pe calea de azi (agent_stage), ca modelul sa raspunda la ce a cerut clientul. Kernelul nu ramifica pe el: planul turului e deja decis."
     },
     {
       "file": "src/agent/interpreted_turn.py",
