@@ -327,6 +327,10 @@ din descrieri și cereri de recomandare, iar `bundle` se pierdea. **339c** = `in
 reparații) + **setul C** (`tests/golden/kernel_interpret_holdout/`, 89 de ture scrise de un agent care n-a
 văzut nimic, ÎNGHEȚAT pe SHA-256 înaintea rulării; B a fost citit la regresii, deci nu mai e nevăzut) +
 pragul de zgomot (v1 rulat a doua oară pe A). Regula GO pentru v3 e pre-înregistrată în card.
+**Verdict v3: NO-GO**, pe un singur punct: F1 pe A 0,768 (< 0,85). Restul trece (C act 0,944, F1
+0,976; A act 0,967, fir 1,0; 6 regresii ≤ zgomotul de 11), iar F1 pe A stă la 0,77-0,80 pe TOATE
+prompturile, deci nu e al promptului: clasele (`product_type` spus în treacăt, `concerns` inferate,
+`unmapped`) cer reguli scrise în contract, apoi un set nevăzut nou. Flagul kernelului rămâne stins.
 **Pasul 6 PR A (NX-336) — schela turului interpretat, DARK: lanțul rulează pe un tur real, v1
 răspunde.** `INTERPRETED_TURN_ENABLED` (OFF; poarta de boot cere stările v2 citite ȘI scrise,
 scurtăturile pe resolverul v2 + `NAMED_SHORTCUT_TARGETS_ENABLED` și gardul de rafinare, refuză
