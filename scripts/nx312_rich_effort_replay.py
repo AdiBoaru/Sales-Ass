@@ -60,7 +60,7 @@ from src.agent import usage  # noqa: E402
 from src.agent.finalize import (  # noqa: E402
     _resolve_handles,
     _rich_schema,
-    item_handles,
+    rich_handles,
     rich_omissions,
     rich_user_message,
 )
@@ -144,7 +144,7 @@ def build_call(
 
 
 def _handles_for(products: list[dict[str, Any]]) -> dict[str, str] | None:
-    return item_handles(products) if get_settings().rich_item_handles_enabled else None
+    return rich_handles(products)  # NX-343: proprietarul unic, ca `_finalize_rich`
 
 
 def visible_text(rich: Any) -> str:

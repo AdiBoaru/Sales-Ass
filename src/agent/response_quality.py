@@ -120,7 +120,17 @@ def explain_shape_report(ctx: TurnContext) -> dict[str, Any] | None:
     pack = getattr(ctx.business, "domain_pack", None)
     if not products:
         return {"has_instructions": False, "reason": "no_sheet", "path": _path(r)}
-    product = products[0]
+    # NX-343: aceeași țintă ca directiva (produsul întrebat, nu `products[0]`), altfel măsurătoarea
+    # ar compara răspunsul cu instrucțiunile altui produs.
+    state = getattr(ctx, "state", None)
+    product, _target = shape_mod.howto_target(
+        products,
+        list(getattr(state, "displayed_products", None) or []),
+        getattr(getattr(ctx, "message", None), "body", "") or "",
+        getattr(ctx, "language", None),
+    )
+    if product is None:
+        return {"has_instructions": False, "reason": "no_target", "path": _path(r)}
     instructions, reason = shape_mod.howto_instructions(product, pack)
     if not instructions:
         # Fișa fără instrucțiuni: răspunsul corect e „nu am", deci nu există ce măsura.

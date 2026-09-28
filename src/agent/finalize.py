@@ -163,6 +163,19 @@ def item_handles(products: list[dict[str, Any]]) -> dict[str, str]:
     return {f"P{i}": str(p["id"]) for i, p in enumerate(products, start=1) if p.get("id")}
 
 
+def rich_handles(products: list[dict[str, Any]]) -> dict[str, str] | None:
+    """Handle-urile turului sub kill-switch-ul NX-324, sau `None`. PROPRIETARUL UNIC: bundle-ul,
+    schema, directiva howto (NX-343) și replay-ul NX-312 le iau de aici, deci nu pot diverge."""
+    return item_handles(products) if get_settings().rich_item_handles_enabled else None
+
+
+def bundle_ref(products: list[dict[str, Any]], product_id: str) -> str:
+    """Numele cu care modelul vede produsul în bundle: handle-ul (`P2`) sau, fără handle-uri, id-ul.
+    NX-343: directiva howto numea produsul prin UUID lângă un bundle scris în `[P1]…[Pk]`."""
+    handle_of = {pid: h for h, pid in (rich_handles(products) or {}).items()}
+    return handle_of.get(product_id, product_id)
+
+
 def _with_item_enum(base: dict[str, Any], n_items: int) -> dict[str, Any]:
     """Schema cu `product_id` restrâns la `P1`…`Pn`, pe `items` și pe `pick`. Copie, nu mutație:
     baza e o constantă de modul folosită concurent de toate turele."""
@@ -518,11 +531,19 @@ async def _turn_shape(
                 else:
                     offer, phrases, offer_reason = None, (), "unphrasable"
     elif profile == "howto" and howto_on:
-        product = products[0]
+        # NX-343: produsul ÎNTREBAT (nu `products[0]`), numit cu handle-ul pe care modelul îl vede
+        # în bundle (`[P1]…`, NX-324), nu cu UUID-ul, care nu apare nicăieri altundeva în mesaj.
+        product, target = answer_shape.howto_target(
+            products, list(ctx.state.displayed_products or []), ctx.message.body or "", ctx.language
+        )
+        if product is None:
+            ctx.emit("howto_instructions", reason="no_target", target=target)
+            return _TurnShape()
         instructions, reason = answer_shape.howto_instructions(product, pack)
-        ctx.emit("howto_instructions", reason=reason)
+        ctx.emit("howto_instructions", reason=reason, target=target)
         if reason in ("instructions", "no_instructions"):
-            lines.append(answer_shape.howto_directive(str(product.get("id") or ""), instructions))
+            ref = bundle_ref(products, str(product.get("id") or ""))
+            lines.append(answer_shape.howto_directive(ref, instructions))
             if instructions:
                 import re  # noqa: PLC0415
 
@@ -903,7 +924,7 @@ async def _finalize_rich(
     Întoarce `_RichOutcome`; `reply is None` → fallback pe proză."""
     shape = shape or _TurnShape()
     # NX-324: handle-uri scurte în loc de UUID-uri (kill-switch `RICH_ITEM_HANDLES_ENABLED`).
-    handles = item_handles(products) if get_settings().rich_item_handles_enabled else None
+    handles = rich_handles(products)
     user = rich_user_message(
         ctx, query, products, history, notes=notes, shape=shape, handles=handles
     )

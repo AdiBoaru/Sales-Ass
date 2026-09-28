@@ -381,6 +381,37 @@ def judge_question(question: object, phrases: Sequence[str]) -> tuple[str | None
 HOWTO_REASONS: tuple[str, ...] = ("instructions", "no_instructions", "no_sheet", "not_declared")
 
 
+def howto_target(
+    products: Sequence[Mapping[str, Any]],
+    displayed: Sequence[Any],
+    message: str,
+    locale: str | None = None,
+) -> tuple[Mapping[str, Any] | None, str]:
+    """NX-343: produsul despre care întreabă clientul „cum se folosește", sau `None`. PURĂ.
+
+    Înainte era mereu `products[0]`: pe setul afișat reîncărcat (R3) primul e primul CARD, deci
+    «cum se folosește a doua?» primea instrucțiunile primului. Ordinea, prima care se aplică:
+
+    1. referința din mesaj, rezolvată pe ecranul de DINAINTE (`resolve_from_displayed`: produs unic,
+       ordinal, nume), dacă produsul e printre cele ale turului ⇒ `reference`;
+    2. produsele turului SUNT chiar setul afișat (reîncărcarea R3), deci niciun instrument n-a ales
+       un produs anume ⇒ `None`, `ambiguous` (mai bine fără instrucțiuni decât pe cardul greșit);
+    3. altfel, primul produs e cel pe care modelul a cerut detaliul (substitutele vin după el) ⇒
+       `detail`."""
+    from src.agent.reference_resolver import resolve_from_displayed  # noqa: PLC0415
+
+    if not products:
+        return None, "no_products"
+    by_id = {str(p.get("id")): p for p in products}
+    resolved = resolve_from_displayed(message or "", list(displayed), locale=locale)
+    if resolved.product_id is not None and str(resolved.product_id) in by_id:
+        return by_id[str(resolved.product_id)], "reference"
+    shown = [str(getattr(d, "product_id", "")) for d in displayed]
+    if len(products) > 1 and shown and set(by_id) == set(shown):
+        return None, "ambiguous"
+    return products[0], "detail"
+
+
 def howto_instructions(product: Mapping[str, Any], pack: object) -> tuple[str | None, str]:
     """`(textul instrucțiunilor MAGAZINULUI, motiv)` pentru un produs. PURĂ.
 
