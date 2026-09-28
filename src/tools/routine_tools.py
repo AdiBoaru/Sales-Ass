@@ -542,6 +542,37 @@ async def routine_plan_tool(
     ctx: TurnContext, deps: PipelineDeps, args: dict[str, Any]
 ) -> ToolResult:
     """Secvența de pași a familiei, din fațeta `routine_step` (+ graful, dacă există ancoră)."""
+    return await _routine(ctx, deps, args)
+
+
+async def run_planned_routine(
+    ctx: TurnContext,
+    deps: PipelineDeps,
+    a: RoutineArgs,
+    *,
+    prefer: dict[str, list[str]] | None = None,
+) -> ToolResult:
+    """NX-336 D3: rutina planificată de kernel. Familia vine din subiect și pachet, nevoile și
+    bugetul din STARE (doar nevoile dure, bugetul doar dintr-o nevoie `explicit`, I7), ancora e o
+    țintă `exact`. Deci argumentele NU se mai re-judecă pe textul recent (`routine_arg_provenance`
+    ar arunca un buget spus acum zece mesaje, lecția NX-333), iar preferințele moi ale stării
+    ordonează în pas, ca `SearchArgs.prefer`. Același corp ca unealta modelului (`_routine`)."""
+    return await _routine(
+        ctx, deps, a.model_dump(exclude_none=True), planned=True, prefer_planned=prefer
+    )
+
+
+async def _routine(
+    ctx: TurnContext,
+    deps: PipelineDeps,
+    args: dict[str, Any],
+    *,
+    planned: bool = False,
+    prefer_planned: dict[str, list[str]] | None = None,
+) -> ToolResult:
+    """Corpul comun: unealta modelului (`planned=False`, byte-identic cu ce rula înainte) și rutina
+    planificată de kernel (`planned=True`: fără re-judecarea argumentelor pe text, cu
+    preferințele stării)."""
     a = RoutineArgs(**args)
     pack = getattr(ctx.business, "domain_pack", None)
     spec = getattr(pack, "routine_steps", None)
@@ -571,7 +602,7 @@ async def routine_plan_tool(
     # NX-321: argumentele fără sursă ies ÎNAINTE de rezoluție și de buget, deci nu ating nici
     # `routine_candidates(include_cheapest=…)`, nici `_fit_budget`.
     provenance: RoutineArgVerdict | None = None
-    if get_settings().routine_arg_provenance_enabled:
+    if not planned and get_settings().routine_arg_provenance_enabled:
         texts = client_texts(ctx)
         provenance = routine_arg_provenance(
             a.budget_max,
@@ -593,6 +624,11 @@ async def routine_plan_tool(
         prefer, hard = apply_need_menu(ctx, need_args, vocab, consumer="routine_plan")
         for dim, keys in hard.items():
             facet_filters[dim] = sorted({*facet_filters.get(dim, []), *keys})
+    if prefer_planned:
+        # D3: preferințele moi ale stării ordonează în pas (niciodată filtru), ca pe căutare
+        prefer = {**(prefer or {})}
+        for dim, keys in prefer_planned.items():
+            prefer[dim] = list(dict.fromkeys([*prefer.get(dim, []), *keys]))
     if provenance is not None:
         asked_budget = args.get("budget_max") is not None
         ctx.emit(

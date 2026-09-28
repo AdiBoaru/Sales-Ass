@@ -33,9 +33,14 @@ de-al doilea plan lasă răspunsul mutației. O mutație refuzată de poartă f�
 (`reply_only` cu motivul `mutation_unavailable` / `mutation_not_exact`) primește fraza pachetului
 cu același nume.
 
+**Rutina (PR D3):** `bundle` cu familia decisă de planner (`TurnPlan.family`, din subiect și
+`routine_steps.family_by_shelf`) rulează `run_planned_routine`: nevoile dure, bugetul dur și
+preferințele din `SearchArgs`-ul planului, ancora = ținta `exact`, fără re-judecarea argumentelor
+pe textul recent. O rutină care nu se poate compune refuză (`False`), iar răspunsul e al căii v1.
+
 Ce nu e legat aici întoarce `None` (turul rămâne pe calea v1, motivul `dark`): restul lui
-`reply_only` (din `chitchat`, unde v1 răspunde în context), două planuri fără mutație și `bundle`
-(PR D3).
+`reply_only` (din `chitchat`, unde v1 răspunde în context), două planuri fără mutație și un `bundle`
+fără familie declarată.
 O căutare care nu e o căutare nouă (aceeași amprentă, sesiune epuizată) refuză (`False`): răspunsul
 „nu mai am" e al căii v1, nu „nu am găsit în catalog".
 
@@ -102,8 +107,11 @@ READ_EXECUTORS: frozenset[str] = frozenset(
         "delegate",
         "cart",
         "reply_only",
+        "bundle",
     }
 )
+#: D3: singura unealtă de `bundle` pe care o știe kernelul (`DomainPack.bundle_executors`).
+_ROUTINE_TOOL = "routine_plan"
 #: Motivele porții pentru o mutație refuzată fără întrebare; fraza lor are același cod (D2).
 _REFUSED_MUTATION: frozenset[str] = frozenset({"mutation_unavailable", "mutation_not_exact"})
 #: Codurile fail-closed: SUNT răspunsul, deci fără frază turul nu e servit de kernel.
@@ -586,6 +594,7 @@ class _SecondPlan:
     patch: dict[str, Any]
     proposals: list[Any]
     events: int
+    routine: Any
 
     @classmethod
     def take(cls, ctx: TurnContext) -> _SecondPlan:
@@ -593,10 +602,12 @@ class _SecondPlan:
             patch=copy.deepcopy(ctx.state_patch),
             proposals=list(ctx.state_proposals),
             events=len(ctx.events),
+            routine=ctx.routine,
         )
 
     def restore(self, ctx: TurnContext) -> None:
         _restore_second_plan(ctx, self.patch, self.proposals, self.events)
+        ctx.routine = self.routine  # o rutină a planului care nu servește nu se randează
 
 
 def _restore_second_plan(
@@ -703,7 +714,47 @@ async def _run_plan(
         return await _compare(ctx, deps, ids, policy_for)
     if kind in DELEGATED_TOOLS:
         return await _delegate(ctx, deps, DELEGATED_TOOLS[kind])
+    if kind == "bundle":
+        return await _bundle(ctx, deps, plan)
     return None
+
+
+def _routine_moment(ctx: TurnContext, args: Any) -> str | None:
+    """Momentul rutinei (recenzia D3): o valoare din `routine_steps.time_markers` al pachetului
+    (`am`/`pm`) printre nevoile sau preferințele planului. O rutină de seară nu mai cere protecția
+    solară, ca pe v1, unde modelul pune `moment`. Fără potrivire: rutina de zi întreagă."""
+    markers = getattr(getattr(_pack(ctx), "routine_steps", None), "time_markers", None) or {}
+    values = [
+        *(args.concerns or []),
+        *(args.features or []),
+        *(v for vals in (args.prefer or {}).values() for v in vals),
+    ]
+    return next((str(v) for v in values if str(v) in markers), None)
+
+
+async def _bundle(ctx: TurnContext, deps: PipelineDeps, plan: TurnPlan) -> bool | None:
+    """Rutina planificată (D3). Fără familie, fără argumente sau cu altă unealtă de `bundle` în
+    pachet ⇒ `None` (calea de azi); o rutină necompusă ⇒ `False` (calea v1 o spune)."""
+    from src.tools.routine_tools import RoutineArgs  # noqa: PLC0415 — ciclul unelte ↔ agent
+
+    args = plan.search_args
+    tools = set((getattr(_pack(ctx), "bundle_executors", None) or {}).values())
+    if plan.family is None or args is None or tools != {_ROUTINE_TOOL}:
+        return None
+    needs = [str(v) for v in [*(args.concerns or []), *(args.features or [])] if v]
+    routine = RoutineArgs(
+        family=plan.family,
+        concerns=needs,
+        budget_max=args.price_max,
+        anchor_id=plan.product_ids[0] if plan.product_ids else None,
+        moment=_routine_moment(ctx, args),
+    )
+    run = ToolRun(ctx, deps)
+    result = await run.execute_planned_routine(routine, prefer=dict(args.prefer or {}) or None)
+    if not result.ok or not run.retrieved:
+        return False
+    await _compose(ctx, deps, run, list(run.retrieved), page=False)
+    return ctx.reply is not None
 
 
 async def execute_read_plans(

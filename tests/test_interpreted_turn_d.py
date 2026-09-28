@@ -639,3 +639,147 @@ def test_a_turn_with_a_cart_act_is_a_mutating_turn():
     assert _mutating_turn(chain(["find", "cart"]))
     assert not _mutating_turn(chain(["chitchat"]))
     assert not _mutating_turn(chain(["cart", "find"], skipped=(0,)))
+
+
+# --- D3: rutina planificată -----------------------------------------------------------------------
+
+
+def _bundle_plan(family="fata", ids=(), prefer=None, price_max=None, concerns=None):
+    from src.tools.catalog_tools import SearchArgs
+
+    args = SearchArgs(query="ten", price_max=price_max, concerns=concerns, prefer=prefer or {})
+    return TurnPlan(
+        executor="bundle",
+        product_ids=list(ids),
+        search_args=args,
+        depends_on=None,
+        family=family,
+    )
+
+
+@pytest.fixture
+def sole(monkeypatch):
+    cat = sh.catalog("sole-ro")
+    sh.install(monkeypatch, cat, executors=True)
+    return cat
+
+
+@pytest.fixture
+def routine_run(monkeypatch, sole):
+    """`run_planned_routine` înregistrat: ce argumente a primit și ce întoarce (`ok`)."""
+    state = NS(calls=[], ok=True)
+
+    async def planned(ctx, deps, a, *, prefer=None):
+        state.calls.append((a.model_dump(exclude_none=True), prefer))
+        rows = sh.product_rows(sole, list(sole.items)[:3])
+        return ToolResult(ok=state.ok, products=rows, llm_view="rutina")
+
+    monkeypatch.setattr("src.tools.routine_tools.run_planned_routine", planned)
+    return state
+
+
+async def test_bundle_runs_the_planned_routine_with_the_plan_args(sole, routine_run):
+    """D3: familia planului, nevoile și bugetul din `SearchArgs`, ancora = ținta `exact`,
+    preferințele stării; răspunsul e compunerea v1."""
+    pid = list(sole.items)[0]
+    plan = _bundle_plan(
+        ids=[pid], prefer={"skin_type": ["dry"]}, price_max=200.0, concerns=["acne"]
+    )
+    ctx = _ctx(sole)
+    planned = PlannedTurn(plans=(plan,), primary=0)
+    assert await kx.execute_read_plans(ctx, _deps(LoopLLM()), planned, _outcome()) is True
+    [(args, prefer)] = routine_run.calls
+    assert args == {
+        "family": "fata",
+        "concerns": ["acne"],
+        "budget_max": 200.0,
+        "anchor_id": pid,
+    }
+    assert prefer == {"skin_type": ["dry"]}
+    assert ctx.reply is not None and _events(ctx, "tool_call")[-1]["name"] == "routine_plan"
+
+
+@pytest.mark.parametrize(
+    ("prefer", "concerns", "moment"),
+    [
+        ({"routine_time": ["pm"]}, None, "pm"),
+        (None, ["am"], "am"),
+        ({"routine_time": ["am_pm"]}, None, None),
+        (None, None, None),
+    ],
+)
+async def test_the_routine_moment_comes_from_the_plan(sole, routine_run, prefer, concerns, moment):
+    """Recenzia D3, P1: o valoare din `time_markers` (`am`/`pm`) printre nevoile sau preferințele
+    planului devine `moment` (o rutină de seară fără protecție solară, ca pe v1)."""
+    planned = PlannedTurn(plans=(_bundle_plan(prefer=prefer, concerns=concerns),), primary=0)
+    await kx.execute_read_plans(_ctx(sole), _deps(LoopLLM()), planned, _outcome())
+    [(args, _)] = routine_run.calls
+    assert args.get("moment") == moment
+
+
+async def test_a_routine_that_cannot_be_composed_refuses(sole, routine_run):
+    routine_run.ok = False
+    planned = PlannedTurn(plans=(_bundle_plan(),), primary=0)
+    assert await kx.execute_read_plans(_ctx(sole), _deps(LoopLLM()), planned, _outcome()) is False
+
+
+@pytest.mark.parametrize("family", [None])
+async def test_a_bundle_without_a_family_stays_dark(sole, routine_run, family):
+    planned = PlannedTurn(plans=(_bundle_plan(family=family),), primary=0)
+    assert await kx.execute_read_plans(_ctx(sole), _deps(LoopLLM()), planned, _outcome()) is None
+    assert routine_run.calls == []
+
+
+async def test_a_bundle_on_another_tool_stays_dark(electronics, routine_run):
+    """Kernelul știe doar `routine_plan`; un pachet cu alt executor de `bundle` rămâne pe v1."""
+    planned = PlannedTurn(plans=(_bundle_plan(),), primary=0)
+    assert (
+        await kx.execute_read_plans(_ctx(electronics), _deps(LoopLLM()), planned, _outcome())
+        is None
+    )
+
+
+async def test_the_planned_routine_does_not_rejudge_its_args_on_recent_text(monkeypatch, sole):
+    """D3: bugetul și nevoile planului vin din STARE (bugetul doar dintr-o nevoie `explicit`, I7),
+    deci `routine_arg_provenance` (care ar arunca un buget spus acum zece mesaje) nu rulează pe
+    calea planificată; pe unealta modelului rulează ca azi."""
+    from src.config import get_settings
+    from src.tools import routine_tools as rt
+
+    monkeypatch.setattr(get_settings(), "routine_arg_provenance_enabled", True)
+    judged = []
+
+    def provenance(*a, **kw):
+        judged.append(1)
+        return rt.RoutineArgVerdict(None, False, (), ())
+
+    async def no_candidates(conn, business_id, **kw):
+        return []
+
+    monkeypatch.setattr(rt, "routine_arg_provenance", provenance)
+    monkeypatch.setattr(rt, "routine_candidates", no_candidates)
+    ctx = _ctx(sole)
+    deps = _deps(LoopLLM())
+    a = rt.RoutineArgs(family="fata", budget_max=150.0)
+    await rt.run_planned_routine(ctx, deps, a)
+    assert judged == []
+    await rt.routine_plan_tool(ctx, deps, {"family": "fata", "budget_max": 150.0})
+    assert judged == [1]
+
+
+def test_the_loader_validates_family_by_shelf():
+    import json
+    from pathlib import Path
+
+    from src.domain.routine_steps import RoutineStepConfigError, build_spec, load_routine_steps
+
+    raw = json.loads(Path("db/seed/domain_pack_sole_ro.json").read_text(encoding="utf-8"))[
+        "routine_steps"
+    ]
+    assert build_spec(raw).family_by_shelf["ten"] == "fata"
+    broken = {**raw, "family_by_shelf": {"ten": "nu-exista"}}
+    with pytest.raises(RoutineStepConfigError):
+        build_spec(broken)
+    # cheie de rafinament: o legătură stricată costă legătura, nu rutinele
+    degraded = load_routine_steps(broken)
+    assert degraded.families and degraded.family_by_shelf == {}

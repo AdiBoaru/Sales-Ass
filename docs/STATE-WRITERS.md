@@ -219,6 +219,6 @@ Fiecare loc din `src/**/*.py` care scrie starea conversației (v1 sau v2), deriv
 | `src/agent/interpreted_turn.py:_restore_state_fields` | `dynamic_patch_update_arg` |
 | `src/agent/kernel_executors.py:_restore_second_plan` | `dynamic_patch_mutating_call` |
 | `src/agent/kernel_executors.py:_restore_second_plan` | `dynamic_patch_update_arg` |
+| `src/agent/tool_executor.py:_absorb_planned` | `dynamic_patch_update_arg` |
 | `src/agent/tool_executor.py:_execute_serialized` | `dynamic_patch_update_arg` |
-| `src/agent/tool_executor.py:execute_planned` | `dynamic_patch_update_arg` |
 

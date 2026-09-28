@@ -289,11 +289,26 @@ class ToolRun:
         doar reducerul. Întoarce `ToolResult`-ul căutării."""
         from src.tools.catalog_tools import run_planned_search  # noqa: PLC0415 — ciclul unelte
 
-        ctx, deps = self.ctx, self.deps
         started = perf_counter()
         with turn_latency.span("tools"):
-            result = await run_planned_search(ctx, deps, args)
-        self.called.append("search_products")
+            result = await run_planned_search(self.ctx, self.deps, args)
+        return self._absorb_planned("search_products", result, args, started)
+
+    async def execute_planned_routine(
+        self, args: Any, *, prefer: dict[str, list[str]] | None = None
+    ) -> Any:
+        """NX-336 D3: rutina PLANULUI kernelului (`RoutineArgs` din planul `bundle`), cu aceeași
+        acumulare ca `execute_planned`. Întoarce `ToolResult`-ul rutinei."""
+        from src.tools.routine_tools import run_planned_routine  # noqa: PLC0415 — ciclul unelte
+
+        started = perf_counter()
+        with turn_latency.span("tools"):
+            result = await run_planned_routine(self.ctx, self.deps, args, prefer=prefer)
+        return self._absorb_planned("routine_plan", result, args, started)
+
+    def _absorb_planned(self, name: str, result: Any, args: Any, started: float) -> Any:
+        ctx = self.ctx
+        self.called.append(name)
         products = self._safe_products(result.products)
         self.retrieved.extend(products)
         if result.relevance is not None:
@@ -304,9 +319,9 @@ class ToolRun:
             ctx.state_patch.update(result.state_patch)
         ctx.emit(
             "tool_call",
-            name="search_products",
+            name=name,
             ok=result.ok,
-            args=_safe_tool_args("search_products", args.model_dump(exclude_none=True)),
+            args=_safe_tool_args(name, args.model_dump(exclude_none=True)),
             n_results=len(products),
             latency_ms=round((perf_counter() - started) * 1000, 1),
             error=(result.error if not result.ok else None),
