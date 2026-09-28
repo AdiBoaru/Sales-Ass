@@ -322,6 +322,11 @@ traficul real A). **339b** = promptul `interpret.v2` (7 reguli generice: actul e
 magazinul; întrebarea despre un articol e `detail`; `other` doar când nu se potrivește nimic; `aside` doar
 magazin/conversație; ce descrie clientul devine schimbare; valoarea din meniu doar când cuvintele o numesc;
 `cart` doar la cerere explicită), înghețat înaintea rulării pe A și B; schema scrisă de model neschimbată.
+Verdict v2: **NO-GO** (A act 0,889, F1 0,784; B scade; 11 regresii pe A): „whether it suits" făcea `detail`
+din descrieri și cereri de recomandare, iar `bundle` se pierdea. **339c** = `interpret.v3` (doar cele două
+reparații) + **setul C** (`tests/golden/kernel_interpret_holdout/`, 89 de ture scrise de un agent care n-a
+văzut nimic, ÎNGHEȚAT pe SHA-256 înaintea rulării; B a fost citit la regresii, deci nu mai e nevăzut) +
+pragul de zgomot (v1 rulat a doua oară pe A). Regula GO pentru v3 e pre-înregistrată în card.
 **Pasul 6 PR A (NX-336) — schela turului interpretat, DARK: lanțul rulează pe un tur real, v1
 răspunde.** `INTERPRETED_TURN_ENABLED` (OFF; poarta de boot cere stările v2 citite ȘI scrise,
 scurtăturile pe resolverul v2 + `NAMED_SHORTCUT_TARGETS_ENABLED` și gardul de rafinare, refuză

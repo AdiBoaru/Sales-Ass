@@ -573,5 +573,25 @@ def test_the_old_value_rule_is_replaced_not_duplicated():
     assert system.count("value: a code from the menu") == 1
 
 
-def test_the_prompt_version_is_v2():
-    assert ic.INTERPRET_PROMPT_VERSION == "interpret.v2"
+# --- NX-339c: interpret.v3 = v2 cu regula 2 fără „whether it suits" și bundle reformulat --------
+
+
+def test_v3_detail_rule_no_longer_covers_whether_an_item_suits():
+    """Pe v2, „whether it suits" făcea din descrierea clientului despre sine sau din cererea de
+    recomandare un `detail` (11 regresii pe A, 7 pe B). v3 o scoate, restul regulii rămâne."""
+    system = " ".join(ti.system_prompt(_input("electronics")).split())
+    assert "whether it suits" not in system
+    assert "(how to use it, why), with a reference to that item" in system
+
+
+@pytest.mark.parametrize("pack", ALL_PACKS)
+def test_v3_bundle_covers_items_used_together_without_naming_them(pack):
+    """Pe v2, „fă-mi o rutină" ieșea `find`: bundle cerea articolele numite. Formularea e generică
+    (poarta I14 pe adaptor), fără cuvântul unui vertical."""
+    system = " ".join(ti.system_prompt(_input(pack)).split())
+    assert "bundle: several items meant to be used together, as one set or in a sequence" in system
+    assert "bundle: a set of items that go together" not in system
+
+
+def test_the_prompt_version_is_v3():
+    assert ic.INTERPRET_PROMPT_VERSION == "interpret.v3"

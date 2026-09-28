@@ -682,3 +682,56 @@ async def test_the_model_side_validates_with_the_same_earlier_words_as_the_label
         dry_run=False,
     )
     assert seen == [c.earlier for c in later] and all(seen)
+
+
+# --- NX-339c: setul C, scris separat pentru verdictul lui interpret.v3 ----------------------------
+
+
+@pytest.fixture(scope="module")
+def cases_c():
+    return rp.journey_cases(rp.HOLDOUT_C_DIR, set_name="C")
+
+
+def test_set_c_is_frozen_before_any_run():
+    """Setul C se îngheață ÎNAINTEA primei rulări: o etichetă schimbată după ce s-au văzut
+    rezultatele ar face din el un set de reglaj. Amprenta e pe bytes normalizați CRLF→LF."""
+    assert rp.holdout_c_digest() == rp.HOLDOUT_C_SHA256
+
+
+def test_set_c_labels_are_well_formed_and_nothing_is_excluded(cases_c):
+    journeys = replay.load_journeys(rp.HOLDOUT_C_DIR)
+    assert [p for j in journeys for p in replay.label_problems(j)] == []
+    assert all(j.journey_id.startswith("c") for j in journeys)
+    assert not any(rp.injected_state(j) for j in journeys)
+    assert {c.set_name for c in cases_c} == {"C"}
+    assert len(cases_c) == 89
+
+
+def test_set_c_does_not_overlap_the_seen_journeys():
+    seen = {j.journey_id for j in replay.load_journeys()}
+    seen_texts = {t.user_input for j in replay.load_journeys() for t in j.turns}
+    c = replay.load_journeys(rp.HOLDOUT_C_DIR)
+    assert not ({j.journey_id for j in c} & seen)
+    assert not ({t.user_input for j in c for t in j.turns} & seen_texts)
+
+
+async def test_a_model_that_answers_the_set_c_label_scores_one(cases_c):
+    """Paritatea unealtei pe setul C: o etichetă pe care comparatorul n-o poate reproduce ar
+    număra o ratare a unealtei ca ratare a modelului."""
+    journeys = {j.journey_id: j for j in replay.load_journeys(rp.HOLDOUT_C_DIR)}
+    fake = CountingLLM(
+        [journeys[c.journey_id].turns[c.index].expect["interpretation"] for c in cases_c]
+    )
+    rows = await rp.run_journeys(cases_c, fake, efforts=("none",), seed=1, dry_run=False)
+    arm = rp.summarize_sets(rows, ("none",))["sets"]["C"]["none"]
+    assert arm["outcomes"] == {"ok": len(cases_c)}
+    for field in ("primary_act", "thread", "targets", "ambiguity"):
+        assert arm[field]["rate"] in (1.0, None), (field, arm[field])
+
+
+async def test_set_c_dry_run_makes_zero_calls(monkeypatch, capsys):
+    fake = CountingLLM()
+    monkeypatch.setattr("src.agent.llm.get_llm", lambda: fake)
+    assert await rp.main(["--journeys", "--journeys-dir", str(rp.HOLDOUT_C_DIR)]) == 0
+    assert fake.calls == 0
+    assert "'C': 89" in capsys.readouterr().out

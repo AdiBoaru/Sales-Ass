@@ -258,9 +258,10 @@ subject.
 says WHAT the customer asks for, never HOW, and never whether the store sells it: code decides \
 availability. find: wants items, including items the store may not carry. show_more: more of the \
 same results. compare, detail, link, cart: about items named by references. detail also covers a \
-question about an item on screen or just discussed (how to use it, why, whether it suits), with a \
-reference to that item. cart: only when the customer explicitly asks to buy or to add an item; \
-otherwise the act the rest of the sentence asks for. bundle: a set of items that go together. \
+question about an item on screen or just discussed (how to use it, why), with a reference to that \
+item. cart: only when the customer explicitly asks to buy or to add an item; \
+otherwise the act the rest of the sentence asks for. bundle: several items meant to be used \
+together, as one set or in a sequence, even when the customer does not name them. \
 order_status: an order. store_info: store policies. chitchat: no request. other: only when no \
 other act fits. A complaint that asks for something else is read as that request, and a \
 misspelled word by the intent of its sentence. targets: ids of references declared in this \
