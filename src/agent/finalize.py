@@ -325,7 +325,8 @@ async def _finalize_grounded(
         else ["empty_text"]
     )
     return (
-        "Ți-am verificat comanda 🙂 Îți confirm imediat detaliile exacte, revin la tine.",
+        "Ți-am verificat comanda 🙂 Nu îți pot confirma acum detaliile exacte, încearcă din nou "
+        "peste câteva momente.",
         ValidationResult(ok=False, reasons=reasons),
     )
 

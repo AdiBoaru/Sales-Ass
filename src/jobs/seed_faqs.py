@@ -169,8 +169,8 @@ BASE_FAQS_RO: list[tuple[str, str]] = [
     (
         "Am avut o reacție sau iritație de la un produs, ce fac?",
         "Oprește imediat folosirea produsului și, dacă simptomele persistă, consultă un medic. "
-        "Eu nu pot oferi sfat medical, dar te pot pune în legătură cu un coleg din echipă "
-        "pentru opțiunile de retur sau înlocuire.",
+        "Eu nu pot oferi sfat medical. Pentru retur sau înlocuire, găsești pașii în politica de "
+        "retur a magazinului.",
     ),
     # --- cont ---
     (
@@ -199,9 +199,9 @@ BASE_FAQS_RO: list[tuple[str, str]] = [
     # --- contact ---
     (
         "Cum vă contactez? Pot vorbi cu un om?",
-        "Mă poți întreba aici orice, iar dacă ai nevoie de un coleg din echipă te pot pune în "
-        "legătură cu un operator uman. Pentru o reclamație, scrie-ne întâi nouă. Dacă nu găsim "
-        "o soluție, te poți adresa ANPC (anpc.ro) ori platformei SOL a Comisiei Europene.",
+        "Mă poți întreba aici orice despre produse, comenzi sau livrare. Pentru o reclamație, "
+        "scrie-ne pe datele de contact din site. Dacă nu găsim o soluție, te poți adresa ANPC "
+        "(anpc.ro) ori platformei SOL a Comisiei Europene.",
     ),
 ]
 

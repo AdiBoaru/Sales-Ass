@@ -2423,7 +2423,11 @@ nou din 2026-08-28; configul vechi e păstrat în `.env.bak.old-project` (gitign
   sau o amenințare legală primesc răspunsul agentului: cel mai bun răspuns pe care îl avem bate
   o promisiune pe care nimeni n-o onorează, iar tăcerea ar încălca P6. Riscul se DETECTEAZĂ
   (event `risk_detected`, ca să știm cât de des se cere), dar nu schimbă turul. Singurul
-  kill-switch rămas e `conversations.bot_active`, setat din DB — nu declanșat de conversație
+  kill-switch rămas e `conversations.bot_active`, setat din DB — nu declanșat de conversație.
+  NX-340: regula e o POARTĂ, nu o intenție (`tests/test_no_human_promise.py`): frazele de
+  promisiune („cu un coleg", „te pun în legătură", „revin la tine"…) sunt interzise în literalii
+  din `src/`, în prompturile randate (registru declarat, un prompt nou neînscris pică) și în datele
+  către client (FAQ-uri de seed, pachete). #336 ratase promptul buclei de vânzare și FAQ-ul demo
 - NU trimitere directă la un canal din stagii — totul prin `outbox` + dispatcher (ChannelSender)
 - NU cod specific de canal în pipeline/worker — doar la margini (parser ingestie + ChannelSender)
 - NU mesaje proactive fără consent (`contacts.consent`) — singura poartă rămasă (NX-289)
