@@ -1,0 +1,1313 @@
+{
+  "schema_version": "kernel-journey.v1",
+  "_note": "NX-339 set C: set de evaluare NEVĂZUT pentru stratul `interpretation`, scris independent de prompt și de rulările anterioare. Conversații de web chat pe cele cinci pachete (patru de fixture + `sole-ro` sintetic), în română scrisă ca de clienți reali (fără diacritice, prescurtări, greșeli de tastare). Etichetele sunt COMPACTE (vezi tests/kernel/replay.py) și fixează doar câmpurile testate: `acts` mereu; `changes` doar când schimbările se judecă (`[]` = turul nu schimbă nimic); `references` când țintele contează; `thread` când contează. Turele cu o etichetă incertă sub contract au fost lăsate afară sau poartă doar actele. Fără `sources` și fără `state_before`: starea se construiește în lanț din turele journey-ului (`shown` = ce a arătat asistentul după tur). Pe `sole-ro` nu există `shown`: catalogul de replay al pachetului real e gol, deci turele SOLE nu depind de un ecran.",
+  "journeys": [
+    {
+      "journey_id": "c01-sole-acne-need-then-budget",
+      "pack": "sole-ro",
+      "family": ["find", "need", "budget"],
+      "source": "NX-339c: o problemă descrisă de client, apoi un buget",
+      "turns": [
+        {
+          "user_input": "salut, am cosuri si nu scap de ele, ai ceva?",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find"}],
+              "changes": [
+                {"op": "add", "dimension": "concerns", "relation": "contains", "value": "acne", "quote": "cosuri"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "si pana in 80 de lei",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find"}],
+              "changes": [
+                {"op": "set", "dimension": "price", "relation": "lte", "number": 80, "unit": "lei", "quote": "pana in 80 de lei"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "c02-sole-dehydrated-skin-then-samples",
+      "pack": "sole-ro",
+      "family": ["find", "need", "store_info", "aside"],
+      "source": "NX-339c: tipul de ten ca motiv al căutării, apoi o întrebare despre magazin",
+      "turns": [
+        {
+          "user_input": "am pielea deshidratata, ce imi recomanzi?",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find"}],
+              "changes": [
+                {"op": "add", "dimension": "skin_type", "relation": "eq", "value": "dry", "quote": "pielea deshidratata"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "aveti mostre gratuite la comanda?",
+          "expect": {
+            "interpretation": {
+              "thread": "aside",
+              "acts": [{"kind": "store_info", "query": "mostre gratuite"}],
+              "changes": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "c03-sole-hair-body-and-back",
+      "pack": "sole-ro",
+      "family": ["find", "show_more", "subject_change", "resume"],
+      "source": "NX-339c: raftul de păr, paginare, o nevoie, schimbare pe corp, întoarcere la păr",
+      "turns": [
+        {
+          "user_input": "vreau niste produse pentru par",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "produse pentru par"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "par-ingrijirea-parului", "quote": "par"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "mai arata-mi",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "show_more"}],
+              "changes": []
+            }
+          }
+        },
+        {
+          "user_input": "am matreata",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find"}],
+              "changes": [
+                {"op": "add", "dimension": "concerns", "relation": "contains", "value": "dandruff", "quote": "matreata"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "acum arata-mi si ceva pentru corp",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "ceva pentru corp"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "corp-ingrijirea-corpului", "quote": "corp"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "hai inapoi la par, arata-mi ce ai",
+          "expect": {
+            "interpretation": {
+              "thread": "resume",
+              "acts": [{"kind": "find"}],
+              "changes": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "c04-sole-oily-skin-routine",
+      "pack": "sole-ro",
+      "family": ["find", "need", "bundle", "store_info"],
+      "source": "NX-339c: două nevoi, o rutină (set de produse folosite împreună), livrarea",
+      "turns": [
+        {
+          "user_input": "am ten gras si pori dilatati",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find"}],
+              "changes": [
+                {"op": "add", "dimension": "skin_type", "relation": "eq", "value": "oily", "quote": "ten gras"},
+                {"op": "add", "dimension": "concerns", "relation": "contains", "value": "pores", "quote": "pori dilatati"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "fa-mi o rutina de dimineata si seara",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "bundle"}],
+              "changes": [
+                {"op": "add", "dimension": "routine_time", "relation": "eq", "value": "am_pm", "quote": "dimineata si seara"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "livrati si in Cluj?",
+          "expect": {
+            "interpretation": {
+              "thread": "aside",
+              "acts": [{"kind": "store_info", "query": "livrati"}],
+              "changes": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "c05-sole-items-the-store-may-not-carry",
+      "pack": "sole-ro",
+      "family": ["find", "not_carried"],
+      "source": "NX-339c: cereri de produse pe care magazinul s-ar putea să nu le aibă; actul rămâne find",
+      "turns": [
+        {
+          "user_input": "aveti parfumuri?",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "parfumuri"}]
+            }
+          }
+        },
+        {
+          "user_input": "dar pasta de dinti?",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "pasta de dinti"}]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "c06-sole-named-serum-usage-then-cart",
+      "pack": "sole-ro",
+      "family": ["detail", "name", "deictic", "cart"],
+      "source": "NX-339c: un produs numit de pe site, cum se folosește, apoi coșul",
+      "turns": [
+        {
+          "user_input": "am vazut pe site Ser Delmira Calmant, e ok pentru roseata?",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "detail", "targets": ["r1"]}],
+              "references": [
+                {"id": "r1", "text": "Ser Delmira Calmant", "kind": "name", "name": "Ser Delmira Calmant"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "cum il aplic, inainte de crema?",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "detail", "targets": ["r1"]}],
+              "changes": [],
+              "references": [
+                {"id": "r1", "text": "il", "kind": "deictic"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "adauga-l in cos te rog",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "cart", "targets": ["r1"]}],
+              "changes": [],
+              "references": [
+                {"id": "r1", "text": "adauga-l", "kind": "deictic"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "c07-sole-delivery-time",
+      "pack": "sole-ro",
+      "family": ["store_info", "aside"],
+      "source": "NX-339c: întrebare despre livrare care pomenește comanda doar în trecere",
+      "turns": [
+        {
+          "user_input": "in cat timp ajunge coletul daca comand azi?",
+          "expect": {
+            "interpretation": {
+              "thread": "aside",
+              "acts": [{"kind": "store_info", "query": "in cat timp ajunge coletul"}],
+              "changes": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "c08-sole-late-order",
+      "pack": "sole-ro",
+      "family": ["order_status", "aside", "numbers"],
+      "source": "NX-339c: o comandă întârziată; numerele din mesaj nu sunt buget",
+      "turns": [
+        {
+          "user_input": "buna ziua, am plasat o comanda acum 3 zile si inca nu a ajuns",
+          "expect": {
+            "interpretation": {
+              "thread": "aside",
+              "acts": [{"kind": "order_status"}],
+              "changes": []
+            }
+          }
+        },
+        {
+          "user_input": "nr comenzii e 48213",
+          "expect": {
+            "interpretation": {
+              "thread": "aside",
+              "acts": [{"kind": "order_status"}],
+              "changes": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "c09-sole-wrinkles-budget-raised",
+      "pack": "sole-ro",
+      "family": ["find", "need", "budget"],
+      "source": "NX-339c: o nevoie cu buget, apoi bugetul ridicat într-un tur ulterior",
+      "turns": [
+        {
+          "user_input": "ceva pentru riduri, maxim 150 lei",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find"}],
+              "changes": [
+                {"op": "add", "dimension": "concerns", "relation": "contains", "value": "anti_aging", "quote": "riduri"},
+                {"op": "set", "dimension": "price", "relation": "lte", "number": 150, "unit": "lei", "quote": "maxim 150 lei"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "hai ca pot sa dau si 200",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find"}],
+              "changes": [
+                {"op": "set", "dimension": "price", "relation": "lte", "number": 200, "quote": "pot sa dau si 200"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "c10-sole-hydration-avoid-then-drop",
+      "pack": "sole-ro",
+      "family": ["find", "polarity", "remove_constraint"],
+      "source": "NX-339c: o nevoie + o excludere, apoi excluderea retrasă prin handle",
+      "turns": [
+        {
+          "user_input": "ceva pentru hidratare, dar sa nu fie gras",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find"}],
+              "changes": [
+                {"op": "add", "dimension": "concerns", "relation": "contains", "value": "hydration", "quote": "hidratare"},
+                {"op": "add", "dimension": "texture", "relation": "avoid", "value": "gras", "quote": "sa nu fie gras"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "lasa, nu mai conteaza daca e gras",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find"}],
+              "changes": [
+                {"op": "remove", "target": "c2", "quote": "nu mai conteaza daca e gras"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "c11-sole-redness-then-thanks",
+      "pack": "sole-ro",
+      "family": ["find", "need", "chitchat"],
+      "source": "NX-339c: o problemă descrisă de client, apoi mulțumiri",
+      "turns": [
+        {
+          "user_input": "am roseata pe obraji, ma poti ajuta cu ceva?",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find"}],
+              "changes": [
+                {"op": "add", "dimension": "concerns", "relation": "contains", "value": "redness", "quote": "roseata"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "multumesc frumos, esti de ajutor",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "chitchat"}],
+              "changes": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "c12-sole-typos-two-needs-then-makeup",
+      "pack": "sole-ro",
+      "family": ["find", "need", "typo", "subject_change"],
+      "source": "NX-339c: greșeli de tastare și prescurtări, două nevoi adăugate, apoi machiaj",
+      "turns": [
+        {
+          "user_input": "vreu ceva pt pete",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find"}],
+              "changes": [
+                {"op": "add", "dimension": "concerns", "relation": "contains", "value": "hyperpigmentation", "quote": "pete"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "si pt pori",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find"}],
+              "changes": [
+                {"op": "add", "dimension": "concerns", "relation": "contains", "value": "pores", "quote": "pori"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "si un fond de ten mat",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "fond de ten"}]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "c13-sole-newsletter",
+      "pack": "sole-ro",
+      "family": ["other"],
+      "source": "NX-339c: o cerere pe care niciun act de cumpărare nu o acoperă",
+      "turns": [
+        {
+          "user_input": "vreau sa ma dezabonez de la newsletter",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "other"}],
+              "changes": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "c14-electronics-budget-compare-cart-link",
+      "pack": "electronics",
+      "family": ["find", "budget", "compare", "multi_act", "cart", "link"],
+      "source": "NX-339c: telefon cu buget, comparația a două carduri, apoi coș + link în același tur",
+      "turns": [
+        {
+          "user_input": "salut, caut un telefon bun sub 2500 lei",
+          "shown": ["el-01", "el-02", "el-04"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "telefon"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "telefoane", "quote": "telefon"},
+                {"op": "set", "dimension": "price", "relation": "lte", "number": 2500, "unit": "lei", "quote": "sub 2500 lei"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "care e diferenta intre primul si al doilea?",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "compare", "targets": ["r1", "r2"]}],
+              "changes": [],
+              "references": [
+                {"id": "r1", "text": "primul", "kind": "ordinal", "ordinal": 1},
+                {"id": "r2", "text": "al doilea", "kind": "ordinal", "ordinal": 2}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "pune-l pe al doilea in cos si trimite-mi si linkul la primul",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {"kind": "cart", "targets": ["r1"]},
+                {"kind": "link", "targets": ["r2"]}
+              ],
+              "changes": [],
+              "references": [
+                {"id": "r1", "text": "al doilea", "kind": "ordinal", "ordinal": 2},
+                {"id": "r2", "text": "primul", "kind": "ordinal", "ordinal": 1}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "c15-electronics-typo-storage-brand-dropped",
+      "pack": "electronics",
+      "family": ["find", "typo", "units", "remove_constraint", "show_more"],
+      "source": "NX-339c: greșeală de tastare, stocare cu unitate, marca retrasă, paginare",
+      "turns": [
+        {
+          "user_input": "vreau un telefn samsung cu minim 256 gb",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "telefn samsung"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "telefoane", "quote": "telefn"},
+                {"op": "add", "dimension": "brand", "relation": "eq", "value": "Samsung", "quote": "samsung"},
+                {"op": "add", "dimension": "storage", "relation": "gte", "number": 256, "unit": "gb", "quote": "minim 256 gb"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "nu neaparat samsung, merge orice marca",
+          "shown": ["el-02", "el-05"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find"}],
+              "changes": [
+                {"op": "remove", "target": "c1", "quote": "nu neaparat samsung"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "mai ai?",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "show_more"}],
+              "changes": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "c16-electronics-laptop-too-expensive",
+      "pack": "electronics",
+      "family": ["find", "detail", "name", "relative_price"],
+      "source": "NX-339c: detaliu pe un produs numit, apoi «prea scump» ca cerere relativă de preț",
+      "turns": [
+        {
+          "user_input": "arata-mi niste laptopuri",
+          "shown": ["el-19", "el-20", "el-22"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "laptopuri"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "laptopuri", "quote": "laptopuri"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "spune-mi mai multe despre Samsung Book 3",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "detail", "targets": ["r1"]}],
+              "changes": [],
+              "references": [
+                {"id": "r1", "text": "Samsung Book 3", "kind": "name", "name": "Samsung Book 3"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "asta e prea scump pt mine, ai ceva mai ieftin?",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find"}],
+              "changes": [
+                {"op": "set", "dimension": "price", "relation": "lte", "relative_to": "r1", "quote": "mai ieftin"}
+              ],
+              "references": [
+                {"id": "r1", "text": "asta", "kind": "deictic"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "c17-electronics-tablet-rates-then-buy",
+      "pack": "electronics",
+      "family": ["find", "budget", "store_info", "aside", "cart"],
+      "source": "NX-339c: tabletă cu buget, o întrebare de plată, apoi coșul pe ecranul rămas neatins",
+      "turns": [
+        {
+          "user_input": "vreau o tableta pana in 1500 de lei",
+          "shown": ["el-11", "el-12"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "tableta"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "tablete", "quote": "tableta"},
+                {"op": "set", "dimension": "price", "relation": "lte", "number": 1500, "unit": "lei", "quote": "pana in 1500 de lei"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "se poate plati in rate?",
+          "expect": {
+            "interpretation": {
+              "thread": "aside",
+              "acts": [{"kind": "store_info", "query": "plati in rate"}],
+              "changes": []
+            }
+          }
+        },
+        {
+          "user_input": "ok, o iau pe prima",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "cart", "targets": ["r1"]}],
+              "changes": [],
+              "references": [
+                {"id": "r1", "text": "prima", "kind": "ordinal", "ordinal": 1}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "c18-electronics-apple-laptops-back",
+      "pack": "electronics",
+      "family": ["find", "subject_change", "resume", "ordinal"],
+      "source": "NX-339c: telefoane Apple, schimbare pe laptopuri, întoarcere cu o întrebare pe setul parcat",
+      "turns": [
+        {
+          "user_input": "arata-mi telefoane Apple",
+          "shown": ["el-02", "el-08"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "telefoane Apple"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "telefoane", "quote": "telefoane"},
+                {"op": "add", "dimension": "brand", "relation": "eq", "value": "Apple", "quote": "Apple"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "si laptopuri ai?",
+          "shown": ["el-18", "el-19"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "laptopuri"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "laptopuri", "quote": "laptopuri"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "bun, revin la telefoane. primul cat costa?",
+          "expect": {
+            "interpretation": {
+              "thread": "resume",
+              "acts": [{"kind": "detail", "targets": ["r1"]}],
+              "changes": [],
+              "references": [
+                {"id": "r1", "text": "primul", "kind": "ordinal", "ordinal": 1}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "c19-electronics-laptop-loose-buy-bigger-screen",
+      "pack": "electronics",
+      "family": ["find", "chitchat", "extreme"],
+      "source": "NX-339c: o cumpărare pomenită vag (nu e coș), apoi extremul pe ecran",
+      "turns": [
+        {
+          "user_input": "vreau sa-mi cumpar un laptop nou, al meu e varza",
+          "shown": ["el-18", "el-19", "el-20"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "laptop"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "laptopuri", "quote": "laptop"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "probabil o sa comand dupa salariu",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "chitchat"}],
+              "changes": []
+            }
+          }
+        },
+        {
+          "user_input": "care din astea are ecranul cel mai mare?",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "detail", "targets": ["r1"]}],
+              "changes": [],
+              "references": [
+                {"id": "r1", "text": "ecranul cel mai mare", "kind": "extreme", "dimension": "screen", "direction": "max"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "c20-electronics-color-replaced",
+      "pack": "electronics",
+      "family": ["find", "replace"],
+      "source": "NX-339c: o culoare înlocuită (replace pe handle, nu o schimbare de subiect)",
+      "turns": [
+        {
+          "user_input": "caut un telefon negru",
+          "shown": ["el-01", "el-05", "el-09"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "telefon"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "telefoane", "quote": "telefon"},
+                {"op": "add", "dimension": "color", "relation": "eq", "value": "negru", "quote": "negru"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "nu mai vreau negru, vreau alb",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find"}],
+              "changes": [
+                {"op": "replace", "target": "c1", "dimension": "color", "relation": "eq", "value": "alb", "quote": "vreau alb"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "c21-fashion-dress-fit-and-link",
+      "pack": "fashion",
+      "family": ["find", "detail", "ordinal", "link", "name"],
+      "source": "NX-339c: rochie cu material și mărime, o întrebare despre croiala celei de-a doua, linkul pe nume",
+      "turns": [
+        {
+          "user_input": "caut o rochie din bumbac, marimea S",
+          "shown": ["fa-01", "fa-05"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "rochie"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "rochii", "quote": "rochie"},
+                {"op": "add", "dimension": "material", "relation": "eq", "value": "bumbac", "quote": "bumbac"},
+                {"op": "set", "dimension": "size", "relation": "eq", "value": "S", "quote": "marimea S"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "a doua e larga sau pe corp?",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "detail", "targets": ["r1"]}],
+              "changes": [],
+              "references": [
+                {"id": "r1", "text": "a doua", "kind": "ordinal", "ordinal": 2}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "da-mi linkul la Nora",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "link", "targets": ["r1"]}],
+              "changes": [],
+              "references": [
+                {"id": "r1", "text": "Nora", "kind": "name", "name": "Nora"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "c22-fashion-white-shirt-no-polyester",
+      "pack": "fashion",
+      "family": ["find", "polarity", "person_fact"],
+      "source": "NX-339c: o excludere cu negație, apoi mărimea spusă ca fapt despre client",
+      "turns": [
+        {
+          "user_input": "vreau o camasa alba, sa nu fie din poliester",
+          "shown": ["fa-15", "fa-20"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "camasa"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "camasi", "quote": "camasa"},
+                {"op": "add", "dimension": "color", "relation": "eq", "value": "alb", "quote": "alba"},
+                {"op": "add", "dimension": "material", "relation": "avoid", "value": "poliester", "quote": "sa nu fie din poliester"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "marimea mea e M",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find"}],
+              "changes": [
+                {"op": "set", "dimension": "size", "relation": "eq", "value": "M", "quote": "marimea mea e M"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "c23-fashion-skirts-shoes-back",
+      "pack": "fashion",
+      "family": ["find", "subject_change", "resume", "show_more"],
+      "source": "NX-339c: fuste, pantofi, apoi întoarcere la fuste cu paginare",
+      "turns": [
+        {
+          "user_input": "arata-mi niste fuste negre",
+          "shown": ["fa-11"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "fuste"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "fuste", "quote": "fuste"},
+                {"op": "add", "dimension": "color", "relation": "eq", "value": "negru", "quote": "negre"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "acum si pantofi",
+          "shown": ["fa-23", "fa-24"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "pantofi"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "pantofi", "quote": "pantofi"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "ma intorc la fuste, mai ai si altele?",
+          "expect": {
+            "interpretation": {
+              "thread": "resume",
+              "acts": [{"kind": "show_more"}],
+              "changes": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "c24-fashion-compare-names-returns-cart",
+      "pack": "fashion",
+      "family": ["find", "budget", "compare", "name", "store_info", "cart"],
+      "source": "NX-339c: rochie cu buget, comparație pe nume, întrebarea de retur, coșul pe nume",
+      "turns": [
+        {
+          "user_input": "vreau o rochie pana in 300 de lei",
+          "shown": ["fa-02", "fa-03", "fa-04"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "rochie"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "rochii", "quote": "rochie"},
+                {"op": "set", "dimension": "price", "relation": "lte", "number": 300, "unit": "lei", "quote": "pana in 300 de lei"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "compara Ilona cu Dora",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "compare", "targets": ["r1", "r2"]}],
+              "changes": [],
+              "references": [
+                {"id": "r1", "text": "Ilona", "kind": "name", "name": "Ilona"},
+                {"id": "r2", "text": "Dora", "kind": "name", "name": "Dora"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "daca nu-mi vine, o pot schimba?",
+          "expect": {
+            "interpretation": {
+              "thread": "aside",
+              "acts": [{"kind": "store_info", "query": "o pot schimba"}],
+              "changes": []
+            }
+          }
+        },
+        {
+          "user_input": "bine, adaug-o in cos pe Ilona",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "cart", "targets": ["r1"]}],
+              "changes": [],
+              "references": [
+                {"id": "r1", "text": "Ilona", "kind": "name", "name": "Ilona"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "c25-fashion-linen-shirt-the-other-cheaper",
+      "pack": "fashion",
+      "family": ["find", "the_other", "relative_price"],
+      "source": "NX-339c: «cealaltă» față de prima, apoi «cam scumpă» ca cerere relativă de preț",
+      "turns": [
+        {
+          "user_input": "caut o camasa din in",
+          "shown": ["fa-16", "fa-20"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "camasa"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "camasi", "quote": "camasa"},
+                {"op": "add", "dimension": "material", "relation": "eq", "value": "in", "quote": "din in"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "prima nu imi place, arata-mi-o pe cealalta",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "detail", "targets": ["r2"]}],
+              "changes": [],
+              "references": [
+                {"id": "r1", "text": "prima", "kind": "ordinal", "ordinal": 1},
+                {"id": "r2", "text": "cealalta", "kind": "the_other"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "asta e cam scumpa, ai ceva mai ieftin?",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find"}],
+              "changes": [
+                {"op": "set", "dimension": "price", "relation": "lte", "relative_to": "r1", "quote": "mai ieftin"}
+              ],
+              "references": [
+                {"id": "r1", "text": "asta", "kind": "deictic"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "c26-fashion-office-outfit",
+      "pack": "fashion",
+      "family": ["bundle"],
+      "source": "NX-339c: o ținută din mai multe piese purtate împreună",
+      "turns": [
+        {
+          "user_input": "am nevoie de o tinuta completa pentru birou: camasa, fusta si pantofi",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "bundle"}]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "c27-furniture-grey-sofa-width-cart",
+      "pack": "furniture",
+      "family": ["find", "units", "detail", "ordinal", "cart", "deictic"],
+      "source": "NX-339c: canapea cu locuri și culoare, o întrebare despre lățimea celei de-a doua, coșul pe «asta»",
+      "turns": [
+        {
+          "user_input": "caut canapea gri de 3 locuri",
+          "shown": ["fu-01", "fu-02", "fu-04"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "canapea"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "canapele", "quote": "canapea"},
+                {"op": "add", "dimension": "color", "relation": "eq", "value": "gri", "quote": "gri"},
+                {"op": "set", "dimension": "seats", "relation": "eq", "number": 3, "unit": "locuri", "quote": "3 locuri"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "cat de lata e a doua?",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "detail", "targets": ["r1"]}],
+              "changes": [],
+              "references": [
+                {"id": "r1", "text": "a doua", "kind": "ordinal", "ordinal": 2}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "o vreau pe asta, adaug-o in cos",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "cart", "targets": ["r1"]}],
+              "changes": [],
+              "references": [
+                {"id": "r1", "text": "asta", "kind": "deictic"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "c28-furniture-wooden-table-set",
+      "pack": "furniture",
+      "family": ["find", "units", "bundle", "store_info"],
+      "source": "NX-339c: masă de lemn pentru 6, un set masă + scaune, livrare cu montaj",
+      "turns": [
+        {
+          "user_input": "vreau o masa de lemn pentru 6 persoane",
+          "shown": ["fu-15", "fu-17"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "masa"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "mese", "quote": "masa"},
+                {"op": "add", "dimension": "material", "relation": "eq", "value": "lemn", "quote": "lemn"},
+                {"op": "set", "dimension": "seats", "relation": "eq", "number": 6, "unit": "persoane", "quote": "6 persoane"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "fa-mi un set complet, masa plus scaune",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "bundle"}]
+            }
+          }
+        },
+        {
+          "user_input": "livrati si montati?",
+          "expect": {
+            "interpretation": {
+              "thread": "aside",
+              "acts": [{"kind": "store_info", "query": "livrati si montati"}],
+              "changes": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "c29-furniture-chairs-no-leather-cheapest",
+      "pack": "furniture",
+      "family": ["find", "polarity", "extreme", "cart", "numbers"],
+      "source": "NX-339c: scaune fără piele, cel mai ieftin, apoi o cantitate care nu e buget",
+      "turns": [
+        {
+          "user_input": "arata-mi scaune, dar nu din piele",
+          "shown": ["fu-19", "fu-22", "fu-23"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "scaune"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "scaune", "quote": "scaune"},
+                {"op": "add", "dimension": "material", "relation": "avoid", "value": "piele", "quote": "nu din piele"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "care e cel mai ieftin?",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "detail", "targets": ["r1"]}],
+              "changes": [],
+              "references": [
+                {"id": "r1", "text": "cel mai ieftin", "kind": "extreme", "dimension": "price", "direction": "min"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "pune 4 bucati din el in cos",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "cart", "targets": ["r1"]}],
+              "changes": [],
+              "references": [
+                {"id": "r1", "text": "el", "kind": "deictic"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "c30-furniture-two-seater-more",
+      "pack": "furniture",
+      "family": ["find", "units", "show_more"],
+      "source": "NX-339c: canapea de 2 locuri, apoi alte modele",
+      "turns": [
+        {
+          "user_input": "caut canapea de 2 locuri",
+          "shown": ["fu-01", "fu-04"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "canapea"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "canapele", "quote": "canapea"},
+                {"op": "set", "dimension": "seats", "relation": "eq", "number": 2, "unit": "locuri", "quote": "2 locuri"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "mai aveti modele?",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "show_more"}],
+              "changes": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "c31-furniture-link-to-unknown-name",
+      "pack": "furniture",
+      "family": ["link", "name", "not_found"],
+      "source": "NX-339c: linkul la un model pe care magazinul nu-l are",
+      "turns": [
+        {
+          "user_input": "trimite-mi linkul la canapeaua Milano",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "link", "targets": ["r1"]}],
+              "changes": [],
+              "references": [
+                {"id": "r1", "text": "canapeaua Milano", "kind": "name", "name": "Milano"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "c32-gifts-sister-birthday",
+      "pack": "gifts",
+      "family": ["find", "person_fact", "budget", "detail", "name"],
+      "source": "NX-339c: destinatar, ocazie și buget fără subiect, apoi raftul, apoi o întrebare pe un produs numit",
+      "turns": [
+        {
+          "user_input": "am nevoie de un cadou pentru sora mea de ziua ei, pana in 100 lei",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find"}],
+              "changes": [
+                {"op": "set", "dimension": "recipient", "relation": "eq", "value": "ea", "quote": "pentru sora mea"},
+                {"op": "set", "dimension": "occasion", "relation": "eq", "value": "zi de nastere", "quote": "ziua ei"},
+                {"op": "set", "dimension": "price", "relation": "lte", "number": 100, "unit": "lei", "quote": "pana in 100 lei"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "ceva de casa",
+          "shown": ["gi-01", "gi-02", "gi-05"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "casa"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "casa", "quote": "casa"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "setul de ceai ce contine?",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "detail", "targets": ["r1"]}],
+              "changes": [],
+              "references": [
+                {"id": "r1", "text": "setul de ceai", "kind": "name", "name": "Set ceai"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "c33-gifts-kids-books-too-expensive",
+      "pack": "gifts",
+      "family": ["find", "show_more", "relative_price", "ordinal"],
+      "source": "NX-339c: cărți pentru copii, paginare, apoi o plângere de preț pe al doilea card",
+      "turns": [
+        {
+          "user_input": "ce carti aveti pentru copii?",
+          "shown": ["gi-03", "gi-11"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "carti"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "carti", "quote": "carti"},
+                {"op": "set", "dimension": "recipient", "relation": "eq", "value": "copil", "quote": "copii"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "mai arata-mi",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "show_more"}],
+              "changes": []
+            }
+          }
+        },
+        {
+          "user_input": "a doua e prea scumpa",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find"}],
+              "changes": [
+                {"op": "set", "dimension": "price", "relation": "lte", "relative_to": "r1", "quote": "prea scumpa"}
+              ],
+              "references": [
+                {"id": "r1", "text": "a doua", "kind": "ordinal", "ordinal": 2}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "c34-gifts-couple-package",
+      "pack": "gifts",
+      "family": ["bundle", "person_fact", "store_info"],
+      "source": "NX-339c: un pachet cadou din mai multe lucruri, apoi ambalarea",
+      "turns": [
+        {
+          "user_input": "vreau sa fac un pachet cadou pentru un cuplu, cu mai multe lucruri",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "bundle"}],
+              "changes": [
+                {"op": "set", "dimension": "recipient", "relation": "eq", "value": "cuplu", "quote": "cuplu"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "cat costa ambalarea?",
+          "expect": {
+            "interpretation": {
+              "thread": "aside",
+              "acts": [{"kind": "store_info", "query": "ambalarea"}],
+              "changes": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "c35-gifts-picky-dad-board-games",
+      "pack": "gifts",
+      "family": ["find", "person_fact"],
+      "source": "NX-339c: destinatarul ca problemă, apoi raftul dedus din pasiunea lui",
+      "turns": [
+        {
+          "user_input": "tata e foarte pretentios, nu stiu ce sa-i iau",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find"}],
+              "changes": [
+                {"op": "set", "dimension": "recipient", "relation": "eq", "value": "el", "quote": "tata"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "joaca des jocuri de societate",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "jocuri de societate"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "jocuri", "quote": "jocuri"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "c36-gifts-mug-order",
+      "pack": "gifts",
+      "family": ["order_status", "aside"],
+      "source": "NX-339c: statusul unei comenzi care numește un produs",
+      "turns": [
+        {
+          "user_input": "am comandat o cana personalizata, cand ajunge?",
+          "expect": {
+            "interpretation": {
+              "thread": "aside",
+              "acts": [{"kind": "order_status"}],
+              "changes": []
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

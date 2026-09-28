@@ -32,6 +32,8 @@ NX-339 (măsurătoarea pentru promptul `interpret.v2`):
    interpretările AȘTEPTATE, deci o greșeală nu se propagă), iar eticheta e interpretarea așteptată
    trecută prin ACELAȘI pas pur ca a modelului. Un câmp absent din journey nu se evaluează. Seturi:
    `B` (pachetele pe care promptul nu se reglează) și `A-bis` (`sole-ro`). Tipărește doar agregate.
+   `--journeys-dir DIR [--set-name C]`: alt set nevăzut (setul C, scris separat pentru verdictul
+   promptului v3), cu numele setului pe toate turele; raportul în `journeys-c/`.
 5. `--regressions ÎNAINTE DUPĂ`: turele care trec din corect în greșit între două `results.json`.
 
 Rândurile păstrează interpretarea brută și verdictul validatorului pe fiecare schimbare (local, sub
@@ -49,6 +51,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import json
 import math
 import random
@@ -838,6 +841,21 @@ async def run(
 # --- journey-urile kernelului: setul NEVĂZUT (NX-339) ---------------------------------------------
 
 JOURNEYS_DIR = ROOT / "tests" / "golden" / "kernel_journeys"
+#: NX-339c: setul C, scris de un agent independent care n-a văzut promptul, rezultatele sau
+#: seturile A și B, pentru verdictul lui `interpret.v3`. ÎNGHEȚAT înaintea primei rulări: amprenta
+#: e pe bytes normalizați CRLF→LF, iar testul pică la orice etichetă schimbată.
+HOLDOUT_C_DIR = ROOT / "tests" / "golden" / "kernel_interpret_holdout"
+HOLDOUT_C_SHA256 = "72fd676ef6dd092464021728cb31d0b535cc9687c4358e1edc47580a64f9ba91"
+
+
+def holdout_c_digest(directory: Path = HOLDOUT_C_DIR) -> str:
+    """SHA-256 peste fișierele setului C, sortate, cu CRLF→LF."""
+    digest = hashlib.sha256()
+    for path in sorted(directory.glob("*.json")):
+        digest.update(path.read_bytes().replace(b"\r\n", b"\n"))
+    return digest.hexdigest()
+
+
 #: Pachetele journey-urilor care NU intră în setul nevăzut: `sole-ro` e tenantul pe care promptul se
 #: reglează, deci turele lui se raportează separat (A-bis).
 TUNED_PACKS: frozenset[str] = frozenset({"sole-ro"})
@@ -898,11 +916,23 @@ def injected_state(journey: Any) -> bool:
 
 
 def journey_cases(
-    directory: Path = JOURNEYS_DIR, *, excluded: Counter | None = None
+    directory: Path = JOURNEYS_DIR,
+    *,
+    excluded: Counter | None = None,
+    set_name: str | None = None,
 ) -> list[JourneyCase]:
     """Turele cu interpretare așteptată, pe catalogul de fixture al pachetului lor
     (`stage_harness.catalog`: pachet, vocabular, meniu, fapte), fără DB și fără model. Journey-urile
-    cu stare injectată se sar; `excluded` numără turele sărite, pe set, ca să fie raportate."""
+    cu stare injectată se sar; `excluded` numără turele sărite, pe set, ca să fie raportate.
+
+    `set_name` fixează numele setului pentru TOATE turele (un set nevăzut scris separat, ca setul C
+    al NX-339, pe care niciun pachet nu e „reglat"); implicit, împărțirea B / A-bis."""
+
+    def name_of(pack: str) -> str:
+        if set_name is not None:
+            return set_name
+        return "A-bis" if pack in TUNED_PACKS else "B"
+
     from tests.kernel import replay  # noqa: PLC0415 — precedent: kernel_plan_snapshot.py
     from tests.kernel import stage_harness as sh  # noqa: PLC0415
 
@@ -912,8 +942,7 @@ def journey_cases(
     for journey in replay.load_journeys(directory):
         if injected_state(journey):
             if excluded is not None:
-                set_name = "A-bis" if journey.pack in TUNED_PACKS else "B"
-                excluded[set_name] += sum(
+                excluded[name_of(journey.pack)] += sum(
                     1 for i in range(len(journey.turns)) if (journey.journey_id, i) in fields
                 )
             continue
@@ -944,7 +973,7 @@ def journey_cases(
                     journey_id=journey.journey_id,
                     pack=journey.pack,
                     index=ct.index,
-                    set_name="A-bis" if journey.pack in TUNED_PACKS else "B",
+                    set_name=name_of(journey.pack),
                     inp=inp,
                     # EXACT cuvintele cu care `chain` a validat eticheta (toate turele de
                     # dinainte, recent întâi), nu fereastra de 8 a lui `user_words`: același
@@ -1295,6 +1324,17 @@ async def main(argv: list[str] | None = None) -> int:
         help="NX-339: journey-urile kernelului (setul nevăzut B + A-bis), fără DB",
     )
     ap.add_argument(
+        "--journeys-dir",
+        type=Path,
+        default=None,
+        help="NX-339: alt director de journey-uri (setul C), cu --journeys",
+    )
+    ap.add_argument(
+        "--set-name",
+        default=None,
+        help="NX-339: numele setului pentru toate turele din --journeys-dir (ex. C)",
+    )
+    ap.add_argument(
         "--regressions",
         nargs=2,
         type=Path,
@@ -1409,7 +1449,9 @@ async def _main_journeys(args: argparse.Namespace) -> int:
 
     efforts = _parse_efforts(args.efforts)
     excluded: Counter = Counter()
-    cases = journey_cases(excluded=excluded)
+    directory = args.journeys_dir or JOURNEYS_DIR
+    set_name = args.set_name or ("C" if args.journeys_dir else None)
+    cases = journey_cases(directory, excluded=excluded, set_name=set_name)
     live = args.yes and not args.dry_run
     llm = None
     if live:
@@ -1433,7 +1475,8 @@ async def _main_journeys(args: argparse.Namespace) -> int:
             print("Rularea reală consumă credite OpenAI. Repornește cu --yes (o pornește Adi).")
         return 0
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-    out_dir = OUT_DIR / "journeys" / f"run-{stamp}"
+    folder = "journeys" if set_name is None else f"journeys-{set_name.lower()}"
+    out_dir = OUT_DIR / folder / f"run-{stamp}"
     out_dir.mkdir(parents=True, exist_ok=True)
     summary = {**summarize_sets(rows, efforts), "excluded_injected_state": dict(excluded)}
     (out_dir / "results.json").write_text(
