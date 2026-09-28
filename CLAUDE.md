@@ -992,13 +992,14 @@ comenzii: «livrare gratuită peste 199 lei» pica pe `ungrounded_price`/`bare_n
 iar clientul primea «n-am găsit produse» (11 din 20 de FAQ-uri SOLE, redate verbatim). Acum
 unealta întoarce `ToolResult.sources` (răspunsurile EXACT arătate, cu tăierea vederii), acumulate
 în `ToolRun.grounded_sources` → `ResponsePlan.grounded_sources` → `validate_prose(grounded_sources=)`.
-Unitatea e PROPOZIȚIA, nu cifra (`strip_quoted`): o propoziție e citată dintr-o regulă dacă
-≥ 0,6 din cuvintele ei sunt ale regulii, fiecare cifră apare acolo în aceeași clasă (sumă/cifră)
-cu un vecin comun, iar afirmațiile ei (`text_claim_keys`) sunt ale regulii. Citatele ies de sub
-porțile de cifre și afirmații, restul e judecat ca înainte. Întemeierea GLOBALĂ a fost respinsă de
-recenzie: `faq_lookup` aduce TOT corpusul, deci „Crema X costă 199 lei" ar fi trecut. Poarta
-medicală, linkurile și stocul se judecă pe tot textul. Fără surse, verdictul e identic; suprafața
-I16 e neschimbată. Deblochează actul `faq`
+O propoziție iese de sub porțile de cifre și afirmații DOAR dacă e un CITAT LITERAL
+(`strip_quoted`): secvență continuă, pe cuvinte întregi, dintr-un răspuns al magazinului, după
+pliere, cu ≥ 3 cuvinte în afara sumelor; propozițiile se despart doar după punctuație, niciodată
+la rând nou. Două variante mai largi (cifrele corpusului întemeiate global, apoi acoperire de
+cuvinte + vecin comun) au fost sparte de recenzia adversarială cu un preț de produs inventat
+(„Crema Aqua costă 49,9 lei și se scade din rambursare."); cele 13 atacuri sunt teste. Parafraza
+e judecată ca pe `main` (declarat). Poarta medicală, linkurile și stocul se judecă pe tot textul.
+Fără surse, verdictul e identic; suprafața I16 e neschimbată. Deblochează actul `faq`
 al kernelului (trece prin `build_plan` + `render`). Flag `FAQ_GROUNDING_ENABLED` (ON). Card:
 [`tasks/stage1/NX-346.md`](tasks/stage1/NX-346.md); probă: `pytest tests/test_faq_grounding.py -q`.
 

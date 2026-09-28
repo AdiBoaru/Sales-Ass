@@ -217,8 +217,8 @@ def _rules_block(sources: list[str]) -> str:
         return ""
     rules = "\n".join(f"{i}. {s}" for i, s in enumerate(sources, 1))
     return (
-        "\n\nRegulile magazinului. Dacă una răspunde la întrebare, red-o fidel, cu cifrele ei, "
-        f"în propoziția ei, fără să le muți lângă un produs:\n{rules}"
+        "\n\nRegulile magazinului. Dacă una răspunde la întrebare, copiază fraza ei cuvânt cu "
+        f"cuvânt, cu cifrele ei, și nu le muta lângă un produs:\n{rules}"
     )
 
 

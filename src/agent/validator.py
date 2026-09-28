@@ -29,12 +29,7 @@ from typing import Any
 from src.catalog.folding import fold_text
 from src.config import get_settings
 from src.observability import turn_latency
-from src.worker.text_scrub import (
-    has_medical_claim,
-    has_stock_claim,
-    has_text_claim,
-    text_claim_keys,
-)
+from src.worker.text_scrub import has_medical_claim, has_stock_claim, has_text_claim
 
 # Suma, cu SAU fără separator de mii. Ordinea alternativelor contează: variantele grupate stau
 # ÎNAINTEA celei simple, altfel „1.234,50" s-ar potrivi doar parțial („234,50") și un preț REAL ar
@@ -255,115 +250,59 @@ def _claims_ok(reply: str) -> bool:
     return not has_text_claim(reply)
 
 
-# --- NX-346: propoziții CITATE din regulile magazinului ------------------------------------------
+# --- NX-346: propoziții CITATE LITERAL din regulile magazinului ---------------------------------
 #
 # `faq_lookup` îi arată modelului TOATE regulile active ale magazinului (pe SOLE, 20) și îi cere să
-# o redea fidel pe cea care se potrivește. O cifră sau un cuvânt-afirmație dintr-o regulă nu se
-# întemeiază însă GLOBAL: atunci „1 leu" sau „în 12 ore", scrise lângă numele unui produs, ar trece
-# fiindcă apar undeva în corpus. Unitatea e PROPOZIȚIA: o propoziție a prozei e citată dintr-o
-# regulă dacă (1) cuvintele ei sunt, în proporție de cel puțin `QUOTE_MIN_COVERAGE`, cuvinte ale
-# ACELEI reguli, (2) fiecare cifră a ei apare în regulă, în aceeași clasă (sumă cu valută / cifră
-# simplă) și cu un vecin comun, și (3) afirmațiile ei („livrare", „cel mai rapid") sunt și ale
-# regulii. O propoziție citată iese de sub porțile de cifre și de afirmații, restul textului trece
-# prin ele exact ca înainte. Poarta medicală, linkurile și stocul se judecă pe TOT textul.
+# o redea fidel. O propoziție a prozei iese de sub porțile de cifre și de afirmații DOAR dacă e un
+# CITAT LITERAL: o secvență continuă, pe cuvinte întregi, dintr-un singur răspuns al magazinului
+# (după pliere: fără diacritice, litere mici, punctuația ca spațiu). Orice criteriu APROXIMATIV a
+# fost spart de recenzia adversarială a PR-ului: întemeierea globală a cifrelor corpusului
+# („Crema X costă 199 lei") și apoi cea pe acoperire de cuvinte + vecin comun („Crema Aqua costă
+# 49,9 lei și se scade din rambursare", servită de `render`). Un citat literal nu poate purta numele
+# unui produs pe care regula nu-l conține. Prețul parafrazei e declarat: o regulă reformulată e
+# judecată ca înainte de NX-346, adică nicio regresie față de `main`.
+#
+# Propozițiile se despart DOAR după punctuație de sfârșit urmată de spațiu, niciodată la rând nou:
+# „…9 sau 12\nlei" ar fi lăsat „lei." orfan, iar suma ar fi ieșit din poartă. Un citat cere cel
+# puțin `QUOTE_MIN_WORDS` cuvinte în afara sumelor, ca „199 lei." singur să nu fie scutit doar
+# fiindcă apare într-o regulă. Poarta medicală, linkurile și stocul se judecă pe TOT textul.
 
-_SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+|\n+")
-_QUOTE_TOKEN = re.compile(
-    rf"(?P<price>{_PRICE_RE.pattern})|(?P<num>\d+(?:[.,]\d+)*)|(?P<word>[^\W\d_]{{3,}})",
-    re.IGNORECASE,
-)
-#: Prima calibrare, măsurată pe SOLE: cele 39 de propoziții ale celor 20 de reguli, redate verbatim,
-#: au acoperirea 1,0, iar cinci fraze despre un produs care împrumută o cifră sau un cuvânt al unei
-#: reguli („Crema X costă 199 lei", „rezultate în 14 zile") ajung cel mult la 0,33.
-QUOTE_MIN_COVERAGE = 0.6
-
-
-def _amount(token: str) -> float | None:
-    try:
-        return round(parse_amount(token), 2)
-    except ValueError:
-        return None
+_SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+")
+_NON_WORD = re.compile(r"[\W_]+")
+_QUOTE_WORD = re.compile(r"[^\W\d_]+")
+_DIGIT = re.compile(r"\d")
+QUOTE_MIN_WORDS = 3
 
 
-def _quote_tokens(text: str) -> list[tuple[str, Any]]:
-    """Textul → `[(clasă, valoare)]`: `p` = sumă cu valută, `n` = cifră, `w` = cuvânt pliat de cel
-    puțin 3 litere (cuvintele scurte nu deosebesc nimic). PUR."""
-    out: list[tuple[str, Any]] = []
-    for m in _QUOTE_TOKEN.finditer(fold_text(text).lower()):
-        if m.group("price"):
-            inner = _PRICE_RE.match(m.group("price"))
-            value = _amount((inner.group(1) or inner.group(2)) if inner else "")
-            if value is not None:
-                out.append(("p", value))
-        elif m.group("num"):
-            value = _amount(m.group("num"))
-            if value is not None:
-                out.append(("n", value))
-        else:
-            out.append(("w", m.group("word")))
-    return out
+def _normal(text: str) -> str:
+    """Forma de comparație: pliată, litere mici, orice rulare de non-alfanumerice = UN spațiu,
+    încadrată de spații ca potrivirea să fie pe cuvinte întregi. PUR."""
+    return " " + " ".join(_NON_WORD.sub(" ", fold_text(text).lower()).split()) + " "
 
 
-def _same_word(a: str, b: str) -> bool:
-    """Același cuvânt, cu flexiune: prefix comun de cel puțin 4 litere și cel mult 2 litere de
-    coadă diferite („livrare"/„livrarea", „gratuita"/„gratuite"). PUR."""
-    if a == b:
-        return True
-    common = 0
-    for x, y in zip(a, b, strict=False):
-        if x != y:
-            break
-        common += 1
-    return common >= max(4, min(len(a), len(b)) - 2)
-
-
-def _neighbours(tokens: list[tuple[str, Any]], i: int) -> tuple[str | None, str | None]:
-    """Cel mai apropiat CUVÂNT la stânga și la dreapta poziției `i`, peste alte cifre."""
-    left = next((v for k, v in reversed(tokens[:i]) if k == "w"), None)
-    right = next((v for k, v in tokens[i + 1 :] if k == "w"), None)
-    return left, right
-
-
-def _supported(sentence: str, source: str) -> bool:
-    """Propoziția e citată din `source` (regula ÎNTREAGĂ): vezi blocul de mai sus."""
-    toks, src = _quote_tokens(sentence), _quote_tokens(source)
-    words = [v for k, v in toks if k == "w"]
-    src_words = [v for k, v in src if k == "w"]
-    if not words:
+def _quoted(sentence: str, normal_sources: list[str]) -> bool:
+    words = _QUOTE_WORD.findall(fold_text(_PRICE_RE.sub(" ", sentence)).lower())
+    if len(words) < QUOTE_MIN_WORDS:
         return False
-    covered = sum(any(_same_word(w, s) for s in src_words) for w in words)
-    if covered / len(words) < QUOTE_MIN_COVERAGE:
-        return False
-    for i, (kind, value) in enumerate(toks):
-        if kind == "w":
-            continue
-        left, right = _neighbours(toks, i)
-        found = False
-        for j, (s_kind, s_value) in enumerate(src):
-            if s_kind != kind or s_value != value:
-                continue
-            s_left, s_right = _neighbours(src, j)
-            if (left and s_left and _same_word(left, s_left)) or (
-                right and s_right and _same_word(right, s_right)
-            ):
-                found = True
-                break
-        if not found:
-            return False
-    return text_claim_keys(sentence) <= text_claim_keys(source)
+    needle = _normal(sentence)
+    return any(needle in source for source in normal_sources)
 
 
 def strip_quoted(reply: str, sources: tuple[str, ...] | list[str]) -> str:
-    """NX-346: `reply` fără propozițiile citate dintr-o regulă a magazinului. Fără surse întoarce
-    textul NESCHIMBAT, deci porțile de cifre și de afirmații rulează exact ca înainte. PUR."""
+    """NX-346: `reply` fără propozițiile citate LITERAL dintr-o regulă a magazinului. Fără surse,
+    sau fără nicio propoziție citată, întoarce textul NESCHIMBAT, deci porțile rulează exact ca
+    înainte. Doar propozițiile cu o cifră sau o afirmație se caută: celelalte nu schimbă nicio
+    poartă. PUR."""
     if not sources or not reply:
         return reply
+    normal_sources = [_normal(source) for source in sources]
+    parts = _SENTENCE_SPLIT.split(reply)
     kept = [
-        sentence
-        for sentence in _SENTENCE_SPLIT.split(reply)
-        if not any(_supported(sentence, source) for source in sources)
+        part
+        for part in parts
+        if not ((_DIGIT.search(part) or has_text_claim(part)) and _quoted(part, normal_sources))
     ]
-    return " ".join(kept)
+    return reply if len(kept) == len(parts) else " ".join(kept)
 
 
 def _safety_ok(reply: str) -> bool:
