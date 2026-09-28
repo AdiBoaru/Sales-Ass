@@ -62,11 +62,17 @@ def test_without_sources_the_gate_is_unchanged():
     assert strip_quoted("Crema Aqua costă 82,99 lei.", CORPUS) == "Crema Aqua costă 82,99 lei."
 
 
-def test_a_verbatim_part_of_a_rule_is_a_quote():
-    """Un fragment continuu al regulii, pe cuvinte întregi, e citat: diacriticele și punctuația
-    nu contează, cuvintele da."""
-    assert _check("Poti returna produsele in 30 de zile!", [RETURNS]).ok
-    assert not _check("Poți returna în 30 de zile.", [RETURNS]).ok  # a lipsit un cuvânt
+def test_a_whole_rule_sentence_is_a_quote_a_fragment_is_not():
+    """Diacriticele și punctuația nu contează, dar citatul e o propoziție ÎNTREAGĂ a regulii: un
+    fragment tăiat din mijloc poate schimba sensul (recenzia 3)."""
+    assert _check("Poti returna produsele in 30 de zile de la primire!", [RETURNS]).ok
+    assert not _check("Poți returna produsele în 30 de zile.", [RETURNS]).ok
+
+
+def test_decimal_and_list_stay_distinct():
+    source = "Plătești în 3, 6, 9 sau 12 rate fără dobândă."
+    assert _check(source, [source]).ok
+    assert not _check("Plătești în 3,6, 9 sau 12 rate fără dobândă.", [source]).ok
 
 
 def test_a_paraphrase_is_judged_as_before_declared():
@@ -110,6 +116,12 @@ def test_anything_added_beyond_the_rule_is_still_rejected(extra):
         "Crema Aqua costă. 199 lei.",
         # recenzia 2: prețul rupt pe două rânduri
         "Star Card de la Banca Transilvania în 3, 6, 9 sau 12\nlei.",
+        # recenzia 3: un fragment peste granița a două propoziții ale regulii
+        "Transportul e gratuit peste 199 lei dacă ai mai comandat la noi cel puțin o dată.",
+        "Dacă te loghezi, un punct valorează 1 leu.",
+        # recenzia 3: un fragment al regulii lângă un produs se citește ca prețul lui
+        "Crema Aqua e alegerea mea pentru tenul uscat. Costul de 49,9 lei îl suporți tu.",
+        "Îți recomand Crema Hidratantă Aqua? La noi pragul e 149 lei.",
     ],
 )
 def test_a_rule_number_or_word_does_not_travel_to_a_product(reply):

@@ -254,8 +254,11 @@ def _claims_ok(reply: str) -> bool:
 #
 # `faq_lookup` îi arată modelului TOATE regulile active ale magazinului (pe SOLE, 20) și îi cere să
 # o redea fidel. O propoziție a prozei iese de sub porțile de cifre și de afirmații DOAR dacă e un
-# CITAT LITERAL: o secvență continuă, pe cuvinte întregi, dintr-un singur răspuns al magazinului
-# (după pliere: fără diacritice, litere mici, punctuația ca spațiu). Orice criteriu APROXIMATIV a
+# CITAT LITERAL: e egală cu o propoziție ÎNTREAGĂ a unui răspuns al magazinului (după pliere: fără
+# diacritice, litere mici, punctuația ca spațiu, zecimalele păstrate). Nu un fragment: tăiat din
+# mijloc, „Costul de 49,9 lei îl suporți tu." se citește lângă un produs ca prețul lui, iar un
+# fragment peste granița a două propoziții ale regulii îi schimbă sensul („gratuit peste 199 lei
+# dacă ai mai comandat", când pragul acela e 149). Orice criteriu APROXIMATIV a
 # fost spart de recenzia adversarială a PR-ului: întemeierea globală a cifrelor corpusului
 # („Crema X costă 199 lei") și apoi cea pe acoperire de cuvinte + vecin comun („Crema Aqua costă
 # 49,9 lei și se scade din rambursare", servită de `render`). Un citat literal nu poate purta numele
@@ -269,23 +272,24 @@ def _claims_ok(reply: str) -> bool:
 
 _SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+")
 _NON_WORD = re.compile(r"[\W_]+")
+_DECIMAL_MARK = re.compile(r"(?<=\d)[.,](?=\d)")
 _QUOTE_WORD = re.compile(r"[^\W\d_]+")
 _DIGIT = re.compile(r"\d")
 QUOTE_MIN_WORDS = 3
 
 
 def _normal(text: str) -> str:
-    """Forma de comparație: pliată, litere mici, orice rulare de non-alfanumerice = UN spațiu,
-    încadrată de spații ca potrivirea să fie pe cuvinte întregi. PUR."""
-    return " " + " ".join(_NON_WORD.sub(" ", fold_text(text).lower()).split()) + " "
+    """Forma de comparație: pliată, litere mici, orice rulare de non-alfanumerice = UN spațiu, dar
+    semnul zecimal rămâne („3,6" ≠ „3, 6"). PUR."""
+    folded = _DECIMAL_MARK.sub("d", fold_text(text).lower())
+    return " ".join(_NON_WORD.sub(" ", folded).split())
 
 
-def _quoted(sentence: str, normal_sources: list[str]) -> bool:
+def _quoted(sentence: str, source_sentences: frozenset[str]) -> bool:
     words = _QUOTE_WORD.findall(fold_text(_PRICE_RE.sub(" ", sentence)).lower())
     if len(words) < QUOTE_MIN_WORDS:
         return False
-    needle = _normal(sentence)
-    return any(needle in source for source in normal_sources)
+    return _normal(sentence) in source_sentences
 
 
 def strip_quoted(reply: str, sources: tuple[str, ...] | list[str]) -> str:
@@ -295,12 +299,14 @@ def strip_quoted(reply: str, sources: tuple[str, ...] | list[str]) -> str:
     poartă. PUR."""
     if not sources or not reply:
         return reply
-    normal_sources = [_normal(source) for source in sources]
+    source_sentences = frozenset(
+        _normal(sentence) for source in sources for sentence in _SENTENCE_SPLIT.split(source)
+    )
     parts = _SENTENCE_SPLIT.split(reply)
     kept = [
         part
         for part in parts
-        if not ((_DIGIT.search(part) or has_text_claim(part)) and _quoted(part, normal_sources))
+        if not ((_DIGIT.search(part) or has_text_claim(part)) and _quoted(part, source_sentences))
     ]
     return reply if len(kept) == len(parts) else " ".join(kept)
 

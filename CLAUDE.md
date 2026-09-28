@@ -993,11 +993,11 @@ iar clientul primea «n-am găsit produse» (11 din 20 de FAQ-uri SOLE, redate v
 unealta întoarce `ToolResult.sources` (răspunsurile EXACT arătate, cu tăierea vederii), acumulate
 în `ToolRun.grounded_sources` → `ResponsePlan.grounded_sources` → `validate_prose(grounded_sources=)`.
 O propoziție iese de sub porțile de cifre și afirmații DOAR dacă e un CITAT LITERAL
-(`strip_quoted`): secvență continuă, pe cuvinte întregi, dintr-un răspuns al magazinului, după
-pliere, cu ≥ 3 cuvinte în afara sumelor; propozițiile se despart doar după punctuație, niciodată
-la rând nou. Două variante mai largi (cifrele corpusului întemeiate global, apoi acoperire de
-cuvinte + vecin comun) au fost sparte de recenzia adversarială cu un preț de produs inventat
-(„Crema Aqua costă 49,9 lei și se scade din rambursare."); cele 13 atacuri sunt teste. Parafraza
+(`strip_quoted`): egală, după pliere, cu o propoziție ÎNTREAGĂ a unui răspuns al magazinului, cu
+≥ 3 cuvinte în afara sumelor; propozițiile se despart doar după punctuație, niciodată la rând nou.
+Trei variante mai largi au fost sparte de recenzia adversarială (cifrele corpusului întemeiate
+global; acoperire de cuvinte + vecin comun, cu un preț de produs inventat servit de `render`;
+fragment continuu, care schimba sensul regulii); cele 17 atacuri sunt teste. Parafraza
 e judecată ca pe `main` (declarat). Poarta medicală, linkurile și stocul se judecă pe tot textul.
 Fără surse, verdictul e identic; suprafața I16 e neschimbată. Deblochează actul `faq`
 al kernelului (trece prin `build_plan` + `render`). Flag `FAQ_GROUNDING_ENABLED` (ON). Card:
