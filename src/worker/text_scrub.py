@@ -167,8 +167,10 @@ def text_claim_keys(text: str | None) -> set[str]:
     keys = {fold_text(m.group(1)).lower() for m in _CLAIMY.finditer(text)}
     for m in _SUPER.finditer(text):
         nxt = _NEXT_WORD.match(text, m.end())
-        phrase = m.group(0) + (" " + nxt.group(1) if nxt else "")
-        keys.add(" ".join(fold_text(phrase).lower().split()))
+        # „nr. 1" = „nr.1", „best seller" = „bestseller": forma din interiorul potrivirii nu
+        # schimbă afirmația, deci spațiile și punctele ei nu intră în cheie.
+        head = re.sub(r"[\s.#]+", "", fold_text(m.group(0)).lower())
+        keys.add(head + (" " + fold_text(nxt.group(1)).lower() if nxt else ""))
     return keys
 
 

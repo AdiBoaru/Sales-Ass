@@ -992,10 +992,13 @@ comenzii: «livrare gratuită peste 199 lei» pica pe `ungrounded_price`/`bare_n
 iar clientul primea «n-am găsit produse» (11 din 20 de FAQ-uri SOLE, redate verbatim). Acum
 unealta întoarce `ToolResult.sources` (răspunsurile EXACT arătate, cu tăierea vederii), acumulate
 în `ToolRun.grounded_sources` → `ResponsePlan.grounded_sources` → `validate_prose(grounded_sources=)`.
-Prețurile se întemeiază doar pe SUMELE cu valută din sursă („30 de zile" nu face din „30 lei" un
-preț), cifrele fără valută pe toate cifrele ei, iar afirmațiile pe chei (`text_claim_keys`:
-rădăcina cuvântului, superlativul plus cuvântul pe care îl califică). Poarta medicală nu se
-relaxează. Fără surse, verdictul e identic; suprafața I16 e neschimbată. Deblochează actul `faq`
+Unitatea e PROPOZIȚIA, nu cifra (`strip_quoted`): o propoziție e citată dintr-o regulă dacă
+≥ 0,6 din cuvintele ei sunt ale regulii, fiecare cifră apare acolo în aceeași clasă (sumă/cifră)
+cu un vecin comun, iar afirmațiile ei (`text_claim_keys`) sunt ale regulii. Citatele ies de sub
+porțile de cifre și afirmații, restul e judecat ca înainte. Întemeierea GLOBALĂ a fost respinsă de
+recenzie: `faq_lookup` aduce TOT corpusul, deci „Crema X costă 199 lei" ar fi trecut. Poarta
+medicală, linkurile și stocul se judecă pe tot textul. Fără surse, verdictul e identic; suprafața
+I16 e neschimbată. Deblochează actul `faq`
 al kernelului (trece prin `build_plan` + `render`). Flag `FAQ_GROUNDING_ENABLED` (ON). Card:
 [`tasks/stage1/NX-346.md`](tasks/stage1/NX-346.md); probă: `pytest tests/test_faq_grounding.py -q`.
 

@@ -26,6 +26,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
+from src.catalog.folding import fold_text
 from src.config import get_settings
 from src.observability import turn_latency
 from src.worker.text_scrub import (
@@ -246,42 +247,123 @@ def _bare_numbers_ok(
     return not _bad_bare_numbers(reply, products, grounded_prices)
 
 
-def _claims_ok(reply: str, sources: tuple[str, ...] = ()) -> bool:
+def _claims_ok(reply: str) -> bool:
     """NX-117: pe calea de proză, claim-uri ne-numerice neverificabile (superlativ „best seller")
-    → respins → retry/fallback. Gated FAIL-OPEN de flag. (Stocul = `_stock_claim_ok`, NX-118.)
-
-    NX-346: o afirmație pe care o face și un text-SURSĂ al turului (regula magazinului servită de
-    `faq_lookup`) e citată, nu inventată: trece. Orice altă afirmație rămâne respinsă, deci o proză
-    care redă FAQ-ul și adaugă un „cel mai bun" pică în continuare."""
+    → respins → retry/fallback. Gated FAIL-OPEN de flag. (Stocul = `_stock_claim_ok`, NX-118.)"""
     if not get_settings().validator_claims_enabled:
         return True
-    if not sources:
-        return not has_text_claim(reply)
-    grounded: set[str] = set()
-    for text in sources:
-        grounded |= text_claim_keys(text)
-    return text_claim_keys(reply) <= grounded
+    return not has_text_claim(reply)
 
 
-def source_prices(sources: tuple[str, ...]) -> set[float]:
-    """NX-346: SUMELE cu valută din textele-sursă ale turului („livrare 15 lei"). Doar ele pot
-    întemeia un preț: o cifră fără valută din sursă („30 de zile") nu face din „30 lei" un preț
-    citat. PUR."""
-    return {
-        round(parse_amount(m.group(1) or m.group(2)), 2)
-        for text in sources
-        for m in _PRICE_RE.finditer(text)
-    }
+# --- NX-346: propoziții CITATE din regulile magazinului ------------------------------------------
+#
+# `faq_lookup` îi arată modelului TOATE regulile active ale magazinului (pe SOLE, 20) și îi cere să
+# o redea fidel pe cea care se potrivește. O cifră sau un cuvânt-afirmație dintr-o regulă nu se
+# întemeiază însă GLOBAL: atunci „1 leu" sau „în 12 ore", scrise lângă numele unui produs, ar trece
+# fiindcă apar undeva în corpus. Unitatea e PROPOZIȚIA: o propoziție a prozei e citată dintr-o
+# regulă dacă (1) cuvintele ei sunt, în proporție de cel puțin `QUOTE_MIN_COVERAGE`, cuvinte ale
+# ACELEI reguli, (2) fiecare cifră a ei apare în regulă, în aceeași clasă (sumă cu valută / cifră
+# simplă) și cu un vecin comun, și (3) afirmațiile ei („livrare", „cel mai rapid") sunt și ale
+# regulii. O propoziție citată iese de sub porțile de cifre și de afirmații, restul textului trece
+# prin ele exact ca înainte. Poarta medicală, linkurile și stocul se judecă pe TOT textul.
+
+_SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+|\n+")
+_QUOTE_TOKEN = re.compile(
+    rf"(?P<price>{_PRICE_RE.pattern})|(?P<num>\d+(?:[.,]\d+)*)|(?P<word>[^\W\d_]{{3,}})",
+    re.IGNORECASE,
+)
+#: Prima calibrare, măsurată pe SOLE: cele 39 de propoziții ale celor 20 de reguli, redate verbatim,
+#: au acoperirea 1,0, iar cinci fraze despre un produs care împrumută o cifră sau un cuvânt al unei
+#: reguli („Crema X costă 199 lei", „rezultate în 14 zile") ajung cel mult la 0,33.
+QUOTE_MIN_COVERAGE = 0.6
 
 
-def source_numbers(sources: tuple[str, ...]) -> set[float]:
-    """NX-346: TOATE cifrele din textele-sursă (sume și cifre fără valută), pentru poarta cifrelor
-    fără valută: proza care citează regula magazinului („în 30 de zile") le poate rosti. PUR."""
-    out = source_prices(sources)
-    for text in sources:
-        for m in _BARE_NUM_RE.finditer(text):
-            out.add(round(parse_amount(m.group(1)), 2))
+def _amount(token: str) -> float | None:
+    try:
+        return round(parse_amount(token), 2)
+    except ValueError:
+        return None
+
+
+def _quote_tokens(text: str) -> list[tuple[str, Any]]:
+    """Textul → `[(clasă, valoare)]`: `p` = sumă cu valută, `n` = cifră, `w` = cuvânt pliat de cel
+    puțin 3 litere (cuvintele scurte nu deosebesc nimic). PUR."""
+    out: list[tuple[str, Any]] = []
+    for m in _QUOTE_TOKEN.finditer(fold_text(text).lower()):
+        if m.group("price"):
+            inner = _PRICE_RE.match(m.group("price"))
+            value = _amount((inner.group(1) or inner.group(2)) if inner else "")
+            if value is not None:
+                out.append(("p", value))
+        elif m.group("num"):
+            value = _amount(m.group("num"))
+            if value is not None:
+                out.append(("n", value))
+        else:
+            out.append(("w", m.group("word")))
     return out
+
+
+def _same_word(a: str, b: str) -> bool:
+    """Același cuvânt, cu flexiune: prefix comun de cel puțin 4 litere și cel mult 2 litere de
+    coadă diferite („livrare"/„livrarea", „gratuita"/„gratuite"). PUR."""
+    if a == b:
+        return True
+    common = 0
+    for x, y in zip(a, b, strict=False):
+        if x != y:
+            break
+        common += 1
+    return common >= max(4, min(len(a), len(b)) - 2)
+
+
+def _neighbours(tokens: list[tuple[str, Any]], i: int) -> tuple[str | None, str | None]:
+    """Cel mai apropiat CUVÂNT la stânga și la dreapta poziției `i`, peste alte cifre."""
+    left = next((v for k, v in reversed(tokens[:i]) if k == "w"), None)
+    right = next((v for k, v in tokens[i + 1 :] if k == "w"), None)
+    return left, right
+
+
+def _supported(sentence: str, source: str) -> bool:
+    """Propoziția e citată din `source` (regula ÎNTREAGĂ): vezi blocul de mai sus."""
+    toks, src = _quote_tokens(sentence), _quote_tokens(source)
+    words = [v for k, v in toks if k == "w"]
+    src_words = [v for k, v in src if k == "w"]
+    if not words:
+        return False
+    covered = sum(any(_same_word(w, s) for s in src_words) for w in words)
+    if covered / len(words) < QUOTE_MIN_COVERAGE:
+        return False
+    for i, (kind, value) in enumerate(toks):
+        if kind == "w":
+            continue
+        left, right = _neighbours(toks, i)
+        found = False
+        for j, (s_kind, s_value) in enumerate(src):
+            if s_kind != kind or s_value != value:
+                continue
+            s_left, s_right = _neighbours(src, j)
+            if (left and s_left and _same_word(left, s_left)) or (
+                right and s_right and _same_word(right, s_right)
+            ):
+                found = True
+                break
+        if not found:
+            return False
+    return text_claim_keys(sentence) <= text_claim_keys(source)
+
+
+def strip_quoted(reply: str, sources: tuple[str, ...] | list[str]) -> str:
+    """NX-346: `reply` fără propozițiile citate dintr-o regulă a magazinului. Fără surse întoarce
+    textul NESCHIMBAT, deci porțile de cifre și de afirmații rulează exact ca înainte. PUR."""
+    if not sources or not reply:
+        return reply
+    kept = [
+        sentence
+        for sentence in _SENTENCE_SPLIT.split(reply)
+        if not any(_supported(sentence, source) for source in sources)
+    ]
+    return " ".join(kept)
 
 
 def _safety_ok(reply: str) -> bool:
@@ -345,19 +427,18 @@ def validate_prose(
             if grounded_sources and getattr(get_settings(), "faq_grounding_enabled", True)
             else ()
         )
-        bare_allowed = grounded_prices or set()
-        if sources:
-            bare_allowed = set(bare_allowed) | source_numbers(sources)
-            grounded_prices = set(grounded_prices or set()) | source_prices(sources)
+        # Cifrele și afirmațiile se judecă pe textul FĂRĂ propozițiile citate dintr-o regulă a
+        # magazinului; fără surse `checked` e chiar `reply`.
+        checked = strip_quoted(reply, sources)
         if not _safety_ok(reply):  # P0-safety: claim medical = invalid pe ORICE rută (răspundere)
             reasons.append("medical_claim")
-        if not _prices_ok(reply, products, grounded_prices):
+        if not _prices_ok(checked, products, grounded_prices):
             reasons.append("ungrounded_price")
         if not _links_ok(reply, products, generated_links):
             reasons.append("invented_link")
-        if check_bare and not _bare_numbers_ok(reply, products, bare_allowed):
+        if check_bare and not _bare_numbers_ok(checked, products, grounded_prices or set()):
             reasons.append("bare_number")
-        if check_claims and not _claims_ok(reply, sources):
+        if check_claims and not _claims_ok(checked):
             reasons.append("text_claim")
         if check_claims and not _stock_claim_ok(reply, products):  # NX-118: stoc availability-aware
             reasons.append("stock_claim")

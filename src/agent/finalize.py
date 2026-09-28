@@ -36,7 +36,7 @@ from src.agent.validator import (
     _claims_ok,
     _stock_claim_ok,
     _valid,
-    source_numbers,
+    strip_quoted,
     validate_prose,
 )
 from src.analytics.demand import clean_ids, product_ids_from_dicts
@@ -209,6 +209,19 @@ def _rich_schema(
     return _with_question(slim) if question else slim
 
 
+def _rules_block(sources: list[str]) -> str:
+    """NX-346: regulile magazinului servite în tur, pentru mesajul de RETRY. Fără ele, o proză care
+    pica din alt motiv se recompunea fără regula pe care clientul o ceruse. Fără surse = șir gol,
+    deci mesajul e byte-identic."""
+    if not sources:
+        return ""
+    rules = "\n".join(f"{i}. {s}" for i, s in enumerate(sources, 1))
+    return (
+        "\n\nRegulile magazinului. Dacă una răspunde la întrebare, red-o fidel, cu cifrele ei, "
+        f"în propoziția ei, fără să le muți lângă un produs:\n{rules}"
+    )
+
+
 def _sources(plan: Any) -> list[str]:
     """NX-346: textele magazinului servite în tur (FAQ), cu kill-switch-ul aplicat O DATĂ aici,
     pentru contoarele de mai jos; `validate_prose` îl reaplică pe gating."""
@@ -261,7 +274,7 @@ async def _finalize(
         f"Limba clientului: {language}\n{history_block}"
         f"Întrebare: {query}\nProduse:\n{_products_brief(products, language)}\n\n"
         f"FOLOSEȘTE EXACT doar aceste prețuri: {allowed}. Niciun alt preț, niciun link inventat."
-    )
+    ) + _rules_block(allowed_sources)
     try:
         reply2 = await llm.complete(reco_system, user)
     except Exception as e:  # noqa: BLE001 — retry eșuat → fallback determinist
@@ -321,7 +334,7 @@ async def _finalize_grounded(
     user = (
         f"Limba clientului: {language}\nDate comandă:\n{facts}\n\n"
         f"FOLOSEȘTE EXACT doar aceste sume: {allowed}. Niciun alt număr, AWB sau link inventat."
-    )
+    ) + _rules_block(allowed_sources)
     try:
         reply2 = await llm.complete(prompt_builder.ORDER_RECO_SYSTEM, user)
     except Exception as e:  # noqa: BLE001 — retry eșuat → fallback sigur
@@ -1144,12 +1157,12 @@ async def render(
                 ctx.trace["rich_downgraded"] = reason  # NX-256: lângă `rich_raw`, în captura full
         # NX-91: dacă textul brut al modelului are cifre bare negroundate, semnalează (P12: doar
         # contorul, NU corpul). _finalize declanșează retry-ul/fallback-ul pe baza validării.
-        grounded = plan.grounded_prices | source_numbers(tuple(_sources(plan)))  # NX-346
-        bare = _bad_bare_numbers(final, products, grounded) if final else []
+        judged = strip_quoted(final, _sources(plan))  # NX-346: fără regulile citate
+        bare = _bad_bare_numbers(judged, products, plan.grounded_prices) if final else []
         if bare:
             ctx.emit("validator_rejected", kind="bare_number", n=len(bare))
         # NX-117: claim ne-numeric neverificabil pe proză → semnalează (P12: doar contorul).
-        if final and not _claims_ok(final, tuple(_sources(plan))):
+        if final and not _claims_ok(judged):
             ctx.emit("validator_rejected", kind="claim")
         # NX-118: claim de stoc nefondat (niciun produs pe stoc) → semnalează (P12: doar contorul).
         if final and not _stock_claim_ok(final, products):
