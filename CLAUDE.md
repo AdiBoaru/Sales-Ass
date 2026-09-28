@@ -317,6 +317,11 @@ model care răspunde exact eticheta iese 1,0 pe toate, testat); un câmp absent 
 evaluează, un apel eșuat e greșit pe fiecare câmp evaluat, țintele din afara ecranului se compară prin
 id. `--regressions` recalculează pe etichetele de acum și dă turele corect → greșit între două
 rapoarte; rândurile păstrează interpretarea brută și verdictul validatorului (local, gitignored).
+Linia de bază v1 pe B: act 0,938, F1 0,916, 0 referințe necunoscute (trece pe scenarii scrise, pică pe
+traficul real A). **339b** = promptul `interpret.v2` (7 reguli generice: actul e cererea, nu ce vinde
+magazinul; întrebarea despre un articol e `detail`; `other` doar când nu se potrivește nimic; `aside` doar
+magazin/conversație; ce descrie clientul devine schimbare; valoarea din meniu doar când cuvintele o numesc;
+`cart` doar la cerere explicită), înghețat înaintea rulării pe A și B; schema scrisă de model neschimbată.
 **Pasul 6 PR A (NX-336) — schela turului interpretat, DARK: lanțul rulează pe un tur real, v1
 răspunde.** `INTERPRETED_TURN_ENABLED` (OFF; poarta de boot cere stările v2 citite ȘI scrise,
 scurtăturile pe resolverul v2 + `NAMED_SHORTCUT_TARGETS_ENABLED` și gardul de rafinare, refuză
