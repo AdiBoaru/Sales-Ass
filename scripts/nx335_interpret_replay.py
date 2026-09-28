@@ -135,8 +135,13 @@ THRESHOLDS = {
     # metrica lor: cât din ele numesc ALTĂ valoare pe o dimensiune etichetată.
     "hypotheses_contradicted_max": 0.15,
 }
-#: NX-345 D1: proveniențele pe care kernelul NU le face fapt (filtru dur / stare `hard`).
+#: NX-345 D1: proveniențele pe care kernelul NU le face fapt. `inferred` e doar semnal de ordonare,
+#: nepersistat (I23), deci nici nu se potrivește cu eticheta: starea nu-l poartă. `implicit` se
+#: persistă ca nevoie `soft` (nu filtrează), deci se potrivește, dar neetichetat e neutru.
 HYPOTHESIS_PROVENANCE = frozenset({"implicit", "inferred"})
+#: Recenzia NX-345a: pe dimensiunile care SCHIMBĂ SUBIECTUL, `implicit` e fapt: devine `set_topic`,
+#: parchează subiectul, iar plannerul caută pe raftul nou. Acolo nu e ipoteză, ci pozitiv fals.
+SUBJECT_DIMENSIONS = frozenset({"category"})
 GATE_POLICY = ClarificationPolicy()
 FactsFn = Callable[[CatalogLookup], Awaitable[ReferenceFacts]]
 
@@ -567,6 +572,15 @@ def observed_parts(
     changes = []
     provenance: list[str | None] = []
     active: list[bool] = []
+    # D3 se judecă pe starea de DINAINTE; un tur care schimbă subiectul sau reia unul parcat
+    # retrage/reactivează nevoile, deci acolo nimic nu e „deja activ" (recenzia NX-345a).
+    subject_moves = interp.thread == "resume" or any(
+        not c.rejected
+        and c.dimension in SUBJECT_DIMENSIONS
+        and c.canonical_value is not None
+        and format_value(c.canonical_value) != state_before.topic.category_key
+        for c in checked
+    )
     for c in checked:
         if c.rejected:
             continue
@@ -579,9 +593,10 @@ def observed_parts(
         changes.append([c.change.op, c.dimension, value, relation])
         provenance.append(c.provenance)
         active.append(
-            _OP_CLASS.get(c.change.op) == "assert"
+            not subject_moves
+            and _OP_CLASS.get(c.change.op) == "assert"
             and _RELATION_CLASS.get(relation) == "positive"
-            and already_active(state_before, c.dimension, value)
+            and already_active(state_before, c.dimension, value, c.provenance)
         )
     return {
         "thread": interp.thread,
@@ -597,19 +612,29 @@ def observed_parts(
     }
 
 
-def already_active(state: ConversationStateV2, dimension: str, value: str | None) -> bool:
-    """NX-345 D3: valoarea e DEJA activă înaintea turului, deci un `set` pe ea nu schimbă nimic în
-    stare (reducerul îl tratează ca nimic): raftul subiectului sau o nevoie activă pe aceeași cheie
-    (delta scrie nevoia pe cheia dimensiunii). Prețul și limitele numerice stau pe chei proprii
-    (`budget_*`, `<fațetă>_min/_max`), deci nu intră aici: rămân judecate. PUR."""
+def already_active(
+    state: ConversationStateV2,
+    dimension: str,
+    value: str | None,
+    provenance: str | None = None,
+) -> bool:
+    """NX-345 D3: valoarea e DEJA activă înaintea turului, iar `set`-ul pe ea nu schimbă nimic în
+    stare: raftul subiectului, sau o nevoie activă pe aceeași cheie (delta scrie nevoia pe cheia
+    dimensiunii) care e deja `hard` și confirmată. Pe o nevoie `soft`, reducerul NU tratează
+    reafirmarea explicită ca nimic: o întărește la `hard` și o confirmă (`_handle_set_need`), deci
+    acolo e o schimbare, judecată. Prețul și limitele numerice stau pe chei proprii (`budget_*`,
+    `<fațetă>_min/_max`), deci rămân judecate. PUR."""
     if value is None:
         return False
-    if dimension == "category":
+    if dimension in SUBJECT_DIMENSIONS:
         return state.topic.category_key == value
     for need in state.active_needs():
-        if need.key == dimension and need.normalized_value is not None:
-            if format_value(need.normalized_value) == value:
-                return True
+        if need.key != dimension or need.normalized_value is None:
+            continue
+        if format_value(need.normalized_value) != value:
+            continue
+        if provenance != "explicit" or (need.strength == "hard" and need.confirmed):
+            return True
     return False
 
 
@@ -682,10 +707,10 @@ def compare(
         "ambiguous": agree("ambiguous", lambda a, b: bool(a) == bool(b)),
         "corrects": agree("corrects", lambda a, b: bool(a) == bool(b)),
         "changes_evaluated": evaluated,
-        "change_hits": sum((want & have).values()),
+        "change_hits": counted["hits"],
         "change_labelled": sum(want.values()),
         "change_emitted": counted["emitted"],
-        "null_hits": sum((want_null & have_null).values()),
+        "null_hits": counted["null_hits"],
         "null_labelled": sum(want_null.values()),
         "null_emitted": counted["null_emitted"],
         # NX-345: ce se numără în plus față de regula de dinainte. `*_all` = toate schimbările
@@ -697,29 +722,53 @@ def compare(
         "neutral_active": counted["neutral_active"],
         "hypotheses": counted["hypotheses"],
         "hypotheses_contradicted": counted["hypotheses_contradicted"],
+        "provenance_known": counted["provenance_known"],
+        # regula de dinainte, pentru `f1_all_emitted` și regresiile pe regula zgomotului
+        "change_hits_all": sum((want & have).values()),
+        "null_hits_all": sum((want_null & have_null).values()),
         "number_for_relative": relative and numbered,
     }
 
 
-def _count_changes(want: Counter, want_null: Counter, got: Mapping[str, Any]) -> dict[str, int]:
-    """NX-345 (D1, D3; Adi, 2026-09-29). Fiecare schimbare emisă, în ordine: o potrivire cu eticheta
-    e un succes; altfel o IPOTEZĂ (`implicit`/`inferred`, pe care kernelul n-o face fapt) e neutră,
-    un `set` pe valoarea deja ACTIVĂ e neutru, iar restul e un pozitiv fals. Fără proveniență sau
-    fără marcajul de activ (etichete, rapoarte vechi), o schimbare se numără exact ca înainte.
+def _is_hypothesis(provenance: str | None, dimension: str) -> bool:
+    """`inferred` nu se persistă pe NICIO dimensiune (I23, `delta`); `implicit` se persistă, iar pe
+    raft mută subiectul, deci acolo e fapt."""
+    if provenance == "inferred":
+        return True
+    return provenance in HYPOTHESIS_PROVENANCE and dimension not in SUBJECT_DIMENSIONS
 
-    Precizia ipotezelor: o ipoteză emisă e CONTRAZISĂ când nu potrivește eticheta, deși eticheta
-    are o schimbare cu valoare pe aceeași (clasă de op, dimensiune), adică numește altă valoare."""
+
+def _count_changes(want: Counter, want_null: Counter, got: Mapping[str, Any]) -> dict[str, int]:
+    """NX-345 (D1, D3; Adi, 2026-09-29), cu reparațiile recenziei NX-345a. Se numără ce kernelul
+    face FAPT:
+
+    - o schimbare `explicit` (sau `implicit` pe raft, care mută subiectul) potrivită cu eticheta e
+      un succes, neetichetată e un pozitiv fals;
+    - o IPOTEZĂ `implicit` (nevoie `soft`, persistată) potrivită e un succes, neetichetată e neutră;
+    - o IPOTEZĂ `inferred` (semnal de ordonare, NEpersistat) nu se potrivește niciodată: dacă
+      eticheta o cerea, e un negativ fals (starea n-o poartă), altfel e neutră;
+    - un `set` pe valoarea deja activă e neutru (D3).
+
+    Faptele se potrivesc ÎNAINTEA ipotezelor, deci ordinea din interpretare nu mută cifrele. Fără
+    proveniență sau fără marcajul de activ (etichete, rapoarte vechi), o schimbare se numără exact
+    ca înainte.
+
+    Precizia ipotezelor: o ipoteză neetichetată e CONTRAZISĂ când eticheta are o schimbare pe
+    aceeași (clasă de op, dimensiune), cu sau fără valoare, adică numește altceva acolo."""
     changes = list(got.get("changes") or [])
     provenance = list(got.get("change_provenance") or [])
     active = list(got.get("change_active") or [])
-    if len(provenance) != len(changes):
+    aligned = len(provenance) == len(changes)
+    if not aligned:
         provenance = [None] * len(changes)
     if len(active) != len(changes):
         active = [False] * len(changes)
     left, left_null = Counter(want), Counter(want_null)
-    labelled_dims = {(k[0], k[1]) for k in want}
+    labelled_dims = {(k[0], k[1]) for k in want} | {(k[0], k[1]) for k in want_null}
     out = dict.fromkeys(
         (
+            "hits",
+            "null_hits",
             "emitted",
             "null_emitted",
             "neutral_hypotheses",
@@ -729,21 +778,27 @@ def _count_changes(want: Counter, want_null: Counter, got: Mapping[str, Any]) ->
         ),
         0,
     )
-    for change, prov, is_active in zip(changes, provenance, active, strict=True):
-        key = _key(change)
+    out["provenance_known"] = int(aligned and bool(changes))
+    items = [
+        (change, prov, is_active, _key(change))
+        for change, prov, is_active in zip(changes, provenance, active, strict=True)
+    ]
+    hypothesis_last = sorted(items, key=lambda it: _is_hypothesis(it[1], it[3][1]))
+    for _change, prov, is_active, key in hypothesis_last:
         null = key[2] is None
         pool, slot = (left_null, (key[0], key[1], key[3])) if null else (left, key)
-        hypothesis = prov in HYPOTHESIS_PROVENANCE
+        hypothesis = _is_hypothesis(prov, key[1])
         emitted = "null_emitted" if null else "emitted"
         if hypothesis:
             out["hypotheses"] += 1
-        if pool[slot] > 0:
+        if pool[slot] > 0 and prov != "inferred":
             pool[slot] -= 1
             out[emitted] += 1
+            out["null_hits" if null else "hits"] += 1
             continue
         if hypothesis:
             out["neutral_hypotheses"] += 1
-            out["hypotheses_contradicted"] += int(not null and (key[0], key[1]) in labelled_dims)
+            out["hypotheses_contradicted"] += int((key[0], key[1]) in labelled_dims)
         elif is_active:
             out["neutral_active"] += 1
         else:
@@ -1185,15 +1240,21 @@ def summarize_sets(rows: Sequence[Mapping[str, Any]], efforts: Sequence[str]) ->
 # --- regresiile tur cu tur între două rapoarte (NX-339) -------------------------------------------
 
 
-def _exact_changes(verdict: Mapping[str, Any]) -> bool | None:
+def _exact_changes(verdict: Mapping[str, Any], rule: str = "nx345") -> bool | None:
+    """Schimbările turului sunt exact eticheta. `rule="all"` = regula de dinainte de NX-345 (toate
+    schimbările emise), cea pe care a fost măsurat zgomotul v1 → v1'."""
     if not verdict.get("changes_evaluated", True):
         return None
     if verdict.get("failed"):
         return False
-    return (
-        verdict["change_hits"] == verdict["change_labelled"] == verdict["change_emitted"]
-        and verdict["null_hits"] == verdict["null_labelled"] == verdict["null_emitted"]
-    )
+    suffix = "_all" if rule == "all" else ""
+
+    def get(name: str) -> int:
+        return verdict.get(name + suffix, verdict[name])
+
+    return get("change_hits") == verdict["change_labelled"] == get("change_emitted") and get(
+        "null_hits"
+    ) == verdict["null_labelled"] == get("null_emitted")
 
 
 def current_labels(rows: Sequence[Mapping[str, Any]], business: str) -> dict[str, dict[str, Any]]:
@@ -1238,7 +1299,10 @@ def with_provenance(got: Mapping[str, Any], checked: Sequence[Mapping[str, Any]]
 
 
 def regressions(
-    before: Sequence[Mapping[str, Any]], after: Sequence[Mapping[str, Any]]
+    before: Sequence[Mapping[str, Any]],
+    after: Sequence[Mapping[str, Any]],
+    *,
+    rule: str = "nx345",
 ) -> dict[str, Any]:
     """Turele care trec din CORECT în GREȘIT (și invers) între două rapoarte, pe fiecare câmp
     evaluat și pe schimbări (potrivire exactă). Se compară doar INTERSECȚIA (tur, braț), iar
@@ -1260,7 +1324,7 @@ def regressions(
                 lost.append(name)
             elif x is False and y is True:
                 gained.append(name)
-        x, y = _exact_changes(a[key]), _exact_changes(b[key])
+        x, y = _exact_changes(a[key], rule), _exact_changes(b[key], rule)
         if x is True and y is False:
             lost.append("changes")
         elif x is False and y is True:
@@ -1318,6 +1382,7 @@ def summarize(rows: Sequence[Mapping[str, Any]], efforts: Sequence[str]) -> dict
         emitted = sum(v["change_emitted"] for v in with_changes)
         precision, recall, f1 = _prf(hits, labelled, emitted)
         emitted_all = sum(v.get("change_emitted_all", v["change_emitted"]) for v in with_changes)
+        hits_all = sum(v.get("change_hits_all", v["change_hits"]) for v in with_changes)
         hypotheses = sum(v.get("hypotheses", 0) for v in with_changes)
         contradicted = sum(v.get("hypotheses_contradicted", 0) for v in with_changes)
         provenance: Counter[str] = Counter()
@@ -1354,12 +1419,20 @@ def summarize(rows: Sequence[Mapping[str, Any]], efforts: Sequence[str]) -> dict
                 "emitted": emitted,
                 # NX-345: F1 pe regula de dinainte (toate schimbările emise), ca v1-v3 să rămână
                 # judecate pe regula cu care au fost rulate.
-                "f1_all_emitted": _round(_prf(hits, labelled, emitted_all)[2]),
+                "f1_all_emitted": _round(_prf(hits_all, labelled, emitted_all)[2]),
                 "emitted_all": emitted_all,
                 "neutral_hypotheses": sum(v.get("neutral_hypotheses", 0) for v in with_changes),
                 "neutral_active": sum(v.get("neutral_active", 0) for v in with_changes),
             },
             "hypotheses": {**rate(contradicted, hypotheses), "contradicted": contradicted},
+            # NX-345a: ipotezele NEETICHETATE (neutre în F1), pe tur: paza împotriva unui prompt
+            # care ar scăpa de pozitivele false coborând proveniența (recenzia NX-345a).
+            "unlabelled_hypotheses": sum(v.get("neutral_hypotheses", 0) for v in with_changes),
+            "provenance_unknown_turns": sum(
+                1
+                for v in with_changes
+                if v.get("change_emitted_all") and not v.get("provenance_known")
+            ),
             "null_valued_changes": {
                 "hits": sum(v["null_hits"] for v in with_changes),
                 "labelled": sum(v["null_labelled"] for v in with_changes),
@@ -1476,7 +1549,10 @@ async def main(argv: list[str] | None = None) -> int:
             json.loads(p.read_text(encoding="utf-8"))["rows"] for p in args.regressions
         )
         labels = current_labels([*before, *after], args.business)
-        report = regressions(rescore(before, labels), rescore(after, labels))
+        a, b = rescore(before, labels), rescore(after, labels)
+        # NX-345a: poarta de zgomot (NX-339) se judecă pe regula pe care a fost măsurat zgomotul
+        # (`all`); regula nouă se raportează alături.
+        report = {**regressions(a, b), "all_emitted": regressions(a, b, rule="all")}
         print(json.dumps(report, ensure_ascii=False, indent=2))
         return 0
 

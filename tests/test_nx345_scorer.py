@@ -54,10 +54,59 @@ def test_an_unlabelled_hypothesis_is_neutral_an_unlabelled_fact_is_a_false_posit
     assert (fact["change_hits"], fact["change_emitted"], fact["neutral_hypotheses"]) == (1, 2, 0)
 
 
-def test_a_hypothesis_that_matches_the_label_is_a_hit():
-    v = rp.compare(LABEL, _got([["set", "skin_type", "dry", "eq"]], ["inferred"]))
+def test_an_implicit_hypothesis_that_matches_the_label_is_a_hit():
+    v = rp.compare(LABEL, _got([["set", "skin_type", "dry", "eq"]], ["implicit"]))
     assert (v["change_hits"], v["change_emitted"], v["neutral_hypotheses"]) == (1, 1, 0)
     assert (v["hypotheses"], v["hypotheses_contradicted"]) == (1, 0)
+
+
+def test_an_inferred_change_never_matches_because_the_state_never_carries_it():
+    """Recenzia NX-345a (P1): `inferred` e doar semnal de ordonare, nepersistat (I23). Numărat ca
+    succes, un prompt care slăbește citatele ar urca F1 fără ca kernelul să scrie nimic."""
+    v = rp.compare(LABEL, _got([["set", "skin_type", "dry", "eq"]], ["inferred"]))
+    assert (v["change_hits"], v["change_emitted"], v["neutral_hypotheses"]) == (0, 0, 1)
+    gamed = rp.compare(
+        {"primary_act": "find", "targets": [], "changes": [["set", "skin_type", "dry", "eq"]]},
+        _got(
+            [
+                ["set", "skin_type", "dry", "eq"],
+                ["set", "category", "machiaj", "eq"],
+                ["set", "brand", "x", "eq"],
+            ],
+            ["inferred", "inferred", "inferred"],
+        ),
+    )
+    assert gamed["change_hits"] == 0  # recall 0: nimic din ce a cerut eticheta nu e în stare
+    assert gamed["change_emitted"] == 0  # nici raftul `inferred` nu intră în stare (I23)
+
+
+def test_an_implicit_shelf_switch_is_a_fact_not_a_hypothesis():
+    """Recenzia NX-345a (P1): pe raft, `implicit` devine `set_topic`, parchează subiectul, iar
+    plannerul caută pe raftul nou. Neetichetat e un pozitiv fals, nu o ipoteză neutră."""
+    v = rp.compare(
+        {"primary_act": "find", "targets": [], "changes": []},
+        _got([["set", "category", "machiaj", "eq"]], ["implicit"]),
+    )
+    assert (v["change_emitted"], v["neutral_hypotheses"], v["hypotheses"]) == (1, 0, 0)
+
+
+def test_facts_match_before_hypotheses_so_order_does_not_move_the_numbers():
+    same = [["set", "skin_type", "dry", "eq"], ["set", "skin_type", "dry", "eq"]]
+    first = rp.compare(LABEL, _got(same, ["explicit", "implicit"]))
+    second = rp.compare(LABEL, _got(same, ["implicit", "explicit"]))
+    keys = ("change_hits", "change_emitted", "neutral_hypotheses")
+    assert [first[k] for k in keys] == [second[k] for k in keys] == [1, 1, 1]
+
+
+def test_a_number_hypothesis_where_the_label_wants_a_relative_price_is_contradicted():
+    """Recenzia NX-345a: eticheta cere o limită relativă (valoare nulă), modelul pune un număr.
+    Neutru în F1, dar contrazis: prețul copiat din istoric e exact riscul acesta."""
+    v = rp.compare(
+        {"primary_act": "find", "targets": [], "changes": [["set", "price", None, "lte"]]},
+        _got([["set", "price", "110", "lte"]], ["implicit"]),
+    )
+    assert (v["hypotheses"], v["hypotheses_contradicted"]) == (1, 1)
+    assert v["number_for_relative"]
 
 
 def test_a_hypothesis_naming_another_value_on_a_labelled_dimension_is_contradicted():
@@ -138,21 +187,51 @@ def _interp():
     )
 
 
-def test_observed_marks_provenance_and_the_already_active_values():
-    state = ConversationStateV2(
+def _state(strength="soft", confirmed=False):
+    return ConversationStateV2(
         topic=Topic(category_key="ten"),
-        needs=(Need(key="skin_type", operator="eq", normalized_value="dry"),),
+        needs=(
+            Need(
+                key="skin_type",
+                operator="eq",
+                normalized_value="dry",
+                strength=strength,
+                confirmed=confirmed,
+            ),
+        ),
     )
+
+
+def test_observed_marks_provenance_and_the_already_active_values():
     checked = [
         _checked("set", "category", "ten"),  # raftul deja activ ⇒ activ
-        _checked("set", "skin_type", "dry", "implicit"),  # nevoia deja activă ⇒ activ
-        _checked("set", "category", "par"),  # alt raft ⇒ judecat
+        _checked("set", "skin_type", "dry", "implicit"),  # o ipoteză pe nevoia activă ⇒ activ
         _checked("remove", "skin_type", "dry"),  # o retragere nu e un `set` ⇒ judecată
         _checked("set", "skin_type", "dry", relation="avoid"),  # o excludere ⇒ judecată
     ]
-    got = rp.observed_parts(_interp(), checked, (), state)
-    assert got["change_provenance"] == ["explicit", "implicit", "explicit", "explicit", "explicit"]
-    assert got["change_active"] == [True, True, False, False, False]
+    got = rp.observed_parts(_interp(), checked, (), _state())
+    assert got["change_provenance"] == ["explicit", "implicit", "explicit", "explicit"]
+    assert got["change_active"] == [True, True, False, False]
+
+
+def test_an_explicit_reaffirmation_of_a_soft_need_is_a_change():
+    """Recenzia NX-345a: reducerul întărește nevoia `soft` la `hard` și o confirmă, deci nu e
+    „nimic". Pe o nevoie deja `hard` și confirmată, e."""
+    change = [_checked("set", "skin_type", "dry")]
+    assert rp.observed_parts(_interp(), change, (), _state())["change_active"] == [False]
+    hard = _state(strength="hard", confirmed=True)
+    assert rp.observed_parts(_interp(), change, (), hard)["change_active"] == [True]
+
+
+def test_nothing_is_already_active_on_a_turn_that_moves_the_subject():
+    """Recenzia NX-345a: schimbarea subiectului retrage/parchează nevoile, deci re-adăugarea lor
+    în același tur se aplică din nou."""
+    checked = [_checked("set", "category", "par"), _checked("set", "skin_type", "dry", "implicit")]
+    got = rp.observed_parts(_interp(), checked, (), _state())
+    assert got["change_active"] == [False, False]
+    resume = _interp().model_copy(update={"thread": "resume"})
+    got = rp.observed_parts(resume, [_checked("set", "category", "ten")], (), _state())
+    assert got["change_active"] == [False]
 
 
 def test_price_and_numeric_bounds_are_never_already_active():
@@ -198,7 +277,26 @@ def test_summary_reports_both_rules_and_the_hypothesis_precision():
         ),
     )
     arm = rp.summarize([row(v)], ("none",))["arms"]["none"]
+    assert arm["unlabelled_hypotheses"] == 1 and arm["provenance_unknown_turns"] == 0
     assert arm["changes"]["f1"] == 1.0
     assert arm["changes"]["f1_all_emitted"] == round(2 * 0.5 * 1 / 1.5, 3)
     assert arm["hypotheses"]["n"] == 1 and arm["hypotheses"]["contradicted"] == 0
     assert rp.THRESHOLDS["hypotheses_contradicted_max"] == 0.15
+
+
+def test_regressions_are_reported_on_both_rules():
+    """Poarta de zgomot NX-339 se judecă pe regula pe care a fost măsurat zgomotul (`all`)."""
+    got = _got(
+        [["set", "skin_type", "dry", "eq"], ["add", "product_type", "crema", "eq"]],
+        ["explicit", "implicit"],
+    )
+    before = [
+        {
+            "turn_id": "t",
+            "arm": "none",
+            "verdict": rp.compare(LABEL, _got([["set", "skin_type", "dry", "eq"]])),
+        }
+    ]
+    after = [{"turn_id": "t", "arm": "none", "verdict": rp.compare(LABEL, got)}]
+    assert rp.regressions(before, after)["regressed"] == 0  # ipoteza e neutră pe regula nouă
+    assert rp.regressions(before, after, rule="all")["regressed"] == 1  # pe cea veche nu
