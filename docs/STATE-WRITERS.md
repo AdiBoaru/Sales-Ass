@@ -5,11 +5,11 @@
 
 Fiecare loc din `src/**/*.py` care scrie starea conversației (v1 sau v2), derivat MECANIC prin `ast` (nu grep). Pregătește I3/I20 din [`docs/KERNEL-CONTRACT-v1.md`](KERNEL-CONTRACT-v1.md): pasul 3 nu poate face din reducer singurul scriitor peste o stare pe care o mai scriu și alții, fără să știe cine sunt aceia.
 
-**Totaluri:** 147 scriitori găsiți, 93 intrări de soartă declarate, 5 `unresolved`.
+**Totaluri:** 148 scriitori găsiți, 93 intrări de soartă declarate, 5 `unresolved`.
 - `becomes_proposal`: 0
 - `executor_output`: 5
 - `retired`: 12
-- `stays`: 130
+- `stays`: 131
 
 ## `needs_topic` -- nevoi + subiect/raft
 
@@ -50,6 +50,7 @@ Fiecare loc din `src/**/*.py` care scrie starea conversației (v1 sau v2), deriv
 | `src/conversation/state_reducer.py:_handle_clear_all` | v2 | `dataclasses_replace` | `parked` | NX-331: reducerul e SINGURUL scriitor al starii v2 (I3); functia e un pas pur al lui (rol `reducer` in tests/kernel_modules.json). `clear all`: toate nevoile neprotejate se retrag, iar slotul parcat se goleste. | `stays` |
 | `src/conversation/state_reducer.py:_handle_confirm` | v2 | `dataclasses_replace` | `needs` | Handler intern al reducerului (NX-235) -- `state_reducer.py` E deja implementarea invariantei I3 ("SINGURUL loc care are voie sa schimbe starea", cf. docstring-ul modulului). Pasul 3 al kernelului EXTINDE acest modul (provenance checker, delta mapper, park/resume), nu il inlocuieste -- fiecare handler ramane exact aici. | `stays` |
 | `src/conversation/state_reducer.py:_handle_revoke` | v2 | `dataclasses_replace` | `needs` | Handler intern al reducerului -- vezi `_handle_confirm`. | `stays` |
+| `src/conversation/state_reducer.py:_handle_revoke` | v2 | `dataclasses_replace` | `parked` | Handler intern al reducerului -- vezi `_handle_confirm`. | `stays` |
 | `src/conversation/state_reducer.py:_handle_revoke` | v2 | `dataclasses_replace` | `revocations` | Handler intern al reducerului -- vezi `_handle_confirm`. | `stays` |
 | `src/conversation/state_reducer.py:_handle_set_need` | v2 | `dataclasses_replace` | `needs` | Handler intern al reducerului -- vezi `_handle_confirm`. | `stays` |
 | `src/conversation/state_reducer.py:_handle_set_need` | v2 | `dataclasses_replace` | `needs` | Handler intern al reducerului -- vezi `_handle_confirm`. | `stays` |

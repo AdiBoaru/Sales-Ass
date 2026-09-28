@@ -608,7 +608,25 @@ def _handle_revoke(
         # NX-331: pe o cheie de LISTĂ o valoare numește O nevoie („remove c2" = `pores`, nu toate
         # nevoile de ten). Fără valoare, retragerea rămâne pe toată cheia, ca înainte.
         targets = [n for n in targets if n.normalized_value == listed]
-    if any(_is_protected(n) for n in targets) and not (
+
+    # NX-337: ordinea contractului parchează SUBIECTUL înaintea retragerii (`_handle_set_topic` →
+    # `_retire_topic`), deci o retragere pe o nevoie a subiectului tocmai părăsit, ÎN ACELAȘI TUR,
+    # nu mai găsește nimic ACTIV — nevoia trăiește deja doar în slotul parcat. O căutăm și acolo,
+    # dar NUMAI când parcarea s-a întâmplat chiar în turul curent (`parked_at_revision ==
+    # state.revision`): o parcare mai veche rămâne comportamentul de azi, apărat de
+    # `_retracted_since_parking` la `resume`.
+    parked_targets: list[Need] = []
+    if (
+        not targets
+        and state.parked is not None
+        and state.parked.parked_at_revision == state.revision
+    ):
+        parked_targets = [n for n in state.parked.needs if n.key == key]
+        if listed is not None:
+            parked_targets = [n for n in parked_targets if n.normalized_value == listed]
+
+    found = targets or parked_targets
+    if any(_is_protected(n) for n in found) and not (
         proposal.source == "user_explicit" and proposal.reason_code == "user_explicit"
     ):
         # Siguranța nu expiră accidental și nu cade la un topic switch (NX-173).
@@ -623,17 +641,38 @@ def _handle_revoke(
     # `model_inferred` (D7 le coboară la naștere), deci „nu vreau Sony" → „de fapt accept Sony"
     # trece neatins. Se apără doar ce a AFIRMAT clientul.
     if proposal.source not in REVIVE_CAPABLE_SOURCES and any(
-        n.source in REVIVE_CAPABLE_SOURCES or n.strength == HARD for n in targets
+        n.source in REVIVE_CAPABLE_SOURCES or n.strength == HARD for n in found
     ):
         return RejectedUpdate("revoke", "unsupported_revoke", key, proposal.source)
 
-    prior = targets[0].normalized_value if targets else (listed or proposal.value)
+    if found:
+        # Ținta găsită (activă sau tocmai parcată) identifică valoarea REALĂ; propunerea poartă
+        # doar valoarea din DELTA, care poate fi alta (cardul NX-337: 100 vs nevoia parcată, 200).
+        prior = found[0].normalized_value
+    elif listed is not None:
+        # Cheie de LISTĂ fără nicio țintă nicăieri: valoarea cerută tot deosebește (marca X ≠
+        # marca Y), deci amprenta rămâne pe ea.
+        prior = listed
+    else:
+        # Cheie scalară fără nicio țintă nicăieri: nimic n-o identifică — tombstone pe toată
+        # cheia (`None` = fără amprentă), nu pe o valoare inventată din propunere (principiul 6).
+        prior = None
+
     needs = tuple(
         replace(n, status="revoked", updated_revision=state.revision)
         if any(n is t for t in targets)
         else n
         for n in state.needs
     )
+    parked = state.parked
+    if parked_targets:
+        # Nevoia retrasă nu mai are ce căuta în parcat: `resume` nu se mai poate baza doar pe
+        # comparația de amprentă (I6), iar un al doilea `revoke` pe aceeași cheie n-ar mai
+        # găsi-o de două ori.
+        parked = replace(
+            parked,
+            needs=tuple(n for n in parked.needs if not any(n is t for t in parked_targets)),
+        )
     reason = (
         proposal.reason_code
         if proposal.reason_code in {"user_explicit", "policy", "correction"}
@@ -650,7 +689,7 @@ def _handle_revoke(
         ),
     )
     return (
-        replace(state, needs=needs, revocations=revocations),
+        replace(state, needs=needs, revocations=revocations, parked=parked),
         Applied("revoke", key, SOFT, proposal.source, "revoked"),
     )
 

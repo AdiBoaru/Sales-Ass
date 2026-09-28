@@ -15,7 +15,7 @@ from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
-from hypothesis import HealthCheck, given, settings
+from hypothesis import HealthCheck, example, given, settings
 from hypothesis import strategies as st
 
 from src.agent.deterministic import _state_v2_sources
@@ -27,7 +27,7 @@ from src.conversation.interpretation import (
     StateChange,
     TurnInterpretation,
 )
-from src.conversation.needs import MAX_UNMAPPED_PER_TOPIC, NeedVocabulary
+from src.conversation.needs import MAX_UNMAPPED_PER_TOPIC, NeedVocabulary, value_fingerprint
 from src.conversation.provenance import need_handles
 from src.conversation.references import (
     MAX_LOOKUP_IDS,
@@ -671,11 +671,95 @@ def test_the_parked_cap_keeps_the_newest_needs_like_the_active_cap():
 
 
 def test_i6_a_key_revoked_after_parking_stays_revoked_on_resume():
+    """Retragerea într-un tur ULTERIOR parcării: comportamentul de azi, apărat de
+    `_retracted_since_parking`, nu e atins de NX-337 (căutarea în parcat se aplică DOAR când
+    parcarea s-a întâmplat în ACELAȘI tur ca retragerea)."""
     _, tablets = phones_then_tablets()
     revoked = turn(tablets.state, said("revoke", key="brand")).state
     resumed = turn(revoked, thread="resume").state
     assert resumed.need_for("brand") is None
     assert "brand" in resumed.revoked_keys()
+
+
+# NX-337 — contraexemplul minim găsit de proprietatea Hypothesis I6, reprodus determinist pe
+# `origin/main@09eaffd` (`tests/kernel/replay._turns`-compatible: (thread, changes, executor)).
+# Ordinea contractului parchează SUBIECTUL înaintea retragerii: turul 1 mută subiectul pe `c1` și,
+# ÎN ACELAȘI TUR, retrage `width_min` — dar `width_min=200` (scris pe `c2`, turul 0) tocmai a fost
+# parcat, deci nu mai există nicio nevoie ACTIVĂ cu cheia asta. `_revoke` trebuie să caute și în
+# slotul parcat DIN ACEST TUR, nu doar în `state.needs`.
+_I6_PARKED_REVOKE_SCRIPT = [
+    ("continue", [("topic", "c2"), ("set", ("width_min", 200.0), "user_explicit")], []),
+    ("continue", [("topic", "c1"), ("remove", ("width_min", 100.0))], []),
+    ("resume", [], []),
+]
+
+
+def test_i6_a_need_revoked_in_the_turn_that_parks_it_stays_revoked_on_resume():
+    """Regresia cardului NX-337: `width_min` se scrie 200 pe `c2`; turul care mută subiectul pe
+    `c1` retrage `width_min` cu valoarea din PROPUNERE (100, valoarea delta-ei), dar nevoia care
+    chiar exista purta 200. Tombstone-ul trebuie să poarte amprenta nevoii GĂSITE (200), nu a
+    propunerii, iar nevoia trebuie scoasă din slotul parcat — altfel `resume` o reînvie."""
+    steps = list(_walk("furniture", _I6_PARKED_REVOKE_SCRIPT))
+    assert len(steps) == 3
+
+    after_revoke = steps[1][3].state
+    assert after_revoke.topic.category_key == "c1"
+    assert after_revoke.need_for("width_min") is None
+    # Nevoia retrasă nu mai are ce căuta în parcat: reluarea nu se poate baza doar pe amprentă.
+    assert [n.key for n in after_revoke.parked.needs] == []
+    tomb = next(r for r in after_revoke.revocations if r.key == "width_min")
+    assert tomb.prior_value_fingerprint == value_fingerprint(200.0)
+
+    resumed = steps[2][3].state
+    assert resumed.topic.category_key == "c2"
+    assert resumed.need_for("width_min") is None
+    assert "width_min" in resumed.revoked_keys()
+
+
+def test_i6_a_list_key_revoked_in_the_same_turn_keeps_the_other_parked_value():
+    """Cardul NX-337, cazul de listă: `concerns` capătă DOUĂ valori pe `telefoane`; turul care
+    schimbă subiectul retrage DOAR una dintre ele. Amprenta rămâne pe valoarea cerută (pe o cheie
+    de listă valoarea deosebește — marca X ≠ marca Y), deci doar ea iese din parcat, iar cealaltă
+    revine la `resume`."""
+    state = turn(
+        ConversationStateV2(),
+        said("set_topic", category_key="telefoane"),
+        said("set_need", key="concerns", value="waterproof"),
+        said("set_need", key="concerns", value="foldable"),
+    ).state
+    switched = turn(
+        state,
+        said("set_topic", category_key="tablete"),
+        said("revoke", key="concerns", value="waterproof"),
+    ).state
+    assert switched.topic.category_key == "tablete"
+    assert {n.normalized_value for n in switched.parked.needs if n.key == "concerns"} == {
+        "foldable"
+    }
+    tomb = next(r for r in switched.revocations if r.key == "concerns")
+    assert tomb.prior_value_fingerprint == value_fingerprint("waterproof")
+
+    resumed = turn(switched, thread="resume").state
+    assert resumed.topic.category_key == "telefoane"
+    assert {n.normalized_value for n in resumed.active_needs() if n.key == "concerns"} == {
+        "foldable"
+    }
+
+
+def test_revoke_of_a_key_that_exists_nowhere_tombstones_without_inventing_a_fingerprint():
+    """Cazul de eșec al cardului: nicio nevoie activă, nimic parcat — retragerea nu explodează,
+    doar lasă un tombstone. Pe o cheie SCALARĂ, propunerea poartă totuși o valoare (ca la orice
+    `remove cN`); fără fix, ea ar fi devenit amprenta tombstone-ului (o valoare inventată, care nu
+    identifică nimic real). Acum tombstone-ul e pe toată cheia (`None`), iar starea rămâne altfel
+    neschimbată."""
+    state = ConversationStateV2()
+    reduced = turn(state, said("revoke", key="brand", value="samsung"))
+    after = reduced.state
+    assert after.need_for("brand") is None
+    assert after.needs == () and after.parked is None
+    tomb = next(r for r in after.revocations if r.key == "brand")
+    assert tomb.prior_value_fingerprint is None
+    assert outcomes(reduced, "revoke") == ["revoked"]
 
 
 def _full_state(name_chars: int) -> ConversationStateV2:
@@ -950,11 +1034,27 @@ def test_i5_aside_and_i20_executors_never_move_needs_or_subject(name, data):
         assert twin.to_jsonb() == reduced.state.to_jsonb()
 
 
+#: NX-337: sentinelă care forțează contraexemplul PINUIT indiferent de ce nimerește căutarea
+#: aleatoare a lui Hypothesis — `@example` pe un test cu `data=st.data()` nu poate oferi un script
+#: gata desenat (`data.draw` e interactiv), deci fixăm `data` la sentinelă și testul recunoaște
+#: cazul special, ca CI-ul să-l ruleze la FIECARE rulare, nu doar când shrinking-ul îl regăsește.
+_I6_PARKED_REVOKE_EXAMPLE = object()
+
+
 @pytest.mark.parametrize("name", PACKS)
 @_PROPERTY
+@example(data=_I6_PARKED_REVOKE_EXAMPLE)
 @given(data=st.data())
 def test_i6_on_the_chain_a_client_revoked_key_returns_only_through_explicit_evidence(name, data):
-    script = data.draw(_turns(name))
+    if data is _I6_PARKED_REVOKE_EXAMPLE:
+        if name != "furniture":
+            # Contraexemplul e specific pachetului `furniture` (`width_min`): pe restul, sentinela
+            # n-are ce testa. `pytest.skip` ar sări TOT testul (căutarea aleatoare inclusă), deci
+            # ieșim tăcut din exemplul PINUIT și lăsăm căutarea normală să ruleze mai departe.
+            return
+        script = _I6_PARKED_REVOKE_SCRIPT
+    else:
+        script = data.draw(_turns(name))
     for before, delta, _, reduced, _ in _walk(name, script):
         revoked = {r.key for r in before.revocations if r.reason_code == "user_explicit"} - {
             n.key for n in before.active_needs()
