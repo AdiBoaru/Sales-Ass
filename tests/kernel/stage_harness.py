@@ -402,6 +402,75 @@ def chain(journey: replay.Journey, cat: Catalog) -> Iterator[ChainTurn]:
         state = step.state_after
 
 
+# --- PR B: un executor SINTETIC și commit-ul real între ture --------------------------------------
+
+#: Executorii care citesc catalogul (`fixture_catalog._CATALOG_EXECUTORS`, aceeași mulțime).
+CATALOG_EXECUTORS: frozenset[str] = frozenset(fixture_catalog._CATALOG_EXECUTORS)
+
+
+def synthetic_executor(cat: Catalog, shown: tuple[str, ...]) -> Callable[..., Any]:
+    """`interpreted_turn.execute_plans` pentru testele PR-ului B: servește turul scriind în context
+    EXACT câmpurile pe care le scriu executorii de producție și pe care commit-ul le citește prin
+    `processor._sender_tail`: răspunsul (cu produsele `shown` ca carduri), `ctx.retrieval` (cu
+    `catalog_read` pe executorii de catalog, NX-326), sesiunea de căutare în `state_patch` (o
+    căutare cu produse o deschide, o paginare o rescrie), iar întrebarea porții ca `set_clarify`
+    (`ask`) sau ca ultima frază a răspunsului (confirmarea, `noted`), ca memoria ei să fie scrisă.
+    Nu scrie nevoi sau subiect: acelea sunt ale reducerului (I20)."""
+    from src.models import RetrievalResult  # noqa: PLC0415
+
+    async def execute(ctx: TurnContext, deps: Any, planned: Any, outcome: Any) -> bool:
+        executors = {p.executor for p in planned.plans}
+        rows = product_rows(cat, list(shown))
+        question = outcome.decision.question
+        if "ask" in executors:
+            # executorul `ask` arată candidații întrebării (cardul, §4: id-urile = candidații)
+            ctx.set_clarify(question or "?", field="kernel", resume_route="sales")
+            if rows:
+                ctx.reply.products = rows
+            return True
+        text = f"ok. {question}" if outcome.asked_kind == "noted" and question else "ok"
+        if rows:
+            ctx.set_reply(text, products=rows, cacheable=False)
+        else:
+            ctx.set_reply(text, cacheable=False)
+        if executors & CATALOG_EXECUTORS or rows:
+            ctx.retrieval = RetrievalResult(
+                products=rows,
+                source="kernel",
+                catalog_read=bool(executors & CATALOG_EXECUTORS),
+            )
+        if "search" in executors and rows:
+            ctx.state_patch["active_search"] = {
+                "fp": f"fixture:{cat.name}",
+                "pool": list(shown),
+                "cursor": 0,
+                "page": 0,
+            }
+        elif "page" in executors and ctx.state_v2.active_search:
+            ctx.state_patch["active_search"] = dict(ctx.state_v2.active_search)
+        return True
+
+    return execute
+
+
+def commit(cat: Catalog, ctx: TurnContext, base: ConversationStateV2) -> ConversationStateV2:
+    """Commit-ul REAL al procesorului (`_build_new_state`, cu scrierea v2 aprinsă) peste documentul
+    stării de dinaintea turului, apoi hidratarea lui, ca la turul următor (`_attach_state_v2`)."""
+    from src.conversation.needs import NeedVocabulary  # noqa: PLC0415
+    from src.conversation.state_v2 import hydrate_state_v2, serialize  # noqa: PLC0415
+    from src.worker.processor import _build_new_state  # noqa: PLC0415
+
+    reply = ctx.reply
+    assert reply is not None
+    doc = _build_new_state(
+        serialize(base)[0],
+        ctx,
+        is_rich=reply.rich is not None,
+        has_products=bool(reply.products),
+    )
+    return hydrate_state_v2(doc, NeedVocabulary.from_pack(cat.pack))
+
+
 def expected_layers(step: fixture_catalog.KernelStep) -> dict[str, Any]:
     """Straturile lanțului pur, în forma etichetelor `first_divergence`. `reducer` = starea PORȚII
     (în PR A niciun executor nu rulează, deci traceul nu are ecranul turului)."""
@@ -419,6 +488,7 @@ def expected_layers(step: fixture_catalog.KernelStep) -> dict[str, Any]:
 
 
 __all__ = [
+    "CATALOG_EXECUTORS",
     "DECLARED_KERNEL_FIELDS",
     "FLAGS",
     "PACKS",
@@ -431,9 +501,11 @@ __all__ = [
     "build_ctx",
     "catalog",
     "chain",
+    "commit",
     "context_fields",
     "expected_layers",
     "install",
     "product_rows",
     "run_turn",
+    "synthetic_executor",
 ]

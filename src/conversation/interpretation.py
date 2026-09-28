@@ -35,7 +35,13 @@ from src.tools.catalog_tools import SearchArgs
 #: §D. Niciun invariant, rând de proprietate sau regulă de stare nu se schimbă (I5, I15a, I20 și
 #: „Answer policy" se decid în PR B/C). Schema scrisă de model (`TurnInterpretation`) e identică cu
 #: cea din v1.0; snapshotul din `tests/kernel/schema/` diferă doar prin versiune.
-KERNEL_CONTRACT_VERSION = "kernel.v1.2"
+#: `kernel.v2.0` (NX-336 PR B, MAJOR, decis de Adi pe 2026-09-28): SENSUL lui I5 se schimbă.
+#: `aside` rămâne identitatea pe starea CONVERSAȚIEI (nevoi, subiect, referințele scrise de
+#: executori, `active_search`), dar prune-ul de siguranță NX-173 (eliminarea produselor blocate din
+#: ecran, seturile de mai devreme și setul parcat) și memoria întrebării porții se aplică și pe
+#: `aside`. Poarta de replay e DEROGATĂ explicit pentru acest bump: niciun tur interpretat n-a fost
+#: servit în producție (flagul n-a fost aprins niciodată). Schema scrisă de model e neschimbată.
+KERNEL_CONTRACT_VERSION = "kernel.v2.0"
 
 # --- scrise de model ----------------------------------------------------------------------------
 

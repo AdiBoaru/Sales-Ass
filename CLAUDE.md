@@ -63,7 +63,7 @@ gate-ul NX-210**. Direcția aprobată către care migrăm:
 
 **Înghețate până la GO-ul de la NX-210:** enforcement-ul QuerySpec/Match Gate (NX-188, NX-189).
 
-**Kernelul conversațional — contractul `kernel.v1.0` (înghețat 2026-09-25, NORMATIV; azi `kernel.v1.2`, minor, NX-336).**
+**Kernelul conversațional — contractul `kernel.v1.0` (înghețat 2026-09-25, NORMATIV; azi `kernel.v2.0`, MAJOR, NX-336 PR B: sensul lui I5, poarta de replay derogată de Adi).**
 Sursa: [`docs/KERNEL-CONTRACT-v1.md`](docs/KERNEL-CONTRACT-v1.md); designul din care vine, ca
 referință: [`docs/KERNEL-DESIGN.md`](docs/KERNEL-DESIGN.md). Modelul scrie O interpretare a turului
 (`TurnInterpretation`: acte, schimbări de stare adresate prin handle, referințe, ambiguități); codul
@@ -344,6 +344,35 @@ producție), iar SOLE primește un catalog SINTETIC doar acolo (`tests/kernel/fi
 `scripts/kernel_trace.py --business <slug> <turn_id>` tipărește traceul. Probă:
 `pytest tests/test_interpreted_turn_a.py tests/test_kernel_contract.py tests/test_kernel_replay.py -q`
 + diferențialul I16 (`scripts/kernel_differential.py`, bază vs branch).
+**Pasul 6 PR B (NX-336) — starea unui tur servit de kernel trece DOAR prin reducer; contractul
+trece pe `kernel.v2.0` (MAJOR).** Ramura încă întoarce `False` în producție: seam-ul executorilor
+`interpreted_turn.execute_plans(ctx, deps, planned, outcome)` întoarce `None` (niciun executor legat,
+turul rămâne `dark`) până la PR C; testele servesc turul printr-un executor SINTETIC
+(`stage_harness.synthetic_executor`). Orchestratorul scrie ÎNAINTEA executorilor (compunerea rulează
+în executor) vederea de citire (`_apply_turn_view`: DOAR `constraints`/`search_constraints` din
+proiecția stării porții, câmp cu câmp, obiectul `ctx.state` nu se înlocuiește; plus
+`ctx.kernel_view` = starea porții + „primul tur al subiectului", fals pe `resume`) și, ULTIMUL, pe un
+tur servit (răspuns NOU pus de executor), `ctx.kernel_turn` (`worker/kernel_commit.KernelTurn`: delta
+cu `resolve_question`, referințele rezolvate, ținta principală, corecția, memoria întrebării DOAR dacă
+întrebarea e chiar în răspuns, propunerile adăugate de executori). Pe orice ieșire neservită
+instantaneul anulează tot, inclusiv vederea. Commit-ul: `processor._sender_tail` (coada Sender-ului,
+extrasă din `_turn_proposals`, paritate cu corpul de pe `main`) + `kernel_commit.commit_kernel_turn`
+(rol `orchestrator`): `reduce_turn` cu propunerile executorilor + coada fără prune (ce nu e în
+`EXECUTOR_OPS` se respinge CU înregistrare, și pe `aside`), apoi `reduce_all` pe revizia fixată cu
+mulțimea FIXĂ memoria întrebării + `prune_products` (orice altceva se aruncă și se numără,
+`second_pass_scope`, turul nu se pierde). Prune-ul NX-173 e pe calea kernelului o ELIMINARE a
+produselor blocate (ecranul de la ÎNCĂRCARE minus lista curățată) din ecran, seturile de mai devreme
+și setul parcat, deci conflictul de versiune scoate din ecranul proaspăt doar blocatele; pe v1 rămâne
+înlocuirea de listă (defect latent declarat, card separat). Pe `aside`, revizia crește o dată doar
+dacă s-a scos ceva. `ctx.state_proposals` de dinaintea ramurii (inclusiv ale lui `clarify_resume`)
+NU intră; `kernel_turn` absent ⇒ `reduce_all` de azi. `active_needs(ctx)` citește starea porții,
+`_drop_dead_moves` flagul subiectului din vedere, întrebarea NX-315 nu rulează pe calea kernelului
+(I11), iar `search_session_aside` spune rezultatul kernelului. **I5 în `kernel.v2.0`** (decis de Adi,
+2026-09-28, poarta de replay derogată: niciun tur interpretat n-a fost servit în producție): `aside`
+e identitatea pe starea CONVERSAȚIEI, dar eliminarea produselor blocate și memoria întrebării porții
+se aplică și pe `aside`. Probă: `pytest tests/test_interpreted_turn_b.py
+tests/test_interpreted_turn_b_review.py tests/test_interpreted_turn_a.py tests/test_kernel_contract.py -q`
+(harnessul la nivel de procesor: 103 ture servite × 5 pachete, starea după fiecare == `kernel_step`).
 
 **NX-238 — retrievalul trece printr-un PORT, iar candidatul e inert (verdict `NOT-READY`).**
 `src/retrieval/` e contractul stabil pe care îl consumă NX-239: `RetrievalPort` + `RetrievalBundle`

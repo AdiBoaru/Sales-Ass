@@ -14,7 +14,7 @@ Versioning: the contract is `kernel.v1.0`. **Minor** (`v1.1`): additive schema f
 
 **`kernel.v1.1` (minor, NX-333, 2026-09-27).** Additive changes only, none of them to the model-written schema (`TurnInterpretation` is byte-identical to v1.0; the schema snapshot differs only in its version stamp): `SearchArgs.prefer`, a second planner-only field next to `rank_terms` (see „Bounds on `unmapped`"); two planner rows that the v1.0 table was missing (see „Primary act → executor"); and two tightenings found in review, both stated where they apply: the delegated loop has no mutation either, and the planned search keeps the state's hard budget instead of re-judging it on the recent text. The delta now writes `unmapped` + `avoid` as an exclusion, which is what „Operations” already required (`avoid` creates an exclusion need), so it is a defect fix, not a rule change. The meaning of every existing field, invariant, ownership row and state rule is unchanged, so no replay gate is required.
 
-**Current version: `kernel.v1.2` (minor, NX-336 PR A, 2026-09-28).** Additive fields and wording only; `TurnInterpretation` is again byte-identical (the schema snapshot differs only in its version stamp):
+**`kernel.v1.2` (minor, NX-336 PR A, 2026-09-28).** Additive fields and wording only; `TurnInterpretation` is again byte-identical (the schema snapshot differs only in its version stamp):
 
 - `KernelTrace` gains additive fields, all with defaults, so every earlier constructor stays valid: `plans`, `gaps`, `disclosures`, `dropped_acts`, `delta_counters`, `gate_memory`, `truncated` (see „Canonical turn trace"). `plan` and `executor` keep their meaning (the primary act's plan). `LAYERS` does not grow.
 - The trace is **redacted** with the NX-230 boundary and **capped** at 16 KB before it is stored, with a declared truncation order. This corrects the wording „bounded like the rest of `diagnostics`": `diagnostics` has no bound and is stored verbatim.
@@ -22,6 +22,8 @@ Versioning: the contract is `kernel.v1.0`. **Minor** (`v1.1`): additive schema f
 - Design §D is corrected to the as-built stage (a branch in `agent_stage`, exact shortcuts before the interpretation, the planned search through `ToolRun.execute_planned`).
 
 No invariant, ownership row or state rule changes in v1.2, so no replay gate is required. The open questions step 6 raised on I5 (the safety prune on `aside`), I20 (the cart on `cart_ref`) and I15a/I12 (`grounding_guard` does not run on the v1 composition) are decided in the PRs that need them (B and C), under the minor/major rule.
+
+**Current version: `kernel.v2.0` (MAJOR, NX-336 PR B, decided by Adi on 2026-09-28).** What changes is the **meaning of I5**, and with it the `thread` ownership row and the `aside` row of „Thread": `thread=aside` is the identity on the CONVERSATION state (needs, topic, the references written by executors, `active_search`), while the safety prune (NX-173) and the gate's question memory still apply on `aside`. The prune is expressed as a **removal** of the blocked products from the displayed set, the earlier sets (`recent_sets`) and the parked set, applied last in the turn's commit, and the turn's revision grows once only when something was removed (an ordinal emitted on the old list then resolves `stale`). Why: (1) **safety parity with v1**: on today's path the prune runs on every turn where a safety context becomes active, so a customer who declares a pregnancy inside an aside would otherwise keep a contraindicated product on the screen and in the parked set, reachable by an ordinal; (2) **no repeated question**: a question the gate asked (or a confirmation it noted) on an aside must be remembered, or the anti-loop rule (I11) would ask it again. The model-written schema (`TurnInterpretation`) is unchanged; the snapshot differs only in its version stamp. **The replay gate is waived explicitly for this bump**, by Adi's decision: no interpreted turn has ever been served in production (`INTERPRETED_TURN_ENABLED` has never been on), so there is no v1.x behaviour to replay against; step 7's replay is the first one and runs on v2.0. Tests that encode the new I5: `tests/test_interpreted_turn_b.py` and `tests/test_interpreted_turn_b_review.py` (the commit of an `aside` keeps needs, topic, `active_search` and executor references, applies the removal and the memory); the reducer's own `aside` identity (`reduce_turn`) is unchanged and keeps its property test.
 
 ## Review decisions
 
@@ -93,7 +95,7 @@ The model proposes meaning; code decides everything that is a fact, an identifie
 | Information | Model | Code | Rule |
 | --- | --- | --- | --- |
 | What the user wants this turn (acts) | proposes | validates shape and handles | Acts come only from the interpretation or a fast-path shortcut |
-| Conversation navigation (`thread`) | proposes | applies | `aside` can never change state |
+| Conversation navigation (`thread`) | proposes | applies | `aside` can never change the conversation state (v2.0: the safety prune and the gate's question memory still apply, see I5) |
 | The user's wording (`quote`, `query`) | supplies | verifies against the user's text | A quote not found in the user's messages is not user evidence |
 | Dimension and value of a change | proposes | owns membership and canonical value | Must exist in the tenant vocabulary; otherwise `unmapped`, then re-resolved once by code |
 | Category key | proposes from a closed menu | owns | Menu membership + the NX-313 contradiction check |
@@ -127,7 +129,7 @@ Twenty-six invariants, each with the test or gate that fails when it is broken. 
 | I2 | On the interpreted path, `SearchArgs` is constructed only by the planner | AST gate: `SearchArgs(` call sites in kernel modules allowlisted to `turn_planner.py`; toolset test: the delegated loop has no catalog-search tool |
 | I3 | State changes only through reducer proposals | AST gate: kernel modules never assign to `ctx.state*` fields; the step 0.5 inventory lists every legacy writer and its fate |
 | I4 | No blind reset: conversation-scoped needs are cleared only by `remove` or `clear all`; topic-scoped needs leave only through a subject change, and are parked, not lost | Property test over random op sequences × 5 packs |
-| I5 | `thread=aside` is the identity on state, including `active_search` | Property test |
+| I5 | `thread=aside` is the identity on the CONVERSATION state (needs, topic, executor-written references, `active_search`); the safety prune (NX-173, as a removal of blocked products from displayed/parked/recent sets) and the gate's question memory still apply on `aside` (v2.0) | Property test (`reduce_turn`) + commit tests (`tests/test_interpreted_turn_b*.py`) |
 | I6 | A revoked need is revived only by `explicit` evidence | Reducer unit test (exists as `revoked_key`) + property test |
 | I7 | Only `explicit` user evidence can produce a hard filter: explicit + hard-capable → hard; explicit + not hard-capable → soft; implicit → soft; inferred → ranking only, this turn | Property test on the delta mapper: no `implicit`/`inferred` change ever reaches a `WHERE` |
 | I8 | Hard-capable means an `enforce_ready` facet or a hard universal spec (budget, size, restriction) | Unit test on the vocabulary |
@@ -357,7 +359,7 @@ The subject of a conversation is `(category_key, product_type)`. Only a change o
 | `thread` | Effect | Validation |
 | --- | --- | --- |
 | `continue` | Changes applied as above | — |
-| `aside` | No change at all: needs, topic, references, `active_search` | An `aside` carrying changes is treated as `continue` and counted (`aside_with_changes`) |
+| `aside` | No change to the conversation state: needs, topic, executor-written references, `active_search`. The safety prune (removal of blocked products) and the gate's question memory still apply (I5, v2.0) | An `aside` carrying changes is treated as `continue` and counted (`aside_with_changes`) |
 | `resume` | Swap with the single parked slot: the parked subject becomes current, the current one becomes parked. Not a stack | No parked topic → no-op, counted |
 
 Worked sequence (I19): current `tablete`, parked `telefoane`. „Hai înapoi la telefoane” → current `telefoane`, parked `tablete`. „Acum arată-mi laptopuri” → a subject change: current `laptopuri`, parked `telefoane`, and `tablete` is evicted (`parked_evicted`). Going deeper than one level is a contract change, not an implementation choice.

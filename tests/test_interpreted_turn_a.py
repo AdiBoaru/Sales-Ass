@@ -470,7 +470,7 @@ async def test_the_dark_turn_writes_the_trace_and_returns_false(monkeypatch, ele
     assert run.reached and run.branch_result is False
     assert run.llm.loops, "calea v1 a răspuns"
     trace = KernelTrace.model_validate(run.ctx.trace["kernel"])
-    assert trace.contract_version == KERNEL_CONTRACT_VERSION == "kernel.v1.2"
+    assert trace.contract_version == KERNEL_CONTRACT_VERSION == "kernel.v2.0"
     assert trace.executor == "none" and trace.plan.executor == "search"
     assert trace.plans == [trace.plan] and trace.truncated is False
     assert "kernel_fallback" not in run.ctx.trace
@@ -846,14 +846,18 @@ def test_the_default_cap_is_16_kb():
 
 def test_the_orchestrator_role_is_registered_with_its_gates():
     roles = gates.modules_by_role()
-    assert roles["orchestrator"] == ["src/agent/interpreted_turn.py"]
+    # NX-336 PR B: commit-ul kernelului a trecut din `planned` în rol, în PR-ul care l-a creat.
+    assert roles["orchestrator"] == [
+        "src/agent/interpreted_turn.py",
+        "src/worker/kernel_commit.py",
+    ]
     assert set(gates.GATES_BY_ROLE["orchestrator"]) == {
         "search_args",
         "state_writes",
         "raw_text",
         "raw_readers",
     }
-    assert gates.load_modules()["planned"].get("src/worker/kernel_commit.py") == "orchestrator"
+    assert "src/worker/kernel_commit.py" not in gates.load_modules()["planned"]
 
 
 def test_the_orchestrator_reads_raw_text_only_in_declared_readers():
@@ -862,7 +866,8 @@ def test_the_orchestrator_reads_raw_text_only_in_declared_readers():
         for e in gates.load_raw_readers()
         if e["file"] == "src/agent/interpreted_turn.py"
     }
-    assert declared == {"_turn_words", "_redact"}
+    # NX-336 PR B (recenzia, constatarea 3): și răspunsul BOTULUI, pentru memoria întrebării.
+    assert declared == {"_turn_words", "_redact", "_asked_in_reply"}
 
 
 @pytest.mark.parametrize(

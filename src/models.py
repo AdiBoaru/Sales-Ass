@@ -673,6 +673,16 @@ class TurnContext:
     # `events` — nimeni nu scrie direct în `state_v2`. Reducerul (pur) le aplică la commit, deci
     # ordinea aici e ordinea în care s-au întâmplat în tur. Owner la aplicare: processor.
     state_proposals: list[Any] = field(default_factory=list)
+    # NX-336 PR B: intrarea commit-ului unui tur SERVIT de kernel (`kernel_commit.KernelTurn`:
+    # delta, referințele rezolvate, ținta principală, corecția, memoria întrebării). Owner UNIC:
+    # orchestratorul (`agent.interpreted_turn`), scris DOAR după ce executorii au servit turul,
+    # niciodată pe fallback. `None` = commit-ul de azi (`reduce_all` pe `state_proposals`).
+    kernel_turn: Any = None
+    # NX-336 PR B: vederea de CITIRE a turului servit de kernel (`interpreted_turn.KernelView`:
+    # starea porții + „primul tur al subiectului"), citită de compunere (`active_needs`,
+    # `subject_is_new`, întrebarea NX-315 oprită). Owner UNIC: orchestratorul, scrisă după ce
+    # executorii au servit turul și restaurată pe fallback. `None` = calea de azi.
+    kernel_view: Any = None
     # NX-236: acțiunea OPACĂ pe care a apăsat-o clientul (`web.action_models.ActionCommand`), deja
     # deschisă, autorizată și consumată la marginea web. Owner UNIC: processor (din payload-ul
     # DURABIL al mesajului inbound, nu din requestul HTTP — un turn reluat după restart trebuie să

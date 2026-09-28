@@ -58,7 +58,7 @@ from src.conversation.references import (
 from src.conversation.state_reducer import (
     ReducerPolicy,
     StateUpdateProposal,
-    reduce,
+    reduce_all,
     reduce_turn,
 )
 from src.conversation.state_v2 import ConversationStateV2
@@ -545,9 +545,10 @@ def kernel_step(
     after = reduce_turn(state, delta, executor, resolved, primary, corrects, reducer_policy).state
     memory = memory_proposal(outcome, turn_id)
     if memory is not None:
-        applied = reduce(after, memory, reducer_policy)
-        if isinstance(applied, ConversationStateV2):
-            after = applied
+        # NX-336 PR B: forma PRODUCȚIEI (`kernel_commit`): a doua trecere e `reduce_all` cu revizia
+        # fixată pe cea a turului (fără bump; plafoanele se aplică), nu `reduce` pe o propunere. O
+        # respingere lasă starea neatinsă, ca înainte.
+        after = reduce_all(after, (memory,), reducer_policy, revision=after.revision).state
     return KernelStep(
         interpretation=interpretation,
         checked=tuple(checked),

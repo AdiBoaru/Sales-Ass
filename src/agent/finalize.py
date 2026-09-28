@@ -465,7 +465,11 @@ async def _turn_shape(
 
     s = get_settings()
     guidance_on = bool(getattr(s, "guidance_required_enabled", False))
-    narrowing_on = bool(getattr(s, "narrowing_question_enabled", False))
+    # NX-336 PR B (I11): pe un tur servit de kernel întrebarea e a PORȚII (`GateOutcome`), deci a
+    # doua sursă de întrebări (NX-315) nu rulează acolo.
+    narrowing_on = bool(getattr(s, "narrowing_question_enabled", False)) and (
+        getattr(ctx, "kernel_view", None) is None
+    )
     howto_on = bool(getattr(s, "howto_from_catalog_enabled", False))
     if not (guidance_on or narrowing_on or howto_on) or not products:
         return _TurnShape()
@@ -663,12 +667,18 @@ def _drop_dead_moves(
     from src.conversation import chip_moves  # noqa: PLC0415
     from src.conversation.subject import spoken_needs, subject_is_new  # noqa: PLC0415
 
+    # NX-336 PR B: pe un tur servit de kernel, „primul tur al subiectului" îl dă vederea turului
+    # (subiectul porții vs cel de dinainte): proiecția v1 a stării n-are `source_turn_id`.
+    view = getattr(ctx, "kernel_view", None)
+    first_subject_turn = (
+        view.subject_is_new if view is not None else subject_is_new(ctx.state, ctx.turn_id)
+    )
     return chip_moves.drop_dead(
         candidates,
         spoken_needs=spoken_needs(ctx.state),
         n_cards=n_cards,
         obligation_kinds=obligation_kinds if v2 else None,
-        first_subject_turn=subject_is_new(ctx.state, ctx.turn_id),
+        first_subject_turn=first_subject_turn,
         cards=cards,
     )
 
