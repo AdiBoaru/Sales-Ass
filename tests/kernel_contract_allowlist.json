@@ -3,6 +3,18 @@
   "entries": [
     {
       "gate": "state_writes",
+      "file": "src/agent/kernel_executors.py",
+      "detail": "nerezolvabil static: dynamic_patch_mutating_call",
+      "reason": "NX-336 D2: _restore_second_plan readuce `state_patch` la valoarea de DUPA mutatie cand al doilea plan nu serveste (sesiunea de cautare pe care clientul n-a vazut-o nu se persista). Anularea unei scrieri, nu o scriere noua; testata."
+    },
+    {
+      "gate": "state_writes",
+      "file": "src/agent/kernel_executors.py",
+      "detail": "nerezolvabil static: dynamic_patch_update_arg",
+      "reason": "NX-336 D2: perechea lui `.clear()` din _restore_second_plan: continutul restaurat e copia facuta dupa mutatie, nimic calculat de kernel."
+    },
+    {
+      "gate": "state_writes",
       "file": "src/agent/interpreted_turn.py",
       "detail": "nerezolvabil static: dynamic_patch_mutating_call",
       "reason": "NX-336 §2: ContextSnapshot.restore readuce `state_patch` la valoarea de DINAINTEA ramurii pe fallback (executorii PR C scriu `active_search` inainte de verdictul servit). Nu e o scriere noua de stare: e anularea uneia, vizibila portii in loc de un setattr ascuns; testul compara toate campurile contextului."
@@ -21,6 +33,11 @@
     }
   ],
   "raw_text_readers": [
+    {
+      "file": "src/agent/kernel_executors.py",
+      "function": "_replace_lead",
+      "reason": "NX-336 D2: inlocuieste confirmarea de cos din codul v1 (pusa de cross-sell) cu fraza pachetului, in raspunsul BOTULUI. Nu citeste cuvintele clientului si nicio decizie nu ramifica pe ele."
+    },
     {
       "file": "src/conversation/provenance.py",
       "function": "_read_quote",
@@ -65,6 +82,11 @@
       "file": "src/agent/kernel_executors.py",
       "function": "_prefix",
       "reason": "NX-336 PR C: pune fraza de dezvaluire a pachetului inaintea raspunsului BOTULUI (text, rich.intro, comparison.intro), o singura data. Citeste raspunsul compus de executor ca sa nu dubleze fraza; nu citeste cuvintele clientului si nicio decizie nu ramifica pe ele."
+    },
+    {
+      "file": "src/agent/kernel_executors.py",
+      "function": "_append",
+      "reason": "NX-336 D2: pune dezvaluirile DUPA fraza unei mutatii (fraza mutatiei e prima), o singura data. Citeste raspunsul BOTULUI ca sa nu dubleze fraza; nu citeste cuvintele clientului si nicio decizie nu ramifica pe ele."
     },
     {
       "file": "src/agent/kernel_executors.py",

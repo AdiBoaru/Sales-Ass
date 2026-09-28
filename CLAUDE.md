@@ -417,8 +417,14 @@ rămâne `dark`. Confirmarea implicită a porții e ultima frază a răspunsului
 restrânsă la `DELEGATED_TOOLS` (`DELEGATE_TOOLS`; `faq_lookup`; `check_order` + `faq_lookup`) ∩
 uneltele tenantului, iar `execute` e învelit într-un allowlist (un nume din afara lui nu ajunge la
 `run_tool`, `delegate_tool_refused{name}`); compunerea e a căii v1, o vedere de comandă trece prin
-ramura ORDER, iar o buclă picată servește fallback-ul v1 fără a doua buclă. Rămân `dark`:
-`reply_only`, mutațiile, multi-act (D2), `bundle` (D3). Frazele vin din
+ramura ORDER, iar o buclă picată servește fallback-ul v1 fără a doua buclă. **PR D2:** `cart`
+prin `cart_add` pe ținte `exact` (garda I10 și în orchestrator), frazele `cart_added`/`cart_failed`
+verificate înaintea scrierii, cross-sell-ul v1 după un produs adăugat; mutația refuzată de poartă
+fără întrebare primește fraza ei; două planuri = coșul întâi, al doilea sărit dacă depinde de un coș
+picat, fraza coșului prima, iar după o mutație reușită nimic nu mai cade pe v1 (nici pe un trace
+picat). Orice refuz fără întrebare al unei mutații primește fraza ei; `cart_add` legacy nu mai
+suprascrie în același tur (defect v1 reparat). Rămân `dark`:
+`reply_only` din `chitchat`, două planuri fără mutație, `bundle` (D3). Frazele vin din
 `DomainPack.kernel_sentences` (vocabular închis `KERNEL_SENTENCE_CODES`, P11), puse o dată înaintea
 răspunsului și în câmpul citit de widget. Un tur căzut după ce un executor a rulat își scoate
 evenimentele (citirile de DB rămân, declarat). Probă: `pytest tests/test_interpreted_turn_c.py
