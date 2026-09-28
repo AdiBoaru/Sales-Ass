@@ -13,15 +13,21 @@ reguli ca interogările din `src/db/queries/catalog.py`:
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Iterable
-from dataclasses import dataclass
+from collections.abc import Callable, Iterable
+from dataclasses import dataclass, replace
 from functools import lru_cache
 from typing import Any
 
 from src.agent.turn_planner import PlannedTurn, plan_turn
 from src.catalog.folding import fold_text
 from src.catalog.vocabulary import CATEGORY_DIMENSION, CatalogVocabulary, VocabEntry
-from src.conversation.ambiguity_gate import GateOutcome, decide_ambiguity, lookup_attributes
+from src.conversation.ambiguity_gate import (
+    GateOutcome,
+    decide_ambiguity,
+    lookup_attributes,
+    question_answered,
+)
+from src.conversation.ambiguity_gate import memory_proposal as _memory_proposal
 from src.conversation.answer_policy import answer_policy
 from src.conversation.clarification_policy import ClarificationPolicy
 from src.conversation.delta import TurnDelta, to_delta
@@ -35,6 +41,7 @@ from src.conversation.interpretation import (
     TurnPlan,
 )
 from src.conversation.kernel_trace import KernelTrace
+from src.conversation.kernel_trace import state_view as _state_view
 from src.conversation.needs import NeedVocabulary
 from src.conversation.provenance import UserWords, check_changes, need_handles
 from src.conversation.references import (
@@ -54,7 +61,7 @@ from src.conversation.state_reducer import (
     reduce,
     reduce_turn,
 )
-from src.conversation.state_v2 import ConversationStateV2, Need
+from src.conversation.state_v2 import ConversationStateV2
 from src.domain.loader import load_domain_pack
 from src.domain.pack import DomainPack
 from src.models import BusinessConfig
@@ -123,14 +130,57 @@ def _facts(product: dict[str, Any], read: tuple[str, ...] | None = None) -> Prod
     )
 
 
-def named_in_catalog(name: str, requested: str) -> tuple[tuple[str, int], ...]:
+def named_in_products(
+    items: Iterable[dict[str, Any]], requested: str
+) -> tuple[tuple[str, int], ...]:
+    """Țintele unui nume cerut, pe o listă de produse (predicatul `find_product_named_in_query`).
+    NX-336: extras din `named_in_catalog`, ca și catalogul sintetic SOLE să folosească ACEEAȘI
+    regulă."""
     wanted = fold_text(requested)
     hits = [
-        (pid, len(head))
-        for pid, p in products(name).items()
+        (p["id"], len(head))
+        for p in items
         if len(head := _distinctive(p["name"])) >= MIN_DISTINCTIVE and fold_text(head) in wanted
     ]
     return tuple(sorted(hits, key=lambda h: (-h[1], h[0])))
+
+
+def named_in_catalog(name: str, requested: str) -> tuple[tuple[str, int], ...]:
+    return named_in_products(products(name).values(), requested)
+
+
+def facts_of(
+    items: dict[str, dict[str, Any]],
+    lookup: CatalogLookup | None = None,
+    *,
+    snapshot: str,
+    drop: Iterable[str] = (),
+    override: dict[str, dict[str, Any]] | None = None,
+) -> ReferenceFacts:
+    """Faptele unui catalog dat ca produse (NX-336: extras din `facts`, pentru catalogul sintetic
+    SOLE din harnessul de stagiu). Aceleași reguli ca `fetch_reference_facts`."""
+    catalog = {pid: dict(p) for pid, p in items.items()}
+    for pid, fields in (override or {}).items():
+        catalog[pid] = {**catalog[pid], **fields}
+    for pid in drop:
+        catalog.pop(pid, None)
+    named = {}
+    read: tuple[str, ...] | None = None
+    if lookup is not None:
+        # Numele se caută pe catalogul NEMODIFICAT, ca înainte de extragere (un produs scos cu
+        # `drop` rămâne o țintă numită, fără fapte: exact „șters între ture").
+        named = {name_key(n): named_in_products(items.values(), n) for n in lookup.names}
+        wanted = set(lookup.ids) | {pid for hits in named.values() for pid, _ in hits}
+        catalog = {pid: p for pid, p in catalog.items() if pid in wanted}
+        # Ca SQL-ul (`reference_facts`): din `attributes` vin DOAR cheile cerute. Altfel testele ar
+        # vedea atribute pe care producția nu le aduce (NX-332, recenzia: poarta număra pe ele).
+        read = tuple(lookup.attributes)
+    return ReferenceFacts(
+        products={pid: _facts(p, read) for pid, p in catalog.items()},
+        named={k: v for k, v in named.items() if v},
+        snapshot=snapshot,
+        attributes_read=read,
+    )
 
 
 def facts(
@@ -143,31 +193,18 @@ def facts(
     """Faptele catalogului. Cu `lookup`: DOAR id-urile cerute plus țintele numelor, exact ca
     `fetch_reference_facts`. `drop` scoate produse din catalog (șterse între ture), `override`
     schimbă câmpuri (un preț schimbat, un stoc epuizat)."""
-    catalog = {pid: dict(p) for pid, p in products(name).items()}
-    for pid, fields in (override or {}).items():
-        catalog[pid] = {**catalog[pid], **fields}
-    for pid in drop:
-        catalog.pop(pid, None)
-    named = {}
-    read: tuple[str, ...] | None = None
-    if lookup is not None:
-        named = {name_key(n): named_in_catalog(name, n) for n in lookup.names}
-        wanted = set(lookup.ids) | {pid for hits in named.values() for pid, _ in hits}
-        catalog = {pid: p for pid, p in catalog.items() if pid in wanted}
-        # Ca SQL-ul (`reference_facts`): din `attributes` vin DOAR cheile cerute. Altfel testele ar
-        # vedea atribute pe care producția nu le aduce (NX-332, recenzia: poarta număra pe ele).
-        read = tuple(lookup.attributes)
-    return ReferenceFacts(
-        products={pid: _facts(p, read) for pid, p in catalog.items()},
-        named={k: v for k, v in named.items() if v},
-        snapshot=f"fixture:{name}",
-        attributes_read=read,
+    return facts_of(
+        products(name), lookup, snapshot=f"fixture:{name}", drop=drop, override=override
     )
 
 
-def vocabulary(name: str) -> CatalogVocabulary:
+def vocabulary_of(
+    business_id: str, items: Iterable[dict[str, Any]], categories: Iterable[dict[str, Any]]
+) -> CatalogVocabulary:
+    """Vocabularul unui catalog dat ca produse + rafturi (NX-336: extras din `vocabulary`)."""
+    items = list(items)
     counts: dict[str, Counter[str]] = {}
-    for product in products(name).values():
+    for product in items:
         for key, value in (product.get("attributes") or {}).items():
             if isinstance(value, str):
                 counts.setdefault(key, Counter())[value] += 1
@@ -178,15 +215,19 @@ def vocabulary(name: str) -> CatalogVocabulary:
     # NX-331: rafturile, ca în `load_vocabulary` (`CATEGORY_DIMENSION`, doar cele cu produse). Fără
     # ele o schimbare de subiect pe un pachet de fixture ieșea `unmapped`, deci stratul `reducer`
     # n-ar fi avut ce parca.
-    shelves = Counter(p.get("category") for p in products(name).values() if p.get("category"))
-    categories = tuple(
+    shelves = Counter(p.get("category") for p in items if p.get("category"))
+    shelf_entries = tuple(
         VocabEntry(key=c["key"], label=c.get("name") or c["key"], count=shelves[c["key"]])
-        for c in _doc(name).get("categories", [])
+        for c in categories
         if shelves[c["key"]] > 0
     )
-    if categories:
-        dimensions[CATEGORY_DIMENSION] = categories
-    return CatalogVocabulary(business_id=f"b-{name}", dimensions=dimensions)
+    if shelf_entries:
+        dimensions[CATEGORY_DIMENSION] = shelf_entries
+    return CatalogVocabulary(business_id=business_id, dimensions=dimensions)
+
+
+def vocabulary(name: str) -> CatalogVocabulary:
+    return vocabulary_of(f"b-{name}", products(name).values(), _doc(name).get("categories", []))
 
 
 def sources_of(name: str, raw: dict[str, Any]) -> ReferenceSources:
@@ -254,32 +295,9 @@ def checked_trace(journey: replay.Journey, index: int) -> KernelTrace:
     return resolver_trace(journey, index).model_copy(update={"checked_changes": checked})
 
 
-def _need_label(need: Need) -> str:
-    value = need.normalized_value
-    shown_value = f"{value:g}" if isinstance(value, float) else value
-    return f"{need.key} {need.operator} {shown_value}"
-
-
-def state_view(state: ConversationStateV2) -> dict[str, Any]:
-    """Forma COMPACTĂ a stării pentru eticheta stratului `reducer`: subiectul, nevoile ACTIVE ca
-    „cheie operator valoare", ecranul, parcatul, seturile de mai devreme și focusul. Câmpurile goale
-    lipsesc, ca un om să poată scrie eticheta fără să le repete."""
-    view: dict[str, Any] = {
-        "topic": state.topic.category_key,
-        "needs": sorted(_need_label(n) for n in state.active_needs()),
-        "shown": [d.product_id for d in state.references.displayed_products],
-    }
-    if state.parked is not None:
-        view["parked"] = {
-            "topic": state.parked.topic.category_key,
-            "needs": sorted(_need_label(n) for n in state.parked.needs),
-            "shown": [d.product_id for d in state.parked.shown],
-        }
-    if state.references.recent_sets:
-        view["recent"] = [[d.product_id for d in s] for s in state.references.recent_sets]
-    if state.references.selected_product:
-        view["selected"] = state.references.selected_product
-    return view
+#: NX-336: forma compactă a stării e a traceului (`kernel_trace.state_view`), aceeași în
+#: producție și în replay.
+state_view = _state_view
 
 
 #: NX-335: sursele resolverului din starea redusă sunt acum o funcție PURĂ din `references.py`
@@ -405,19 +423,8 @@ class KernelStep:
 GATE_POLICY = ClarificationPolicy()
 
 
-def memory_proposal(outcome: GateOutcome, turn_id: str) -> StateUpdateProposal | None:
-    """Propunerea pe care pasul 6 o scrie din `GateOutcome`: `set_pending_question` pentru o
-    întrebare care ține locul răspunsului, `note_asked` pentru confirmarea pusă la final."""
-    if outcome.asked_key is None:
-        return None
-    op = "set_pending_question" if outcome.asked_kind == "pending" else "note_asked"
-    return StateUpdateProposal(
-        op,  # type: ignore[arg-type]
-        key=outcome.asked_key,
-        reason=outcome.decision.reason if op == "set_pending_question" else None,
-        source="policy",
-        turn_id=turn_id,
-    )
+#: NX-336: memoria întrebării are UN proprietar, în producție (`ambiguity_gate`).
+memory_proposal = _memory_proposal
 
 
 def kernel_step(
@@ -435,6 +442,8 @@ def kernel_step(
     loaded: DomainPack | None = None,
     vocab: CatalogVocabulary | None | bool = True,
     policy: ClarificationPolicy = GATE_POLICY,
+    catalog: Callable[[CatalogLookup], ReferenceFacts] | None = None,
+    answer_pending: bool = False,
 ) -> KernelStep:
     """Un tur complet pe calea interpretată, fără executori reali: validatorul de proveniență,
     resolverul (pe sursele stării), `to_delta`, reducerul, poarta, politica de răspuns și memoria
@@ -462,11 +471,25 @@ def kernel_step(
         locale=locale,
         extra_attributes=lookup_attributes(interpretation, vocab=voc, pack=loaded),
     )
-    known = facts(name, lookup, drop=drop, override=override)
+    # NX-336: `catalog` = alt catalog decât al pachetului (harnessul de stagiu, catalogul SOLE
+    # sintetic), cu aceleași reguli ca `fetch_reference_facts`.
+    known = (
+        catalog(lookup)
+        if catalog is not None
+        else facts(name, lookup, drop=drop, override=override)
+    )
     resolved = resolve_references(refs, sources, known, vocab=voc, pack=loaded, locale=locale)
     delta = to_delta(
         interpretation, checked, resolved, known, handles=handles, needs=needs, turn_id=turn_id
     )
+    changed = bool(delta.proposals)
+    # NX-336 §1: cu `answer_pending`, o întrebare VIE se închide pe un tur care nu e paranteză, ca
+    # în orchestrator (paritatea pe care o cere harnessul de stagiu). Implicit oprit: suitele NX-332
+    # modelează explicit ambele cazuri (întrebarea rămasă vie ⇒ `already_pending`). `changed`
+    # rămâne al propunerilor de nevoi.
+    answered = question_answered(state, delta.thread, turn_id) if answer_pending else None
+    if answered is not None:
+        delta = replace(delta, proposals=(answered, *delta.proposals))
     primary = (
         interpretation.acts[-1].targets[0]
         if interpretation.acts and interpretation.acts[-1].targets
@@ -513,7 +536,7 @@ def kernel_step(
         delta.ranking,
         resolved,
         outcome,
-        changed=bool(delta.proposals),
+        changed=changed,
         pack=loaded,
         vocab=voc,
         locale=locale,

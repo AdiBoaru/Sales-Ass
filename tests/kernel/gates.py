@@ -47,8 +47,22 @@ class Violation:
 LLM_MODULES: tuple[str, ...] = ("openai", "anthropic", "src.agent.llm", "src.agent.brain")
 #: Metodele prin care se cheamă modelul. Se prind și ca nume importate, și ca apeluri pe un obiect
 #: primit ca parametru (`deps.llm.complete_schema(...)`), care n-ar lăsa niciun import în urmă.
+#: NX-336: și `complete_schema_raw` (adaptorul), `run_tool_loop_structured` (creierul unic),
+#: `moderate` și `describe_image`, fiecare cu exemplul care pică: lista era incompletă față de
+#: metodele `LLMClient`.
 LLM_CALLS: frozenset[str] = frozenset(
-    {"complete", "complete_schema", "classify_json", "run_tool_loop", "tool_round", "embed"}
+    {
+        "complete",
+        "complete_schema",
+        "complete_schema_raw",
+        "classify_json",
+        "run_tool_loop",
+        "run_tool_loop_structured",
+        "tool_round",
+        "embed",
+        "moderate",
+        "describe_image",
+    }
 )
 
 
@@ -368,6 +382,10 @@ GATES_BY_ROLE: dict[str, tuple[str, ...]] = {
     "adapter": ("search_args", "state_writes"),
     "reducer": ("llm_calls", "search_args", "raw_text", "raw_readers"),
     "executor": ("executor_needs",),
+    # NX-336: orchestratorul turului interpretat cheamă adaptorul și executorii (deci nu i se aplică
+    # I13), dar nu construiește `SearchArgs`, nu scrie starea (în afara restaurării declarate) și
+    # citește textul brut doar în cititorii declarați. I14 i se aplică prin testul general.
+    "orchestrator": ("search_args", "state_writes", "raw_text", "raw_readers"),
 }
 GATES = {
     "llm_calls": llm_calls,

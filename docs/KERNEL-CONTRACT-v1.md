@@ -12,7 +12,16 @@ Versioning: the contract is `kernel.v1.0`. **Minor** (`v1.1`): additive schema f
 
 **Status: `kernel.v1.0` frozen after review round 4 (2026-09-25).** From here, changes follow the minor/major rule; architecture changes are out of scope. Future defects go through the replay corpus and are fixed in pack data, a reducer rule or the one component the trace blames.
 
-**Current version: `kernel.v1.1` (minor, NX-333, 2026-09-27).** Additive changes only, none of them to the model-written schema (`TurnInterpretation` is byte-identical to v1.0; the schema snapshot differs only in its version stamp): `SearchArgs.prefer`, a second planner-only field next to `rank_terms` (see „Bounds on `unmapped`"); two planner rows that the v1.0 table was missing (see „Primary act → executor"); and two tightenings found in review, both stated where they apply: the delegated loop has no mutation either, and the planned search keeps the state's hard budget instead of re-judging it on the recent text. The delta now writes `unmapped` + `avoid` as an exclusion, which is what „Operations” already required (`avoid` creates an exclusion need), so it is a defect fix, not a rule change. The meaning of every existing field, invariant, ownership row and state rule is unchanged, so no replay gate is required.
+**`kernel.v1.1` (minor, NX-333, 2026-09-27).** Additive changes only, none of them to the model-written schema (`TurnInterpretation` is byte-identical to v1.0; the schema snapshot differs only in its version stamp): `SearchArgs.prefer`, a second planner-only field next to `rank_terms` (see „Bounds on `unmapped`"); two planner rows that the v1.0 table was missing (see „Primary act → executor"); and two tightenings found in review, both stated where they apply: the delegated loop has no mutation either, and the planned search keeps the state's hard budget instead of re-judging it on the recent text. The delta now writes `unmapped` + `avoid` as an exclusion, which is what „Operations” already required (`avoid` creates an exclusion need), so it is a defect fix, not a rule change. The meaning of every existing field, invariant, ownership row and state rule is unchanged, so no replay gate is required.
+
+**Current version: `kernel.v1.2` (minor, NX-336 PR A, 2026-09-28).** Additive fields and wording only; `TurnInterpretation` is again byte-identical (the schema snapshot differs only in its version stamp):
+
+- `KernelTrace` gains additive fields, all with defaults, so every earlier constructor stays valid: `plans`, `gaps`, `disclosures`, `dropped_acts`, `delta_counters`, `gate_memory`, `truncated` (see „Canonical turn trace"). `plan` and `executor` keep their meaning (the primary act's plan). `LAYERS` does not grow.
+- The trace is **redacted** with the NX-230 boundary and **capped** at 16 KB before it is stored, with a declared truncation order. This corrects the wording „bounded like the rest of `diagnostics`": `diagnostics` has no bound and is stored verbatim.
+- A new module role, `orchestrator` (see „Enforcement").
+- Design §D is corrected to the as-built stage (a branch in `agent_stage`, exact shortcuts before the interpretation, the planned search through `ToolRun.execute_planned`).
+
+No invariant, ownership row or state rule changes in v1.2, so no replay gate is required. The open questions step 6 raised on I5 (the safety prune on `aside`), I20 (the cart on `cart_ref`) and I15a/I12 (`grounding_guard` does not run on the v1 composition) are decided in the PRs that need them (B and C), under the minor/major rule.
 
 ## Review decisions
 
@@ -150,7 +159,7 @@ These replace section B of the design tab. Changes from it: `thread` loses `swit
 ### Written by the model
 
 ```python
-KERNEL_CONTRACT_VERSION = "kernel.v1.1"   # v1.1 (NX-333): planner-side additions only
+KERNEL_CONTRACT_VERSION = "kernel.v1.2"   # v1.1 (NX-333): planner-side additions; v1.2 (NX-336): trace + clarifications
 
 ActKind = Literal["find", "show_more", "compare", "detail", "link", "cart",
                   "bundle", "order_status", "store_info", "chitchat", "other"]
@@ -426,6 +435,8 @@ The contract survives only if breaking it fails CI. Five gates make the likely r
 | Domain-leak gate | Vertical literals in kernel modules (I14) | The NX-264 gate, extended to the kernel paths |
 | Replay gate | Behavior drift on any family | The phase 0 corpus runs on every major bump; the metrics in design section H may not regress on any family |
 
+Every kernel module has a **role** in `tests/kernel_modules.json`, and the role decides which gates apply: `pure`, `planner`, `adapter`, `reducer`, `executor`, and (v1.2, step 6) `orchestrator`. The orchestrator (`src/agent/interpreted_turn.py`, the branch of `agent_stage` that runs the interpreted turn) calls the adapter and the executors, so I13 does not apply to it; it gets I2 (`SearchArgs` only in the planner), I3 (state only through proposals, with one declared exception: one helper restores `state_patch` and `state_proposals` to their pre-branch value on fallback), the raw-text gates (raw text read only in declared readers) and I14. Registering it also makes the I16 differential apply to every PR that touches it or the kernel commit (`src/worker/kernel_commit.py`, step 6 PR B), while repairs of the v1 path in `agent.py` stay outside it. The I13 gate's list of model methods covers every `LLMClient` generation method (`complete_schema_raw`, `run_tool_loop_structured`, `moderate` and `describe_image` added in v1.2).
+
 The rule for fixing a bad conversation, from now on:
 
 1. Add the conversation to the replay corpus as a journey.
@@ -452,14 +463,24 @@ class KernelTrace(BaseModel):
     rejected: list[dict]             # reducer rejects with reason
     state_after: dict
     ambiguity: AmbiguityDecision
-    plan: TurnPlan
+    plan: TurnPlan                   # the primary act's plan
     executor: str
     answer_policy: AnswerPolicy | None
+    # v1.2, additive, all with defaults
+    plans: list[TurnPlan] = []       # every plan of the turn (multi-act)
+    gaps: list[str] = []             # planner gaps (closed vocabulary); never reply text
+    disclosures: list[tuple[int, str]] = []   # (plan index, disclosure code)
+    dropped_acts: int = 0
+    delta_counters: dict[str, int] = {}       # delta counters + non-applied reducer outcomes
+    gate_memory: dict | None = None  # the question memory the gate would write (op, key)
+    truncated: bool = False          # the cap cut something
 ```
 
-**Where it lives.** In `conversation_traces.diagnostics["kernel"]`. That capture already runs in production (NX-256), so there is no new table and no migration. The size is bounded like the rest of `diagnostics`. It follows the existing redaction: user text appears only as the quotes the interpretation already carries.
+**Where it lives.** In `conversation_traces.diagnostics["kernel"]`. That capture already runs in production (NX-256), so there is no new table and no migration. A turn that falls back to v1 writes no `KernelTrace`, only `diagnostics["kernel_fallback"] = {reason, vocabulary_snapshot}`.
 
-**How it reads.** `scripts/kernel_trace.py <turn_id>` prints it in this form:
+**Redaction and cap (v1.2).** `diagnostics` is stored verbatim and has no bound, so the trace carries its own. Before `model_dump`, every text field the model writes (`StateChange.quote`, `value`, `unit`, `dimension`, `target`, `relative_to`; `Reference.id`, `text`, `name`, `value`, `dimension`; `Act.query` and `targets`; `Ambiguity.readings` and `target`), `CheckedChange.canonical_value` (for `unmapped` it is the user's word) and `CheckedChange.dimension`, `ResolvedRef.ref_id` (the model's reference id, copied by the resolver), the need labels in `state_before`/`state_after` (a need's value can be the user's word), and every text field of the plans' `SearchArgs` pass through the NX-230 redactor, with the same categories as `apply_boundary`. Product ids and codes do not (a digit detector could damage an id). A test walks every string leaf of a stored trace, produced through the real stage with PII seeded into every model-written field. The stored trace is then capped at 16 KB (measured on fixtures: 0.7-2.8 KB, p50 1.2 KB), cut in this order: `product_ids` beyond 6 in `resolved_refs`; `state_before`/`state_after` down to topic + needs; the quotes in `checked_changes`; the interpretation down to acts + `thread`. If it still does not fit, only a summary remains (version, snapshot, acts without their query, plans, executor; the search arguments last), with `truncated: true`. A cut trace stays valid for `render`.
+
+**How it reads.** `scripts/kernel_trace.py --business <slug> <turn_id>` prints it in this form:
 
 ```
 USER             „Vreau ceva sub 100 lei”

@@ -5,11 +5,11 @@
 
 Fiecare loc din `src/**/*.py` care scrie starea conversației (v1 sau v2), derivat MECANIC prin `ast` (nu grep). Pregătește I3/I20 din [`docs/KERNEL-CONTRACT-v1.md`](KERNEL-CONTRACT-v1.md): pasul 3 nu poate face din reducer singurul scriitor peste o stare pe care o mai scriu și alții, fără să știe cine sunt aceia.
 
-**Totaluri:** 142 scriitori găsiți, 89 intrări de soartă declarate, 3 `unresolved`.
+**Totaluri:** 147 scriitori găsiți, 93 intrări de soartă declarate, 5 `unresolved`.
 - `becomes_proposal`: 0
 - `executor_output`: 5
 - `retired`: 12
-- `stays`: 125
+- `stays`: 130
 
 ## `needs_topic` -- nevoi + subiect/raft
 
@@ -90,9 +90,11 @@ Fiecare loc din `src/**/*.py` care scrie starea conversației (v1 sau v2), deriv
 | --- | --- | --- | --- | --- | --- |
 | `src/agent/action_kernel.py:_handle_product_action` | v2 | `proposal_call` | `_select() -> set_references.selected_product` | Apel indirect catre `_select` (vezi mai jos) -- acelasi verdict: mecanism v2-only, nimic de mutat. | `stays` |
 | `src/agent/action_kernel.py:_select` | v2 | `proposal_constructor` | `set_references.selected_product` | O actiune (click) e o selectie EXPLICITA (`source="action"`) -- trece deja prin reducer ca orice alta propunere (`set_references`, payload `selected_product`). Nu exista o forma v1 a acestui concept (v1 nu are `selected_product`), deci nu e nimic de migrat. | `stays` |
-| `src/agent/deterministic.py:_handle_detail_intent` | v2 | `proposal_call` | `_resolve_anchor() -> set_references.selected_product` | Apel indirect catre `_resolve_anchor` -- vezi mai jos, mecanism v2-only. | `stays` |
-| `src/agent/deterministic.py:_handle_review_intent` | v2 | `proposal_call` | `_resolve_anchor() -> set_references.selected_product` | Idem, acelasi apel indirect catre `_resolve_anchor`. | `stays` |
-| `src/agent/deterministic.py:_resolve_anchor` | v2 | `proposal_constructor` | `set_references.selected_product` | Rezolvarea de referinte v2 (`reference_precedence_v2_enabled`, NX-235/236): o referinta REZOLVATA explicit e memorata prin `StateUpdateProposal("set_references", payload={"selected_product":...})`. Conceptul de "produs selectat" nu exista in v1 -- nimic de migrat, mecanismul e nascut deja pe forma tinta. | `stays` |
+| `src/agent/deterministic.py:_anchor` | v2 | `proposal_constructor` | `set_references.selected_product` | NX-336 (a doua recenzie): corpul lui `_resolve_anchor`, care intoarce si DECIZIA resolverului (`source`/`reason`), ca trecerea `exact_only` sa deosebeasca o tinta exacta de o ancora ghicita. Aceeasi propunere `set_references.selected_product`, aceleasi conditii. | `stays` |
+| `src/agent/deterministic.py:_handle_detail_intent` | v2 | `proposal_call` | `_anchor() -> set_references.selected_product` | Apel indirect catre `_resolve_anchor` -- vezi mai jos, mecanism v2-only. | `stays` |
+| `src/agent/deterministic.py:_handle_review_intent` | v2 | `proposal_call` | `_anchor() -> set_references.selected_product` | Idem, acelasi apel indirect catre `_resolve_anchor`. | `stays` |
+| `src/agent/deterministic.py:_resolve_anchor` | v2 | `proposal_call` | `_anchor() -> set_references.selected_product` | Rezolvarea de referinte v2 (`reference_precedence_v2_enabled`, NX-235/236): o referinta REZOLVATA explicit e memorata prin `StateUpdateProposal("set_references", payload={"selected_product":...})`. Conceptul de "produs selectat" nu exista in v1 -- nimic de migrat, mecanismul e nascut deja pe forma tinta. NX-336: acum un invelis subtire peste `_anchor`. | `stays` |
+| `src/agent/deterministic.py:_serve_exact_anchor` | v2 | `proposal_call` | `_anchor() -> set_references.selected_product` | NX-336: acelasi apel indirect catre `_resolve_anchor`, pe scurtatura EXACTA dinaintea interpretarii, prin `ShortcutMemo`. Pe ancora nerezolvata efectele (propunerea, evenimentul) se detaseaza din context si se redau o singura data de trecerea completa; pe cea rezolvata turul e servit de scurtatura, pe calea de azi (`reduce_all` la commit). | `stays` |
 | `src/conversation/state_reducer.py:reduce_turn` | v2 | `proposal_constructor` | `set_references.selected_product` | NX-331: reducerul e SINGURUL scriitor al starii v2 (I3); functia e un pas pur al lui (rol `reducer` in tests/kernel_modules.json). Efectul de referinta: `selected_product` = tinta `exact` a actului principal, aplicata ultima in tur. | `stays` |
 
 ## `active_search` -- sesiune de cautare
@@ -153,6 +155,9 @@ Fiecare loc din `src/**/*.py` care scrie starea conversației (v1 sau v2), deriv
 | `src/agent/brain.py:run_main_brain` | v2 | `proposal_call` | `_persist_clarification() -> set_pending_question` | Apel indirect catre `_persist_clarification` -- deja v2-only (vezi mai sus). | `stays` |
 | `src/agent/finalize.py:_apply_turn_shape` | v2 | `proposal_constructor` | `note_asked` | NX-331: `StateUpdateProposal("note_asked", key=fateta)` dupa intrebarea de ingustare NX-315 (reducerul o scrie in `asked_questions`). NX-331: propunerea e SURSA; vederea v1 se derivă din ea prin `worker/state_writes.apply_v1_view`, singurul scriitor al formei v1 pe siturile mutate. | `stays` |
 | `src/agent/finalize.py:_finalize_rich` | v2 | `proposal_call` | `_apply_turn_shape() -> note_asked` | Apel catre `_apply_turn_shape` (v2, `note_asked`), aceeasi soarta ca acolo. NX-331: propunerea e SURSA; vederea v1 se derivă din ea prin `worker/state_writes.apply_v1_view`, singurul scriitor al formei v1 pe siturile mutate. | `stays` |
+| `src/conversation/ambiguity_gate.py:memory_proposal` | v2 | `proposal_constructor` | `note_asked` | NX-336: memoria intrebarii portii (`set_pending_question` / `note_asked`), mutata din `fixture_catalog` ca sa aiba UN proprietar. Propunere spre reducer; commit-ul pasului 6 (PR B) o aplica in a doua trecere. | `stays` |
+| `src/conversation/ambiguity_gate.py:memory_proposal` | v2 | `proposal_constructor` | `set_pending_question` | NX-336: memoria intrebarii portii (`set_pending_question` / `note_asked`), mutata din `fixture_catalog` ca sa aiba UN proprietar. Propunere spre reducer; commit-ul pasului 6 (PR B) o aplica in a doua trecere. | `stays` |
+| `src/conversation/ambiguity_gate.py:question_answered` | v2 | `proposal_constructor` | `resolve_question` | NX-336 §1: pe turul interpretat o intrebare VIE se inchide (`resolve_question`) cand turul nu e paranteza, ca `clarify_resume` pe calea de azi. Propunere spre reducer; in PR A doar in starea portii (memorie), in PR B in commit. | `stays` |
 | `src/conversation/state_reducer.py:_handle_clear_all` | v2 | `dataclasses_replace` | `pending_clarification` | NX-331: reducerul e SINGURUL scriitor al starii v2 (I3); functia e un pas pur al lui (rol `reducer` in tests/kernel_modules.json). `clear all` goleste intrebarea in asteptare. | `stays` |
 | `src/conversation/state_reducer.py:_handle_note_asked` | v2 | `dataclasses_replace` | `asked_questions` | NX-331: reducerul e SINGURUL scriitor al starii v2 (I3); functia e un pas pur al lui (rol `reducer` in tests/kernel_modules.json). `note_asked`: semnalul anti-bucla al intrebarii de ingustare (NX-315). | `stays` |
 | `src/conversation/state_reducer.py:_handle_resolve_question` | v2 | `dataclasses_replace` | `asked_questions` | Handler intern al reducerului -- vezi `_handle_confirm`. | `stays` |
@@ -199,5 +204,7 @@ Fiecare loc din `src/**/*.py` care scrie starea conversației (v1 sau v2), deriv
 | --- | --- |
 | `src/agent/brain.py:_search` | `dynamic_patch_update_arg` |
 | `src/agent/brain.py:_state_proposals_from_plan` | `dynamic_proposal_op` |
+| `src/agent/interpreted_turn.py:_restore_state_fields` | `dynamic_patch_mutating_call` |
+| `src/agent/interpreted_turn.py:_restore_state_fields` | `dynamic_patch_update_arg` |
 | `src/agent/tool_executor.py:_execute_serialized` | `dynamic_patch_update_arg` |
 

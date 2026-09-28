@@ -63,7 +63,7 @@ gate-ul NX-210**. Direcția aprobată către care migrăm:
 
 **Înghețate până la GO-ul de la NX-210:** enforcement-ul QuerySpec/Match Gate (NX-188, NX-189).
 
-**Kernelul conversațional — contractul `kernel.v1.0` (înghețat 2026-09-25, NORMATIV; azi `kernel.v1.1`, minor, NX-333).**
+**Kernelul conversațional — contractul `kernel.v1.0` (înghețat 2026-09-25, NORMATIV; azi `kernel.v1.2`, minor, NX-336).**
 Sursa: [`docs/KERNEL-CONTRACT-v1.md`](docs/KERNEL-CONTRACT-v1.md); designul din care vine, ca
 referință: [`docs/KERNEL-DESIGN.md`](docs/KERNEL-DESIGN.md). Modelul scrie O interpretare a turului
 (`TurnInterpretation`: acte, schimbări de stare adresate prin handle, referințe, ambiguități); codul
@@ -298,6 +298,44 @@ Probă: `pytest tests/test_turn_interpreter.py tests/test_interpretation_check.p
 tests/test_llm_interpret_effort.py tests/test_usage_purpose.py tests/test_nx335_interpret_replay.py
 tests/test_nx335_review.py tests/test_kernel_contract.py tests/test_kernel_replay.py -q` +
 `python scripts/kernel_prompt_snapshot.py`.
+**Pasul 6 PR A (NX-336) — schela turului interpretat, DARK: lanțul rulează pe un tur real, v1
+răspunde.** `INTERPRETED_TURN_ENABLED` (OFF; poarta de boot cere stările v2 citite ȘI scrise,
+scurtăturile pe resolverul v2 + `NAMED_SHORTCUT_TARGETS_ENABLED` și gardul de rafinare, refuză
+creierul unic). O RAMURĂ în `agent_stage` (un stagiu nou ar pica poarta NX-297), după
+`_recognize_chip_press`: nu intră butoanele semnate (`action_command`), chip-urile recunoscute și
+paginarea pură (`deterministic.is_pure_pagination` = `is_show_more`); scurtăturile EXACTE rulează
+întâi (`try_pre_intents(exact_only=True)`: chip-ul nostru «compară-l cu un similar», recenzii/detaliu
+pe ancoră rezolvată fără constrângeri noi, link/comparație pe verdictul `served` al resolverului v2,
+iar `fallback`-ul lor doar cu o singură ancoră / exact două carduri; fiecare ramură GHICITOARE întoarce `False` fără efecte, testat pe fiecare), apoi
+`src/agent/interpreted_turn.py` (rol NOU `orchestrator`, import leneș: flag stins = zero import):
+`InterpretInput` din context (cititorii declarați `_turn_words`/`_redact`; istoricul redactat la
+citire; vocabularul cu eticheta lui, `kernel_load_vocabulary`, iar indisponibil ⇒ fallback
+`vocabulary_unavailable` FĂRĂ apel), UN `interpret_turn`, `sources_from_state` + pagina (`deterministic.page_source`, aceeași ca la
+scurtături), `plan_lookup(extra_attributes=lookup_attributes)`, `fetch_reference_facts(op=
+"kernel_reference_facts")`, `resolve_references`, `to_delta` (+ `ambiguity_gate.question_answered` pe o
+întrebare vie, în afara parantezei), `reduce_turn` DOAR în memorie, `decide_ambiguity`, `plan_turn`.
+Ramura întoarce MEREU `False` în PR A (`ctx.kernel_turn` e al PR B). Traceul `kernel.v1.2` (câmpuri
+aditive: `plans`, `gaps`, `disclosures`, `dropped_acts`, `delta_counters`, `gate_memory`, `truncated`)
+se scrie în `ctx.trace["kernel"]` redactat (`kernel_trace.redact_trace`, frontiera NX-230) și plafonat
+la 16 KB (`cap_trace`, ordinea declarată, apoi rezumatul); un eșec scrie doar
+`ctx.trace["kernel_fallback"]={reason, vocabulary_snapshot}`. Evenimente: `turn_interpretation`,
+`ambiguity_decision`, `answer_policy`, `kernel_delta`, `kernel_turn{served, executor, plans,
+fallback_reason}` (`dark` = lanțul a mers, dar ramura nu servește încă), emise o singură dată, după
+ce rezultatul e cunoscut. `ContextSnapshot` restaurează la ieșire ce pot scrie executorii (PR C/D;
+câmpurile `state*` într-un singur helper vizibil porții I3), iar testul compară TOATE câmpurile
+contextului predat căii v1. Pașii scurtăturilor exacte se memorează (`deterministic.ShortcutMemo`):
+pe un tur căzut, trecerea completă îi refolosește fără recitire și fără re-emitere, deci turul e cel
+cu flagul stins pe răspuns, unelte, stare, citiri (în afara celor trei etichete `kernel_*`) și
+evenimente (în afara celor ale kernelului). BLOCANT pentru PR C: cu `CHIP_MOVES_V2_ENABLED` stins,
+apăsările de chip ajung la ramură. `memory_proposal` s-a mutat din fixture în `ambiguity_gate` (un proprietar), `state_view` în
+`kernel_trace`; `LLM_CALLS` acoperă și `complete_schema_raw`/`run_tool_loop_structured`/`moderate`/
+`describe_image`; `src/worker/kernel_commit.py` e `planned` (PR B). Harnessul de stagiu
+(`tests/kernel/stage_harness.py`) trece journey-urile × 5 pachete prin `agent_stage` REAL, cu
+interpretarea prin `LLMClient.complete_schema_raw` peste un transport fals (rândul `per_call` e cel de
+producție), iar SOLE primește un catalog SINTETIC doar acolo (`tests/kernel/fixture_sole_catalog.py`).
+`scripts/kernel_trace.py --business <slug> <turn_id>` tipărește traceul. Probă:
+`pytest tests/test_interpreted_turn_a.py tests/test_kernel_contract.py tests/test_kernel_replay.py -q`
++ diferențialul I16 (`scripts/kernel_differential.py`, bază vs branch).
 
 **NX-238 — retrievalul trece printr-un PORT, iar candidatul e inert (verdict `NOT-READY`).**
 `src/retrieval/` e contractul stabil pe care îl consumă NX-239: `RetrievalPort` + `RetrievalBundle`

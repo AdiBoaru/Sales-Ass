@@ -66,6 +66,7 @@ from src.conversation.references import (
     ReferenceFacts,
     gate_act_targets,
 )
+from src.conversation.state_reducer import StateUpdateProposal
 from src.conversation.state_v2 import ConversationStateV2
 from src.web.localization import currency_word, format_amount
 
@@ -859,6 +860,46 @@ def decide_ambiguity(
     ).run()
 
 
+def memory_proposal(outcome: GateOutcome, turn_id: str) -> StateUpdateProposal | None:
+    """Memoria întrebării scrisă din `GateOutcome` (NX-336: mutată din `fixture_catalog`, un
+    singur proprietar pentru replay și pentru commit-ul pasului 6): `set_pending_question` pentru o
+    întrebare care ține locul răspunsului, `note_asked` pentru confirmarea pusă la final. PUR."""
+    if outcome.asked_key is None:
+        return None
+    if outcome.asked_kind == "pending":
+        return StateUpdateProposal(
+            "set_pending_question",
+            key=outcome.asked_key,
+            reason=outcome.decision.reason,
+            source="policy",
+            turn_id=turn_id,
+        )
+    return StateUpdateProposal(
+        "note_asked", key=outcome.asked_key, source="policy", turn_id=turn_id
+    )
+
+
+def question_answered(
+    state: ConversationStateV2, thread: str, turn_id: str
+) -> StateUpdateProposal | None:
+    """NX-336 §1: pe turul interpretat, o întrebare VIE se închide când turul nu e o paranteză.
+
+    Interpretarea a văzut întrebarea (blocul `PENDING`) și i-a citit răspunsul ca schimbări, deci
+    nevoia vine din interpretare; aici se închide doar întrebarea, ca `clarify_resume` pe calea de
+    azi. Fără asta întrebarea ar rămâne vie până expiră, iar poarta n-ar mai putea întreba nimic
+    (`set_pending_question` respins cu `already_pending`). PUR."""
+    pending = state.pending_clarification
+    if thread == "aside" or pending is None or pending.expired_at(state.revision):
+        return None
+    return StateUpdateProposal(
+        "resolve_question",
+        key=pending.target_key,
+        question_id=pending.question_id,
+        source="user_explicit",
+        turn_id=turn_id,
+    )
+
+
 __all__ = [
     "BOUND_KINDS",
     "GATE_REASONS",
@@ -869,6 +910,8 @@ __all__ = [
     "GateOutcome",
     "decide_ambiguity",
     "lookup_attributes",
+    "memory_proposal",
+    "question_answered",
     "target_question_key",
     "template_markers",
     "valid_template",

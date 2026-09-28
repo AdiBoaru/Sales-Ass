@@ -1761,6 +1761,15 @@ class Settings(BaseSettings):
     reference_precedence_v2_enabled: bool = Field(
         default=False, validation_alias="REFERENCE_PRECEDENCE_V2_ENABLED"
     )
+    # NX-336 (kernel pasul 6): turul interpretat, cablat în `agent_stage` ca o RAMURĂ (nu un stagiu
+    # nou: poarta NX-297 refuză un stagiu care cheamă bucla de unelte). OFF = calea v1 byte-identică
+    # și `src/agent/interpreted_turn.py` nici nu se importă. PR A: lanțul rulează DARK (trace +
+    # evenimente), iar ramura întoarce mereu `False`. Relațiile cu celelalte flaguri se validează la
+    # boot (`_interpreted_turn_relations`). Global pe proces: expunerea per conversație e a
+    # pasului 7.
+    interpreted_turn_enabled: bool = Field(
+        default=False, validation_alias="INTERPRETED_TURN_ENABLED"
+    )
     # Pragul de information gain sub care NU întrebăm (răspundem cu ce avem + declarăm ce nu
     # știm). Siguranța și conflictele hard trec peste el — sunt corectitudine, nu UX.
     clarification_min_information_gain: float = Field(
@@ -2134,6 +2143,41 @@ class Settings(BaseSettings):
             )
         if not 0.0 <= self.clarification_min_information_gain <= 1.0:
             raise ValueError("CLARIFICATION_MIN_INFORMATION_GAIN trebuie să fie în [0, 1]")
+        return self
+
+    @model_validator(mode="after")
+    def _interpreted_turn_relations(self) -> "Settings":
+        """NX-336: turul interpretat are nevoie de starea v2 hidratată ȘI persistată (fără scrierea
+        v2, persistența v1 citește `search_constraints`, pe care kernelul nu-l scrie), de ramura v2
+        a scurtăturilor exacte (care rulează ÎNAINTEA interpretării) și de gardul de rafinare (fără
+        el «mai arată-mi, dar sub 100» ar trece drept paginare pură). Creierul unic revendică și el
+        turul, deci cele două se exclud."""
+        if not self.interpreted_turn_enabled:
+            return self
+        missing = [
+            name
+            for name, on in (
+                ("CONVERSATION_STATE_V2_ENABLED", self.conversation_state_v2_enabled),
+                ("CONVERSATION_STATE_V2_WRITE_ENABLED", self.conversation_state_v2_write_enabled),
+                (
+                    "REFERENCE_RESOLVER_V2_SHORTCUTS_ENABLED",
+                    self.reference_resolver_v2_shortcuts_enabled,
+                ),
+                ("NAMED_SHORTCUT_TARGETS_ENABLED", self.named_shortcut_targets_enabled),
+                ("REFINEMENT_GUARD_ENABLED", self.refinement_guard_enabled),
+            )
+            if not on
+        ]
+        if missing:
+            raise ValueError(
+                f"INTERPRETED_TURN_ENABLED cere {' + '.join(missing)} (starea v2 persistată, "
+                "scurtăturile exacte pe resolverul v2 și gardul de rafinare)"
+            )
+        if self.single_brain_enabled:
+            raise ValueError(
+                "INTERPRETED_TURN_ENABLED e incompatibil cu SINGLE_BRAIN_ENABLED (ambele "
+                "revendică turul)"
+            )
         return self
 
     @model_validator(mode="after")
