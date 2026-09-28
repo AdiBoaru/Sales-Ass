@@ -277,7 +277,7 @@ def test_summary_reports_both_rules_and_the_hypothesis_precision():
         ),
     )
     arm = rp.summarize([row(v)], ("none",))["arms"]["none"]
-    assert arm["unlabelled_hypotheses"] == 1 and arm["provenance_unknown_turns"] == 0
+    assert arm["unlabelled_hypotheses"]["k"] == 1 and arm["provenance_unknown_turns"] == 0
     assert arm["changes"]["f1"] == 1.0
     assert arm["changes"]["f1_all_emitted"] == round(2 * 0.5 * 1 / 1.5, 3)
     assert arm["hypotheses"]["n"] == 1 and arm["hypotheses"]["contradicted"] == 0
@@ -300,3 +300,56 @@ def test_regressions_are_reported_on_both_rules():
     after = [{"turn_id": "t", "arm": "none", "verdict": rp.compare(LABEL, got)}]
     assert rp.regressions(before, after)["regressed"] == 0  # ipoteza e neutră pe regula nouă
     assert rp.regressions(before, after, rule="all")["regressed"] == 1  # pe cea veche nu
+
+
+def test_a_hypothesis_with_the_labelled_value_is_redundant_not_contradicted():
+    """Recenzia NX-345a (a doua trecere): un `inferred` egal cu eticheta nu se potrivește (starea
+    nu-l poartă), dar nici nu contrazice; la fel un duplicat `implicit` al unui fapt potrivit."""
+    inferred = rp.compare(LABEL, _got([["set", "skin_type", "dry", "eq"]], ["inferred"]))
+    assert (inferred["hypotheses_contradicted"], inferred["hypotheses_redundant"]) == (0, 1)
+    dup = rp.compare(
+        LABEL,
+        _got([["set", "skin_type", "dry", "eq"]] * 2, ["explicit", "implicit"]),
+    )
+    assert (dup["change_hits"], dup["hypotheses_contradicted"], dup["hypotheses_redundant"]) == (
+        1,
+        0,
+        1,
+    )
+
+
+def test_nothing_is_already_active_after_a_clear_or_a_correction():
+    hard = _state(strength="hard", confirmed=True)
+    clear = StateChange(
+        op="clear",
+        target="topic",
+        dimension=None,
+        relation=None,
+        value=None,
+        number=None,
+        unit=None,
+        relative_to=None,
+        quote="altceva",
+    )
+    cleared = CheckedChange(
+        change=clear,
+        dimension="topic",
+        canonical_value=None,
+        provenance="explicit",
+        strength="soft",
+        rejected=None,
+    )
+    got = rp.observed_parts(_interp(), [cleared, _checked("set", "skin_type", "dry")], (), hard)
+    assert got["change_active"] == [False, False]
+    fix = _interp().model_copy(update={"corrects_previous_turn": True})
+    got = rp.observed_parts(fix, [_checked("set", "skin_type", "dry")], (), hard)
+    assert got["change_active"] == [False]
+
+
+def test_an_inferred_shelf_does_not_move_the_subject():
+    hard = _state(strength="hard", confirmed=True)
+    checked = [
+        _checked("set", "category", "par", "inferred"),
+        _checked("set", "skin_type", "dry"),
+    ]
+    assert rp.observed_parts(_interp(), checked, (), hard)["change_active"] == [False, True]

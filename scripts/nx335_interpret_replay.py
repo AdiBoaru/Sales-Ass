@@ -134,6 +134,9 @@ THRESHOLDS = {
     # NX-345 D1 (Adi, 2026-09-29): ipotezele (`implicit`/`inferred`) sunt neutre în F1, dar au
     # metrica lor: cât din ele numesc ALTĂ valoare pe o dimensiune etichetată.
     "hypotheses_contradicted_max": 0.15,
+    # NX-345a: ipotezele NEETICHETATE pe tur cu schimbări evaluate (linia de bază pe A: 0,133-0,144;
+    # marjă 25%, fixată înaintea rulării v4).
+    "unlabelled_hypotheses_per_turn_max": 0.18,
 }
 #: NX-345 D1: proveniențele pe care kernelul NU le face fapt. `inferred` e doar semnal de ordonare,
 #: nepersistat (I23), deci nici nu se potrivește cu eticheta: starea nu-l poartă. `implicit` se
@@ -574,12 +577,19 @@ def observed_parts(
     active: list[bool] = []
     # D3 se judecă pe starea de DINAINTE; un tur care schimbă subiectul sau reia unul parcat
     # retrage/reactivează nevoile, deci acolo nimic nu e „deja activ" (recenzia NX-345a).
-    subject_moves = interp.thread == "resume" or any(
-        not c.rejected
-        and c.dimension in SUBJECT_DIMENSIONS
-        and c.canonical_value is not None
-        and format_value(c.canonical_value) != state_before.topic.category_key
-        for c in checked
+    # `clear` și corecția retrag nevoi la fel; un `inferred` nu mută nimic (nu se persistă).
+    subject_moves = (
+        interp.thread == "resume"
+        or bool(interp.corrects_previous_turn)
+        or any(not c.rejected and c.change.op == "clear" for c in checked)
+        or any(
+            not c.rejected
+            and c.provenance != "inferred"
+            and c.dimension in SUBJECT_DIMENSIONS
+            and c.canonical_value is not None
+            and format_value(c.canonical_value) != state_before.topic.category_key
+            for c in checked
+        )
     )
     for c in checked:
         if c.rejected:
@@ -722,6 +732,7 @@ def compare(
         "neutral_active": counted["neutral_active"],
         "hypotheses": counted["hypotheses"],
         "hypotheses_contradicted": counted["hypotheses_contradicted"],
+        "hypotheses_redundant": counted["hypotheses_redundant"],
         "provenance_known": counted["provenance_known"],
         # regula de dinainte, pentru `f1_all_emitted` și regresiile pe regula zgomotului
         "change_hits_all": sum((want & have).values()),
@@ -753,8 +764,9 @@ def _count_changes(want: Counter, want_null: Counter, got: Mapping[str, Any]) ->
     proveniență sau fără marcajul de activ (etichete, rapoarte vechi), o schimbare se numără exact
     ca înainte.
 
-    Precizia ipotezelor: o ipoteză neetichetată e CONTRAZISĂ când eticheta are o schimbare pe
-    aceeași (clasă de op, dimensiune), cu sau fără valoare, adică numește altceva acolo."""
+    Precizia ipotezelor: o ipoteză nepotrivită e CONTRAZISĂ când eticheta are o schimbare pe
+    aceeași (clasă de op, dimensiune), cu sau fără valoare, dar ALTA; cu aceeași valoare e
+    REDUNDANTĂ (un `inferred` pe care starea nu-l poartă, sau un duplicat al unui fapt)."""
     changes = list(got.get("changes") or [])
     provenance = list(got.get("change_provenance") or [])
     active = list(got.get("change_active") or [])
@@ -775,6 +787,7 @@ def _count_changes(want: Counter, want_null: Counter, got: Mapping[str, Any]) ->
             "neutral_active",
             "hypotheses",
             "hypotheses_contradicted",
+            "hypotheses_redundant",
         ),
         0,
     )
@@ -798,7 +811,12 @@ def _count_changes(want: Counter, want_null: Counter, got: Mapping[str, Any]) ->
             continue
         if hypothesis:
             out["neutral_hypotheses"] += 1
-            out["hypotheses_contradicted"] += int((key[0], key[1]) in labelled_dims)
+            if slot in want_null or slot in want:
+                # aceeași valoare ca eticheta: un `inferred` (nepersistat) sau un duplicat al unui
+                # fapt deja potrivit. Nici contrazisă, nici neetichetată (recenzia NX-345a).
+                out["hypotheses_redundant"] += 1
+            elif (key[0], key[1]) in labelled_dims:
+                out["hypotheses_contradicted"] += 1
         elif is_active:
             out["neutral_active"] += 1
         else:
@@ -1427,7 +1445,13 @@ def summarize(rows: Sequence[Mapping[str, Any]], efforts: Sequence[str]) -> dict
             "hypotheses": {**rate(contradicted, hypotheses), "contradicted": contradicted},
             # NX-345a: ipotezele NEETICHETATE (neutre în F1), pe tur: paza împotriva unui prompt
             # care ar scăpa de pozitivele false coborând proveniența (recenzia NX-345a).
-            "unlabelled_hypotheses": sum(v.get("neutral_hypotheses", 0) for v in with_changes),
+            "unlabelled_hypotheses": rate(
+                sum(
+                    v.get("neutral_hypotheses", 0) - v.get("hypotheses_redundant", 0)
+                    for v in with_changes
+                ),
+                len(with_changes),
+            ),
             "provenance_unknown_turns": sum(
                 1
                 for v in with_changes

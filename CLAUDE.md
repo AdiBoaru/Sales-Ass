@@ -329,8 +329,8 @@ văzut nimic, ÎNGHEȚAT pe SHA-256 înaintea rulării; B a fost citit la regres
 pragul de zgomot (v1 rulat a doua oară pe A). Regula GO pentru v3 e pre-înregistrată în card.
 **NX-345** (decis de Adi, 2026-09-29): F1 numără ce kernelul face FAPT. O ipoteză neetichetată
 (`implicit` în afara raftului, sau `inferred`, care nu se persistă și deci nici nu se potrivește) e
-NEUTRĂ, cu metricile ei (contrazise ≤ 0,15, neetichetate ≤ 16 pe A); `implicit` pe raft mută subiectul,
-deci e fapt; un `set` pe valoarea deja activă (și `hard`, fără schimbare de subiect) e neutru;
+NEUTRĂ, cu metricile ei (contrazise ≤ 0,15, neetichetate ≤ 0,18 pe tur); `implicit` pe raft mută subiectul,
+deci e fapt; un `set` pe valoarea deja activă (`hard`, fără subiect mutat/golit) e neutru;
 „cremă" rămâne fără tip; raftul numit = `set category`. Scorerul le aplică (`change_provenance`/
 `change_active` în `observed`; `f1_all_emitted` și `--regressions … all_emitted` = regula veche). Pe
 rapoartele existente F1 pe A devine 0,874 (v3). Regula GO v4 e în NX-339; restul (etichete, setul D,
