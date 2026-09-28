@@ -542,3 +542,36 @@ def test_the_adapter_holds_no_vertical_literal_and_the_check_can_fail():
     term = sorted(leak._domain_terms())[0]
     mutated = source + f'\n_INSTRUCTION = "Prefer {term} when unsure."\n'
     assert _vertical_terms_in(mutated)
+
+
+# --- NX-339b: regulile promptului interpret.v2, pe toate pachetele --------------------------------
+
+#: Câte o frază-ancoră per regulă din cardul NX-339 (§ „Promptul interpret.v2"). Dacă o regulă se
+#: pierde la o rescriere, testul arată care.
+V2_RULES = {
+    "1 actul e cererea, nu ce vinde magazinul": "never whether the store sells it",
+    "2 întrebarea despre un articol e detail": "detail also covers a question about an item",
+    "3 other doar când nu se potrivește nimic": "other: only when no other act fits",
+    "4 aside doar magazin și conversație": '"aside" only for a question about the store itself',
+    "5 ce descrie clientul devine schimbare": "is a change when a menu value names its cause",
+    "6 valoarea doar când cuvintele o numesc": "only when the customer's words name that code",
+    "7 cart doar la cerere explicită": "cart: only when the customer explicitly asks",
+}
+
+
+@pytest.mark.parametrize("pack", ALL_PACKS)
+def test_every_v2_rule_is_in_the_rendered_prompt(pack):
+    system = " ".join(ti.system_prompt(_input(pack)).split())
+    missing = [rule for rule, anchor in V2_RULES.items() if anchor not in system]
+    assert missing == []
+
+
+def test_the_old_value_rule_is_replaced_not_duplicated():
+    """Regula 6 ÎNLOCUIEȘTE formularea v1, ca promptul să nu spună două lucruri."""
+    system = " ".join(ti.system_prompt(_input("electronics")).split())
+    assert "a code from the menu when one fits" not in system
+    assert system.count("value: a code from the menu") == 1
+
+
+def test_the_prompt_version_is_v2():
+    assert ic.INTERPRET_PROMPT_VERSION == "interpret.v2"
