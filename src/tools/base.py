@@ -39,6 +39,9 @@ class ToolResult:
     # Sume citite din DB (ex. total comandă/checkout, G7-3): grounded prin construcție →
     # validatorul de preț le acceptă, pe lângă prețurile produselor retrievate.
     prices: list[float] = field(default_factory=list)
+    # NX-346: textele MAGAZINULUI servite în tur (răspunsurile FAQ): cifrele și afirmațiile citate
+    # din ele sunt întemeiate pentru validatorul de proză. Nu vin niciodată de la model.
+    sources: list[str] = field(default_factory=list)
     # Mutație de state cerută de tool (NX-79, ex. cart_add → {"cart": [...]}). Stagiul Agent
     # o acumulează în `ctx.state_patch`; processor-ul o persistă. Tool-urile NU scriu ctx direct.
     state_patch: dict[str, Any] = field(default_factory=dict)

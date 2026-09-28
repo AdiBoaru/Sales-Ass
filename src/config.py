@@ -560,6 +560,12 @@ class Settings(BaseSettings):
     validator_claims_enabled: bool = Field(
         default=True, validation_alias="VALIDATOR_CLAIMS_ENABLED"
     )
+    # NX-346: textele MAGAZINULUI servite în tur (răspunsurile `faq_lookup`) întemeiază cifrele și
+    # afirmațiile pe care le citează. Fără asta, un răspuns care reda FIDEL regula magazinului
+    # („returnezi în 30 de zile", „livrare 15 lei") era respins, iar clientul primea „Momentan n-am
+    # găsit produse potrivite" (11 din 20 de FAQ-uri SOLE). ON implicit: defect măsurat, iar fără
+    # surse comportamentul e byte-identic.
+    faq_grounding_enabled: bool = Field(default=True, validation_alias="FAQ_GROUNDING_ENABLED")
     # NX-118: afirmație POZITIVĂ de stoc/disponibilitate („pe stoc", „in stock") validată
     # AVAILABILITY-aware — drop (rich) / invalid+retry+fallback (proză) DOAR dacă niciun produs
     # retrievat nu e pe stoc (in_stock/low_stock). `has_stock_claim` sare peste negat/viitor

@@ -28,7 +28,12 @@ from typing import Any
 
 from src.config import get_settings
 from src.observability import turn_latency
-from src.worker.text_scrub import has_medical_claim, has_stock_claim, has_text_claim
+from src.worker.text_scrub import (
+    has_medical_claim,
+    has_stock_claim,
+    has_text_claim,
+    text_claim_keys,
+)
 
 # Suma, cu SAU fără separator de mii. Ordinea alternativelor contează: variantele grupate stau
 # ÎNAINTEA celei simple, altfel „1.234,50" s-ar potrivi doar parțial („234,50") și un preț REAL ar
@@ -241,12 +246,42 @@ def _bare_numbers_ok(
     return not _bad_bare_numbers(reply, products, grounded_prices)
 
 
-def _claims_ok(reply: str) -> bool:
+def _claims_ok(reply: str, sources: tuple[str, ...] = ()) -> bool:
     """NX-117: pe calea de proză, claim-uri ne-numerice neverificabile (superlativ „best seller")
-    → respins → retry/fallback. Gated FAIL-OPEN de flag. (Stocul = `_stock_claim_ok`, NX-118.)"""
+    → respins → retry/fallback. Gated FAIL-OPEN de flag. (Stocul = `_stock_claim_ok`, NX-118.)
+
+    NX-346: o afirmație pe care o face și un text-SURSĂ al turului (regula magazinului servită de
+    `faq_lookup`) e citată, nu inventată: trece. Orice altă afirmație rămâne respinsă, deci o proză
+    care redă FAQ-ul și adaugă un „cel mai bun" pică în continuare."""
     if not get_settings().validator_claims_enabled:
         return True
-    return not has_text_claim(reply)
+    if not sources:
+        return not has_text_claim(reply)
+    grounded: set[str] = set()
+    for text in sources:
+        grounded |= text_claim_keys(text)
+    return text_claim_keys(reply) <= grounded
+
+
+def source_prices(sources: tuple[str, ...]) -> set[float]:
+    """NX-346: SUMELE cu valută din textele-sursă ale turului („livrare 15 lei"). Doar ele pot
+    întemeia un preț: o cifră fără valută din sursă („30 de zile") nu face din „30 lei" un preț
+    citat. PUR."""
+    return {
+        round(parse_amount(m.group(1) or m.group(2)), 2)
+        for text in sources
+        for m in _PRICE_RE.finditer(text)
+    }
+
+
+def source_numbers(sources: tuple[str, ...]) -> set[float]:
+    """NX-346: TOATE cifrele din textele-sursă (sume și cifre fără valută), pentru poarta cifrelor
+    fără valută: proza care citează regula magazinului („în 30 de zile") le poate rosti. PUR."""
+    out = source_prices(sources)
+    for text in sources:
+        for m in _BARE_NUM_RE.finditer(text):
+            out.add(round(parse_amount(m.group(1)), 2))
+    return out
 
 
 def _safety_ok(reply: str) -> bool:
@@ -291,6 +326,7 @@ def validate_prose(
     grounded_prices: set[float] | None = None,
     check_bare: bool = True,
     check_claims: bool = True,
+    grounded_sources: tuple[str, ...] | list[str] = (),
 ) -> ValidationResult:
     """SURSA UNICĂ DE ADEVĂR a validării de proză: preț + link grounded (mereu) + cifre bare
     grounded (NX-91, doar SALES) + claim-uri de text neverificabile (NX-117) + stoc availability-
@@ -304,15 +340,24 @@ def validate_prose(
     (NX-121) e DOAR detectare/observabilitate, nu apărarea reală."""
     with turn_latency.span("validation"):  # NX-241: faza de validare, măsurată acolo unde se face
         reasons: list[str] = []
+        sources = (  # NX-346: setarea se citește doar când există surse
+            tuple(grounded_sources)
+            if grounded_sources and getattr(get_settings(), "faq_grounding_enabled", True)
+            else ()
+        )
+        bare_allowed = grounded_prices or set()
+        if sources:
+            bare_allowed = set(bare_allowed) | source_numbers(sources)
+            grounded_prices = set(grounded_prices or set()) | source_prices(sources)
         if not _safety_ok(reply):  # P0-safety: claim medical = invalid pe ORICE rută (răspundere)
             reasons.append("medical_claim")
         if not _prices_ok(reply, products, grounded_prices):
             reasons.append("ungrounded_price")
         if not _links_ok(reply, products, generated_links):
             reasons.append("invented_link")
-        if check_bare and not _bare_numbers_ok(reply, products, grounded_prices or set()):
+        if check_bare and not _bare_numbers_ok(reply, products, bare_allowed):
             reasons.append("bare_number")
-        if check_claims and not _claims_ok(reply):
+        if check_claims and not _claims_ok(reply, sources):
             reasons.append("text_claim")
         if check_claims and not _stock_claim_ok(reply, products):  # NX-118: stoc availability-aware
             reasons.append("stock_claim")
@@ -327,6 +372,7 @@ def _valid(
     *,
     check_bare: bool = True,
     check_claims: bool = True,
+    grounded_sources: tuple[str, ...] | list[str] = (),
 ) -> bool:
     """Shim bool peste `validate_prose` (API-ul folosit de `agent._finalize*` — o singură sursă de
     adevăr). Argumentele poziționale `allowed_links`/`allowed_prices` = `generated_links`/
@@ -338,4 +384,5 @@ def _valid(
         grounded_prices=allowed_prices,
         check_bare=check_bare,
         check_claims=check_claims,
+        grounded_sources=grounded_sources,
     ).ok

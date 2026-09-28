@@ -153,6 +153,25 @@ def has_text_claim(text: str | None) -> bool:
     return bool(_CLAIMY.search(text) or _SUPER.search(text))
 
 
+_NEXT_WORD = re.compile(r"\s*(\w+)")
+
+
+def text_claim_keys(text: str | None) -> set[str]:
+    """NX-346: ce citește `has_text_claim` ca afirmație, ca CHEI comparabile între texte (pliate,
+    litere mici): pentru un cuvânt cuantificabil, rădăcina lui („livrarea", „livrare" → „livrare"),
+    fiindcă flexiunea nu schimbă afirmația; pentru un superlativ, fraza PLUS cuvântul care îl
+    urmează („cel mai rapid" ≠ „cel mai bun"), fiindcă „cel mai" singur nu spune ce se afirmă.
+    Validatorul cere ca fiecare cheie a prozei să fie și în textele-sursă ale turului."""
+    if not text:
+        return set()
+    keys = {fold_text(m.group(1)).lower() for m in _CLAIMY.finditer(text)}
+    for m in _SUPER.finditer(text):
+        nxt = _NEXT_WORD.match(text, m.end())
+        phrase = m.group(0) + (" " + nxt.group(1) if nxt else "")
+        keys.add(" ".join(fold_text(phrase).lower().split()))
+    return keys
+
+
 def has_stock_claim(text: str | None) -> bool:
     """NX-118: textul afirmă POZITIV stoc/disponibilitate curentă („pe stoc", „disponibil",
     „in stock")? Sare peste lexemele negate / la viitor („nu mai e pe stoc", „revine pe stoc",

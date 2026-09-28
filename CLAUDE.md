@@ -986,6 +986,19 @@ resolverului v2 (pasul 2). Flaguri `NAMED_SHORTCUT_TARGETS_ENABLED`,
 `ASIDE_KEEPS_SEARCH_SESSION_ENABLED`, `TOOL_FIELD_ERRORS_ENABLED` (ON; OFF = byte-identic). Card:
 [`tasks/stage1/NX-326.md`](tasks/stage1/NX-326.md); probe: `pytest tests/test_nx326_*.py -q`.
 
+**NX-346 — regula magazinului, citată fidel, era respinsă ca inventată.** `faq_lookup` cere
+modelului să redea regula, dar validatorul de proză întemeia doar prețurile produselor și sumele
+comenzii: «livrare gratuită peste 199 lei» pica pe `ungrounded_price`/`bare_number`/`text_claim`,
+iar clientul primea «n-am găsit produse» (11 din 20 de FAQ-uri SOLE, redate verbatim). Acum
+unealta întoarce `ToolResult.sources` (răspunsurile EXACT arătate, cu tăierea vederii), acumulate
+în `ToolRun.grounded_sources` → `ResponsePlan.grounded_sources` → `validate_prose(grounded_sources=)`.
+Prețurile se întemeiază doar pe SUMELE cu valută din sursă („30 de zile" nu face din „30 lei" un
+preț), cifrele fără valută pe toate cifrele ei, iar afirmațiile pe chei (`text_claim_keys`:
+rădăcina cuvântului, superlativul plus cuvântul pe care îl califică). Poarta medicală nu se
+relaxează. Fără surse, verdictul e identic; suprafața I16 e neschimbată. Deblochează actul `faq`
+al kernelului (trece prin `build_plan` + `render`). Flag `FAQ_GROUNDING_ENABLED` (ON). Card:
+[`tasks/stage1/NX-346.md`](tasks/stage1/NX-346.md); probă: `pytest tests/test_faq_grounding.py -q`.
+
 **NX-321 → NX-325 — conversația `bc7a356e`: rutina pentru pielea uscată, construită din ce spusese
 BOTUL.** «vreau o crema de fata» → «pai mi se usuca pielea dupa dus» → «fa mi o rutina»: la final,
 patru produse mini de 10-30 lei (sumă exact 100 lei), filtrate pe roșeață, cu un ulei de curățare
