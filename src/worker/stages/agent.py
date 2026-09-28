@@ -416,9 +416,16 @@ async def _recognize_chip_press(ctx: TurnContext, deps: PipelineDeps) -> None:
 
     Cardurile sunt setul afișat din stare, în ordinea de pe ecran, iar pragul de scurtare urmează
     ACELAȘI flag ca la construcția chips-urilor, deci textul re-randat e cel pe care l-a văzut
-    clientul. Best-effort: o eroare aici lasă turul exact ca înainte (regexurile rămân plasa)."""
+    clientul. Best-effort: o eroare aici lasă turul exact ca înainte (regexurile rămân plasa).
+
+    NX-338: FAPTUL (`chip_recognized`) e separat de SERVIRE (`chip_move`). Condiția ramurii
+    kernelului are nevoie de fapt și cu `CHIP_MOVES_V2_ENABLED` stins, altfel apăsările ar pleca
+    la interpretare; servirea ca mutare pe v1 rămâne a flagului, deci calea de azi e neatinsă.
+    Fără niciun consumator (ambele flaguri stinse) nu rulează nimic: zero citiri în plus."""
     settings = get_settings()
-    if not getattr(settings, "chip_moves_v2_enabled", False):
+    serve = bool(getattr(settings, "chip_moves_v2_enabled", False))
+    kernel = bool(getattr(settings, "interpreted_turn_enabled", False))
+    if not (serve or kernel):
         return
     try:
         from src.conversation import chip_press  # noqa: PLC0415 — modul pur, încărcat sub flag
@@ -440,7 +447,12 @@ async def _recognize_chip_press(ctx: TurnContext, deps: PipelineDeps) -> None:
     except Exception as e:  # noqa: BLE001 — recunoașterea e o scurtătură, nu o poartă (P6)
         log.warning("agent: recunoașterea chip-ului a eșuat (%s)", type(e).__name__)
         return
-    ctx.chip_move = move
+    ctx.chip_recognized = move
+    ctx.chip_move = move if serve else None
+    if move is not None and not serve:
+        # Pe v1 apăsarea o servește calea de text (regexurile), ca azi; evenimentul arată doar că
+        # a ocolit kernelul. Emis doar sub kernel (`serve` stins ⇒ `kernel` aprins aici).
+        ctx.emit("chip_pressed", kind=move.kind, recognized=True, handler="text_path")
 
 
 async def need_menu_for_turn(ctx: TurnContext, deps: PipelineDeps) -> NeedMenu | None:
@@ -942,12 +954,14 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     # Nu intră: butoanele semnate (o decizie, nu text), chip-urile recunoscute (mutări emise de
     # server) și paginarea pură (§1.1). Scurtăturile EXACTE rulează înaintea interpretării, cu zero
     # apeluri; cele ghicitoare pleacă la interpretare. Import leneș: flag stins = zero import.
+    # NX-338: chip-ul se judecă pe FAPT (`chip_recognized`), nu pe servire (`chip_move`, None cu
+    # `CHIP_MOVES_V2_ENABLED` stins), altfel apăsările ar ajunge la modelul de interpretare.
     s = get_settings()
     kernel = (
         getattr(s, "interpreted_turn_enabled", False)
         and ctx.state_v2 is not None
         and action_command(ctx) is None
-        and ctx.chip_move is None
+        and ctx.chip_recognized is None
         and not is_pure_pagination(ctx)
     )
     memo = None
