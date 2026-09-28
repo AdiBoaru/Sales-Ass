@@ -1,4 +1,4 @@
-"""NX-336 PR C (feliile C1 + C2) — executorii de CITIRE ai turului interpretat.
+"""NX-336 PR C (C1 + C2) și PR D (D1) — executorii turului interpretat, fără mutații.
 
 Planul turului (`PlannedTurn`, scris de `turn_planner`) spune CE se servește; aici se leagă la
 executorii de azi, fără niciun apel de model în plus și fără a re-deduce intenția:
@@ -13,10 +13,19 @@ executorii de azi, fără niciun apel de model în plus și fără a re-deduce i
 - `ask`: întrebarea porții (`set_clarify`), cu candidații ca CARDURI (`_card_products`: identitate
   `product_id`, nume scurt), ca pe orice alt răspuns cu produse.
 
-Ce nu e legat aici întoarce `None` (turul rămâne pe calea v1, motivul `dark`): `faq`/`order` (azi
-răspunsul lor e proza modelului, iar planul nu poartă cuvintele clientului), `reply_only` (vine din
-`chitchat`, unde v1 răspunde în context, sau dintr-o MUTAȚIE refuzată de poartă fără întrebare,
-unde răspunsul e al mutației: PR D), mutațiile, `bundle`, `delegate` și planurile multiple (PR D).
+**Bucla restrânsă (PR D1):** `delegate` (actul `other`), `faq` (`store_info`) și `order`
+(`order_status`) rulează bucla de unelte a căii v1 (același system, același mesaj de user), cu
+schema restrânsă la uneltele permise ∩ uneltele tenantului: `DELEGATE_TOOLS` pe `delegate`,
+`faq_lookup` pe `faq`, `check_order` + `faq_lookup` pe `order` (setul v1 de comandă, FAQ întâi).
+`execute` e ÎNVELIT într-un allowlist: un nume din
+afara lui nu ajunge la `run_tool` (care execută orice unealtă înregistrată), se numără
+(`delegate_tool_refused{name}`) și modelul primește un refuz structurat. Niciuna nu e mutație și
+niciuna nu citește catalogul, deci niciun `product_id` nu vine de la model (I1, I10). Compunerea e a
+căii v1 (`build_plan(kernel=True)` + `render`), pe proza buclei.
+
+Ce nu e legat aici întoarce `None` (turul rămâne pe calea v1, motivul `dark`): `reply_only` (vine
+din `chitchat`, unde v1 răspunde în context, sau dintr-o MUTAȚIE refuzată de poartă fără întrebare,
+unde răspunsul e al mutației: PR D2), mutațiile, `bundle` și planurile multiple (PR D2/D3).
 O căutare care nu e o căutare nouă (aceeași amprentă, sesiune epuizată) refuză (`False`): răspunsul
 „nu mai am" e al căii v1, nu „nu am găsit în catalog".
 
@@ -43,12 +52,16 @@ subiect (I20): sesiunea de căutare și referințele trec prin commit-ul kernelu
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Any
 
 from src.agent import deterministic as det
 from src.agent.fallbacks import _card_products
+from src.agent.observability import agent_prompt_event
+from src.agent.tool_definitions import TOOL_NAMES
 from src.agent.tool_executor import ToolRun
+from src.agent.turn_planner import DELEGATE_TOOLS
 from src.config import get_settings
 from src.conversation.answer_policy import dimension_label
 from src.db.queries.catalog import get_products_by_ids
@@ -62,18 +75,36 @@ if TYPE_CHECKING:
     from src.models import TurnContext
     from src.worker.runner import PipelineDeps
 
-#: Executorii legați în C1. Oricare altul ⇒ `None` (calea v1).
-READ_EXECUTORS: frozenset[str] = frozenset({"search", "page", "detail", "compare", "link", "ask"})
+#: Executorii legați (C1, C2, D1). Oricare altul ⇒ `None` (calea v1).
+READ_EXECUTORS: frozenset[str] = frozenset(
+    {"search", "page", "detail", "compare", "link", "ask", "faq", "order", "delegate"}
+)
 #: Codurile fail-closed: SUNT răspunsul, deci fără frază turul nu e servit de kernel.
 _REQUIRED = frozenset({"no_results"})
 #: Evenimentele KERNELULUI emise în faza executorilor: rămân și pe un tur căzut (restul
 #: evenimentelor executorilor se scot, ca turul căzut să fie turul cu flagul stins).
 KERNEL_EXECUTOR_EVENTS: frozenset[str] = frozenset(
-    {"kernel_sentence_missing", "kernel_similar_partner", "verdict_withheld"}
+    {
+        "kernel_sentence_missing",
+        "kernel_similar_partner",
+        "verdict_withheld",
+        "delegate_tool_refused",
+        "delegate_loop_failed",
+    }
 )
 #: Politica de răspuns a orchestratorului pe produsele unei comparații: (partenerii adăugați de
 #: executor, rândurile încărcate) → `AnswerPolicy` sau `None` (nu e o judecată).
 PolicyFor = Callable[[Sequence[str], Sequence[dict[str, Any]]], "AnswerPolicy | None"]
+#: PR D1: uneltele pe care le poate chema bucla restrânsă, pe executor (∩ uneltele tenantului).
+DELEGATED_TOOLS: dict[str, frozenset[str]] = {
+    "delegate": DELEGATE_TOOLS,
+    "faq": frozenset({"faq_lookup"}),
+    # ca setul v1 de comandă (`tools.base._ORDER_TOOLS`, FAQ întâi): o întrebare de politică citită
+    # ca `order_status` («cum fac retur la comandă?») are răspuns fără cont (recenzia D1)
+    "order": frozenset({"check_order", "faq_lookup"}),
+}
+#: Ce primește modelul când cheamă o unealtă din afara allowlist-ului: structură, nu frază (P11).
+_REFUSED_TOOL = json.dumps({"ok": False, "error": "tool_not_allowed"})
 #: Câte produse arată o pagină a sesiunii (ca paginarea v1).
 _PAGE_SIZE = 6
 
@@ -137,6 +168,12 @@ def _prefix(ctx: TurnContext, text: str) -> None:
     reply.cacheable = False
 
 
+def _message(ctx: TurnContext) -> str:
+    """Cititorul DECLARAT al mesajului curent: pleacă neschimbat spre compunerea v1 și spre bucla
+    restrânsă, ca pe calea de azi. Kernelul nu ramifică pe el: planul turului e deja decis."""
+    return (ctx.message.body or "").strip()
+
+
 async def _compose(
     ctx: TurnContext,
     deps: PipelineDeps,
@@ -162,7 +199,7 @@ async def _compose(
         retrieved=products,
         is_order=False,
         show_more=page,
-        query=(ctx.message.body or "").strip(),
+        query=_message(ctx),
         history=conversation_transcript(ctx.history),
         tool_names=[],
         # Proza NU a existat pe calea kernelului (nicio buclă), deci compunerea picată nu cere o
@@ -172,6 +209,86 @@ async def _compose(
     )
     if not plan.handled:
         await render(ctx, deps, plan)
+
+
+async def _delegate(ctx: TurnContext, deps: PipelineDeps, allowed: frozenset[str]) -> bool | None:
+    """Bucla restrânsă (PR D1): bucla v1 de unelte, cu schema și `execute` limitate la `allowed`
+    ∩ uneltele tenantului. Fără nicio unealtă permisă ⇒ `None` (calea v1)."""
+    from src.agent import prompt_builder  # noqa: PLC0415 — ciclul agent
+    from src.agent.finalize import render  # noqa: PLC0415
+    from src.agent.planner import build_plan  # noqa: PLC0415
+    from src.worker.context import context_blocks, conversation_transcript  # noqa: PLC0415
+    from src.worker.stages.agent import (  # noqa: PLC0415
+        _filters_hint,
+        _load_prompt_inputs,
+        tool_loop_tools,
+        tool_loop_user_parts,
+    )
+
+    names, schemas = tool_loop_tools(ctx.business, "sales", unrouted=True)
+    allow = [n for n in names if n in allowed]
+    if not allow:
+        return None
+    schemas = [s for s in schemas if s.get("function", {}).get("name") in allow]
+    run = ToolRun(ctx, deps)
+
+    async def execute(name: str, args: dict[str, Any]) -> str:
+        if name not in allow:
+            ctx.emit("delegate_tool_refused", name=name if name in TOOL_NAMES else "unknown")
+            return _REFUSED_TOOL
+        return await run.execute(name, args)
+
+    inp = await _load_prompt_inputs(deps, ctx)
+    history = conversation_transcript(ctx.history)
+    query = _message(ctx)
+    user = tool_loop_user_parts(
+        language=ctx.language,
+        history=history,
+        hints=_filters_hint(ctx.state.search_constraints),
+        context=context_blocks(ctx, consumer="agent"),
+        query=query,
+    ).legacy()
+    system = prompt_builder.build_agent_system(inp)
+    try:
+        final = await deps.llm.run_tool_loop(system, user, schemas, execute)
+    except Exception as e:  # noqa: BLE001 — P6: ca pe v1, fără o a doua buclă
+        # Pe v1 o buclă picată lasă turul fără răspuns, iar `fallback_stage` pune întrebarea de
+        # clarificare. Aici același răspuns, servit de kernel: căderea pe v1 ar rula bucla A DOUA
+        # OARĂ exact pe turele pe care furnizorul e bolnav (recenzia D1).
+        from src.worker.runner import fallback_stage  # noqa: PLC0415 — ciclul runner ↔ agent
+
+        ctx.emit("delegate_loop_failed", error=type(e).__name__)
+        await fallback_stage(ctx, deps)
+        return ctx.reply is not None
+    plan = await build_plan(
+        ctx,
+        deps,
+        run,
+        inp,
+        final=final or "",
+        retrieved=list(run.retrieved),
+        # o vedere de comandă ajunsă din unealtă ⇒ ramura ORDER a lui `render` (vederea grounded a
+        # comenzii), nu validatorul de proză de vânzare (recenzia D1)
+        is_order=bool(run.order_views),
+        show_more=False,
+        query=query,
+        history=history,
+        tool_names=allow,
+        kernel=True,
+    )
+    validation = None if plan.handled else await render(ctx, deps, plan)
+    # ca pe v1: promptul (hash) și verdictul validatorului, pentru Turn Replay (P10, P12)
+    ctx.emit(
+        "agent_prompt",
+        **agent_prompt_event(
+            system,
+            user,
+            list(run.retrieved),
+            store_prompt=get_settings().replay_store_prompt_enabled,
+            validator=validation,
+        ),
+    )
+    return ctx.reply is not None
 
 
 def _pack(ctx: TurnContext) -> Any:
@@ -331,6 +448,8 @@ async def _run_plan(
         return await _compare(ctx, deps, ids, policy_for) if len(ids) >= 2 else False
     if kind == "compare":
         return await _compare(ctx, deps, ids, policy_for)
+    if kind in DELEGATED_TOOLS:
+        return await _delegate(ctx, deps, DELEGATED_TOOLS[kind])
     return None
 
 
