@@ -5,11 +5,11 @@
 
 Fiecare loc din `src/**/*.py` care scrie starea conversației (v1 sau v2), derivat MECANIC prin `ast` (nu grep). Pregătește I3/I20 din [`docs/KERNEL-CONTRACT-v1.md`](KERNEL-CONTRACT-v1.md): pasul 3 nu poate face din reducer singurul scriitor peste o stare pe care o mai scriu și alții, fără să știe cine sunt aceia.
 
-**Totaluri:** 146 scriitori găsiți, 92 intrări de soartă declarate, 5 `unresolved`.
+**Totaluri:** 147 scriitori găsiți, 93 intrări de soartă declarate, 5 `unresolved`.
 - `becomes_proposal`: 0
 - `executor_output`: 5
 - `retired`: 12
-- `stays`: 129
+- `stays`: 130
 
 ## `needs_topic` -- nevoi + subiect/raft
 
@@ -90,10 +90,11 @@ Fiecare loc din `src/**/*.py` care scrie starea conversației (v1 sau v2), deriv
 | --- | --- | --- | --- | --- | --- |
 | `src/agent/action_kernel.py:_handle_product_action` | v2 | `proposal_call` | `_select() -> set_references.selected_product` | Apel indirect catre `_select` (vezi mai jos) -- acelasi verdict: mecanism v2-only, nimic de mutat. | `stays` |
 | `src/agent/action_kernel.py:_select` | v2 | `proposal_constructor` | `set_references.selected_product` | O actiune (click) e o selectie EXPLICITA (`source="action"`) -- trece deja prin reducer ca orice alta propunere (`set_references`, payload `selected_product`). Nu exista o forma v1 a acestui concept (v1 nu are `selected_product`), deci nu e nimic de migrat. | `stays` |
-| `src/agent/deterministic.py:_handle_detail_intent` | v2 | `proposal_call` | `_resolve_anchor() -> set_references.selected_product` | Apel indirect catre `_resolve_anchor` -- vezi mai jos, mecanism v2-only. | `stays` |
-| `src/agent/deterministic.py:_handle_review_intent` | v2 | `proposal_call` | `_resolve_anchor() -> set_references.selected_product` | Idem, acelasi apel indirect catre `_resolve_anchor`. | `stays` |
-| `src/agent/deterministic.py:_resolve_anchor` | v2 | `proposal_constructor` | `set_references.selected_product` | Rezolvarea de referinte v2 (`reference_precedence_v2_enabled`, NX-235/236): o referinta REZOLVATA explicit e memorata prin `StateUpdateProposal("set_references", payload={"selected_product":...})`. Conceptul de "produs selectat" nu exista in v1 -- nimic de migrat, mecanismul e nascut deja pe forma tinta. | `stays` |
-| `src/agent/deterministic.py:_serve_exact_anchor` | v2 | `proposal_call` | `_resolve_anchor() -> set_references.selected_product` | NX-336: acelasi apel indirect catre `_resolve_anchor`, pe scurtatura EXACTA dinaintea interpretarii, prin `ShortcutMemo`. Pe ancora nerezolvata efectele (propunerea, evenimentul) se detaseaza din context si se redau o singura data de trecerea completa; pe cea rezolvata turul e servit de scurtatura, pe calea de azi (`reduce_all` la commit). | `stays` |
+| `src/agent/deterministic.py:_anchor` | v2 | `proposal_constructor` | `set_references.selected_product` | NX-336 (a doua recenzie): corpul lui `_resolve_anchor`, care intoarce si DECIZIA resolverului (`source`/`reason`), ca trecerea `exact_only` sa deosebeasca o tinta exacta de o ancora ghicita. Aceeasi propunere `set_references.selected_product`, aceleasi conditii. | `stays` |
+| `src/agent/deterministic.py:_handle_detail_intent` | v2 | `proposal_call` | `_anchor() -> set_references.selected_product` | Apel indirect catre `_resolve_anchor` -- vezi mai jos, mecanism v2-only. | `stays` |
+| `src/agent/deterministic.py:_handle_review_intent` | v2 | `proposal_call` | `_anchor() -> set_references.selected_product` | Idem, acelasi apel indirect catre `_resolve_anchor`. | `stays` |
+| `src/agent/deterministic.py:_resolve_anchor` | v2 | `proposal_call` | `_anchor() -> set_references.selected_product` | Rezolvarea de referinte v2 (`reference_precedence_v2_enabled`, NX-235/236): o referinta REZOLVATA explicit e memorata prin `StateUpdateProposal("set_references", payload={"selected_product":...})`. Conceptul de "produs selectat" nu exista in v1 -- nimic de migrat, mecanismul e nascut deja pe forma tinta. NX-336: acum un invelis subtire peste `_anchor`. | `stays` |
+| `src/agent/deterministic.py:_serve_exact_anchor` | v2 | `proposal_call` | `_anchor() -> set_references.selected_product` | NX-336: acelasi apel indirect catre `_resolve_anchor`, pe scurtatura EXACTA dinaintea interpretarii, prin `ShortcutMemo`. Pe ancora nerezolvata efectele (propunerea, evenimentul) se detaseaza din context si se redau o singura data de trecerea completa; pe cea rezolvata turul e servit de scurtatura, pe calea de azi (`reduce_all` la commit). | `stays` |
 | `src/conversation/state_reducer.py:reduce_turn` | v2 | `proposal_constructor` | `set_references.selected_product` | NX-331: reducerul e SINGURUL scriitor al starii v2 (I3); functia e un pas pur al lui (rol `reducer` in tests/kernel_modules.json). Efectul de referinta: `selected_product` = tinta `exact` a actului principal, aplicata ultima in tur. | `stays` |
 
 ## `active_search` -- sesiune de cautare

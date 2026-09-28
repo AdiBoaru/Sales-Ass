@@ -152,7 +152,14 @@
       "file": "src/agent/deterministic.py",
       "function": "_resolve_anchor",
       "field": "focus",
-      "why": "Rezolvarea de referinte v2 (`reference_precedence_v2_enabled`, NX-235/236): o referinta REZOLVATA explicit e memorata prin `StateUpdateProposal(\"set_references\", payload={\"selected_product\":...})`. Conceptul de \"produs selectat\" nu exista in v1 -- nimic de migrat, mecanismul e nascut deja pe forma tinta.",
+      "why": "Rezolvarea de referinte v2 (`reference_precedence_v2_enabled`, NX-235/236): o referinta REZOLVATA explicit e memorata prin `StateUpdateProposal(\"set_references\", payload={\"selected_product\":...})`. Conceptul de \"produs selectat\" nu exista in v1 -- nimic de migrat, mecanismul e nascut deja pe forma tinta. NX-336: acum un invelis subtire peste `_anchor`.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/agent/deterministic.py",
+      "function": "_anchor",
+      "field": "focus",
+      "why": "NX-336 (a doua recenzie): corpul lui `_resolve_anchor`, care intoarce si DECIZIA resolverului (`source`/`reason`), ca trecerea `exact_only` sa deosebeasca o tinta exacta de o ancora ghicita. Aceeasi propunere `set_references.selected_product`, aceleasi conditii.",
       "fate": "stays"
     },
     {

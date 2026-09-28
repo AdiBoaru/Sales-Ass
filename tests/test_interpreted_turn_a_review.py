@@ -77,10 +77,12 @@ def _leaves(obj, path=""):
 
 
 def _pii_interpretation() -> TurnInterpretation:
-    """PII-ul semănat în FIECARE câmp text scris de model."""
+    """PII-ul semănat în FIECARE câmp text scris de model, inclusiv id-ul referinței (a doua
+    recenzie: `ResolvedRef.ref_id` îl copia neredactat), țintele actului, `target` și
+    `relative_to` ale schimbării și ținta ambiguității."""
     return TurnInterpretation(
         thread="continue",
-        acts=[Act(kind="find", targets=["r1"], query=f"telefon pentru {MAIL}")],
+        acts=[Act(kind="find", targets=[MAIL], query=f"telefon pentru {MAIL}")],
         changes=[
             StateChange(
                 op="add",
@@ -92,6 +94,17 @@ def _pii_interpretation() -> TurnInterpretation:
                 unit=None,
                 relative_to=None,
                 quote=f"telefon pentru {MAIL}",
+            ),
+            StateChange(
+                op="replace",
+                target=PHONE,
+                dimension="price",
+                relation="lte",
+                value=None,
+                number=None,
+                unit=None,
+                relative_to=MAIL,
+                quote=f"sunati la {PHONE}",
             ),
             StateChange(
                 op="add",
@@ -107,7 +120,7 @@ def _pii_interpretation() -> TurnInterpretation:
         ],
         references=[
             Reference(
-                id="r1",
+                id=MAIL,
                 text=MAIL,
                 kind="name",
                 ordinal=None,
@@ -117,7 +130,7 @@ def _pii_interpretation() -> TurnInterpretation:
                 direction=None,
             )
         ],
-        ambiguities=[Ambiguity(about="value", target=None, readings=[MAIL, PHONE])],
+        ambiguities=[Ambiguity(about="value", target=MAIL, readings=[MAIL, PHONE])],
         corrects_previous_turn=False,
     )
 
@@ -143,6 +156,7 @@ def test_r1_the_contract_lists_canonical_value_as_redacted():
 
     doc = (gates.ROOT / "docs" / "KERNEL-CONTRACT-v1.md").read_text(encoding="utf-8")
     assert "`CheckedChange.canonical_value`" in doc
+    assert "`ResolvedRef.ref_id`" in doc
 
 
 # --- 2. fallback = OFF pe scurtături: aceleași citiri, aceleași evenimente ------------------------

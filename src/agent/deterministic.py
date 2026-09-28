@@ -38,6 +38,7 @@ from src.agent.reference_resolver import (
     ActionAnchor,
     NamedTargets,
     ReferenceRequest,
+    ReferenceResolution,
     named_targets,
     normalize_for_match,
     page_anchor_from_snapshot,
@@ -202,7 +203,14 @@ def _signed_anchor(ctx: TurnContext) -> ActionAnchor | None:
 
 
 def _resolve_anchor(ctx: TurnContext, query: str) -> ProductRef | None:
-    """Rezolvarea referinței, prin precedența UNICĂ din `reference_resolver`.
+    """Produsul ancorei (vezi `_anchor`); semnătura de azi, pentru apelanții care nu cer sursa."""
+    return _anchor(ctx, query)[0]
+
+
+def _anchor(ctx: TurnContext, query: str) -> tuple[ProductRef | None, ReferenceResolution]:
+    """Rezolvarea referinței, prin precedența UNICĂ din `reference_resolver`, plus DECIZIA ei
+    (`source`/`reason`): NX-336, a doua recenzie, ca trecerea `exact_only` să deosebească o țintă
+    exactă (acțiune, ordinal, nume unic) de o ancoră ghicită (singurul card, pagina ca fallback).
 
     NX-234 (flag stins): `ordinal` > `named` > `page` > `single`, cu pagina ca fallback
     necondiționat. NX-235 (`reference_precedence_v2_enabled`): precedența completă —
@@ -215,7 +223,9 @@ def _resolve_anchor(ctx: TurnContext, query: str) -> ProductRef | None:
     page = _page_anchor_ref(ctx)
     v2 = get_settings().reference_precedence_v2_enabled
     if page is None and not v2:
-        return _resolve_review_product(query, refs, ctx.language)
+        # `_resolve_review_product`, cu decizia păstrată (aceeași `resolve_from_displayed`).
+        legacy = resolve_from_displayed(query, refs, locale=ctx.language)
+        return (refs[legacy.index] if legacy.index is not None else None), legacy
     if v2:
         state_v2 = getattr(ctx, "state_v2", None)
         references = getattr(state_v2, "references", None)
@@ -257,14 +267,14 @@ def _resolve_anchor(ctx: TurnContext, query: str) -> ProductRef | None:
             )
         )
     if resolution.index is not None:
-        return refs[resolution.index]
+        return refs[resolution.index], resolution
     if resolution.product_id is None:
-        return None
+        return None, resolution
     if page is not None and resolution.product_id == page.product_id:
-        return page
+        return page, resolution
     # Rezolvat pe un id pe care NU-l putem hidrata aici (produs selectat într-un tur anterior, ieșit
     # din setul afișat): apelantul întreabă. Nu inventăm un `ProductRef` fără nume/preț canonice.
-    return next((r for r in refs if r.product_id == resolution.product_id), None)
+    return next((r for r in refs if r.product_id == resolution.product_id), None), resolution
 
 
 def _review_copy(language: str) -> dict[str, str]:
@@ -368,7 +378,7 @@ async def serve_reviews(
 async def _handle_review_intent(ctx: TurnContext, deps: PipelineDeps, query: str) -> None:
     """Răspunde din recenziile produsului afișat; nu lasă modelul să aleagă ancora."""
     refs = _anchor_refs(ctx)  # NX-234: setul afișat + produsul PAGINII (dacă există)
-    selected = await _memo(ctx, ("anchor",), lambda: _resolve_anchor(ctx, query))
+    selected = (await _memo(ctx, ("anchor",), lambda: _anchor(ctx, query)))[0]
     if selected is None:
         ctx.set_clarify(
             _review_copy(ctx.language)["which"],
@@ -507,7 +517,7 @@ async def serve_details(
 
 async def _handle_detail_intent(ctx: TurnContext, deps: PipelineDeps, query: str) -> None:
     refs = _anchor_refs(ctx)  # NX-234: setul afișat + produsul PAGINII (dacă există)
-    selected = await _memo(ctx, ("anchor",), lambda: _resolve_anchor(ctx, query))
+    selected = (await _memo(ctx, ("anchor",), lambda: _anchor(ctx, query)))[0]
     if selected is None:
         ctx.set_clarify(
             _detail_copy(ctx.language)["which"],
@@ -949,6 +959,7 @@ async def _serve_exact_anchor(
     query: str,
     route: Any,
     serve: Callable[[ProductRef], Any],
+    trigger: re.Pattern[str],
 ) -> bool:
     """NX-336 (`exact_only`): recenzii / detaliu DOAR pe o ancoră rezolvată determinist și fără
     constrângeri noi în mesaj (`turn_has_new_constraints`, predicatul porților ancorate). Altfel
@@ -957,11 +968,55 @@ async def _serve_exact_anchor(
     completă."""
     if turn_has_new_constraints(ctx, route):
         return False
-    selected = await _memo(ctx, ("anchor",), lambda: _resolve_anchor(ctx, query))
-    if selected is None:
+    selected, resolution = await _memo(ctx, ("anchor",), lambda: _anchor(ctx, query))
+    if selected is None or not _anchor_is_exact(query, trigger, ctx.language, selected, resolution):
         return False
     await serve(selected)
     return True
+
+
+#: Decizii ale resolverului care NUMESC ținta: acțiunea semnată, un ordinal pe lista afișată, un
+#: nume unic pe ecran. `single` / `selected` / `page` sunt ancore IMPLICITE: exacte doar când
+#: mesajul nu numește altceva (vezi `_anchor_is_exact`).
+_NAMING_SOURCES: frozenset[str] = frozenset({"action", "ordinal", "named"})
+
+
+def _own_chip_texts(language: str | None) -> tuple[str, ...]:
+    """Textele chip-urilor NOASTRE fără nume de produs (sub un detaliu / sub recenzii), re-randate
+    ca la `is_compare_with_similar`: o apăsare pe ele e o mutare a serverului, nu o descriere."""
+    copy = _detail_copy(language)
+    return (copy["review_chip"], copy["link_chip"], copy["compare_chip"]) + tuple(
+        _review_next_steps(language)
+    )
+
+
+def _anchor_is_exact(
+    query: str,
+    trigger: re.Pattern[str],
+    language: str | None,
+    selected: ProductRef,
+    resolution: ReferenceResolution,
+) -> bool:
+    """NX-336, a doua recenzie: ținta recenziilor/detaliului e EXACTĂ fără model? PUR.
+
+    O decizie care numește ținta (acțiune, ordinal în listă, nume unic) e exactă. Una implicită
+    (singurul card, focusul, pagina, inclusiv fallback-ul NX-234 pe pagină) e exactă DOAR dacă
+    mesajul nu numește altceva: după scăderea formulei (`_shortcut_residue`, aceleași tabele per
+    locale ca gardul de rafinare) nu rămâne nimic, sau rămân doar cuvinte din numele ANCOREI
+    (chip-ul nostru «Spune-mi mai multe despre X»), sau mesajul e chiar textul unui chip al nostru.
+    Altfel («ce părere au clienții despre Cerave?» cu COSRX pe ecran) turul e al interpretării.
+    Conservator, declarat: un cuvânt al formulei pe care tabelele nu-l știu («clienții») trimite și
+    un tur exact la interpretare (o inferență în plus, nu un răspuns greșit)."""
+    if resolution.source in _NAMING_SOURCES:
+        return True
+    residue = _shortcut_residue(query, trigger, language)
+    if not residue:
+        return True
+    asked = _norm_followup(query).strip(" ?.!")
+    if any(asked == _norm_followup(chip).strip(" ?.!") for chip in _own_chip_texts(language)):
+        return True
+    name_words = set(re.split(r"[^0-9a-z]+", fold(selected.name or "")))
+    return set(residue) <= name_words
 
 
 def is_pure_pagination(ctx: TurnContext) -> bool:
@@ -992,6 +1047,11 @@ async def try_pre_intents(
     de azi, neatinsă."""
     if exact_only and memo is None:
         memo = ShortcutMemo()
+    if memo is not None and not exact_only:
+        # A doua recenzie (constatarea 5): DOAR trecerea exactă înregistrează. Un memo dat unei
+        # treceri complete doar REDĂ ce a înregistrat trecerea exactă; altfel detașarea de la final
+        # i-ar fi șters propriile evenimente.
+        memo.recording = False
     if memo is None:
         return await _pre_intents(ctx, deps, exact_only=exact_only)
     token = _ACTIVE_MEMO.set(memo)
@@ -1060,7 +1120,12 @@ async def _pre_intents(ctx: TurnContext, deps: PipelineDeps, *, exact_only: bool
     if review_intent:
         if exact_only:
             return await _serve_exact_anchor(
-                ctx, deps, query, route, lambda p: serve_reviews(ctx, deps, p.product_id, p.name)
+                ctx,
+                deps,
+                query,
+                route,
+                lambda p: serve_reviews(ctx, deps, p.product_id, p.name),
+                _REVIEW_RE,
             )
         await _handle_review_intent(ctx, deps, query)
         return True
@@ -1078,7 +1143,12 @@ async def _pre_intents(ctx: TurnContext, deps: PipelineDeps, *, exact_only: bool
     if detail_intent:
         if exact_only:
             return await _serve_exact_anchor(
-                ctx, deps, query, route, lambda p: serve_details(ctx, deps, p.product_id)
+                ctx,
+                deps,
+                query,
+                route,
+                lambda p: serve_details(ctx, deps, p.product_id),
+                _DETAIL_RE,
             )
         await _handle_detail_intent(ctx, deps, query)
         return True

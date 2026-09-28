@@ -258,10 +258,14 @@ def _redacted(trace: KernelTrace, redact: Callable[[str], str]) -> KernelTrace:
         )
         for c in trace.checked_changes
     ]
+    # A doua recenzie: `ResolvedRef.ref_id` e id-ul referinței SCRIS DE MODEL (fără tipar în
+    # schemă), copiat de resolver; `product_ids` sunt ale catalogului și nu se ating.
+    resolved = [r.model_copy(update={"ref_id": text(r.ref_id)}) for r in trace.resolved_refs]
     return trace.model_copy(
         update={
             "interpretation": interpretation,
             "checked_changes": checked,
+            "resolved_refs": resolved,
             "state_before": state(trace.state_before),
             "state_after": state(trace.state_after),
             "plan": plan(trace.plan),

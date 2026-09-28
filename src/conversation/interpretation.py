@@ -31,9 +31,10 @@ from src.tools.catalog_tools import SearchArgs
 #: (`rank_terms`, `prefer`), și două rânduri aditive în tabelul plannerului.
 #: `kernel.v1.2` (NX-336, MINOR): `KernelTrace` primește câmpuri aditive (planurile, golurile,
 #: dezvăluirile, actele scoase, contoarele deltei, memoria porții, `truncated`), plafon și
-#: redactare; rolul `orchestrator`; clarificări la I5, I15a, I20 și „Answer policy". Schema
-#: scrisă de model (`TurnInterpretation`) e identică cu cea din v1.0; snapshotul din
-#: `tests/kernel/schema/` diferă doar prin versiune.
+#: redactare; rolul `orchestrator` (cu restaurarea declarată ca excepție I3); corectura designului
+#: §D. Niciun invariant, rând de proprietate sau regulă de stare nu se schimbă (I5, I15a, I20 și
+#: „Answer policy" se decid în PR B/C). Schema scrisă de model (`TurnInterpretation`) e identică cu
+#: cea din v1.0; snapshotul din `tests/kernel/schema/` diferă doar prin versiune.
 KERNEL_CONTRACT_VERSION = "kernel.v1.2"
 
 # --- scrise de model ----------------------------------------------------------------------------
