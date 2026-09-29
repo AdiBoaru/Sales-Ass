@@ -796,7 +796,60 @@ async def _serve(
 # --- ramura ---------------------------------------------------------------------------------------
 
 
-async def run_interpreted_turn(ctx: TurnContext, deps: PipelineDeps) -> bool:
+def _dark_truth(state: ConversationStateV2) -> dict[str, Any]:
+    """NX-353: ce a validat kernelul din cuvintele clientului, după reducer: tipul spus (sau
+    codurile umbrelei), raftul și nevoile de fațetă active (`contains`, valori de vocabular). Sunt
+    CHEI de catalog, nu text de client; raportul le folosește ca adevăr PROXY (declarat)."""
+    topic = state.topic
+    types = [topic.product_type] if topic.product_type else list(topic.type_umbrella)
+    return {
+        "types": types,
+        "type_learned": bool(topic.type_learned),
+        "shelf": topic.category_key,
+        "needs": [
+            [n.key, n.normalized_value]
+            for n in state.active_needs()
+            if n.operator == "contains" and isinstance(n.normalized_value, str)
+        ],
+    }
+
+
+async def _dark_search(ctx: TurnContext, deps: PipelineDeps, chain: _Chain) -> dict[str, Any]:
+    """NX-353 (pasul 7, DARK): ce ar fi servit kernelul, fără să servească. Pe un plan `search`
+    principal rulează DOAR căutarea planificată (read-only, aceeași ca pe calea servită, fără
+    compunere, deci fără al doilea apel de model) și reține primele `card_slots` id-uri. Zero text
+    de client: id-uri de produs, treapta lexicală, ms, executorul, câte planuri."""
+    from time import perf_counter  # noqa: PLC0415
+
+    from src.tools.catalog_tools import run_planned_search  # noqa: PLC0415 — ciclul unelte
+
+    planned = chain.planned
+    plan = planned.plans[planned.primary]
+    out: dict[str, Any] = {
+        "executor": plan.executor,
+        "plans": len(planned.plans),
+        "searched": False,
+        "kernel_ids": [],
+        "lexical_step": None,
+        "ms": None,
+        "truth": _dark_truth(chain.reduced.state),
+    }
+    if plan.executor != "search" or plan.search_args is None:
+        return out
+    mark = len(ctx.events)
+    started = perf_counter()
+    result = await run_planned_search(ctx, deps, plan.search_args)
+    out["ms"] = round((perf_counter() - started) * 1000, 1)
+    slots = int(getattr(get_settings(), "card_slots", 6))
+    ids = [str(p.get("product_id") or p.get("id")) for p in (result.products or [])]
+    out["kernel_ids"] = [i for i in ids if i and i != "None"][:slots]
+    search = next((e for e in ctx.events[mark:] if e.type == "product_search"), None)
+    out["lexical_step"] = (search.properties or {}).get("lexical_step") if search else None
+    out["searched"] = True
+    return out
+
+
+async def run_interpreted_turn(ctx: TurnContext, deps: PipelineDeps, *, dark: bool = False) -> bool:
     """Turul pe calea interpretată. Întoarce `True` doar când un executor a servit turul; atunci
     `ctx.kernel_turn` e scris (ultimul), iar commit-ul trece doar prin reducer. PR B: niciun
     executor nu e legat (`execute_plans` ⇒ `None`), deci în producție turul rămâne DARK și ramura
@@ -828,9 +881,18 @@ async def run_interpreted_turn(ctx: TurnContext, deps: PipelineDeps) -> bool:
             except Exception as e:  # noqa: BLE001 — P6: după apel, tot un fallback
                 log.warning("interpreted_turn: lanțul (%s)", type(e).__name__)
                 reason = _EXCEPTION
-    served, record, kernel_turn, dark = False, None, None, False
+    served, record, kernel_turn, dark_record = False, None, None, None
+    dark_mode, dark = dark, False
     mark = len(ctx.events)
-    if chain is not None:
+    if chain is not None and dark_mode:
+        # NX-353: fără executori și fără scurtături; doar căutarea planificată, read-only
+        dark = True
+        try:
+            dark_record = await _dark_search(ctx, deps, chain)
+        except Exception as e:  # noqa: BLE001 — P6: căutarea picată se numără, v1 răspunde
+            log.warning("interpreted_turn: căutarea dark (%s)", type(e).__name__)
+            dark_record = {"executor": "search", "searched": False, "error": type(e).__name__}
+    elif chain is not None:
         try:
             verdict = await _serve(ctx, deps, chain, saved)
             if verdict in (_EXECUTOR_REFUSED, _NO_SENTENCE):
@@ -881,6 +943,17 @@ async def run_interpreted_turn(ctx: TurnContext, deps: PipelineDeps) -> bool:
     ctx.trace["kernel"] = trace
     for name, properties in events:
         ctx.emit(name, **properties)
+    if dark_record is not None:
+        # NX-353: ce ar fi servit kernelul (id-uri de produs, fără text de client); raportul îl
+        # compară cu setul servit de v1 pe același tur (`conversation_traces.recommended`).
+        ctx.trace["kernel_dark"] = dark_record
+        ctx.emit(
+            "kernel_dark",
+            executor=dark_record.get("executor"),
+            searched=bool(dark_record.get("searched")),
+            kernel_n=len(dark_record.get("kernel_ids") or ()),
+            lexical_step=dark_record.get("lexical_step"),
+        )
     return False
 
 

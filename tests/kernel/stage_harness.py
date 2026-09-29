@@ -346,6 +346,15 @@ class StageRun:
     before_branch: dict[str, Any] | None = None
     after_branch: dict[str, Any] | None = None
     branch_result: bool | None = None
+    #: NX-353: fereastra citirilor făcute ÎN ramură (`db.ops[start:end]`): citirile kernelului
+    branch_ops: tuple[int, int] | None = None
+
+    def ops_outside_branch(self) -> list[str]:
+        """Citirile căii v1: tot ce nu s-a citit în ramură (acolo citește doar kernelul)."""
+        if self.branch_ops is None:
+            return list(self.db.ops)
+        start, end = self.branch_ops
+        return [*self.db.ops[:start], *self.db.ops[end:]]
 
     @property
     def interpret_rows(self) -> list[dict[str, Any]]:
@@ -385,10 +394,12 @@ async def run_turn(
     run = StageRun(ctx=ctx, llm=llm, db=db, per_call=[])
     original = it.run_interpreted_turn
 
-    async def spy(ctx_, deps_):
+    async def spy(ctx_, deps_, **kw):
         run.reached = True
         run.before_branch = context_fields(ctx_)
-        run.branch_result = await original(ctx_, deps_)
+        start = len(db.ops)
+        run.branch_result = await original(ctx_, deps_, **kw)
+        run.branch_ops = (start, len(db.ops))
         run.after_branch = context_fields(ctx_)
         return run.branch_result
 
