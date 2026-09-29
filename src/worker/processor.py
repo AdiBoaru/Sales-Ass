@@ -262,7 +262,9 @@ def _attach_state_v2(ctx: TurnContext, raw_state: dict | None) -> None:
     if not get_settings().conversation_state_v2_enabled:
         return
     legacy = not is_v2(raw_state)
-    ctx.state_v2 = hydrate_state_v2(raw_state, _need_vocabulary(ctx))
+    ctx.state_v2 = hydrate_state_v2(
+        raw_state, _need_vocabulary(ctx), rehome=get_settings().needs_retained_enabled
+    )
     ctx.emit(
         "conversation_state_loaded",
         schema=1 if legacy else STATE_SCHEMA_VERSION,
@@ -387,7 +389,7 @@ def _build_state_v2(base_state: dict, ctx: TurnContext, *, is_rich: bool, has_pr
     re-aplică ACELEAȘI propuneri pe starea proaspăt citită. Reducerul fiind determinist, rezultatul
     e re-derivat — fără să rerulăm modelul și fără să repetăm un efect deja produs (P6)."""
     vocab = _need_vocabulary(ctx)
-    hydrated = hydrate_state_v2(base_state, vocab)
+    hydrated = hydrate_state_v2(base_state, vocab, rehome=get_settings().needs_retained_enabled)
     kernel_turn = getattr(ctx, "kernel_turn", None)
     if kernel_turn is not None:
         # NX-336 PR B: tur SERVIT de kernel ⇒ reducerul e singurul scriitor, pe intrarea scrisă de

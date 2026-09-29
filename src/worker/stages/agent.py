@@ -175,13 +175,20 @@ _MAX_CONCERNS = 5
 _MAX_FACET_KEYS = 4
 
 
+def _retained_keys(ctx: TurnContext) -> frozenset[str]:
+    """NX-355: cheile de fațetă pe care stiva le cară între ture (gol cu flagul stins)."""
+    if not get_settings().needs_retained_enabled:
+        return frozenset()
+    return positive_facet_keys(NeedVocabulary.from_pack(getattr(ctx.business, "domain_pack", None)))
+
+
 def merge_constraints(
     stored: Any,
     filters: dict[str, Any] | None,
     category_key: str | None,
     *,
     switched_topic: bool = False,
-    carry_facets: bool = False,
+    carry_keys: frozenset[str] = frozenset(),
 ) -> tuple[dict[str, Any], bool]:
     """Funcție PURĂ: împacă stiva stocată cu sloturile turului curent (`filters` din triaj), pt ca
     o RAFINARE („am tenul mixt") să NU piardă constrângerile deja spuse („ser cu vitamina C sub
@@ -228,19 +235,16 @@ def merge_constraints(
         merged["concerns"] = unioned[:_MAX_CONCERNS]
 
     # NX-355: o fațetă pe care clientul a spus-o (ex. tipul de ten) nu mai cade la primul commit
-    # doar fiindcă lista de chei de mai sus n-o numește. Doar din stivă (un reset o golește), doar
-    # valori scalare, cu plafon (P4).
-    if carry_facets:
-        reserved = {*_CONSTRAINT_SCALAR_KEYS, "concerns", "category_key", SUBJECT_KEY}
-        carried = 0
-        for k, v in base.items():
-            if carried >= _MAX_FACET_KEYS:
-                break
-            if k in reserved or k in merged or v in (None, ""):
-                continue
-            if isinstance(v, (str, int, float, bool)):
-                merged[k] = v
-                carried += 1
+    # doar fiindcă lista de chei de mai sus n-o numește. Doar cheile date de apelant
+    # (`positive_facet_keys`: cerințe pozitive pe valori închise, nu excluderi sau limite), doar
+    # din stivă (un reset o golește), doar șiruri, cu plafon (P4).
+    carried = 0
+    for k, v in base.items():
+        if carried >= _MAX_FACET_KEYS:
+            break
+        if k in carry_keys and k not in merged and isinstance(v, str) and v:
+            merged[k] = v
+            carried += 1
 
     cat = category_key or (None if reset else prev_cat)
     if cat:
@@ -887,7 +891,7 @@ async def _learn_constraints(
             ctx.state.search_constraints,
             observed,
             category,
-            carry_facets=settings.needs_retained_enabled,
+            carry_keys=_retained_keys(ctx),
         )
         ctx.state.search_constraints = merged
         ctx.state_proposals.extend(_need_proposals(ctx, observed))
@@ -943,13 +947,19 @@ def _learn_subject(
         # NX-355: căutarea a CERUT tipul subiectului («cremă…»), iar ce a întors alt tip e o
         # ratare a căutării, nu o schimbare de subiect. Pe `1748f988` setul de măști de la turul 3
         # muta subiectul pe `masca de fata`, iar turul 4 pagina tot măști: greșeala se
-        # autoîntărea. Doar produsele de tipul cerut rămân dovadă.
-        same = [p for p in displayed if product_type_of(p) in (prev_type, None)]
-        if len(same) < len(displayed):
+        # autoîntărea. Dovadă rămâne orice produs al cărui tip îl NUMEȘTE căutarea, nu doar tipul
+        # subiectului: «crema contur ochi» după «crema de fata» mută subiectul (recenzia NX-355: pe
+        # capul „crema” stau 8 tipuri pe SOLE), iar măștile unei căutări de cremă nu.
+        asked = [
+            p
+            for p in displayed
+            if (t := product_type_of(p)) is None or search_named_type(queries, t)
+        ]
+        if len(asked) < len(displayed):
             ctx.emit(
-                "subject_kept", reason="searched_type_missed", dropped=len(displayed) - len(same)
+                "subject_kept", reason="searched_type_missed", dropped=len(displayed) - len(asked)
             )
-        displayed = same
+        displayed = asked
     subject = derive_subject(
         displayed=displayed,
         shelf=category if (vocab is not None and not vocab.is_empty()) else None,
@@ -1129,7 +1139,7 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
             route.filters,
             route.category_key,
             switched_topic=switched,
-            carry_facets=get_settings().needs_retained_enabled,
+            carry_keys=_retained_keys(ctx),
         )
         # NX-235: cu v2 aprins, stiva NU mai e un merge liber de dicționare — e rezultatul
         # reducerului, cu tărie/sursă/status per nevoie. Forma rămâne identică pentru consumatori
@@ -1154,9 +1164,7 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     filters_hint = _filters_hint(
         merged_constraints,
         retained=get_settings().needs_retained_enabled,
-        positive=positive_facet_keys(
-            NeedVocabulary.from_pack(getattr(ctx.business, "domain_pack", None))
-        ),
+        positive=_retained_keys(ctx),
     )  # NX-116/133: seed structurat (stiva merged)
     # A2 (Val1): semnal de CUMPĂRARE → onorează intenția (checkout_link + confirmă stocul), nu
     # re-recomanda. Hint per-tur (în USER, nu în prefixul cached). Leagă tool-urile existente de

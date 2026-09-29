@@ -30,7 +30,7 @@ from src.catalog.need_menu import (
     split_args,
     split_needs,
 )
-from src.catalog.query_terms import content_terms
+from src.catalog.query_terms import content_terms, stopwords
 from src.catalog.render_text import cut_at_sentence, display_name
 from src.catalog.vocabulary import (
     CATEGORY_DIMENSION,
@@ -52,10 +52,11 @@ from src.conversation.needs import (
     MAX_UNMAPPED_PER_TOPIC,
     NeedVocabulary,
     corroborated_by,
+    normalize_need,
     positive_facet_keys,
     rehome_list_value,
 )
-from src.conversation.subject import SUBJECT_KEY, ConversationSubject, search_named_type
+from src.conversation.subject import SUBJECT_KEY, ConversationSubject, type_fits_query
 from src.db.queries.catalog import (
     get_products_by_ids,
     get_substitutes,
@@ -877,52 +878,68 @@ _MAX_CARRIED_CONCERNS = 6
 
 
 def _carry_retained(ctx: TurnContext, a: SearchArgs) -> bool:
-    """NX-355: ce a spus clientul rămâne în căutare, chiar dacă modelul îl omite. Scrie DOAR
-    `a.concerns` și `a.prefer`, înaintea rezoluției (termenii trec prin aceeași confruntare cu
-    catalogul ca ai modelului).
+    """NX-355: fațetele pe care clientul le-a spus (ex. tipul de ten) rămân în căutare, chiar dacă
+    modelul le omite. Scrie DOAR `a.concerns`, înaintea rezoluției (termenii trec prin aceeași
+    confruntare cu catalogul ca ai modelului).
 
-    Nevoile vin din stiva turului (`search_constraints`, derivată de reducer, deci o nevoie retrasă
-    nu reînvie): lista `concerns` plus fațetele ținute minte (ex. tipul de ten). Se cară doar pe
-    ACELAȘI raft: un raft nou al modelului e o schimbare de subiect. O fațetă pe care modelul o
-    trimite deja, cu altă valoare («ten gras» după «ten uscat»), nu se cară: clientul s-a
-    răzgândit, iar a trimite ambele ar cere un ten și uscat, și gras.
+    Se cară doar fațetele POZITIVE cu valori închise (`positive_facet_keys`): stiva v1 pierde
+    operatorul, deci o excludere ar fi plecat ca cerere. Lista `concerns` NU se cară: în SQL
+    valorile unei dimensiuni se leagă cu SAU, deci o nevoie veche («acnee») ar LĂRGI o căutare nouă
+    («pete»); moștenirea din sesiune o cară deja când modelul nu trimite nicio nevoie. Doar pe
+    ACELAȘI raft, confirmat (raftul căutării = raftul stivei). O fațetă pe care modelul o trimite
+    cu altă valoare («ten gras» după «ten uscat») nu se cară: clientul s-a răzgândit.
 
-    Tipul subiectului ORDONEAZĂ (`prefer`) căutarea care îl numește în cuvinte: tipul nu e filtru
-    (`enforce_ready: false`), deci măștile nu dispar, doar coboară sub creme.
-
-    Întoarce `True` când a cărat ceva ȘI toate nevoile căutării sunt din stivă: atunci ele sunt ale
-    stării, nu ghicite de model. O nevoie nouă a modelului rămâne judecată de garda NX-313."""
+    Întoarce `True` când TOATE nevoile căutării (după cărare) sunt ale stivei, inclusiv una
+    retrimisă de model sub alt nume («dry», «ten uscat»): atunci sunt ale stării, nu ghicite, și
+    nu le mai judecă garda NX-313 pe textul clientului (ca pe calea planificată)."""
     stack = ctx.state.search_constraints if isinstance(ctx.state.search_constraints, dict) else {}
-    if not stack:
-        return False
     stack_shelf = stack.get("category_key")
-    if a.category and stack_shelf and a.category != stack_shelf:
+    if not stack or not stack_shelf or a.category != stack_shelf:
         return False
     vocab = NeedVocabulary.from_pack(getattr(ctx.business, "domain_pack", None))
-    sent = [c for c in (a.concerns or []) if isinstance(c, str)]
-    sent_keys = {c.strip().lower() for c in sent}
-    sent_facets = {moved[0] for c in sent if (moved := rehome_list_value("concerns", c, vocab))}
     positive = positive_facet_keys(vocab)
-    retained = [c for c in (stack.get("concerns") or []) if isinstance(c, str)]
-    retained += [
+    sent = [c for c in (a.concerns or []) if isinstance(c, str)]
+    sent_facets = {moved[0] for c in sent if (moved := rehome_list_value("concerns", c, vocab))}
+    retained = {k: v for k, v in stack.items() if k in positive and isinstance(v, str) and v}
+    missing = [
         v
-        for k, v in stack.items()
-        if k in positive and k not in sent_facets and isinstance(v, str) and v
+        for k, v in retained.items()
+        if k not in sent_facets and v.strip().lower() not in {c.strip().lower() for c in sent}
     ]
-    missing = [c for c in dict.fromkeys(retained) if c.strip().lower() not in sent_keys]
     if missing:
         a.concerns = [*sent, *missing][:_MAX_CARRIED_CONCERNS]
         ctx.emit("search_needs_carried", n=len(missing))
+    known = {c.strip().lower() for c in stack.get("concerns") or [] if isinstance(c, str)}
+    known |= {v.strip().lower() for v in retained.values()}
+
+    def _from_stack(c: str) -> bool:
+        if c.strip().lower() in known:
+            return True
+        listed = normalize_need("concerns", c, vocab)  # «hidratare» → «hydration»
+        moved = rehome_list_value("concerns", c, vocab)  # «ten uscat» → «dry»
+        return (listed is not None and listed.value in known) or (
+            moved is not None and moved[1] in known
+        )
+
+    final = [c for c in (a.concerns or []) if isinstance(c, str)]
+    return bool(final) and all(_from_stack(c) for c in final)
+
+
+def _prefer_subject_type(ctx: TurnContext, a: SearchArgs, catalog: CatalogVocabulary) -> None:
+    """NX-355: tipul subiectului ORDONEAZĂ (`prefer`) căutarea care îl cere, fără să filtreze
+    (`product_type` e `enforce_ready: false`), deci măștile nu dispar, doar coboară sub creme.
+
+    Se aplică doar când căutarea numește capul tipului și NU numește un tip mai specific cu același
+    cap din catalog: «crema contur ochi» după «crema de fata» nu primește preferința pentru crema
+    de față (recenzia NX-355)."""
+    stack = ctx.state.search_constraints if isinstance(ctx.state.search_constraints, dict) else {}
     subject = ConversationSubject.from_dict(stack.get(SUBJECT_KEY))
-    if (
-        subject is not None
-        and subject.product_type
-        and search_named_type([a.query], subject.product_type)
-    ):
+    if subject is None or not subject.product_type:
+        return
+    types = [e.key for e in catalog.entries("product_type")]
+    if type_fits_query([a.query], subject.product_type, types, stopwords(ctx.language)):
         a.prefer = _merge_prefer(a.prefer, {"product_type": [subject.product_type]}) or {}
         ctx.emit("subject_type_preferred")
-    known = {c.strip().lower() for c in retained}
-    return bool(missing) and all(c.strip().lower() in known for c in a.concerns or [])
 
 
 def price_units(ctx: TurnContext) -> UnitRegistry | None:
@@ -1790,6 +1807,8 @@ async def _search(
     # cerere de cremă, deci măștile cu textură cremoasă nu mai câștigă pe text), `UNKNOWN` (nu
     # ajunge NICIODATĂ în WHERE; se raportează și i se spune modelului că filtrul n-a rulat).
     vocab = await get_vocabulary(deps, ctx.business.id)
+    if not planned and get_settings().needs_retained_enabled:
+        _prefer_subject_type(ctx, a, vocab)
     resolutions = _resolve_search_terms(ctx, a, vocab)
     category_keys = resolutions.category_keys
     facet_filters = resolutions.facet_filters

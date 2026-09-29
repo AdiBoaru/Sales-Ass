@@ -40,7 +40,7 @@ from __future__ import annotations
 
 import json
 from collections import Counter
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -164,6 +164,33 @@ def search_named_type(queries: Iterable[object], product_type: str | None) -> bo
     if not head:
         return False
     return any(isinstance(q, str) and q and corroborated_by(q, head) for q in queries)
+
+
+def type_fits_query(
+    queries: Iterable[object],
+    product_type: str,
+    catalog_types: Iterable[str],
+    stop: Collection[str] = frozenset(),
+) -> bool:
+    """Cere căutarea chiar tipul `product_type`, și nu unul mai SPECIFIC cu același cap? PURĂ
+    (NX-355, recenzia: pe SOLE capul „crema” poartă 8 tipuri).
+
+    Da când capul e numit (`search_named_type`) și niciun alt tip din catalog cu același cap nu are
+    toate cuvintele lui în plus (fără cuvinte goale) numite în căutare: «cremă de hidratare pentru
+    ten uscat» se potrivește cu «crema de fata», «crema contur ochi» nu."""
+    if not search_named_type(queries, product_type):
+        return False
+    texts = [q for q in queries if isinstance(q, str) and q]
+    own = [w for w in product_type.split() if w not in stop]
+    head = product_type.split()[0]
+    for other in catalog_types:
+        words = other.split()
+        if other == product_type or not words or words[0] != head:
+            continue
+        extra = [w for w in words if w not in stop and w not in own]
+        if extra and all(any(corroborated_by(t, w) for t in texts) for w in extra):
+            return False
+    return True
 
 
 def resolve_shelf(vocab: CatalogVocabulary | None, raw: str | None) -> str | None:
