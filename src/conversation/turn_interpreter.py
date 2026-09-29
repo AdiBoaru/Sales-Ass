@@ -270,15 +270,20 @@ interpretation. query: the customer's words, for find and store_info only.
 op set: one value; add: one more value; remove: drop the handle in target; replace: the handle in \
 target gets a new value; clear: target "topic" drops the current subject, "all" drops everything. \
 dimension: one from {dimensions_header}, "category" for a shelf from {shelves_header} (value = the \
-shelf key), "price" for money, "unmapped" only as a last resort, when no dimension fits. \
+shelf key), "price" for money, "unmapped" only as a last resort, when no dimension fits. A \
+shelf the customer names as what they want or ask about, also inside a question, is a set on \
+category with that shelf key. \
 relation: eq; lte (at most); gte (at least); contains; avoid (the customer does not want it). \
 value: a code from the menu only when the customer's words name that code, never a narrower code \
 for a broader word, and always of the same kind as the dimension's other values; when no code \
 fits, the customer's words. number and unit: only for a number the customer wrote. relative_to: \
 a reference id when the value is relative to an item on screen, with relation lte or gte and no \
 number. What the customer describes about themselves or about the items (a condition, a problem, \
-a complaint about price) is a change when a menu value names its cause; a complaint about the \
-price of the items on screen is price with lte relative to them.
+a complaint about price) is a change when a menu value names its cause, on the dimension of that \
+value and not on a related one; a complaint about the price of the items on screen is price with \
+lte relative to them. A dimension listed as true or false takes true or false whenever the \
+customer's words say whether the property holds, also as a negation ("without", "not"), never \
+avoid and never unmapped.
 - quote: the customer's exact words that support the change, copied from CURRENT MESSAGE or from \
 a user line in HISTORY, never from a bot line. A change with no customer words behind it is a \
 guess: leave it out.

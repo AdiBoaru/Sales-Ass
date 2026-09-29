@@ -593,5 +593,30 @@ def test_v3_bundle_covers_items_used_together_without_naming_them(pack):
     assert "bundle: a set of items that go together" not in system
 
 
-def test_the_prompt_version_is_v3():
-    assert ic.INTERPRET_PROMPT_VERSION == "interpret.v3"
+# --- NX-347: interpret.v4 = v3 + trei reguli de RECUNOAȘTERE (clasele B, C, E, NX-345) -----
+
+#: Câte o frază-ancoră per regulă nouă. Formulările sunt generice (I14): niciun cuvânt de vertical.
+V4_RULES = {
+    "B raftul numit, și ca întrebare": "also inside a question, is a set on category",
+    "C descrierea pe dimensiunea ei": "on the dimension of that value and not on a related one",
+    "E fațeta da/nu, și ca negație": "A dimension listed as true or false takes true or",
+}
+
+
+@pytest.mark.parametrize("pack", ALL_PACKS)
+def test_every_v4_rule_is_in_the_rendered_prompt(pack):
+    system = " ".join(ti.system_prompt(_input(pack)).split())
+    missing = [rule for rule, anchor in V4_RULES.items() if anchor not in system]
+    assert missing == []
+
+
+@pytest.mark.parametrize("pack", ALL_PACKS)
+def test_v4_keeps_every_v2_and_v3_rule(pack):
+    """v4 ADAUGĂ trei reguli; nicio regulă de dinainte nu se pierde la rescriere."""
+    system = " ".join(ti.system_prompt(_input(pack)).split())
+    assert [rule for rule, anchor in V2_RULES.items() if anchor not in system] == []
+    assert "bundle: several items meant to be used together" in system
+
+
+def test_the_prompt_version_is_v4():
+    assert ic.INTERPRET_PROMPT_VERSION == "interpret.v4"
