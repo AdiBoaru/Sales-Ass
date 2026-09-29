@@ -99,14 +99,7 @@
       "targets": [
         "#2"
       ],
-      "changes": [
-        [
-          "set",
-          "product_type",
-          "crema de fata",
-          "eq"
-        ]
-      ],
+      "changes": [],
       "ambiguous": false,
       "uncertain": true
     },
