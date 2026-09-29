@@ -37,7 +37,7 @@ def test_an_unlabelled_hypothesis_is_neutral_an_unlabelled_fact_is_a_false_posit
     hypothesis = rp.compare(
         LABEL,
         _got(
-            [["set", "skin_type", "dry", "eq"], ["add", "product_type", "crema", "eq"]],
+            [["set", "skin_type", "dry", "eq"], ["add", "concerns", "hydration", "eq"]],
             ["explicit", "implicit"],
         ),
     )
@@ -47,7 +47,7 @@ def test_an_unlabelled_hypothesis_is_neutral_an_unlabelled_fact_is_a_false_posit
     fact = rp.compare(
         LABEL,
         _got(
-            [["set", "skin_type", "dry", "eq"], ["add", "product_type", "crema", "eq"]],
+            [["set", "skin_type", "dry", "eq"], ["add", "concerns", "hydration", "eq"]],
             ["explicit", "explicit"],
         ),
     )
@@ -127,7 +127,7 @@ def test_null_valued_hypotheses_are_neutral_too():
 
 def test_without_provenance_nothing_changes():
     """Etichetele, testele de dinainte și rapoartele fără `checked` se numără exact ca înainte."""
-    got = _got([["set", "skin_type", "dry", "eq"], ["add", "product_type", "crema", "eq"]])
+    got = _got([["set", "skin_type", "dry", "eq"], ["add", "concerns", "hydration", "eq"]])
     v = rp.compare(LABEL, got)
     assert v["change_emitted"] == v["change_emitted_all"] == 2
     misaligned = rp.compare(LABEL, {**got, "change_provenance": ["implicit"]})
@@ -246,7 +246,7 @@ def test_price_and_numeric_bounds_are_never_already_active():
 
 
 def test_old_reports_recover_provenance_from_the_validator_verdict():
-    got = _got([["set", "skin_type", "dry", "eq"], ["add", "product_type", "crema", "eq"]])
+    got = _got([["set", "skin_type", "dry", "eq"], ["add", "concerns", "hydration", "eq"]])
     checked = [
         {"provenance": "explicit", "rejected": None},
         {"provenance": "explicit", "rejected": "unknown_dimension"},  # respinsă: nu e în `changes`
@@ -272,7 +272,7 @@ def test_summary_reports_both_rules_and_the_hypothesis_precision():
     v = rp.compare(
         LABEL,
         _got(
-            [["set", "skin_type", "dry", "eq"], ["add", "product_type", "crema", "eq"]],
+            [["set", "skin_type", "dry", "eq"], ["add", "concerns", "hydration", "eq"]],
             ["explicit", "implicit"],
         ),
     )
@@ -287,7 +287,7 @@ def test_summary_reports_both_rules_and_the_hypothesis_precision():
 def test_regressions_are_reported_on_both_rules():
     """Poarta de zgomot NX-339 se judecă pe regula pe care a fost măsurat zgomotul (`all`)."""
     got = _got(
-        [["set", "skin_type", "dry", "eq"], ["add", "product_type", "crema", "eq"]],
+        [["set", "skin_type", "dry", "eq"], ["add", "concerns", "hydration", "eq"]],
         ["explicit", "implicit"],
     )
     before = [
@@ -353,3 +353,11 @@ def test_an_inferred_shelf_does_not_move_the_subject():
         _checked("set", "skin_type", "dry"),
     ]
     assert rp.observed_parts(_interp(), checked, (), hard)["change_active"] == [False, True]
+
+
+def test_after_nx348_an_implicit_type_is_a_fact_not_a_hypothesis():
+    """NX-348 a intrat înaintea rulării v4 (regula din NX-339): tipul mută subiectul, deci o
+    schimbare `implicit` pe tip, neetichetată, e pozitiv fals, nu ipoteză neutră."""
+    v = rp.compare(LABEL, _got([["set", "product_type", "ser", "eq"]], ["implicit"]))
+    assert (v["change_emitted"], v["neutral_hypotheses"], v["hypotheses"]) == (1, 0, 0)
+    assert "product_type" in rp.SUBJECT_DIMENSIONS
