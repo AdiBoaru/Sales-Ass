@@ -65,7 +65,11 @@ from src.tools.catalog_tools import SearchArgs
 #: limită relativă de preț pe o țintă AMBIGUĂ spre ecran se raportează la MEDIANA prețurilor
 #: recitite ale candidaților; (4) la un tip nou raftul vechi rămâne doar pe o pereche verificată.
 #: Poarta de replay e DEROGATĂ (niciun tur interpretat servit); schema scrisă de model neschimbată.
-KERNEL_CONTRACT_VERSION = "kernel.v5.0"
+#: `kernel.v5.1` (NX-349, MINOR): o fațetă da/nu a pachetului (`value_type: bool`) acceptă valorile
+#: `true`/`false` fără intrare de vocabular (catalogul nu indexează booleeni), judecate pe frazele
+#: pachetului care o numesc; înainte orice astfel de schimbare ajungea `unmapped` („true" ca termen de
+#: ordonare). Citatul ei nu dă text de căutare. Schema scrisă de model neschimbată.
+KERNEL_CONTRACT_VERSION = "kernel.v5.1"
 
 # --- scrise de model ----------------------------------------------------------------------------
 

@@ -73,6 +73,7 @@ from src.conversation.references import (
     VARIANT_DIMENSION,
 )
 from src.conversation.state_v2 import HARD_CAPABLE_SOURCES, ConversationStateV2, Need, Topic
+from src.domain.facets import FacetType
 from src.domain.routine_steps import SEP
 from src.tools.base import CATALOG_READ_TOOLS
 from src.tools.catalog_tools import SearchArgs
@@ -162,6 +163,7 @@ def _read_act_query(
     shelf_label: str | None,
     shelf_names: Collection[str],
     locale: str,
+    flags: Collection[str] = (),
 ) -> tuple[str | None, str | None]:
     """SINGURUL loc din planner care citește `Act.query` și citatele schimbărilor (cuvintele
     clientului). Întoarce `(textul căutării, cererea întreagă fără cuvintele negate)`, ca VALORI;
@@ -185,7 +187,11 @@ def _read_act_query(
     la fiecare, cuvintele unei valori SPUSE care nu ajunge filtru (o marcă pe o preferință slabă sau
     într-un gol), fiindcă textul e atunci canalul ei; 4. cererea întreagă, fără cuvintele negate, e
     ultima rezervă. Doar schimbările ACCEPTATE (`checked`) contează; `avoid` nu dă text. Cuvintele
-    ies în ordinea din cerere, în forma scrisă de client."""
+    ies în ordinea din cerere, în forma scrisă de client.
+
+    NX-349: citatul unei fațete da/nu (`flags`) nu dă text nici în rezervă: proprietatea o poartă
+    fațeta (sau golul dezvăluit), iar cuvintele ei sunt adesea negația unui lucru («fără parfum»),
+    deci «parfum» ar urca exact produsele parfumate."""
     stop = stopwords(locale)
     # (dimensiune, relație, proveniență, cuvintele care au numit valoarea, valoarea de text,
     # cuvintele citatului, cuvintele citatului în forma scrisă de client)
@@ -260,7 +266,7 @@ def _read_act_query(
         for w in surface(m, raw)
     ]
     unmapped = [v for d, _r, _p, _m, v, _q, _raw in live if d == UNMAPPED_KEY and v]
-    negated = {w for _d, r, _p, _m, _v, q, _raw in items if r in _NEGATIVE for w in q}
+    negated = {w for d, r, _p, _m, _v, q, _raw in items if r in _NEGATIVE or d in flags for w in q}
     whole = None
     if has_words and query is not None:
         own = [w for w in query.split() if not set(tokens(w)) & negated]
@@ -342,6 +348,12 @@ class _Planner:
             f.key: f for f in getattr(pack, "facets", ()) or () if getattr(f, "key", None)
         }
         self.searchable = frozenset(getattr(pack, "searchable_facets", ()) or ())
+        # NX-349: fațetele da/nu ale pachetului (citatul lor nu dă text de căutare)
+        self.flags = frozenset(
+            key
+            for key, f in self.facets.items()
+            if getattr(f, "value_type", None) is FacetType.BOOL
+        )
         self.gaps: list[str] = []
         self.disclosures: list[tuple[int, str]] = []
 
@@ -665,6 +677,7 @@ class _Planner:
             shelf_label,
             {t for n in (topic.category_key, shelf_label) if n for t in tokens(n)},
             self.locale,
+            flags=self.flags,
         )
         # NX-352: căutarea se COMPUNE din ce a validat kernelul (subiectul, nevoile filtrate,
         # termenii nemapați); cererea întreagă, fără cuvintele negate, e ultima rezervă.

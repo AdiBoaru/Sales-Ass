@@ -64,6 +64,7 @@ from src.conversation.needs import (
 )
 from src.conversation.state_v2 import MAX_TYPE_UMBRELLA, Need
 from src.domain.constraints import EMPTY_UNITS, UnitRegistry
+from src.domain.facets import FacetType
 
 #: Plafoanele de runtime ale contractului (decizia 3 din „Review decisions"). Peste ele, restul se
 #: taie de la coadă, în ordine, și se numără (`interpretation_truncated`).
@@ -83,6 +84,13 @@ _STRONG_MATCH: frozenset[str] = frozenset({"exact", "overlay"})
 _MAX_NGRAM = 4
 #: Câte cuvinte înaintea valorii poate sta o negație ca să o contrazică („nu gras").
 _NEGATION_WINDOW = 2
+#: NX-349: valorile unei fațete da/nu, cum le scrie MODELUL (limbajul schemei, nu al clientului).
+#: Vocabularul nu ține booleeni (`catalog.vocabulary`), deci fără ramura asta orice `set
+#: fragrance_free true` ajungea `unmapped` cu valoarea „true", adică termen de ordonare.
+_FLAGS: Mapping[str, bool] = {"true": True, "false": False}
+#: Relațiile cu care o fațetă da/nu are sens: valoarea poartă deja polaritatea («fără parfum» =
+#: `true`), deci `avoid`/`lte`/`gte` pe ea sunt un conflict de polaritate.
+_FLAG_RELATIONS = frozenset({"eq", "contains"})
 
 
 @dataclass(frozen=True)
@@ -450,6 +458,10 @@ class _Checker:
         else:
             if not change.value:
                 return reject("unknown_dimension")
+            facet = self._bool_facet(dimension)
+            flag = _FLAGS.get(fold(change.value).strip()) if facet is not None else None
+            if facet is not None and flag is not None:
+                return self._flag(change, dimension, facet, flag, evidence)
             dimension, canonical = self._canonical(dimension, change.value)
             level = located
             number_in_quote = False
@@ -476,6 +488,80 @@ class _Checker:
             if umbrella:
                 checked = checked.model_copy(update={"umbrella": umbrella})
         return checked
+
+    def _bool_facet(self, dimension: str) -> object | None:
+        """Fațeta da/nu a pachetului pe `dimension`, sau `None`."""
+        for facet in getattr(self.pack, "facets", ()) or ():
+            if getattr(facet, "key", None) != dimension:
+                continue
+            return facet if getattr(facet, "value_type", None) is FacetType.BOOL else None
+        return None
+
+    def _flag_phrases(self, facet: object) -> list[tuple[tuple[str, ...], bool]]:
+        """Frazele care NUMESC o fațetă da/nu, cu starea pe care o spun: eticheta locale-i numește
+        starea ADEVĂRATĂ („Fără parfum"), un alias spune starea din valoarea lui. Date de pachet
+        per locale (P11)."""
+        base = (self.locale or "").split("-")[0].lower()
+        labels = getattr(facet, "labels", None) or {}
+        out: list[tuple[tuple[str, ...], bool]] = []
+        label = labels.get(base) if base else None
+        if label and tokens(label):
+            out.append((tuple(tokens(label)), True))
+        for alias, value in (getattr(facet, "aliases", None) or {}).items():
+            state = _FLAGS.get(fold(str(value)).strip())
+            if state is not None and tokens(alias):
+                out.append((tuple(tokens(alias)), state))
+        # cele mai lungi întâi: «fara parfum adaugat» înaintea lui «fara parfum»
+        out.sort(key=lambda pv: -len(pv[0]))
+        return out
+
+    def _flag(
+        self,
+        change: StateChange,
+        dimension: str,
+        facet: object,
+        flag: bool,
+        evidence: _Evidence,
+    ) -> CheckedChange:
+        """NX-349: o fațetă da/nu nu are intrare de vocabular (catalogul nu indexează booleeni),
+        deci se judecă pe frazele PACHETULUI care o numesc. Citatul găsit + o frază a fațetei cu
+        aceeași stare ⇒ `explicit`; cu starea opusă ⇒ `semantic_mismatch`; o negație chiar înaintea
+        ei ⇒ `polarity_conflict`; fără frază ⇒ `implicit` («să nu conțină parfum» e descrierea, nu
+        numele fațetei). Valoarea canonică e `true`/`false` (ca `format_value`).
+
+        `matched` rămâne GOL, deliberat: cuvintele care numesc o fațetă da/nu sunt adesea o negație
+        a unui lucru («fără parfum»), iar plannerul (NX-352) duce cuvintele unei valori spuse, dar
+        nefiltrate, în textul căutării, unde «parfum» ar urca exact produsele parfumate."""
+        located: Provenance = "explicit" if evidence.located else "inferred"
+        canonical = format_flag(flag)
+
+        def reject(reason: ChangeReject) -> CheckedChange:
+            return CheckedChange(
+                change=change,
+                dimension=dimension,
+                canonical_value=canonical,
+                provenance=located,
+                strength="ranking",
+                rejected=reason,
+            )
+
+        if (change.relation or "eq") not in _FLAG_RELATIONS:
+            return reject("polarity_conflict")
+        level: Provenance = located
+        if located == "explicit":
+            level = "implicit"
+            for phrase, state in self._flag_phrases(facet):
+                at = _find(evidence.words, phrase)
+                if at < 0:
+                    continue
+                if state != flag:
+                    return reject("semantic_mismatch")
+                window = range(max(0, at - _NEGATION_WINDOW), at)
+                if any(p in window for p in evidence.negations):
+                    return reject("polarity_conflict")
+                level = "explicit"
+                break
+        return self._finish(change, dimension, canonical, level)
 
     def _resolve_quote(
         self, evidence: _Evidence, dimension: str, canonical: str | float | None
@@ -600,6 +686,12 @@ class _Checker:
             strength=strength,
             rejected=None,
         )
+
+
+def format_flag(flag: bool) -> str:
+    """Valoarea canonică a unei fațete da/nu. Aceeași formă ca `interpretation_check.format_value`
+    (vederea modelului), fără import invers (modulul ăsta e sub validare)."""
+    return next(text for text, state in _FLAGS.items() if state is flag)
 
 
 def _bounds_of(change: CheckedChange) -> tuple[float | None, float | None]:
