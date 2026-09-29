@@ -26,9 +26,17 @@ No invariant, ownership row or state rule changes in v1.2, so no replay gate is 
 **Current version: `kernel.v4.0` (MAJOR, NX-350, decided by Adi on 2026-09-29).** The product type
 of the SUBJECT changes only from a type the customer stated (`explicit`). An `implicit` type (the
 customer's words do not name the whole code: „cremă" → `crema de fata`, which could as well be a body
-or hand cream) becomes a turn-local ranking signal, like `inferred`, and is never persisted. Counted as
-`subject_type_not_explicit`. The replay gate is waived, as for v2.0 and v3.0: no interpreted turn has
-been served in production. The model-written schema is unchanged.
+or hand cream) is remembered as the customer's UMBRELLA instead: the validator computes the type codes
+that carry every type word of the quote, with the locale's inflection suffixes
+(`CheckedChange.umbrella`, at most 8, largest first; without a type word, the code the model assumed),
+the delta puts them on the subject proposal (`set_topic.type_umbrella`, counted
+`subject_type_umbrella`), and the subject keeps them (`Topic.type_umbrella`). The reducer is the only
+writer: a new umbrella replaces the old one without parking; a stated type replaces the umbrella (a
+refinement); a vague type whose umbrella does not contain the subject's stated type is another kind of
+item, so it is a subject change on the same shelf (the old subject is parked). The planner prefers every
+code of the umbrella and labels the subject with the word they share. An umbrella never filters. The
+replay gate is waived, as for v2.0 and v3.0: no interpreted turn has been served in production. The
+model-written schema is unchanged.
 
 **Previous version: `kernel.v3.0` (MAJOR, NX-348, decided by Adi on 2026-09-29).** The meaning of a
 subject change: the subject `(category_key, product_type)` changes only when a half that is already
@@ -301,7 +309,7 @@ Provenance is computed by code in four steps, in order. The model supplies only 
 | Provenance | Maps to `NeedSource` | Strength | Can revive a revoked need | Can override an explicit need |
 | --- | --- | --- | --- | --- |
 | explicit | `user_explicit` | hard if the dimension is hard-capable, else soft | yes | yes (supersede) |
-| implicit | `user_implicit` (new) | soft (`prefer`); a confirmation candidate for the gate | no | no |
+| implicit | `user_implicit` (new) | soft (`prefer`); a confirmation candidate for the gate. (v4.0) On `product_type`, the umbrella of the customer's words on the subject, never the subject's type | no | no |
 | inferred | `model_inferred` | ranking only, this turn; never persisted | no | no |
 
 `user_implicit` is added to `NeedSource` and left out of `HARD_CAPABLE_SOURCES` and `REVIVE_CAPABLE_SOURCES`. The existing reducer rules then apply unchanged.
@@ -345,7 +353,7 @@ Never afterwards:
 The contract requires two additive changes in the search tool, both written only by the planner and both empty by default (empty ⇒ the SQL, the fusion and the session fingerprint are byte-identical to v1.0):
 
 - `SearchArgs.rank_terms` (v1.0). Today the only textual input is `query`, and on the `strict` rung the query is a gate: its terms are joined with AND. Passing unmapped words through `query` would turn „piele obosită după avion” into a hidden filter, which is the NX-298 lesson.
-- `SearchArgs.prefer` (v1.1, NX-333): the `soft` facet needs, the subject's product type and this turn's `inferred` facet signals, as attribute key → catalog values, merged in the tool with the NX-322 need-menu preference and passed to the existing fusion (`need_preference`). No new SQL. Without it, a `soft` need had no channel into the search, and since no facet is `enforce_ready` on today's data, every facet need the user stated would have vanished from the interpreted search, which is worse than today's path. Only dimensions that are **attribute** facets enter `prefer`: fusion reads the preference from `attributes`, so a column-backed dimension (the brand, on the real catalog) would order nothing and dilute the others; it goes into `gaps` instead.
+- `SearchArgs.prefer` (v1.1, NX-333): the `soft` facet needs, the subject's product type (v4.0: or every code of its umbrella when no type was stated) and this turn's `inferred` facet signals, as attribute key → catalog values, merged in the tool with the NX-322 need-menu preference and passed to the existing fusion (`need_preference`). No new SQL. Without it, a `soft` need had no channel into the search, and since no facet is `enforce_ready` on today's data, every facet need the user stated would have vanished from the interpreted search, which is worse than today's path. Only dimensions that are **attribute** facets enter `prefer`: fusion reads the preference from `attributes`, so a column-backed dimension (the brand, on the real catalog) would order nothing and dilute the others; it goes into `gaps` instead.
 
 „Weight capped below any facet match” is measured, not assumed (`tests/test_kernel_planner.py`): with today's fusion weights and the real fusion pool (50), a facet preference always beats the one-position lift a rank term gives between two adjacent products. The declared limit: a rank term is a secondary key, so inside a large tie group of the text rank (the `filters_only` rung, where hundreds of products rank zero) it can lift a product by several positions at once, and one preferred dimension (0.25) undoes a lift of at most 7 positions from the top of the pool; with several preferred dimensions the preference is their mean, so the bound is lower. Moving `rank_terms` into a fusion signal would lift that limit and is a contract change on measurement, not on principle.
 
@@ -355,7 +363,7 @@ On the planned path the tool does not re-judge `price_max` on the recent text (t
 
 ## Reducer, thread and parking
 
-The subject of a conversation is `(category_key, product_type)`. Only a change of subject parks anything; a change of any other dimension is an ordinary constraint change. (v3.0) A change of subject means a half that is already set gets a different value; filling an empty half is a refinement and parks nothing. Several values for one half in the same turn keep the last one, counted as `subject_multiple`.
+The subject of a conversation is `(category_key, product_type)`. Only a change of subject parks anything; a change of any other dimension is an ordinary constraint change. (v3.0) A change of subject means a half that is already set gets a different value; filling an empty half is a refinement and parks nothing. Several values for one half in the same turn keep the last one, counted as `subject_multiple`. (v4.0) The type half is set only by a stated (`explicit`) type; a vague one sets the subject's umbrella (`Topic.type_umbrella`), which counts as a subject for the gate and the planner. A new umbrella replaces the old one without parking; a stated type replaces the umbrella; a vague type whose umbrella does not contain the subject's stated type is a subject change on the same shelf.
 
 ### Order of application within a turn
 

@@ -214,8 +214,7 @@ class _Planner:
         return [r for r in self.interp.references if r.id not in targeted]
 
     def _subject(self) -> bool:
-        topic = self.state.topic
-        return bool(topic.category_key or topic.product_type)
+        return self.state.topic.has_subject
 
     def _facet_needs(self) -> bool:
         return any(self.needs.dimension_of(n.key) in self.facets for n in self.state.active_needs())
@@ -241,6 +240,12 @@ class _Planner:
                 if entry.key == topic.product_type and entry.label:
                     return entry.label
             return topic.product_type
+        if topic.type_umbrella:
+            # NX-350: eticheta unei umbrele e cuvântul pe care îl poartă TOATE codurile ei (ce a
+            # spus clientul, «cremă»), nu codul unuia: altfel căutarea fără cuvinte ar alege unul.
+            words = [code.split() for code in topic.type_umbrella]
+            shared = [w for w in words[0] if all(w in other for other in words[1:])]
+            return shared[0] if shared else topic.type_umbrella[0]
         return None
 
     def _hard(self, need: Need, dimension: str) -> bool:
@@ -579,9 +584,12 @@ class _Planner:
         # NX-314 pe calea interpretată: tipul subiectului ORDONEAZĂ (fațeta nu e `enforce_ready`),
         # deci „cremă de față" pe un raft de 900 de produse urcă cremele, fără să scoată restul.
         product_type = self.state.topic.product_type
-        if product_type and self._on_attributes(PRODUCT_TYPE):
-            _prefer(PRODUCT_TYPE, product_type)
-        elif product_type:
+        # NX-350: fără tip spus clar, UMBRELA (toate codurile cuvântului clientului) ordonează.
+        kinds = (product_type,) if product_type else self.state.topic.type_umbrella
+        if kinds and self._on_attributes(PRODUCT_TYPE):
+            for kind in kinds:
+                _prefer(PRODUCT_TYPE, kind)
+        elif kinds:
             self._gap("subject_type")
 
         return SearchArgs(
@@ -675,7 +683,7 @@ def bundle_executor(
     intrare în `DomainPack.bundle_executors` pentru rădăcina raftului, raft sau `"*"`. PUR; pasul 6
     îl cheamă ca să afle CE unealtă execută planul `bundle`."""
     topic = state.topic
-    if not (topic.category_key or topic.product_type):
+    if not topic.has_subject:
         return None
     table = getattr(pack, "bundle_executors", None)
     if not isinstance(table, Mapping) or not table:
@@ -708,6 +716,13 @@ def routine_family(
         family = str(by_type[ptype]).partition(SEP)[0]
         if family in families:
             return family
+    if not ptype and state.topic.type_umbrella:
+        # NX-350: o umbrelă decide familia doar când TOATE codurile ei cunoscute sunt ale aceleiași.
+        seen = {
+            str(by_type[k]).partition(SEP)[0] for k in state.topic.type_umbrella if k in by_type
+        }
+        if len(seen) == 1 and next(iter(seen)) in families:
+            return next(iter(seen))
     key = state.topic.category_key
     table = getattr(spec, "family_by_shelf", None)
     if not key or not isinstance(table, Mapping) or not table:

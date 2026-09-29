@@ -25,7 +25,7 @@ clasifica static fiecare scriitor. Modul PUR: aceleași intrări ⇒ același `T
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Literal
 
 from src.conversation.interpretation import CheckedChange, ResolvedRef, TurnInterpretation
@@ -40,6 +40,7 @@ from src.conversation.provenance import (
 )
 from src.conversation.references import ReferenceFacts
 from src.conversation.state_reducer import StateUpdateProposal
+from src.conversation.state_v2 import MAX_TYPE_UMBRELLA
 
 CATEGORY = "category"
 #: Cheia universală a unei excluderi, când fațeta nu are propriul operator `not_contains`.
@@ -281,6 +282,8 @@ def to_delta(
     ranking: list[RankingSignal] = []
     rejected: list[CheckedChange] = []
     subject: list[CheckedChange] = []
+    umbrella: list[str] = []
+    umbrella_lead: CheckedChange | None = None
 
     for c in ordered:
         if c.rejected is not None:
@@ -309,16 +312,21 @@ def to_delta(
             and c.change.op in ("set", "add")
             and c.canonical_value is not None
         ):
-            # NX-350 (kernel.v4.0, decis de Adi pe 2026-09-29): tipul SUBIECTULUI se schimbă doar
-            # dintr-un tip pe care clientul l-a SPUS (`explicit`). Unul presupus («cremă de
-            # hidratare» → `crema de fata`, deși putea fi de corp sau de mâini) doar ORDONEAZĂ
-            # rezultatele turului, ca `inferred`: altfel subiectul ar filtra pe un tip necerut.
-            ranking.append(RankingSignal(c.dimension, c.canonical_value, c.change.relation or "eq"))
-            counters["subject_type_not_explicit"] = counters.get("subject_type_not_explicit", 0) + 1
+            # NX-350 (kernel.v4.0, decis de Adi pe 2026-09-29): un tip spus VAG («cremă de
+            # hidratare» → `crema de fata`, deși putea fi de corp sau de mâini) nu devine tipul
+            # subiectului: subiectul ține minte UMBRELA cuvintelor clientului (toate codurile care
+            # se potrivesc, calculate de validator), care ordonează în fiecare tur și nu parchează.
+            if not subject and not umbrella:
+                proposals.append(None)  # type: ignore[arg-type]  # locul propunerii de subiect
+            umbrella_lead = umbrella_lead or c
+            for code in c.umbrella or (str(c.canonical_value),):
+                if code not in umbrella:
+                    umbrella.append(code)
+            counters["subject_type_umbrella"] = counters.get("subject_type_umbrella", 0) + 1
             continue
         if c.dimension in SUBJECT_DIMENSIONS and c.canonical_value is not None:
             # NX-348: se adună, apoi UN `set_topic` pe pereche, în poziția subiectului (primul).
-            if not subject:
+            if not subject and not umbrella:
                 proposals.append(None)  # type: ignore[arg-type]  # locul propunerii de subiect
             subject.append(c)
             continue
@@ -338,8 +346,20 @@ def to_delta(
             continue
         proposals += made
 
-    if subject:
-        made = _subject_proposal(subject, turn_id, counters)
+    if subject or umbrella:
+        made = _subject_proposal(subject, turn_id, counters) if subject else None
+        if umbrella and umbrella_lead is not None:
+            codes = tuple(umbrella[:MAX_TYPE_UMBRELLA])
+            if made is None:
+                made = StateUpdateProposal(
+                    "set_topic",
+                    type_umbrella=codes,
+                    **_common(
+                        umbrella_lead, _SOURCE_BY_PROVENANCE[umbrella_lead.provenance], turn_id
+                    ),
+                )
+            else:
+                made = replace(made, type_umbrella=codes)
         proposals = [made if p is None else p for p in proposals]
     return TurnDelta(
         thread=thread,

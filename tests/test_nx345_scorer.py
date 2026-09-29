@@ -356,8 +356,9 @@ def test_an_inferred_shelf_does_not_move_the_subject():
 
 
 def test_after_nx350_an_implicit_type_is_a_hypothesis_an_implicit_shelf_a_fact():
-    """NX-350 (kernel.v4.0): un tip `implicit` nu mai intră în subiect (doar ordonează), deci e
-    ipoteză neutră; raftul `implicit` mută în continuare subiectul, deci e fapt."""
+    """NX-350 (kernel.v4.0): un tip `implicit` nu mai devine tipul subiectului (doar umbrela, care
+    ordonează), deci e ipoteză neutră; raftul `implicit` mută în continuare subiectul, deci e
+    fapt."""
     kind = rp.compare(LABEL, _got([["set", "product_type", "ser", "eq"]], ["implicit"]))
     assert (kind["change_emitted"], kind["neutral_hypotheses"], kind["hypotheses"]) == (0, 1, 1)
     shelf = rp.compare(LABEL, _got([["set", "category", "ten", "eq"]], ["implicit"]))

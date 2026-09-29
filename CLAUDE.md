@@ -63,7 +63,7 @@ gate-ul NX-210**. Direcția aprobată către care migrăm:
 
 **Înghețate până la GO-ul de la NX-210:** enforcement-ul QuerySpec/Match Gate (NX-188, NX-189).
 
-**Kernelul conversațional — contractul `kernel.v1.0` (înghețat 2026-09-25, NORMATIV; azi `kernel.v4.0`: MAJOR la v2.0, NX-336 PR B, sensul lui I5; minor la v2.1, NX-336 D3, `TurnPlan.family`; MAJOR la v3.0, NX-348, sensul unei schimbări de subiect; MAJOR la v4.0, NX-350, tipul subiectului doar din `explicit`; porțile de replay derogate de Adi).**
+**Kernelul conversațional — contractul `kernel.v1.0` (înghețat 2026-09-25, NORMATIV; azi `kernel.v4.0`: MAJOR la v2.0, NX-336 PR B, sensul lui I5; minor la v2.1, NX-336 D3, `TurnPlan.family`; MAJOR la v3.0, NX-348, sensul unei schimbări de subiect; MAJOR la v4.0, NX-350, un tip spus vag devine umbrelă, nu tipul subiectului; porțile de replay derogate de Adi).**
 Sursa: [`docs/KERNEL-CONTRACT-v1.md`](docs/KERNEL-CONTRACT-v1.md); designul din care vine, ca
 referință: [`docs/KERNEL-DESIGN.md`](docs/KERNEL-DESIGN.md). Modelul scrie O interpretare a turului
 (`TurnInterpretation`: acte, schimbări de stare adresate prin handle, referințe, ambiguități); codul
@@ -464,13 +464,21 @@ schimbare de subiect SPRE subiectul parcat e un schimb (ca `resume`), fără să
 Poarta de replay derogată (niciun tur interpretat servit). Intră în `main` după rularea v4. Card:
 [`tasks/stage1/NX-348.md`](tasks/stage1/NX-348.md); probă: `pytest tests/test_nx348_subject_type.py -q`.
 
-**NX-350 — `kernel.v4.0` (MAJOR, decis de Adi pe 2026-09-29): tipul subiectului doar din ce a SPUS
-clientul.** Verdictul v4 a picat pe A pe o singură clasă: «cremă de hidratare» → `crema de fata`
-(`implicit`), care pe v3.0 devenea subiect și orienta căutarea pe cremele de față, deși putea fi de
-corp sau de mâini. Acum un tip ne-`explicit` e semnal de ordonare al turului (ca `inferred`), numărat
-`subject_type_not_explicit`; raftul `implicit` rămâne subiect. Scorerul urmează regula. F1 pe A pe
-raportul v4: 0,899; verdictul îl dă setul nevăzut E (regula în NX-339). Card:
-[`tasks/stage1/NX-350.md`](tasks/stage1/NX-350.md).
+**NX-350 — `kernel.v4.0` (MAJOR, decis de Adi pe 2026-09-29): un tip spus vag ține minte UMBRELA
+clientului.** Verdictul v4 a picat pe A pe o singură clasă: «cremă de hidratare» → `crema de fata`
+(`implicit`), care pe v3.0 devenea tipul subiectului și orienta căutarea pe cremele de față, deși
+putea fi de corp sau de mâini. Acum validatorul calculează umbrela cuvintelor clientului
+(`CheckedChange.umbrella`: codurile de tip care poartă toate cuvintele-tip ale citatului, cu flexiunea
+din `query_terms`, ≤ 8), delta o pune pe `set_topic` (`type_umbrella`, `subject_type_umbrella`), iar
+subiectul o ține minte (`Topic.type_umbrella`, `has_subject`). Scriitorul unic e
+`state_reducer._apply_umbrella`: o umbrelă nouă o înlocuiește pe cea veche fără parcare; un tip spus
+clar în umbrelă o înlocuiește (rafinare), iar unul din afara ei, deja în subiect, face din umbrelă
+subiect nou pe același raft (parcare). Plannerul pune `prefer` pe toate codurile, cu eticheta
+cuvântului comun («crema»). Prima variantă, „tipul `implicit` doar ordonează turul”, a picat la
+recenzie (se uita la turul următor). Scorerul: tipul `implicit` e ipoteză. F1 pe A pe raportul v4:
+0,899; verdictul îl dă setul nevăzut E (regula în NX-339). Card:
+[`tasks/stage1/NX-350.md`](tasks/stage1/NX-350.md); probă: `pytest tests/test_nx348_subject_type.py
+tests/test_nx345_scorer.py -q`.
 
 **NX-238 — retrievalul trece printr-un PORT, iar candidatul e inert (verdict `NOT-READY`).**
 `src/retrieval/` e contractul stabil pe care îl consumă NX-239: `RetrievalPort` + `RetrievalBundle`

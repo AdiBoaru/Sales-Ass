@@ -229,10 +229,10 @@ def _subject_is_new(before: ConversationStateV2, gate: ConversationStateV2, thre
     oferit ca la începutul unui subiect."""
     if thread == "resume":
         return False
-    now = (gate.topic.category_key, gate.topic.product_type)
-    if now == (None, None):
+    now = (gate.topic.category_key, gate.topic.product_type, gate.topic.type_umbrella)
+    if not gate.topic.has_subject:
         return True
-    if now == (before.topic.category_key, before.topic.product_type):
+    if now == (before.topic.category_key, before.topic.product_type, before.topic.type_umbrella):
         return False
     # NX-348: o RAFINARE (completarea unei jumătăți goale) nu e subiect nou; reducerul păstrează
     # atunci revizia subiectului (recenzia NX-348, constatarea 5).

@@ -32,6 +32,7 @@ from decimal import Decimal, InvalidOperation
 from src.catalog.query_terms import (
     comparators,
     fold,
+    inflection_suffixes,
     negation_markers,
     relative_comparators,
     stopwords,
@@ -61,7 +62,7 @@ from src.conversation.needs import (
     UNIVERSAL_SPECS,
     NeedVocabulary,
 )
-from src.conversation.state_v2 import Need
+from src.conversation.state_v2 import MAX_TYPE_UMBRELLA, Need
 from src.domain.constraints import EMPTY_UNITS, UnitRegistry
 
 #: Plafoanele de runtime ale contractului (decizia 3 din „Review decisions"). Peste ele, restul se
@@ -208,6 +209,27 @@ class _Evidence:
     located: bool
     comparator_ops: frozenset[str]  # op-urile comparatorilor găsiți în citat
     negations: tuple[int, ...]  # pozițiile negațiilor, după scăderea comparatorilor
+
+
+#: NX-350: dimensiunea tipului de produs, a doua jumătate a subiectului (`Topic.product_type`).
+SUBJECT_TYPE = "product_type"
+
+
+def _same_stem(a: str, b: str, suffixes: Collection[str]) -> bool:
+    """Același cuvânt, eventual flexionat pe AMBELE părți («creme» = „crema": tulpina „crem" +
+    „e" / „a"), cu tulpina de cel puțin 3 litere. Sufixele sunt ale locale-i (P11)."""
+    if a == b:
+        return True
+    for sa in ("", *suffixes):
+        if sa and not a.endswith(sa):
+            continue
+        stem = a[: len(a) - len(sa)] if sa else a
+        if len(stem) < 3:
+            continue
+        for sb in ("", *suffixes):
+            if b == stem + sb:
+                return True
+    return False
 
 
 def _read_quote(quote: str, user: UserWords, locale: str | None) -> _Evidence:
@@ -432,7 +454,12 @@ class _Checker:
             if any(p in window for p in evidence.negations):
                 return reject("polarity_conflict", canonical)
         level = self._polarity_level(level, relation, evidence, dimension, number_in_quote)
-        return self._finish(change, dimension, canonical, level)
+        checked = self._finish(change, dimension, canonical, level)
+        if dimension == SUBJECT_TYPE and level == "implicit" and evidence.located:
+            umbrella = self._umbrella(evidence, canonical)
+            if umbrella:
+                checked = checked.model_copy(update={"umbrella": umbrella})
+        return checked
 
     def _resolve_quote(
         self, evidence: _Evidence, dimension: str, canonical: str | float | None
@@ -456,6 +483,31 @@ class _Checker:
             if (anywhere.dimension, anywhere.key) != (dimension, canonical):
                 other = True
         return "implicit", -1, other
+
+    def _umbrella(self, evidence: _Evidence, canonical: str | float | None) -> tuple[str, ...]:
+        """NX-350: UMBRELA unui tip spus vag. Cuvintele-tip ale citatului sunt cele care apar (cu
+        flexiune: aceeași tulpină + un sufix al locale-i) în vreun cod de tip din vocabular;
+        umbrela = codurile care le poartă pe TOATE («cremă» → toate cremele; «creme de față» →
+        doar „crema de fata"). Fără cuvinte-tip, codul presupus de model (dacă există). Plafonată
+        la cele mai mari coduri, determinist."""
+        entries = self.vocab.entries(SUBJECT_TYPE) if self.vocab is not None else ()
+        suffixes = inflection_suffixes(self.locale)
+        codes = [
+            (e.key, [w for w in tokens(e.key) if w not in self.stop], e.count) for e in entries
+        ]
+        quote = [w for w in evidence.words if w not in self.stop]
+        typed = [
+            w for w in quote if any(_same_stem(w, t, suffixes) for _k, ws, _n in codes for t in ws)
+        ]
+        if not typed:
+            return (str(canonical),) if isinstance(canonical, str) else ()
+        hits = [
+            (key, count)
+            for key, words, count in codes
+            if all(any(_same_stem(w, t, suffixes) for t in words) for w in typed)
+        ]
+        hits.sort(key=lambda kc: (-kc[1], kc[0]))
+        return tuple(k for k, _n in hits[:MAX_TYPE_UMBRELLA])
 
     def _polarity_level(
         self,

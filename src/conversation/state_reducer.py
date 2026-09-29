@@ -172,6 +172,9 @@ class StateUpdateProposal:
     # înaintea reducerului, ca reducerul să rămână pur. O completare e rafinare doar dacă perechea
     # pe care o aplică reducerul e EXACT aceasta (un bool ar fi putut descrie altă stare).
     pair_verified: tuple[str, str] | None = None
+    # NX-350 (kernel.v4.0): UMBRELA unui tip spus vag (toate codurile care se potrivesc cuvântului
+    # clientului), scrisă de delta din validator. Ordonează, nu parchează; un tip spus clar o bate.
+    type_umbrella: tuple[str, ...] = ()
     # set_pending_question / resolve_question
     question_id: str | None = None
     reason: str | None = None
@@ -743,11 +746,79 @@ def _rescoped(
     return replace(state, needs=needs)
 
 
+def _records(outcome: Any) -> tuple[Applied, ...]:
+    return outcome if isinstance(outcome, tuple) else (outcome,)
+
+
+def _apply_umbrella(
+    state: ConversationStateV2,
+    umbrella: tuple[str, ...],
+    proposal: StateUpdateProposal,
+    policy: ReducerPolicy,
+) -> _Outcome:
+    """NX-350: umbrela unui tip spus vag. Un tip spus CLAR care e în umbrelă rămâne (clientul l-a
+    reformulat mai larg); unul care nu e în ea ⇒ clientul cere alt fel de produs: subiect nou pe
+    același raft, cu umbrela (se parchează, ca orice schimbare de subiect). Fără tip spus clar,
+    umbrela completează sau înlocuiește umbrela veche, fără parcare; un tip DEDUS de cod rămâne doar
+    dacă e în umbrelă."""
+    topic = state.topic
+    explicit = None if topic.type_learned else topic.product_type
+    if explicit is not None and explicit in umbrella:
+        return state, Applied("set_topic", topic.category_key, SOFT, proposal.source, "unchanged")
+    if explicit is not None:
+        outcome = "evicted" if state.parked is not None else "parked"
+        parked = _parked_now(state, policy)
+        retired = _retire_topic(state, proposal.turn_id, policy)
+        new = Topic(
+            category_key=topic.category_key,
+            changed_at_revision=state.revision,
+            type_umbrella=umbrella,
+        )
+        return (
+            replace(retired, topic=new, parked=parked),
+            (
+                Applied("set_topic", topic.category_key, SOFT, proposal.source, "reset"),
+                Applied("park", topic.category_key, SOFT, proposal.source, outcome),
+            ),
+        )
+    learned = topic.product_type if topic.type_learned and topic.product_type in umbrella else None
+    first = not topic.has_subject
+    new = replace(
+        topic,
+        product_type=learned,
+        type_learned=learned is not None,
+        type_umbrella=umbrella,
+        changed_at_revision=state.revision if first else topic.changed_at_revision,
+    )
+    if new == topic:
+        return state, Applied("set_topic", topic.category_key, SOFT, proposal.source, "unchanged")
+    outcome = "applied" if first else "refined"
+    return replace(state, topic=new), Applied(
+        "set_topic", topic.category_key, SOFT, proposal.source, outcome
+    )
+
+
 def _handle_set_topic(
     state: ConversationStateV2, proposal: StateUpdateProposal, policy: ReducerPolicy
 ) -> _Outcome:
     category = _proposed_category(proposal)
     interpreted = proposal.origin == "interpretation"
+    if interpreted and proposal.type_umbrella:
+        # NX-350: întâi raftul (dacă e), apoi umbrela; un tip spus clar în același tur o bate.
+        base = replace(proposal, type_umbrella=())
+        if proposal.product_type:
+            return _handle_set_topic(state, base, policy)
+        if not category:
+            return _apply_umbrella(state, proposal.type_umbrella, proposal, policy)
+        first = _handle_set_topic(state, base, policy)
+        if isinstance(first, RejectedUpdate):
+            return first
+        after, records = first
+        second = _apply_umbrella(after, proposal.type_umbrella, proposal, policy)
+        if isinstance(second, RejectedUpdate):
+            return after, records
+        final, more = second
+        return final, (*_records(records), *_records(more))
     if (
         interpreted
         and category is not None
@@ -808,6 +879,8 @@ def _handle_set_topic(
                     product_type=kept_type,
                     goal=proposal.goal or state.topic.goal,
                     type_learned=keep_learned and kept_type is not None,
+                    # NX-350: un tip spus clar înlocuiește umbrela; un raft singur o păstrează.
+                    type_umbrella=() if new_type else state.topic.type_umbrella,
                 )
                 changed = (topic.category_key, topic.product_type) != (
                     previous,

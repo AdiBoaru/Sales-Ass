@@ -5,11 +5,11 @@
 
 Fiecare loc din `src/**/*.py` care scrie starea conversației (v1 sau v2), derivat MECANIC prin `ast` (nu grep). Pregătește I3/I20 din [`docs/KERNEL-CONTRACT-v1.md`](KERNEL-CONTRACT-v1.md): pasul 3 nu poate face din reducer singurul scriitor peste o stare pe care o mai scriu și alții, fără să știe cine sunt aceia.
 
-**Totaluri:** 161 scriitori găsiți, 103 intrări de soartă declarate, 8 `unresolved`.
+**Totaluri:** 163 scriitori găsiți, 104 intrări de soartă declarate, 8 `unresolved`.
 - `becomes_proposal`: 0
 - `executor_output`: 9
 - `retired`: 16
-- `stays`: 136
+- `stays`: 138
 
 ## `needs_topic` -- nevoi + subiect/raft
 
@@ -49,8 +49,10 @@ Fiecare loc din `src/**/*.py` care scrie starea conversației (v1 sau v2), deriv
 | `src/conversation/delta.py:to_delta` | v2 | `proposal_call` | `_structural_proposals() -> set_need` | NX-330 (pasul 3a al kernelului): traducerea interpretarii VALIDATE in propuneri typed -- forma tinta a contractului (I3): starea se schimba doar prin propuneri, iar singurul care le aplica e reducerul. Sursa e proveniența calculata de cod (`provenance.py`), deci `inferred` nu produce propunere (I23). Fara apelant in productie pana la pasul 6. | `stays` |
 | `src/conversation/delta.py:to_delta` | v2 | `proposal_call` | `_structural_proposals() -> supersede` | NX-330 (pasul 3a al kernelului): traducerea interpretarii VALIDATE in propuneri typed -- forma tinta a contractului (I3): starea se schimba doar prin propuneri, iar singurul care le aplica e reducerul. Sursa e proveniența calculata de cod (`provenance.py`), deci `inferred` nu produce propunere (I23). Fara apelant in productie pana la pasul 6. | `stays` |
 | `src/conversation/delta.py:to_delta` | v2 | `proposal_call` | `_subject_proposal() -> set_topic` | NX-330 (pasul 3a al kernelului): traducerea interpretarii VALIDATE in propuneri typed -- forma tinta a contractului (I3): starea se schimba doar prin propuneri, iar singurul care le aplica e reducerul. Sursa e proveniența calculata de cod (`provenance.py`), deci `inferred` nu produce propunere (I23). Fara apelant in productie pana la pasul 6. | `stays` |
+| `src/conversation/delta.py:to_delta` | v2 | `proposal_constructor` | `set_topic` | NX-330 (pasul 3a al kernelului): traducerea interpretarii VALIDATE in propuneri typed -- forma tinta a contractului (I3): starea se schimba doar prin propuneri, iar singurul care le aplica e reducerul. Sursa e proveniența calculata de cod (`provenance.py`), deci `inferred` nu produce propunere (I23). Fara apelant in productie pana la pasul 6. | `stays` |
 | `src/conversation/state_reducer.py:_apply_correction` | v2 | `dataclasses_replace` | `needs` | NX-331: reducerul e SINGURUL scriitor al starii v2 (I3); functia e un pas pur al lui (rol `reducer` in tests/kernel_modules.json). Regula de corectie (I21): retrage cu `correction` nevoile implicite scrise de turul anterior pe dimensiunea contrazisa. | `stays` |
 | `src/conversation/state_reducer.py:_apply_correction` | v2 | `dataclasses_replace` | `revocations` | NX-331: reducerul e SINGURUL scriitor al starii v2 (I3); functia e un pas pur al lui (rol `reducer` in tests/kernel_modules.json). Regula de corectie (I21): retrage cu `correction` nevoile implicite scrise de turul anterior pe dimensiunea contrazisa. | `stays` |
+| `src/conversation/state_reducer.py:_apply_umbrella` | v2 | `dataclasses_replace` | `topic` | NX-350 (kernel.v4.0): umbrela unui tip spus vag. Pe un tip spus clar care nu e in umbrela, clientul cere alt fel de produs: subiect nou pe acelasi raft, iar nevoile subiectului se parcheaza (aceeasi regula ca orice schimbare de subiect). Scris DOAR de reducer. | `stays` |
 | `src/conversation/state_reducer.py:_evict_oldest_unmapped` | v2 | `dataclasses_replace` | `needs` | NX-331: reducerul e SINGURUL scriitor al starii v2 (I3); functia e un pas pur al lui (rol `reducer` in tests/kernel_modules.json). Plafonul `unmapped` (I25): al patrulea semnal pe subiect il inlocuieste pe cel mai vechi. | `stays` |
 | `src/conversation/state_reducer.py:_handle_clear_all` | v2 | `dataclasses_replace` | `parked` | NX-331: reducerul e SINGURUL scriitor al starii v2 (I3); functia e un pas pur al lui (rol `reducer` in tests/kernel_modules.json). `clear all`: toate nevoile neprotejate se retrag, iar slotul parcat se goleste. | `stays` |
 | `src/conversation/state_reducer.py:_handle_confirm` | v2 | `dataclasses_replace` | `needs` | Handler intern al reducerului (NX-235) -- `state_reducer.py` E deja implementarea invariantei I3 ("SINGURUL loc care are voie sa schimbe starea", cf. docstring-ul modulului). Pasul 3 al kernelului EXTINDE acest modul (provenance checker, delta mapper, park/resume), nu il inlocuieste -- fiecare handler ramane exact aici. | `stays` |

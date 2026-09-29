@@ -149,7 +149,8 @@ HYPOTHESIS_PROVENANCE = frozenset({"implicit", "inferred"})
 #: NX-339: tipul de produs mută și el subiectul (NX-331), deci e dimensiune de subiect.
 SUBJECT_DIMENSIONS = frozenset({"category", "product_type"})
 #: NX-350 (kernel.v4.0): pe ce dimensiune de subiect o schimbare `implicit` e totuși FAPT. Tipul
-#: `implicit` rămâne semnal de ordonare, deci doar raftul.
+#: `implicit` devine doar umbrela subiectului (ordonează pe toate codurile cuvântului, nu pe
+#: valoarea modelului), deci doar raftul. Umbrela nu se compară cu eticheta (rapoartele n-o poartă).
 IMPLICIT_FACT_DIMENSIONS = frozenset({"category"})
 GATE_POLICY = ClarificationPolicy()
 FactsFn = Callable[[CatalogLookup], Awaitable[ReferenceFacts]]
@@ -594,7 +595,7 @@ def observed_parts(
         or any(not c.rejected and c.change.op == "clear" for c in checked)
         or any(
             not c.rejected
-            and c.provenance != "inferred"
+            and not _is_hypothesis(c.provenance, c.dimension)
             and c.dimension in SUBJECT_DIMENSIONS
             and c.canonical_value is not None
             and _moves_subject(state_before, c.dimension, format_value(c.canonical_value))
@@ -768,7 +769,7 @@ def _is_hypothesis(provenance: str | None, dimension: str) -> bool:
     raft mută subiectul, deci acolo e fapt."""
     if provenance == "inferred":
         return True
-    # NX-350 (kernel.v4.0): un tip `implicit` nu mai intră în subiect (semnal de ordonare), deci e
+    # NX-350 (kernel.v4.0): un tip `implicit` nu mai devine tipul subiectului (doar umbrela), deci e
     # ipoteză; doar raftul `implicit` rămâne fapt (mută subiectul).
     return provenance in HYPOTHESIS_PROVENANCE and dimension not in IMPLICIT_FACT_DIMENSIONS
 
