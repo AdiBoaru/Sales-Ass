@@ -327,6 +327,15 @@ din descrieri și cereri de recomandare, iar `bundle` se pierdea. **339c** = `in
 reparații) + **setul C** (`tests/golden/kernel_interpret_holdout/`, 89 de ture scrise de un agent care n-a
 văzut nimic, ÎNGHEȚAT pe SHA-256 înaintea rulării; B a fost citit la regresii, deci nu mai e nevăzut) +
 pragul de zgomot (v1 rulat a doua oară pe A). Regula GO pentru v3 e pre-înregistrată în card.
+**NX-345** (decis de Adi, 2026-09-29): F1 numără ce kernelul face FAPT. O ipoteză neetichetată
+(`implicit` în afara raftului, sau `inferred`, care nu se persistă și deci nici nu se potrivește) e
+NEUTRĂ, cu metricile ei (contrazise ≤ 0,15, neetichetate ≤ 0,18 pe tur); `implicit` pe raft mută subiectul,
+deci e fapt; un `set` pe valoarea deja activă (`hard`, fără subiect mutat/golit) e neutru;
+„cremă" rămâne fără tip; raftul numit = `set category`. Scorerul le aplică (`change_provenance`/
+`change_active` în `observed`; `f1_all_emitted` și `--regressions … all_emitted` = regula veche). Pe
+rapoartele existente F1 pe A devine 0,874 (v3). Regula GO v4 e în NX-339; restul (etichete, setul D,
+`interpret.v4`, verdict) e [`NX-347`](tasks/stage1/NX-347.md). Defect de kernel găsit pe drum:
+[`NX-348`](tasks/stage1/NX-348.md) (`set product_type` respins mereu de reducer).
 **Verdict v3: NO-GO**, pe un singur punct: F1 pe A 0,768 (< 0,85). Restul trece (C act 0,944, F1
 0,976; A act 0,967, fir 1,0; 6 regresii ≤ zgomotul de 11), iar F1 pe A stă la 0,77-0,80 pe TOATE
 prompturile, deci nu e al promptului: clasele (`product_type` spus în treacăt, `concerns` inferate,
