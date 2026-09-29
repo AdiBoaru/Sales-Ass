@@ -1828,8 +1828,18 @@ async def _search(
     ):
         category_uttered = False
         ctx.emit("category_subshelf_homograph", category_key=category_keys[0])
+    # NX-352 (recenziile): pe calea PLANIFICATĂ filtrele de FAȚETĂ vin doar din nevoi spuse sau dure
+    # ale stării, iar plannerul trimite codul canonic («anti_aging»), nerostit literal; re-judecate
+    # aici, garda NX-313 le-ar scoate ca ghicite (o a doua memorie peste reducer, ca `price_max`,
+    # NX-333). RAFTUL nu: în stare poate sta și un raft `implicit` sau unul scris de o tură v1 din
+    # căutarea ghicită a modelului, deci rămâne judecat aici (scara îl relaxează înaintea nevoii
+    # spuse, garda NX-313 și cea de omograf rămân). A treia recenzie: cu raftul „rostit", «crema de
+    # fata» → «ceva pentru calmare» arunca nevoia și păstra raftul de machiaj (cd98a513).
     facets_uttered = (
-        "concerns" in inherited or bool(hard_needs) or uttered_by_client(ctx, *(a.concerns or []))
+        planned
+        or "concerns" in inherited
+        or bool(hard_needs)
+        or uttered_by_client(ctx, *(a.concerns or []))
     )
     ladder = _relax_ladder(
         price_max=price_max_sql,

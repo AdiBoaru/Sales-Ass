@@ -64,18 +64,43 @@ def pair_exists(shelf: str, kind: str, rows: Sequence[tuple[str, str]], vocab: A
     )
 
 
+def _umbrella_shelf(proposal: Any, state: Any, thread: str) -> str | None:
+    """NX-352: raftul pe care ar rămâne o UMBRELĂ fără tip spus clar (raftul turului, altfel cel
+    curent), sau `None` când propunerea nu e o astfel de umbrelă."""
+    if (
+        getattr(proposal, "op", None) != "set_topic"
+        or proposal.origin != "interpretation"
+        or not getattr(proposal, "type_umbrella", ())
+        or proposal.product_type
+    ):
+        return None
+    return proposal.category_key or _base_topic(state, thread, proposal.category_key).category_key
+
+
 def needs_pairs(delta: Any, state: Any) -> bool:
     """Turul are o propunere de subiect cu ambele jumătăți: doar atunci merită citirea."""
-    return any(proposal_pair(p, state, delta.thread) for p in delta.proposals)
+    return any(
+        proposal_pair(p, state, delta.thread) or _umbrella_shelf(p, state, delta.thread)
+        for p in delta.proposals
+    )
 
 
 def mark_pairs(delta: Any, state: Any, rows: Sequence[tuple[str, str]], vocab: Any) -> Any:
-    """Propunerile de subiect primesc perechea VERIFICATĂ, când există în catalog. PUR."""
+    """Propunerile de subiect primesc perechea VERIFICATĂ, când există în catalog. PUR. O umbrelă
+    (NX-352) primește perechea primului ei cod care există pe raft: reducerul păstrează raftul la
+    alt fel de produs doar pe ea."""
     out = []
     for p in delta.proposals:
-        pair = proposal_pair(p, state, delta.thread)
-        if pair is not None and pair_exists(pair[0], pair[1], rows, vocab):
-            p = replace(p, pair_verified=pair)
+        shelf = _umbrella_shelf(p, state, delta.thread)
+        if shelf is not None:
+            codes = [k for k in p.type_umbrella if pair_exists(shelf, k, rows, vocab)]
+            code = codes[0] if codes else None
+            if code is not None:
+                p = replace(p, pair_verified=(shelf, code))
+        else:
+            pair = proposal_pair(p, state, delta.thread)
+            if pair is not None and pair_exists(pair[0], pair[1], rows, vocab):
+                p = replace(p, pair_verified=pair)
         out.append(p)
     return replace(delta, proposals=tuple(out))
 

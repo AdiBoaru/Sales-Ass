@@ -73,12 +73,15 @@ def step(state, *checked, compatible=None, corrects=False):
     )
     if compatible:
         # Perechea VERIFICATĂ e cea pe care o calculează orchestratorul (`proposal_pair`).
+        def _pair(p):
+            # NX-352: o umbrelă își verifică primul cod pe raft (ca `mark_pairs`)
+            if p.type_umbrella and not p.product_type:
+                return (p.category_key or state.topic.category_key, p.type_umbrella[0])
+            return proposal_pair(p, state, delta.thread)
+
         delta = replace(
             delta,
-            proposals=tuple(
-                replace(p, pair_verified=proposal_pair(p, state, delta.thread))
-                for p in delta.proposals
-            ),
+            proposals=tuple(replace(p, pair_verified=_pair(p)) for p in delta.proposals),
         )
     return reduce_turn(state, delta, (), (), None, corrects, POLICY), delta
 
@@ -509,22 +512,24 @@ def test_a_stated_type_outside_the_umbrella_parks_it():
     state, _ = step(ConversationStateV2(), _change("category", "telefoane"), _vague(CREAMS))
     state, _ = step(state.state, _change("brand", "apple"))
     moved, _ = step(state.state, _change("product_type", "laptop"))
-    assert (moved.state.topic.category_key, moved.state.topic.product_type) == (
-        "telefoane",
-        "laptop",
-    )
+    # A treia recenzie NX-352: fără pereche verificată, raftul vechi pleacă (ca la tip schimbat)
+    assert (moved.state.topic.category_key, moved.state.topic.product_type) == (None, "laptop")
     assert moved.state.parked.topic.type_umbrella == CREAMS
     assert moved.state.need_for("brand") is None
+    kept, _ = step(state.state, _change("product_type", "laptop"), compatible=True)
+    assert (kept.state.topic.category_key, kept.state.topic.product_type) == ("telefoane", "laptop")
 
 
 def test_another_kind_keeps_the_shelf_and_naming_it_again_loses_nothing():
-    """A doua recenzie NX-350, constatările 1-2: «cremă pentru ten» → «un ser» rămâne pe raft (ca
-    la NX-348 când tipul se schimbă), iar «un ser pentru ten» apoi nu aduce înapoi cremele parcate
-    și nu evacuează nevoile serului."""
+    """A doua recenzie NX-350, constatările 1-2: «cremă pentru ten» → «un ser» rămâne pe raft când
+    perechea (raft, ser) există (NX-352), iar «un ser pentru ten» apoi nu aduce înapoi cremele
+    parcate și nu evacuează nevoile serului. Fără pereche verificată, raftul pleacă."""
     state, _ = step(ConversationStateV2(), _change("category", "ten"), _vague(CREAMS))
     state, _ = step(state.state, _change("brand", "apple"))
     serums = ("ser de fata", "ser de par")
-    state, _ = step(state.state, _vague(serums))
+    unverified, _ = step(state.state, _vague(serums))
+    assert unverified.state.topic.category_key is None
+    state, _ = step(state.state, _vague(serums), compatible=True)
     assert (state.state.topic.category_key, state.state.topic.type_umbrella) == ("ten", serums)
     assert state.state.parked.topic.type_umbrella == CREAMS
     state, _ = step(state.state, _change("brand", "samsung"))
@@ -781,3 +786,17 @@ def test_the_scorer_counts_an_umbrella_of_another_kind_as_moving_the_subject():
     vague = ConversationStateV2(topic=Topic(type_umbrella=CREAMS))
     assert rp._umbrella_moves(vague, _vague(LIPS))
     assert not rp._umbrella_moves(vague, _change("product_type", "ruj"))
+
+
+def test_a_new_stated_type_keeps_the_old_shelf_only_on_a_verified_pair():
+    """NX-352 (sonda NX-351): «vreau un ruj» după un șampon pe raftul de păr nu caută rujuri pe
+    raftul de păr. Raftul vechi rămâne doar pe o pereche (raft, tip nou) VERIFICATĂ în catalog."""
+    state, _ = step(
+        ConversationStateV2(),
+        _change("category", "telefoane"),
+        _change("product_type", "smartphone"),
+    )
+    moved, _ = step(state.state, _change("product_type", "laptop"))
+    assert (moved.state.topic.category_key, moved.state.topic.product_type) == (None, "laptop")
+    kept, _ = step(state.state, _change("product_type", "laptop"), compatible=True)
+    assert (kept.state.topic.category_key, kept.state.topic.product_type) == ("telefoane", "laptop")

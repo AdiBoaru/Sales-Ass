@@ -216,7 +216,10 @@ def test_find_with_a_known_subject_and_no_words_searches_the_subject_label(name)
 def test_find_with_words_searches_the_words(name):
     state = _state(_shelf(name))
     plan = _only(_plan(name, _interp(acts=[{"kind": "find", "query": "ceva elegant"}]), state))
-    assert plan.executor == "search" and plan.search_args.query == "ceva elegant"
+    # NX-352: textul se compune din ce a validat kernelul: cu subiect, subiectul. Un cuvânt pe care
+    # modelul nu l-a scris ca schimbare («elegant») nu e poartă (modelul îl scrie `unmapped`, deci
+    # ordonează prin `rank_terms`).
+    assert plan.executor == "search" and plan.search_args.query == _label(name)
 
 
 @pytest.mark.parametrize("name", PACKS)
@@ -389,8 +392,9 @@ def test_a_bundle_with_a_declared_family_carries_it_and_the_state_args():
     plan = _only(planned)
     assert (plan.executor, plan.family, plan.product_ids) == ("bundle", "fata", [pid])
     assert plan.search_args is not None and plan.search_args.price_max == 200.0
-    # `skin_type` nu poate filtra dur pe SOLE (`enforce_ready: false`): ordonează, ca la căutare
-    assert plan.search_args.prefer == {"skin_type": ["dry"]}
+    # `skin_type` nu e `enforce_ready` pe SOLE: pe căutare, spus de client, ar fi filtru relaxabil
+    # (NX-352), dar rutina NU relaxează filtrele pe pași, deci aici rămâne ordonare (recenzia)
+    assert plan.search_args.prefer == {"skin_type": ["dry"]} and plan.search_args.concerns is None
     assert "routine_budget" not in planned.gaps
 
 
@@ -794,15 +798,30 @@ def test_every_gap_code_is_in_the_closed_vocabulary(name):
 
 
 def test_soft_facet_needs_go_to_prefer_with_the_catalog_key():
-    """Pe datele de azi nicio fațetă nu e `enforce_ready`, deci o nevoie de fațetă e `soft` ⇒
-    `prefer`. Valoarea din stare e normalizată («samsung»); fuziunea compară cu atributul literal,
-    deci plannerul o duce înapoi la cheia din catalog («Samsung»)."""
-    needs = (_need("brand", "samsung"), _need("color", "negru"))
+    """O nevoie de fațetă doar DESCRISĂ (`user_implicit`) e `soft` ⇒ `prefer`. Valoarea din stare
+    e normalizată («samsung»); fuziunea compară cu atributul literal, deci plannerul o duce înapoi
+    la cheia din catalog («Samsung»)."""
+    needs = (
+        _need("brand", "samsung", source="user_implicit"),
+        _need("color", "negru", source="user_implicit"),
+    )
     args = _search(
         _plan("electronics", _interp(acts=[{"kind": "find"}]), _state("telefoane", needs=needs))
     )
     assert args.brand is None and args.concerns is None
     assert args.prefer == {"brand": ["Samsung"], "color": ["negru"]}
+
+
+def test_a_spoken_facet_need_is_a_relaxable_filter_but_a_spoken_soft_brand_is_not():
+    """NX-352 (`kernel.v5.0`, decis de Adi): o nevoie de fațetă SPUSĂ (`user_explicit`) intră în
+    `concerns` chiar fără `enforce_ready` (scara de relaxare o scoate dacă nu iese nimic). Marca
+    nu: filtrul de marcă nu se relaxează niciodată, deci rămâne regula de azi."""
+    needs = (_need("brand", "samsung"), _need("color", "negru"))
+    args = _search(
+        _plan("electronics", _interp(acts=[{"kind": "find"}]), _state("telefoane", needs=needs))
+    )
+    assert args.brand is None and args.concerns == ["negru"]
+    assert args.prefer == {"brand": ["Samsung"]}
 
 
 def test_hard_facet_needs_go_to_concerns_features_and_brand():
@@ -853,7 +872,7 @@ def test_a_value_shared_by_two_facets_resolves_ambiguously_in_the_tool():
     )
     res = resolve_any(vocab, "natur")
     assert res.status is ResolutionStatus.KNOWN and res.dimension == "material"
-    needs = (_need("color", "natur"),)
+    needs = (_need("color", "natur", source="user_implicit"),)
     args = _search(
         _plan("furniture", _interp(acts=[{"kind": "find"}]), _state("canapele", needs=needs))
     )
@@ -1272,25 +1291,35 @@ def _i7_violations(planned: PlannedTurn, case: _Case) -> list[tuple[str, str]]:
         and n.source in HARD_CAPABLE_SOURCES
         and hard_capable(vocab.dimension_of(n.key), case.pack)
     }
+    # NX-352 (`kernel.v5.0`): o nevoie de fațetă SPUSĂ de client e filtru relaxabil (fațetele), dar
+    # prețul și marca rămân doar din nevoi dure.
+    spoken = {
+        n.normalized_value
+        for n in case.state.active_needs()
+        if n.source == "user_explicit"
+        and vocab.dimension_of(n.key) in {f.key for f in getattr(case.pack, "facets", ()) or ()}
+    }
     out = []
     for plan in planned.plans:
         args = plan.search_args
         if args is None:
             continue
         fields = [("price_max", args.price_max), ("brand", args.brand)]
-        fields += [("concerns", v) for v in args.concerns or []]
-        fields += [("features", v) for v in args.features or []]
         out += [(f, str(v)) for f, v in fields if v is not None and v not in hard]
+        facets = [("concerns", v) for v in args.concerns or []]
+        facets += [("features", v) for v in args.features or []]
+        out += [(f, str(v)) for f, v in facets if v not in hard | spoken]
     return out
 
 
 @_PROPERTY
 @given(_cases())
 def test_i7_nothing_but_hard_explicit_evidence_reaches_a_filter(case):
-    """I7: `price_max`, `brand`, `concerns`, `features` (tot ce ajunge în `WHERE`) vin DOAR din
-    nevoi dure, de la o sursă care poate susține un filtru, pe o dimensiune hard-capable. Un buget
-    `soft` sau `user_implicit` n-ajunge niciodată `price_max`, un semnal `inferred` niciodată un
-    filtru."""
+    """I7 (`kernel.v5.0`): `price_max` și `brand` vin DOAR din nevoi dure, de la o sursă care poate
+    susține un filtru, pe o dimensiune hard-capable; `concerns`/`features` (filtre RELAXABILE) vin
+    din nevoi dure sau din nevoi de fațetă SPUSE de client (`user_explicit`). Un buget `soft` sau
+    `user_implicit` n-ajunge niciodată `price_max`, o nevoie `user_implicit` sau un semnal
+    `inferred` niciodată un filtru."""
     assert not _i7_violations(_run(case), case)
 
 
@@ -1885,7 +1914,7 @@ def test_review_4_a_brand_that_is_not_an_attribute_is_a_gap_not_a_preference():
     celelalte preferințe (media pe dimensiuni). Pe SOLE (fără fațetă `brand`) marca preferată e un
     gol numărat; pe electronice, unde pachetul declară marca fațetă de ATRIBUT, rămâne
     preferință."""
-    needs = (_need("brand", "cerave"), _need("skin_type", "dry"))
+    needs = (_need("brand", "cerave"), _need("skin_type", "dry", source="user_implicit"))
     planned = _plan("sole-ro", _interp(acts=[{"kind": "find"}]), _state(SOLE_SHELF, needs=needs))
     args = _search(planned)
     assert args.prefer == {"skin_type": ["dry"]}

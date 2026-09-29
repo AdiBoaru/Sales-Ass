@@ -50,7 +50,7 @@ from src.conversation.ambiguity_gate import (
 )
 from src.conversation.answer_policy import answer_policy
 from src.conversation.clarification_policy import ClarificationPolicy
-from src.conversation.delta import TurnDelta, to_delta
+from src.conversation.delta import TurnDelta, accepted_changes, to_delta
 from src.conversation.interpretation import (
     KERNEL_CONTRACT_VERSION,
     AnswerPolicy,
@@ -579,6 +579,7 @@ async def _chain(
         pack=pack,
         vocab=vocab,
         locale=locale,
+        checked=accepted_changes(validated.checked, delta),
     )
     return _Chain(
         interpreted=interpreted,

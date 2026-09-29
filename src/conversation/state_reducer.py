@@ -759,9 +759,9 @@ def _apply_umbrella(
     """NX-350: umbrela unui tip spus vag. Regula e una, pe ambele sensuri (recenzia NX-350,
     constatarea 3): clientul cere ALT FEL de produs când ce spune acum nu se suprapune cu ce
     spusese (un tip spus clar în afara umbrelei, sau două umbrele disjuncte) ⇒ subiect nou, iar cel
-    vechi se parchează, ca orice schimbare de subiect. Raftul RĂMÂNE, ca la NX-348 când tipul se
-    schimbă (a doua recenzie NX-350: golit, «cremă pentru ten» → «un ser» căuta serurile pe tot
-    catalogul, iar «un ser pentru ten» la turul următor aducea înapoi cremele parcate).
+    vechi se parchează, ca orice schimbare de subiect. Raftul rămâne dacă turul îl numește sau dacă
+    perechea (raft, un cod al umbrelei) există în catalog (NX-352; a doua recenzie NX-350: golit
+    orbește, «cremă pentru ten» → «un ser» căuta serurile pe tot catalogul).
 
     Altfel: un tip spus clar în umbrelă rămâne (reformulare mai largă), iar o umbrelă care se
     suprapune cu cea veche o înlocuiește fără parcare; un tip DEDUS de cod rămâne doar dacă e în
@@ -775,8 +775,15 @@ def _apply_umbrella(
         outcome = "evicted" if state.parked is not None else "parked"
         parked = _parked_now(state, policy)
         retired = _retire_topic(state, proposal.turn_id, policy)
+        # NX-352 (sonda NX-351): raftul rămâne dacă turul îl numește sau dacă măcar un cod al
+        # umbrelei are produse pe el (`pair_verified`, verificat de `mark_pairs`); altfel «un ruj»
+        # după un șampon căuta rujuri pe raftul de păr.
+        verified = proposal.pair_verified
+        keep = _proposed_category(proposal) is not None or (
+            verified is not None and verified[0] == topic.category_key and verified[1] in umbrella
+        )
         new = Topic(
-            category_key=topic.category_key,
+            category_key=topic.category_key if keep else None,
             changed_at_revision=state.revision,
             type_umbrella=umbrella,
         )
@@ -877,7 +884,12 @@ def _handle_set_topic(
         )
         if other_kind and not shelf_changed:
             product_type = new_type
-            category = category or previous
+            # A treia recenzie NX-352: raftul vechi rămâne doar dacă turul îl numește sau perechea
+            # (raft, tip nou) e VERIFICATĂ, ca la schimbarea de tip; altfel «un șampon» după o
+            # umbrelă de creme căuta șampon pe raftul de ten.
+            named = _proposed_category(proposal) is not None
+            if not named and proposal.pair_verified != (previous, new_type):
+                category = None
             same_subject = False
         elif not shelf_changed and not type_changed:
             result = (category or previous, new_type or old_type)
@@ -920,6 +932,16 @@ def _handle_set_topic(
         else:
             product_type = new_type or (None if shelf_changed or learned else old_type)
             same_subject = False
+            if (
+                type_changed
+                and not shelf_changed
+                and not _proposed_category(proposal)
+                and proposal.pair_verified != (previous, new_type)
+            ):
+                # NX-352 (sonda NX-351): alt tip, iar raftul nu e numit în tur: raftul vechi rămâne
+                # doar pe o pereche VERIFICATĂ în catalog (regula NX-348 a completării). Altfel
+                # «vreau un ruj» după un șampon căuta rujuri pe raftul de păr.
+                category = None
     else:
         product_type = proposal.product_type if proposal.subject else state.topic.product_type
         same_subject = category == previous

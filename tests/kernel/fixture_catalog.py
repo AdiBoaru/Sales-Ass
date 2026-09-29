@@ -30,7 +30,7 @@ from src.conversation.ambiguity_gate import (
 from src.conversation.ambiguity_gate import memory_proposal as _memory_proposal
 from src.conversation.answer_policy import answer_policy
 from src.conversation.clarification_policy import ClarificationPolicy
-from src.conversation.delta import TurnDelta, to_delta
+from src.conversation.delta import TurnDelta, accepted_changes, to_delta
 from src.conversation.interpretation import (
     KERNEL_CONTRACT_VERSION,
     AmbiguityDecision,
@@ -546,6 +546,7 @@ def kernel_step(
         pack=loaded,
         vocab=voc,
         locale=locale,
+        checked=accepted_changes(checked, delta),
     )
     executor = _executor_proposals(name, shown_ids, planned)
     after = reduce_turn(state, delta, executor, resolved, primary, corrects, reducer_policy).state

@@ -4,11 +4,17 @@
       "disclosures": [],
       "dropped_acts": 0,
       "gaps": [
-        "no_query"
+        "soft_budget"
       ],
       "plans": [
         {
-          "executor": "reply_only"
+          "executor": "search",
+          "search_args": {
+            "concerns": [
+              "ea"
+            ],
+            "query": "sora"
+          }
         }
       ],
       "primary": 0,
@@ -60,7 +66,7 @@
                 "ea"
               ]
             },
-            "query": "cineva drag"
+            "query": "Casa"
           }
         }
       ],
@@ -81,7 +87,7 @@
                 "ea"
               ]
             },
-            "query": "cineva drag"
+            "query": "Casa"
           }
         }
       ],
@@ -102,7 +108,7 @@
                 "ea"
               ]
             },
-            "query": "cineva drag"
+            "query": "Casa"
           }
         }
       ],
@@ -160,7 +166,7 @@
                 "ea"
               ]
             },
-            "query": "cineva drag"
+            "query": "Casa"
           }
         }
       ],

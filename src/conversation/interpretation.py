@@ -57,7 +57,15 @@ from src.tools.catalog_tools import SearchArgs
 #: nu spune dacă e de față, de corp sau de mâini, iar un tip presupus ajuns în subiect orienta
 #: căutarea pe un tip necerut. Poarta de replay e DEROGATĂ, ca
 #: la v2.0 și v3.0: niciun tur interpretat n-a fost servit. Schema scrisă de model e neschimbată.
-KERNEL_CONTRACT_VERSION = "kernel.v4.0"
+#: `kernel.v5.0` (NX-352, MAJOR, decis de Adi pe 2026-09-29, după sonda NX-351 pe catalogul real):
+#: (1) o nevoie de fațetă SPUSĂ de client (`user_explicit`) e filtru RELAXABIL chiar fără
+#: `enforce_ready` (I7 reformulat: prețul și marca rămân doar din nevoi dure); (2) textul căutării
+#: plannerului se COMPUNE din ce a validat kernelul (tipul numit sau eticheta lui, cuvântul
+#: clientului pentru raft, fațetele filtrate, termenii nemapați), nu din fraza clientului; (3) o
+#: limită relativă de preț pe o țintă AMBIGUĂ spre ecran se raportează la MEDIANA prețurilor
+#: recitite ale candidaților; (4) la un tip nou raftul vechi rămâne doar pe o pereche verificată.
+#: Poarta de replay e DEROGATĂ (niciun tur interpretat servit); schema scrisă de model neschimbată.
+KERNEL_CONTRACT_VERSION = "kernel.v5.0"
 
 # --- scrise de model ----------------------------------------------------------------------------
 
@@ -182,6 +190,10 @@ class CheckedChange(_CodeWritten):
     # codurile de tip din vocabular care poartă toate cuvintele-tip spuse («cremă» → cremă de față,
     # de corp, de mâini). Scrisă doar de validator (singurul cititor al citatului); goală în rest.
     umbrella: tuple[str, ...] = ()
+    # NX-352 (kernel.v5.0): pe o schimbare `explicit`, cuvintele citatului care au NUMIT valoarea
+    # (fraza din vocabular, sau numărul). Plannerul compune textul căutării din ele (subiectul
+    # numit, o fațetă filtrată), nu din tot citatul. Redactate în trace. Goală în rest.
+    matched: tuple[str, ...] = ()
 
 
 class ResolvedRef(_CodeWritten):
