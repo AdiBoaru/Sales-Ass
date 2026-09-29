@@ -308,3 +308,25 @@ async def test_load_scopes_every_query_to_the_tenant():
     assert dark[0].v1_ids == ("p1",) and dark[0].record["kernel_ids"] == ["p3"]
     assert cards["p1"].product_type == "ser" and cards["p3"].product_type is None
     assert sorted(tenant_rows[1][2][1]) == ["p1", "p3"]
+
+
+# --- NX-356: fereastra care cuprinde deploy-ul lui interpret.v4.1 -------------------------------
+
+
+def test_prompt_version_filter_keeps_only_that_versions_turns() -> None:
+    """NX-356 a schimbat vederea interpretării (replica botului netăiată) și versiunea. Fără filtru,
+    o fereastră care cuprinde deploy-ul amesteca două măsurători în G1-G5."""
+    events = [
+        rep.Event("old", "turn_interpretation", {"prompt_version": "interpret.v4"}, "2026-09-29"),
+        rep.Event("old", "kernel_turn", {"mode": "dark"}, "2026-09-29"),
+        rep.Event("new", "turn_interpretation", {"prompt_version": "interpret.v4.1"}, "2026-09-30"),
+        rep.Event("new", "kernel_turn", {"mode": "dark"}, "2026-09-30"),
+    ]
+    dark = [
+        rep.DarkTurn("old", "2026-09-29", {"executor": "search"}, ()),
+        rep.DarkTurn("new", "2026-09-30", {"executor": "search"}, ()),
+    ]
+    assert rep.prompt_versions(events) == {"interpret.v4": 1, "interpret.v4.1": 1}
+    kept_events, kept_dark = rep.only_prompt_version(events, dark, "interpret.v4.1")
+    assert {e.turn_id for e in kept_events} == {"new"}
+    assert [t.turn_id for t in kept_dark] == ["new"]
