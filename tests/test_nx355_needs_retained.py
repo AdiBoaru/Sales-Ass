@@ -66,6 +66,17 @@ SHELF = "ten-ingrijirea-tenului"
 CREAM = "crema de fata"
 MASK = "masca de fata"
 EYE = "crema contur ochi"
+BODY = "crema de corp"
+CATALOG = CatalogVocabulary(
+    business_id="b",
+    dimensions={
+        "product_type": tuple(
+            VocabEntry(key=t, label=t, count=10) for t in (CREAM, EYE, BODY, "crema de maini", MASK)
+        ),
+        "skin_type": tuple(VocabEntry(key=v, label=v, count=10) for v in ("dry", "oily")),
+    },
+)
+PACK = SimpleNamespace(concern_map=dict(VOCAB.concern_map), facets=())
 
 
 # --- 1a. mutarea valorii în fațeta ei ---------------------------------------------------------
@@ -183,7 +194,7 @@ def test_hint_shows_retained_facets_and_subject() -> None:
 def _ctx(stack: dict[str, Any], body: str = "sub 100 de lei sa vad") -> TurnContext:
     ctx = TurnContext(
         turn_id="t",
-        business=BusinessConfig(id="b", slug="d", name="D"),
+        business=BusinessConfig(id="b", slug="d", name="D", domain_pack=PACK),
         contact=Contact(id="c", business_id="b"),
         message=InboundMessage(provider_msg_id="m", body=body),
         conversation_id="conv",
@@ -215,7 +226,7 @@ def test_turn_3_search_carries_the_skin_type(vocab_from_pack) -> None:
         concerns=["hydration"],
         price_max=100,
     )
-    assert _carry_retained(ctx, a) is True
+    assert _carry_retained(ctx, a, CATALOG) is True
     assert a.concerns == ["hydration", "dry"]
 
 
@@ -224,23 +235,23 @@ def test_old_concerns_are_not_added_to_a_new_need(vocab_from_pack) -> None:
     căutare de «pete» o LĂRGEA. Lista `concerns` nu se mai cară, doar fațetele pozitive."""
     ctx = _ctx({**_stack(), "concerns": ["acne"]})
     a = SearchArgs(query="ser pentru pete", category=SHELF, concerns=["hyperpigmentation"])
-    _carry_retained(ctx, a)
+    _carry_retained(ctx, a, CATALOG)
     assert a.concerns == ["hyperpigmentation", "dry"]
 
 
 def test_nothing_carried_on_another_shelf_or_without_a_shelf(vocab_from_pack) -> None:
     ctx = _ctx(_stack())
     other = SearchArgs(query="sampon", category="par-ingrijirea-parului", concerns=["dandruff"])
-    assert _carry_retained(ctx, other) is False and other.concerns == ["dandruff"]
+    assert _carry_retained(ctx, other, CATALOG) is False and other.concerns == ["dandruff"]
     no_shelf = SearchArgs(query="ceva", concerns=["hydration"])
-    assert _carry_retained(ctx, no_shelf) is False and no_shelf.concerns == ["hydration"]
+    assert _carry_retained(ctx, no_shelf, CATALOG) is False and no_shelf.concerns == ["hydration"]
 
 
 def test_a_changed_facet_is_not_carried(vocab_from_pack) -> None:
     """«ten gras» după «ten uscat»: clientul s-a răzgândit, nu cere un ten și uscat, și gras."""
     ctx = _ctx(_stack())
     a = SearchArgs(query="crema pentru ten gras", category=SHELF, concerns=["ten gras"])
-    _carry_retained(ctx, a)
+    _carry_retained(ctx, a, CATALOG)
     assert a.concerns == ["ten gras"]
 
 
@@ -249,7 +260,7 @@ def test_an_exclusion_is_never_carried_as_a_need(vocab_from_pack) -> None:
     în căutare ca «alcool» dorit."""
     ctx = _ctx({**_stack(), "restriction": "alcool", "budget_max": 100.0})
     a = SearchArgs(query="crema de hidratare", category=SHELF, concerns=["hydration"])
-    _carry_retained(ctx, a)
+    _carry_retained(ctx, a, CATALOG)
     assert a.concerns == ["hydration", "dry"]
 
 
@@ -262,27 +273,17 @@ def test_needs_from_the_stack_count_as_the_clients(vocab_from_pack, sent) -> Non
     lipsea și proveniența cădea iar pe gardă."""
     ctx = _ctx(_stack())
     a = SearchArgs(query="crema de hidratare", category=SHELF, concerns=list(sent))
-    assert _carry_retained(ctx, a) is True
+    assert _carry_retained(ctx, a, CATALOG) is True
 
 
 def test_a_new_model_need_is_still_judged(vocab_from_pack) -> None:
     ctx = _ctx(_stack())
     a = SearchArgs(query="crema de hidratare", category=SHELF, concerns=["acne"])
-    assert _carry_retained(ctx, a) is False
+    assert _carry_retained(ctx, a, CATALOG) is False
     assert "dry" in a.concerns  # cărarea s-a făcut, doar proveniența rămâne a gărzii
 
 
 # --- 3. tipul subiectului: preferință și dovadă -----------------------------------------------
-
-CATALOG = CatalogVocabulary(
-    business_id="b",
-    dimensions={
-        "product_type": tuple(
-            VocabEntry(key=t, label=t, count=10)
-            for t in (CREAM, EYE, "crema de corp", "crema de maini", MASK)
-        )
-    },
-)
 
 
 def test_type_fits_query() -> None:
@@ -353,3 +354,59 @@ def test_flag_off_is_the_old_subject_behaviour(monkeypatch) -> None:
     monkeypatch.setattr(get_settings(), "needs_retained_enabled", False)
     subject, _ = _subject_after("cremă de hidratare, sub 100 de lei", [MASK] * 6)
     assert subject is not None and subject.product_type == MASK
+
+
+# --- a doua recenzie ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("body", ["am ten foarte gras", "de fapt am tenul gras"])
+def test_a_spoken_correction_beats_the_carried_skin_type(vocab_from_pack, body) -> None:
+    """«ten foarte gras» nu e în harta tenantului: fără citirea mesajului curent, `dry` se căra
+    peste corecția clientului."""
+    ctx = _ctx(_stack(), body=body)
+    a = SearchArgs(query="crema de hidratare", category=SHELF, concerns=["hydration"])
+    _carry_retained(ctx, a, CATALOG)
+    assert "dry" not in a.concerns
+
+
+def test_a_model_phrase_on_the_same_facet_blocks_the_carry(vocab_from_pack) -> None:
+    ctx = _ctx(_stack(), body="si pentru ten foarte gras?")
+    a = SearchArgs(query="crema", category=SHELF, concerns=["ten foarte gras"])
+    _carry_retained(ctx, a, CATALOG)
+    assert a.concerns == ["ten foarte gras"]
+
+
+def test_a_spoken_correction_is_not_kept_in_the_stack(vocab_from_pack) -> None:
+    """Valoarea veche nu se mai păstrează în stivă pe turul în care clientul numește fațeta."""
+    from src.worker.stages.agent import _retained_keys
+
+    ctx = _ctx(_stack(), body="de fapt am tenul gras")
+    assert "skin_type" not in _retained_keys(ctx, CATALOG)
+    quiet = _ctx(_stack(), body="sub 100 de lei sa vad")
+    assert "skin_type" in _retained_keys(quiet, CATALOG)
+
+
+def test_need_proposals_rehome_at_the_source(vocab_from_pack) -> None:
+    """Cu scrierea stării v2 aprinsă, `concerns: ten uscat` ieșea inactivă în reducer."""
+    from src.worker.stages.agent import _need_proposals
+
+    ctx = _ctx({})
+    props = _need_proposals(ctx, {"concerns": ["hydration", "ten uscat"]})
+    assert [(p.key, p.value) for p in props] == [("concerns", "hydration"), ("skin_type", "dry")]
+
+
+def test_need_proposals_without_the_flag_are_unchanged(vocab_from_pack, monkeypatch) -> None:
+    from src.worker.stages.agent import _need_proposals
+
+    monkeypatch.setattr(get_settings(), "needs_retained_enabled", False)
+    props = _need_proposals(_ctx({}), {"concerns": ["ten uscat"]})
+    assert [(p.key, p.value) for p in props] == [("concerns", "ten uscat")]
+
+
+def test_body_creams_from_a_face_cream_search_do_not_move_the_subject() -> None:
+    """A doua recenzie: pe capul „crema”, «cremă de hidratare» care întoarce creme de corp e tot o
+    ratare. Dovadă e doar tipul subiectului sau un tip numit COMPLET în căutare."""
+    subject, _ = _subject_after("cremă de hidratare", [BODY] * 6)
+    assert subject is not None and subject.product_type == CREAM
+    body, _ = _subject_after("crema de corp hidratanta", [BODY] * 6)
+    assert body is not None and body.product_type == BODY

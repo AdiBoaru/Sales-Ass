@@ -75,6 +75,7 @@ from src.agent.validator import (
     validate_prose,  # noqa: F401 — re-export (consumatori/teste)
 )
 from src.catalog.need_menu import NeedMenu, build_menu
+from src.catalog.query_terms import stopwords
 from src.catalog.vocabulary import (
     facet_overlays,
     named_topic_roots,
@@ -84,16 +85,18 @@ from src.catalog.vocabulary import (
 from src.catalog.vocabulary_cache import get_vocabulary
 from src.config import get_settings
 from src.conversation import observed_constraints
-from src.conversation.needs import NeedVocabulary, positive_facet_keys
+from src.conversation.needs import NeedVocabulary, positive_facet_keys, rehome_list_value
 from src.conversation.state_reducer import ReducerPolicy, StateUpdateProposal, reduce_all
 from src.conversation.state_v2 import ConversationStateV2, active_needs, project_v1
 from src.conversation.subject import (
     SUBJECT_KEY,
     ConversationSubject,
     derive_subject,
+    dimensions_named,
     product_type_of,
     resolve_needs,
     search_named_type,
+    type_fully_named,
 )
 from src.db.queries.catalog import (
     get_products_by_ids,
@@ -175,11 +178,26 @@ _MAX_CONCERNS = 5
 _MAX_FACET_KEYS = 4
 
 
-def _retained_keys(ctx: TurnContext) -> frozenset[str]:
-    """NX-355: cheile de fațetă pe care stiva le cară între ture (gol cu flagul stins)."""
+def _retained_keys(ctx: TurnContext, catalog: Any = None) -> frozenset[str]:
+    """NX-355: cheile de fațetă pe care stiva le cară între ture (gol cu flagul stins).
+
+    O fațetă pe care clientul o numește în mesajul CURENT nu se cară (a doua recenzie): altfel
+    «ten foarte gras» după «ten uscat» pierdea în fața valorii vechi, iar valoarea veche rămânea
+    salvată. Atunci stiva păstrează doar ce a învățat turul ăsta (corecția sau nimic)."""
     if not get_settings().needs_retained_enabled:
         return frozenset()
-    return positive_facet_keys(NeedVocabulary.from_pack(getattr(ctx.business, "domain_pack", None)))
+    pack = getattr(ctx.business, "domain_pack", None)
+    keys = positive_facet_keys(NeedVocabulary.from_pack(pack))
+    if catalog is None or not keys:
+        return keys
+    spoken = dimensions_named(
+        catalog,
+        ctx.message.body or "",
+        keys,
+        overlays=facet_overlays(pack, catalog.facet_names),
+        locale=ctx.language,
+    )
+    return keys - spoken
 
 
 def merge_constraints(
@@ -302,12 +320,22 @@ def _need_proposals(ctx: TurnContext, values: Any) -> list[StateUpdateProposal]:
                     "set_need", key=key, value=value, source="user_explicit", turn_id=ctx.turn_id
                 )
             )
+    vocab = (
+        NeedVocabulary.from_pack(getattr(ctx.business, "domain_pack", None))
+        if get_settings().needs_retained_enabled
+        else None
+    )
     for concern in (filters.get("concerns") or [])[:_MAX_CONCERNS]:
+        # NX-355 (a doua recenzie): mutarea «ten uscat» → `skin_type=dry` se face și la SURSĂ, nu
+        # doar la citirea unui rând v1 (`adapt_v1`): cu scrierea stării v2 aprinsă, propunerea
+        # `concerns: ten uscat` ieșea inactivă în reducer și tipul de ten se pierdea din nou.
+        moved = rehome_list_value("concerns", concern, vocab) if vocab is not None else None
+        key, value = moved if moved is not None else ("concerns", concern)
         proposals.append(
             StateUpdateProposal(
                 "set_need",
-                key="concerns",
-                value=concern,
+                key=key,
+                value=value,
                 source="user_explicit",
                 turn_id=ctx.turn_id,
             )
@@ -879,7 +907,8 @@ async def _learn_constraints(
     subject_on = getattr(settings, "conversation_subject_enabled", False)
     # NX-314: vocabularul intră doar cu subiectul aprins — stins, raftul rămâne șirul brut și
     # turul nu face nicio citire în plus (byte-identic). Vocabularul e cache-uit per tenant.
-    vocab = await get_vocabulary(deps, ctx.business.id) if subject_on else None
+    retained_on = settings.needs_retained_enabled
+    vocab = await get_vocabulary(deps, ctx.business.id) if (subject_on or retained_on) else None
     observed, stats = observed_constraints.from_search_args(run.search_args, message)
     # Raftul căutat e marker de SUBIECT, nu constrângere: nu se coroborează și e singurul care poate
     # reseta stiva. Se pasează chiar și cu `observed` gol — „am schimbat raftul" e o informație
@@ -891,7 +920,7 @@ async def _learn_constraints(
             ctx.state.search_constraints,
             observed,
             category,
-            carry_keys=_retained_keys(ctx),
+            carry_keys=_retained_keys(ctx, vocab),
         )
         ctx.state.search_constraints = merged
         ctx.state_proposals.extend(_need_proposals(ctx, observed))
@@ -953,7 +982,9 @@ def _learn_subject(
         asked = [
             p
             for p in displayed
-            if (t := product_type_of(p)) is None or search_named_type(queries, t)
+            if (t := product_type_of(p)) is None
+            or t == prev_type
+            or type_fully_named(queries, t, stopwords(ctx.language))
         ]
         if len(asked) < len(displayed):
             ctx.emit(
@@ -1130,16 +1161,23 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     # NX-133: stiva de constrângeri multi-tur — DOAR pe SALES (order nu atinge stiva).
     # Filters curente merged peste ce s-a spus deja → rafinarea nu resetează căutarea. Scriere pe
     # ctx.state (owner = agent); persistat de processor (merge canonic, ca `constraints`).
+    retained_keys: frozenset[str] = frozenset()
     if is_order:
         merged_constraints = route.filters
     else:
         switched = await _topic_switched(ctx, deps)
+        catalog = (
+            await get_vocabulary(deps, ctx.business.id)
+            if get_settings().needs_retained_enabled
+            else None
+        )
+        retained_keys = _retained_keys(ctx, catalog)
         merged_constraints, cons_reset = merge_constraints(
             ctx.state.search_constraints,
             route.filters,
             route.category_key,
             switched_topic=switched,
-            carry_keys=_retained_keys(ctx),
+            carry_keys=retained_keys,
         )
         # NX-235: cu v2 aprins, stiva NU mai e un merge liber de dicționare — e rezultatul
         # reducerului, cu tărie/sursă/status per nevoie. Forma rămâne identică pentru consumatori
@@ -1164,7 +1202,7 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     filters_hint = _filters_hint(
         merged_constraints,
         retained=get_settings().needs_retained_enabled,
-        positive=_retained_keys(ctx),
+        positive=retained_keys,
     )  # NX-116/133: seed structurat (stiva merged)
     # A2 (Val1): semnal de CUMPĂRARE → onorează intenția (checkout_link + confirmă stocul), nu
     # re-recomanda. Hint per-tur (în USER, nu în prefixul cached). Leagă tool-urile existente de

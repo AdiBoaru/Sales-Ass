@@ -42,8 +42,10 @@ import json
 from collections import Counter
 from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from itertools import product
 from typing import Any
 
+from src.catalog.query_terms import content_terms, inflection_suffixes
 from src.catalog.vocabulary import (
     CATEGORY_DIMENSION,
     CatalogVocabulary,
@@ -191,6 +193,55 @@ def type_fits_query(
         if extra and all(any(corroborated_by(t, w) for t in texts) for w in extra):
             return False
     return True
+
+
+def type_fully_named(queries: Iterable[object], product_type: str, stop: Collection[str]) -> bool:
+    """Numește căutarea TOATE cuvintele tipului (fără cuvintele goale)? PURĂ (NX-355, a doua
+    recenzie): «crema contur ochi» numește `crema contur ochi`, «cremă de hidratare» nu numește
+    `crema de corp`, deși capul e același."""
+    texts = [q for q in queries if isinstance(q, str) and q]
+    words = [w for w in product_type.split() if w not in stop]
+    return bool(words) and all(any(corroborated_by(t, w) for t in texts) for w in words)
+
+
+def dimensions_named(
+    vocab: CatalogVocabulary | None,
+    text: str,
+    dimensions: Iterable[str],
+    *,
+    overlays: Mapping[str, Mapping[str, str]] | None = None,
+    locale: str | None = None,
+) -> frozenset[str]:
+    """Care dintre `dimensions` le NUMEȘTE textul (clientului), prin vocabularul catalogului și
+    harta de limbă a tenantului. PURĂ (NX-355, a doua recenzie).
+
+    Se încearcă grupuri de 3, 2 și 1 termeni de conținut consecutivi, ca «ten foarte gras» să
+    ajungă la «ten gras» (cuvântul gol „foarte” iese la `content_terms`), cu flexiunea locale-i
+    («tenul» → «ten»). Doar `KNOWN`/`AMBIGUOUS` contează.
+    Vocabular absent ⇒ nimic numit (apelantul se poartă ca înainte de NX-355)."""
+    if vocab is None or vocab.is_empty() or not text:
+        return frozenset()
+    suffixes = inflection_suffixes(locale)
+
+    def variants(term: str) -> list[str]:
+        # «tenul» → «ten»: tulpina + un sufix de flexiune al locale-i, tulpina de minimum 3 litere
+        stems = [term[: -len(x)] for x in suffixes if term.endswith(x) and len(term) - len(x) >= 3]
+        return [term, *dict.fromkeys(stems)]
+
+    terms = [variants(t) for t in content_terms(text, locale)]
+    grams: list[str] = []
+    for n in (3, 2, 1):
+        for i in range(len(terms) - n + 1):
+            grams.extend(" ".join(combo) for combo in product(*terms[i : i + n]))
+    named: set[str] = set()
+    for dim in dimensions:
+        overlay = (overlays or {}).get(dim)
+        for gram in grams:
+            status = resolve(vocab, gram, dim, overlay=overlay).status
+            if status in (ResolutionStatus.KNOWN, ResolutionStatus.AMBIGUOUS):
+                named.add(dim)
+                break
+    return frozenset(named)
 
 
 def resolve_shelf(vocab: CatalogVocabulary | None, raw: str | None) -> str | None:
