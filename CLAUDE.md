@@ -339,7 +339,9 @@ fapt) 0,809, recalculat înaintea rulării v4. Regula GO v4 e în NX-339; restul
 recunoaștere (raftul numit ca obiect al cererii, și ca întrebare ⇒ `set category`, dar nu un calificativ
 din numele unui tip; descrierea clientului pe valoarea care spune ce ESTE, iar un rezultat cerut rămâne
 schimbare). Setul
-D (88 de ture, agent independent) e înghețat (`68c58e79…`). Negația pe o fațetă da/nu nu e în v4:
+D (88 de ture, agent independent) e înghețat (`68c58e79…`). **Verdict v4: NO-GO** (2026-09-29): D trece (F1 0,953), A pică doar pe F1 (0,833 < 0,85, sub
+zgomotul v3 0,809/0,842); 7 din 10 pozitive false sunt tipuri `implicit` pe un cuvânt-umbrelă, care
+pe `kernel.v3.0` devin subiect: propunerea (tipul subiectului doar din `explicit`) e în NX-339. Negația pe o fațetă da/nu nu e în v4:
 validatorul transformă orice fațetă booleană în `unmapped` ([`NX-349`](tasks/stage1/NX-349.md)). Defect de kernel găsit pe drum:
 [`NX-348`](tasks/stage1/NX-348.md) (`set product_type` respins mereu de reducer).
 **Verdict v3: NO-GO**, pe un singur punct: F1 pe A 0,768 (< 0,85). Restul trece (C act 0,944, F1
