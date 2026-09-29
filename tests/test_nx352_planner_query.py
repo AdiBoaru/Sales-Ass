@@ -344,3 +344,81 @@ def test_a_correction_keeps_the_withdrawn_value_out_of_the_text():
         product_type="crema de fata",
     )
     assert "uscat" not in args.query and "gras" not in args.query
+
+
+# --- a treia recenzie NX-352 ----------------------------------------------------------------------
+
+
+def test_a_long_implicit_shelf_quote_is_a_description_not_the_search():
+    """Constatarea 3: citatul lung al unui raft `implicit` («pielea mea care se înroșește») nu intră
+    în text și nu acoperă tipul spus."""
+    shelf = {
+        "op": "set",
+        "dimension": "category",
+        "relation": "eq",
+        "value": SOLE_SHELF,
+        "quote": "pentru pielea mea care se inroseste",
+        "provenance": "implicit",
+    }
+    args = _args(
+        "vreau un ser pentru pielea mea care se inroseste", [shelf], product_type="ser de fata"
+    )
+    assert "pielea" not in args.query and "inroseste" not in args.query
+
+
+def test_a_short_implicit_shelf_quote_is_the_customers_name_for_the_product():
+    """«telefon» pentru raftul „Telefoane" (plural alternat), «cremă de față» întreg."""
+    shelf = {
+        "op": "set",
+        "dimension": "category",
+        "relation": "eq",
+        "value": SOLE_SHELF,
+        "quote": "cremă de față",
+        "provenance": "implicit",
+    }
+    assert _args("vreau o cremă de față", [shelf]).query == "cremă de față"
+
+
+def test_an_unmapped_word_is_the_text_next_to_a_shelf_only_subject():
+    """Constatarea 4: lângă un subiect care e DOAR raft, eticheta raftului nu apare în produse
+    (NX-293), deci termenul nemapat e textul («niacinamida»)."""
+    word = {
+        "op": "add",
+        "dimension": "unmapped",
+        "relation": "contains",
+        "value": "niacinamida",
+        "quote": "cu niacinamida",
+    }
+    assert _args("ceva cu niacinamida", [word]).query == "niacinamida"
+
+
+def test_a_compound_word_contributes_only_its_matched_token_in_the_customers_order():
+    """Constatările 5-6: «ten/fata» nu aduce «ten» ca poartă; ordinea e cea din cerere."""
+    kind = {
+        "op": "set",
+        "dimension": "product_type",
+        "relation": "eq",
+        "value": "crema de fata",
+        "quote": "crema ten/fata",
+        "matched": ["fata"],
+    }
+    assert _args("o crema ten/fata", [kind], product_type="crema de fata").query == "fata"
+    both = [
+        {
+            "op": "set",
+            "dimension": "category",
+            "relation": "eq",
+            "value": SOLE_SHELF,
+            "quote": "fata",
+            "matched": ["fata"],
+        },
+        {
+            "op": "set",
+            "dimension": "product_type",
+            "relation": "eq",
+            "value": "crema de fata",
+            "quote": "crema",
+            "matched": ["crema"],
+        },
+    ]
+    assert _args("crema de fata", both, product_type="crema de fata").query == "crema"

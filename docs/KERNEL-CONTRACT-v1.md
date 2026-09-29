@@ -32,19 +32,24 @@ and fewer carrying the stated needs than v1:
   preference. Price and brand still filter only from a hard need (the brand filter is never relaxed).
   I7 is restated accordingly. A routine (`bundle`) does not relax its step filters, so there a stated
   but not `enforce_ready` need stays a preference. On the planned search these facet filters count as
-  uttered for the guessed-filter guard (NX-313): the kernel already judged their provenance.
+  uttered for the relaxation ladder and the guessed-filter guard (NX-313): the kernel already judged
+  their provenance. The shelf does not: the state may hold an `implicit` shelf or one written by a v1
+  turn from the model's guess, so it stays judged (relaxed before a stated need, NX-313 and the
+  homograph guard apply).
 - **The search text is COMPOSED from what the kernel validated.** `SearchArgs.query` is, in order:
-  the words that named the subject this turn (`CheckedChange.matched` of an `explicit` shelf or type,
-  written by the validator and redacted in the trace; for a shelf named in other words, the content
-  words of its quote, since a shelf name does not occur in product names, NX-293), else the subject's
-  name from the state (the type before the shelf, the umbrella's head for a vague type), plus the words
-  of a stated value that reaches no filter; without a subject, the words that named a facet filter;
-  else this turn's unmapped values; the whole request without the negated words is the last resort.
-  Only changes accepted by the validator and the delta count (`plan_turn(checked=…)`); an `avoid`
-  change never yields text. A first design SUBTRACTED from the sentence (the locale's formula, the
-  need words) and failed two adversarial reviews: every unforeseen word stayed a gate. On the `strict`
-  rung every word is a gate, so the whole sentence („si ceva mai ieftin ?") returned nothing (64 of 81
-  probed plans searched the customer's sentence).
+  the type (the words that named it this turn, `CheckedChange.matched` of an `explicit` type, written
+  by the validator and redacted in the trace; else the type's label from the state, the umbrella's head
+  for a vague type); else the customer's word for the shelf (the words that named it, or, for an
+  `implicit` shelf, the quote's words that look like the shelf's name, «telefon» for „Telefoane", or a
+  short quote of at most three content words, «cremă de față»; a long quote is a description and never
+  text); else the words that named a facet filter; else this turn's unmapped values; else the shelf's
+  label (a shelf name does not occur in product names, NX-293); each with the words of a stated value
+  that reaches no filter; the whole request without the negated words is the last resort. Words come
+  in the request's order, in the customer's spelling. Only changes accepted by the validator and the
+  delta count (`plan_turn(checked=…)`); an `avoid` change never yields text. A first design SUBTRACTED
+  from the sentence (the locale's formula, the need words) and failed two adversarial reviews: every
+  unforeseen word stayed a gate. On the `strict` rung every word is a gate, so the whole sentence („si
+  ceva mai ieftin ?") returned nothing (64 of 81 probed plans searched the customer's sentence).
 - **A relative price on an ambiguous target is the median.** „Ceva mai ieftin” with several products on
   screen is cheaper than most of them: the bound is the median of the available candidates' re-read
   prices (counted `relative_price_median`), only for a reference pointing at the screen (deictic,

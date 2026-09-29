@@ -884,7 +884,12 @@ def _handle_set_topic(
         )
         if other_kind and not shelf_changed:
             product_type = new_type
-            category = category or previous
+            # A treia recenzie NX-352: raftul vechi rămâne doar dacă turul îl numește sau perechea
+            # (raft, tip nou) e VERIFICATĂ, ca la schimbarea de tip; altfel «un șampon» după o
+            # umbrelă de creme căuta șampon pe raftul de ten.
+            named = _proposed_category(proposal) is not None
+            if not named and proposal.pair_verified != (previous, new_type):
+                category = None
             same_subject = False
         elif not shelf_changed and not type_changed:
             result = (category or previous, new_type or old_type)

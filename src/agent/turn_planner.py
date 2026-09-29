@@ -29,7 +29,7 @@ conține literali de vertical (I14)."""
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 
 from src.agent.tool_budget import spec_for
@@ -158,32 +158,34 @@ def _read_act_query(
     changes: Sequence[StateChange],
     checked: Sequence[CheckedChange] | None,
     carried: Mapping[str, str],
-    subject: str | None,
+    type_label: str | None,
+    shelf_label: str | None,
+    shelf_names: Collection[str],
     locale: str,
 ) -> tuple[str | None, str | None]:
     """SINGURUL loc din planner care citește `Act.query` și citatele schimbărilor (cuvintele
     clientului). Întoarce `(textul căutării, cererea întreagă fără cuvintele negate)`, ca VALORI;
     nicio decizie nu ramifică pe text.
 
-    NX-352 (sonda NX-351, două recenzii): cererea întreagă nu e o căutare. Pe treapta `strict`
+    NX-352 (sonda NX-351, trei recenzii): cererea întreagă nu e o căutare. Pe treapta `strict`
     fiecare cuvânt e o poartă (lecția NX-298), deci «si ceva mai ieftin ?» dădea zero produse, iar
     «pai mi se usuca pielea dupa dus» potriviri pe «dus». O SCĂDERE din frază (formula locale-i,
-    nevoile) a picat la recenzie de două ori: orice cuvânt neprevăzut («decât», «ieftină», un cuvânt
-    dintr-o corecție) rămânea poartă. Deci textul se COMPUNE din ce a validat kernelul:
-    1. SUBIECTUL: cuvintele care l-au numit în turul ăsta (`CheckedChange.matched` al unui raft sau
-       tip `explicit`; la un raft spus cu alte cuvinte, `implicit`, cuvintele de conținut ale
-       citatului: «telefon» pentru „Telefoane", fiindcă numele raftului nu apare în numele
-       produselor, NX-293), altfel numele subiectului din stare (`subject`, tipul înaintea raftului;
-       la un tip vag, capul umbrelei);
-       plus cuvintele unei valori SPUSE care nu ajunge nici filtru, nici preferință (o marcă soft pe
-       o coloană), fiindcă textul e singurul ei canal;
-    2. fără subiect, cuvintele care au numit o fațetă ajunsă FILTRU («anti aging»; prețul nu: un
-       număr nu e text);
-    3. altfel valorile nemapate ale turului («gerovital»): lângă un subiect sau un filtru ele doar
-       ordonează (`rank_terms`, NX-333), fără ele sunt singurul text cerut;
-    4. cererea întreagă, fără cuvintele negate, e ultima rezervă.
-    Doar schimbările ACCEPTATE (de validator și de delta, `checked`) contează; una `avoid` nu dă
-    niciodată text."""
+    nevoile) a picat la recenzie de două ori: orice cuvânt neprevăzut rămânea poartă. Deci textul se
+    COMPUNE din ce a validat kernelul, în ordinea:
+    1. TIPUL: cuvintele care l-au numit în tur (`CheckedChange.matched` al unui tip `explicit`),
+       altfel eticheta tipului din stare (`type_label`: tipul spus, capul umbrelei);
+    2. altfel RAFTUL spus de client: cuvintele care l-au numit (`explicit`), sau cuvintele citatului
+       unui raft `implicit` care seamănă cu numele raftului (`shelf_names`: «telefon» pentru
+       „Telefoane"); restul citatului nu, fiindcă poate fi o descriere («pielea mea care se
+       înroșește»). Numele raftului nu apare în numele produselor (NX-293), deci cuvântul clientului
+       e textul bun;
+    3. fără tip și fără cuvântul clientului pentru raft: cuvintele unei fațete FILTRATE («anti
+       aging»; un număr nu e text), altfel valorile nemapate («niacinamida»), altfel eticheta
+       raftului (`shelf_label`);
+    la fiecare, cuvintele unei valori SPUSE care nu ajunge filtru (o marcă pe o preferință slabă sau
+    într-un gol), fiindcă textul e atunci canalul ei; 4. cererea întreagă, fără cuvintele negate, e
+    ultima rezervă. Doar schimbările ACCEPTATE (`checked`) contează; `avoid` nu dă text. Cuvintele
+    ies în ordinea din cerere, în forma scrisă de client."""
     stop = stopwords(locale)
     # (dimensiune, relație, proveniență, cuvintele care au numit valoarea, valoarea de text,
     # cuvintele citatului, cuvintele citatului în forma scrisă de client)
@@ -204,32 +206,47 @@ def _read_act_query(
             items.append(
                 (change.dimension, relation, "explicit", tuple(quote), change.value, quote, raw)
             )
+    order = tokens(query or "")
 
     def surface(words: Sequence[str], raw: Sequence[str]) -> list[str]:
-        """Cuvintele normalizate înapoi în forma clientului («husa» → «husă»)."""
-        out = []
-        for w in words:
-            out.append(next((r for r in raw if w in tokens(r)), w))
-        return out
+        """Cuvântul clientului doar când e ÎNTREG acel token («husă» pentru «husa»); dintr-un cuvânt
+        compus («ten/fata») doar tokenul, nu și vecinul lui."""
+        return [next((r for r in raw if tokens(r) == [w]), w) for w in words]
+
+    def like_shelf(word: str) -> bool:
+        """Cuvântul seamănă cu numele raftului: prefix comun de cel puțin lungimea celui mai scurt
+        minus 2, minimum 3 litere (pluralul alternează: «telefon» / „telefoane",
+        «husă» / „huse")."""
+
+        def common(a: str, b: str) -> int:
+            n = 0
+            while n < min(len(a), len(b)) and a[n] == b[n]:
+                n += 1
+            return n
+
+        return any(common(word, n) >= max(3, min(len(word), len(n)) - 2) for n in shelf_names)
 
     live = [i for i in items if i[1] not in _NEGATIVE]
-    named_subject: list[str] = []
+    type_words: list[str] = []
+    shelf_words: list[str] = []
     for dimension, _r, provenance, matched, _v, quote, raw in live:
-        if dimension not in _SUBJECT_WORDS:
-            continue
-        if provenance == "explicit":
-            named_subject += surface(matched, raw)
+        if dimension == PRODUCT_TYPE and provenance == "explicit":
+            type_words += surface(matched, raw)
+        elif dimension == "category" and provenance == "explicit":
+            shelf_words += surface(matched, raw)
         elif dimension == "category":
-            # cuvintele goale doar de la capete: «cremă de față» rămâne întreg
+            content = [w for w in quote if w not in stop]
+            alike = [w for w in content if like_shelf(w)]
+            # un citat SCURT fără cuvânt de raft e numele produsului («cremă de față»); unul
+            # lung e o descriere («pielea mea care se înroșește») și nu intră în text
             trimmed = list(quote)
             while trimmed and trimmed[0] in stop:
                 trimmed.pop(0)
             while trimmed and trimmed[-1] in stop:
                 trimmed.pop()
-            named_subject += surface(trimmed, raw)
+            short = trimmed if len(content) <= _SHORT_QUOTE else []
+            shelf_words += surface(alike or short, raw)
     spoken = [i for i in live if i[2] == "explicit" and i[0] not in _SUBJECT_WORDS]
-    # o valoare SPUSĂ care nu ajunge filtru (doar preferință slabă, sau nicăieri) își păstrează
-    # cuvântul în text; doar o valoare de TEXT (un număr, «256 GB», nu e text de căutare)
     gapped = [
         w
         for d, _r, _p, m, v, _q, raw in spoken
@@ -248,9 +265,26 @@ def _read_act_query(
     if has_words and query is not None:
         own = [w for w in query.split() if not set(tokens(w)) & negated]
         whole = " ".join(own).strip() or None
-    head = named_subject or ([subject] if subject else [])
-    for candidate in ([*head, *gapped] if head else [], named_filters, [*unmapped, *gapped]):
-        text = " ".join(dict.fromkeys(w for w in candidate if w))
+
+    def ordered(words: Sequence[str]) -> str:
+        """În ordinea din cerere; o etichetă din stare (fără loc în cerere) rămâne întreagă."""
+        unique = list(dict.fromkeys(w for w in words if w))
+
+        def position(word: str) -> int:
+            first = (tokens(word) or [""])[0]
+            return order.index(first) if first in order else len(order)
+
+        return " ".join(sorted(unique, key=position))
+
+    head = type_words or ([type_label] if type_label else []) or shelf_words
+    candidates = (
+        [*head, *gapped] if head else [],
+        [*named_filters, *gapped],
+        [*unmapped, *gapped],
+        [shelf_label, *gapped] if shelf_label else [],
+    )
+    for candidate in candidates:
+        text = ordered(candidate)
         if text:
             return text, whole
     return None, whole
@@ -259,6 +293,8 @@ def _read_act_query(
 #: NX-352: dimensiunile ale căror cuvinte rămân în căutare chiar dacă un citat de nevoie le
 #: cuprinde: numesc CE ESTE produsul. Un cuvânt nemapat nu e consumat de nimic (e textul căutat).
 _SUBJECT_WORDS = frozenset({"category", PRODUCT_TYPE})
+#: Câte cuvinte de conținut are cel mult citatul unui raft `implicit` ca să numească un produs.
+_SHORT_QUOTE = 3
 #: Relațiile care OCOLESC o valoare: cuvântul lor nu e niciodată text de căutare.
 _NEGATIVE = frozenset({"avoid"})
 _PUNCTUATION = ".,;:!?…\"'()[]«»„”“"
@@ -361,12 +397,17 @@ class _Planner:
                 if entry.key == topic.product_type and entry.label:
                     return entry.label
             return topic.product_type
-        if topic.category_key:
-            for entry in self.vocab.categories if self.vocab else ():
-                if entry.key == topic.category_key and entry.label:
-                    return entry.label
-            return topic.category_key
-        return None
+        return self._shelf_label()
+
+    def _shelf_label(self) -> str | None:
+        """Eticheta raftului subiectului (`VocabEntry.label`), altfel cheia; `None` fără raft."""
+        key = self.state.topic.category_key
+        if not key:
+            return None
+        for entry in self.vocab.categories if self.vocab else ():
+            if entry.key == key and entry.label:
+                return entry.label
+        return key
 
     def _hard(self, need: Need, dimension: str) -> bool:
         """I7: dur doar ce e dur în stare, de la o sursă care poate susține un filtru, pe o
@@ -612,13 +653,17 @@ class _Planner:
         carried: dict[str, str] = {}
         args = self._search_args(_PENDING, act, product_name=product_name, carried=carried)
         subject = self._subject_label()
+        topic = self.state.topic
+        shelf_label = self._shelf_label()
         text, whole = _read_act_query(
             act.query,
             words,
             self.interp.changes,
             self.checked,
             carried,
-            subject,
+            subject if subject_kinds(topic) else None,
+            shelf_label,
+            {t for n in (topic.category_key, shelf_label) if n for t in tokens(n)},
             self.locale,
         )
         # NX-352: căutarea se COMPUNE din ce a validat kernelul (subiectul, nevoile filtrate,
@@ -626,7 +671,8 @@ class _Planner:
         if name is not None:
             phrase = name
         elif subject_first:
-            phrase = subject or text or whole or product_name
+            # cu subiect, textul compus îl conține deja (plus cuvintele fără alt canal)
+            phrase = (text if subject else None) or subject or text or whole or product_name
         else:
             phrase = text or whole or product_name
         if not phrase:

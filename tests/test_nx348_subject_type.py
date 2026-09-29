@@ -512,12 +512,12 @@ def test_a_stated_type_outside_the_umbrella_parks_it():
     state, _ = step(ConversationStateV2(), _change("category", "telefoane"), _vague(CREAMS))
     state, _ = step(state.state, _change("brand", "apple"))
     moved, _ = step(state.state, _change("product_type", "laptop"))
-    assert (moved.state.topic.category_key, moved.state.topic.product_type) == (
-        "telefoane",
-        "laptop",
-    )
+    # A treia recenzie NX-352: fără pereche verificată, raftul vechi pleacă (ca la tip schimbat)
+    assert (moved.state.topic.category_key, moved.state.topic.product_type) == (None, "laptop")
     assert moved.state.parked.topic.type_umbrella == CREAMS
     assert moved.state.need_for("brand") is None
+    kept, _ = step(state.state, _change("product_type", "laptop"), compatible=True)
+    assert (kept.state.topic.category_key, kept.state.topic.product_type) == ("telefoane", "laptop")
 
 
 def test_another_kind_keeps_the_shelf_and_naming_it_again_loses_nothing():
