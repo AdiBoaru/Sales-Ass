@@ -76,6 +76,7 @@ from src.domain.constraints import (
     extract_constraints,
     merge_constraints,
     monetary_mentions,
+    strip_price_mentions,
 )
 from src.domain.normalize import normalize
 from src.models import MAX_SEARCH_POOL, Relevance
@@ -907,6 +908,41 @@ def _is_relative_price_request(text: str) -> bool:
     return _CHEAPER_RE.search(text or "") is not None
 
 
+def _price_as_filter_only(ctx: TurnContext, a: SearchArgs, *, planned: bool) -> None:
+    """NX-354: prețul e deja filtru (`price_max`), deci nu se mai cere o dată ca text și nu mai
+    decide ordinea. Scrie DOAR `a.query` și `a.sort_mode`, înaintea amprentei de sesiune, ca
+    «mai arată-mi» să pagineze exact căutarea care a rulat.
+
+    Textul: fără sumă, unitate de bani și comparație de preț (`strip_price_mentions`). Dacă din
+    cerere nu rămâne niciun cuvânt («sub 100 lei»), textul rămâne cum era: filtrele de subiect și
+    treapta `filters_only` (NX-293) au deja grijă de o cerere fără cuvinte, iar un `query` gol ar
+    fi altă cale, netestată aici.
+
+    Ordinea: `price_asc` ales de MODEL rămâne doar dacă mesajul curent chiar cere «mai ieftin»
+    (același detector ca garda NX-319 și ramura deterministă). Pe calea planificată sortarea e a
+    plannerului (NX-333), deci nu se atinge."""
+    units = getattr(getattr(ctx.business, "domain_pack", None), "units", None)
+    if units is not None and a.query:
+        stripped = strip_price_mentions(a.query, units=units, locale=ctx.language)
+        if stripped != a.query:
+            before = len(content_terms(a.query, ctx.language))
+            after = len(content_terms(stripped, ctx.language))
+            if after:
+                a.query = stripped
+            ctx.emit(
+                "query_price_words",
+                outcome="stripped" if after else "kept_nothing_left",
+                removed=before - after if after else 0,
+            )
+    if planned or a.sort_mode != "price_asc":
+        return
+    texts = client_texts(ctx)
+    if texts and _is_relative_price_request(texts[0]):
+        return
+    a.sort_mode = "relevance"
+    ctx.emit("price_sort_dropped", reason="budget_is_not_cheapest")
+
+
 def _relax_ladder(
     *,
     price_max: float | None,
@@ -1713,6 +1749,8 @@ async def _search(
         )
         if source is None:
             a.price_max = None
+    if a.price_max is not None and get_settings().search_price_as_filter_only_enabled:
+        _price_as_filter_only(ctx, a, planned=planned)
 
     # === REZOLVARE ÎNAINTE DE CONSTRÂNGERE =====================================================
     # Un filtru SQL nu e o comparație, e o execuție: `WHERE slug = 'ten'` nu întreabă dacă «ten»

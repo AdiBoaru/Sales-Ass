@@ -41,7 +41,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
-from src.catalog.query_terms import comparators, fold
+from src.catalog.query_terms import comparators, fold, relative_comparators
 from src.domain.facets import FacetSource, FacetType, TypedFacet
 
 log = logging.getLogger(__name__)
@@ -459,6 +459,55 @@ def monetary_mentions(message: str, *, units: UnitRegistry) -> set[float]:
             except ValueError:
                 continue
     return out
+
+
+def strip_price_mentions(text: str, *, units: UnitRegistry, locale: str | None) -> str:
+    """Textul unei căutări FĂRĂ prețul, pentru când prețul e deja filtru (NX-354). PURĂ.
+
+    Cererea «cremă pentru ten uscat, sub 100 de lei» pleca în SQL de DOUĂ ori: o dată ca
+    `price_max=100`, o dată ca termenii `100` și `lei`, legați cu ȘI pe treapta strictă. Niciun
+    produs nu poartă „lei” în descriere, deci strictul dădea zero, căutarea cobora pe `relaxed`
+    (orice pereche de cuvinte), iar `hidratare + ten` aducea 54 de măști din 96 (conversația
+    `1748f988`). E clasa NX-298: o condiție cerută a doua oară, ca TEXT, peste propriul filtru.
+
+    Se scot, fără nicio listă scrisă aici:
+    • numerele care pot fi o sumă (aceeași citire ca `monetary_mentions`: lipite de o unitate de
+      BANI sau fără unitate), cu unitatea de bani de lângă ele; un număr lipit de unitatea ALTEI
+      dimensiuni («100 ml», «spf 50») rămâne, fiindcă e o cerință de produs, nu de preț;
+    • aliasurile de bani ale tenantului (`domain_pack.units`), oriunde apar;
+    • frazele de comparație de preț ale locale-i (`comparators`, `relative_comparators`), ca
+      «ieftin» din «mai ieftin decât» să nu devină un cuvânt pe care produsul trebuie să-l aibă.
+
+    Întoarce textul PLIAT (ce oricum se caută: `content_terms` pliază). Fără unități declarate,
+    textul rămâne neatins: fără registru nu putem deosebi un preț de o cantitate."""
+    if not text or not units.specs or units.specs.get(MONEY_UNIT_FACET) is None:
+        return text
+    folded = fold(text)
+    drop: list[tuple[int, int]] = []
+    for match in _NUMBER_RE.finditer(folded):
+        alias, _ambiguous = _unit_near(folded, match.start(), match.end(), match.start(), units)
+        facet = units.facet_for_unit(alias) if alias else None
+        if facet is not None and facet != MONEY_UNIT_FACET:
+            continue
+        drop.append((match.start(), match.end()))
+    for word in _WORD_RE.finditer(folded):
+        if units.facet_for_unit(word.group(0)) == MONEY_UNIT_FACET:
+            drop.append((word.start(), word.end()))
+    phrases = [p for p, _op in comparators(locale)] + [p for p, _op in relative_comparators(locale)]
+    for phrase in phrases:
+        for hit in re.finditer(rf"(?<![a-z0-9]){re.escape(phrase)}(?![a-z0-9])", folded):
+            drop.append((hit.start(), hit.end()))
+    if not drop:
+        return text
+    kept, cursor = [], 0
+    for start, end in sorted(drop):
+        if start >= cursor:
+            kept.append(folded[cursor:start])
+            cursor = end
+        else:
+            cursor = max(cursor, end)
+    kept.append(folded[cursor:])
+    return re.sub(r"\s+", " ", " ".join(kept)).strip(" ,.;")
 
 
 def constraint_from_value(

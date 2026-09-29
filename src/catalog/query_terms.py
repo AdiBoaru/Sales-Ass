@@ -52,6 +52,7 @@ from src.catalog.folding import fold as _fold
 # proastă, niciodată un răspuns mai scurt.
 _RO_STOPWORDS = """
     a al ale cu de din dintre in intr intre la pe pentru peste pana prin spre sub si sau dar ori ca
+    decat
     un o una unui unei niste cel cea cei cele acest aceasta acesta aceste acestea
     eu tu el ea noi voi ei imi iti isi mi ti ma te se ne va le lui mea meu mei tau ta
     am ai are as ar au fi fie este sunt esti era fost vreau vrei vrea caut cauti doresc trebuie

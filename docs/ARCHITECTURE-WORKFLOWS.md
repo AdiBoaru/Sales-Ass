@@ -1875,6 +1875,7 @@ search_guessed_filter_coherence_enabled = true
 search_guessed_filter_rescue_enabled = true
 search_offcategory_guard_enabled = true
 search_one_card_per_family_enabled = true
+search_price_as_filter_only_enabled = true
 search_price_bound_provenance_enabled = true
 search_relax_by_provenance_enabled = true
 search_semantic_enabled = false

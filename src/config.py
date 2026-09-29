@@ -1112,6 +1112,17 @@ class Settings(BaseSettings):
     search_price_bound_provenance_enabled: bool = Field(
         default=True, validation_alias="SEARCH_PRICE_BOUND_PROVENANCE_ENABLED"
     )
+    # NX-354: când prețul a devenit filtru (`price_max` păstrat de garda de mai sus), el nu se mai
+    # cere o dată ca TEXT, și nici nu schimbă ordinea. (1) Sumele, unitățile de bani și frazele de
+    # comparație de preț ies din `query` (`strip_price_mentions`): altfel `100` și `lei` deveneau
+    # termeni obligatorii, strictul dădea zero și `relaxed` aducea orice (conversația `1748f988`:
+    # 54 de măști din 96 la o cerere de cremă). (2) `price_asc` ales de model fără o cerere de
+    # «mai ieftin» în mesaj devine `relevance`: un buget e o margine, nu o sortare. Măsurat: 4 din 6
+    # căutări salvate cu plafon aveau prețul și în text. ON implicit (defect măsurat, ca NX-311);
+    # OFF = byte-identic.
+    search_price_as_filter_only_enabled: bool = Field(
+        default=True, validation_alias="SEARCH_PRICE_AS_FILTER_ONLY_ENABLED"
+    )
     # NX-319: un SUBRAFT numit doar prin numele lui nu e un raft rostit. «Fata» și «Buze» sunt
     # subrafturi de MACHIAJ, iar „crema de fata" le coroborează literal, deci NX-313 nu judeca
     # raftul pe date (judecă doar ce e ghicit). Măsurat pe 30 de zile: 6 din 12 rafturi „rostite"

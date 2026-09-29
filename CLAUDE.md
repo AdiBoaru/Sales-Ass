@@ -1222,6 +1222,19 @@ punea numele întreg sub „De ce ți-l recomand" (`ai_summary` e gol pe tot cat
 `pytest tests/test_nx319_conversation_1518.py -q` +
 `PYTHONPATH=. python scripts/nx319_conversation_replay.py`.
 
+**NX-354 — prețul devenit filtru se mai cerea o dată ca text, iar un buget sorta după preț.**
+Conversația `1748f988` (2026-09-29): la «sub 100 de lei sa vad», după o cremă pentru ten uscat,
+modelul a căutat corect `"cremă de hidratare pentru ten uscat, hidratare, sub 100 de lei"` cu
+`price_max=100`, dar `100` și `lei` au devenit termeni obligatorii (strict = 0, `relaxed` = 54 de
+măști din 96), iar `price_asc` ales pentru un buget a pus măștile de 10 lei primele (clasa NX-298,
+măsurat: 4 din 6 căutări salvate cu plafon aveau prețul și în text). `_price_as_filter_only`, după
+garda NX-319: `strip_price_mentions` scoate sumele, unitățile de bani ale tenantului și frazele de
+comparație ale locale-i din `query` («spf 50», «50 ml» rămân), iar `price_asc` fără «mai ieftin» în
+mesaj devine `relevance` (calea planificată neatinsă). Pe catalogul real: 6 măști → 4 creme + 2
+măști. Descoperit, declarat: tipul nu e filtru pe v1, iar „ten uscat” se pierde în drumul prin
+starea v2. Flag `SEARCH_PRICE_AS_FILTER_ONLY_ENABLED` (ON). Card:
+[`tasks/stage1/NX-354.md`](tasks/stage1/NX-354.md); probă: `pytest tests/test_nx354_price_as_filter.py -q`.
+
 **NX-315 — forma răspunsului după ce a CERUT clientul (v1, trei flaguri OFF).** Comparația iZi
 pe «vreau o crema de hidratare»: iZi pune o întrebare („ten uscat, mixt/gras sau sensibil?") și un
 paragraf „cum alegi"; la «cum se foloseste prima» răspunde din prima frază. Nativx: nicio
