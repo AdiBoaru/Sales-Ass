@@ -45,7 +45,13 @@ from src.tools.catalog_tools import SearchArgs
 #: rutinei unui plan `bundle`, din subiectul stării și `routine_steps.family_by_shelf` al
 #: pachetului. Niciun invariant, rând de proprietate sau regulă de stare nu se schimbă; schema
 #: scrisă de model e neschimbată.
-KERNEL_CONTRACT_VERSION = "kernel.v2.1"
+#: `kernel.v3.0` (NX-348, MAJOR, decis de Adi pe 2026-09-29): SEMANTICA subiectului. Subiectul
+#: (raft, tip) se SCHIMBĂ doar când o jumătate deja setată primește altă valoare; completarea unei
+#: jumătăți goale e RAFINARE (nevoile rămân, nimic nu se parchează). Tipul spus de client ajunge în
+#: `Topic.product_type` printr-un singur `set_topic` pe pereche (înainte era respins ca
+#: `topic_key`). Poarta de replay e DEROGATĂ, ca la v2.0: niciun tur interpretat n-a fost servit.
+#: Schema scrisă de model e neschimbată.
+KERNEL_CONTRACT_VERSION = "kernel.v3.0"
 
 # --- scrise de model ----------------------------------------------------------------------------
 

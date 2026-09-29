@@ -446,6 +446,15 @@ răspunsului și în câmpul citit de widget. Un tur căzut după ce un executor
 evenimentele (citirile de DB rămân, declarat). Probă: `pytest tests/test_interpreted_turn_c.py
 tests/test_interpreted_turn_a.py tests/test_interpreted_turn_b.py tests/test_kernel_contract.py -q`.
 
+**NX-348 — `kernel.v3.0` (MAJOR, decis de Adi pe 2026-09-29): tipul de produs ajunge în subiect, iar
+completarea subiectului e rafinare.** Un `set product_type` din interpretare era respins MEREU de
+reducer (`topic_key`), deci «vreau un ser» nu ajungea la planner. Delta trimite acum raftul și tipul
+turului într-un singur `set_topic` pe pereche (`_subject_proposal`; mai multe valori ⇒ ultima,
+`subject_multiple`); reducerul acceptă tipul fără raft (păstrează raftul) și schimbă subiectul doar
+când o jumătate DEJA SETATĂ primește altă valoare: completarea unei jumătăți goale păstrează nevoile.
+Poarta de replay derogată (niciun tur interpretat servit). Intră în `main` după rularea v4. Card:
+[`tasks/stage1/NX-348.md`](tasks/stage1/NX-348.md); probă: `pytest tests/test_nx348_subject_type.py -q`.
+
 **NX-238 — retrievalul trece printr-un PORT, iar candidatul e inert (verdict `NOT-READY`).**
 `src/retrieval/` e contractul stabil pe care îl consumă NX-239: `RetrievalPort` + `RetrievalBundle`
 (candidați = REFERINȚE + verdicte tri-state + evidence + degradări cu cod fix), cu două

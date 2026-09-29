@@ -23,7 +23,16 @@ Versioning: the contract is `kernel.v1.0`. **Minor** (`v1.1`): additive schema f
 
 No invariant, ownership row or state rule changes in v1.2, so no replay gate is required. The open questions step 6 raised on I5 (the safety prune on `aside`), I20 (the cart on `cart_ref`) and I15a/I12 (`grounding_guard` does not run on the v1 composition) are decided in the PRs that need them (B and C), under the minor/major rule.
 
-**Current version: `kernel.v2.1` (minor, NX-336 D3).** One additive, planner-written field:
+**Current version: `kernel.v3.0` (MAJOR, NX-348, decided by Adi on 2026-09-29).** The meaning of a
+subject change: the subject `(category_key, product_type)` changes only when a half that is already
+set gets a DIFFERENT value. Filling an empty half (the first product type on a shelf without one, the
+first shelf on a subject that has only a type) is a REFINEMENT: the subject's needs stay and nothing
+is parked. A product type the customer names now reaches `Topic.product_type` through one
+`set_topic` proposal for the whole pair per turn (before, it was proposed as a need and always
+rejected as `topic_key`). The replay gate is waived, as for v2.0: no interpreted turn has been served
+in production. The model-written schema is unchanged.
+
+**Previous version: `kernel.v2.1` (minor, NX-336 D3).** One additive, planner-written field:
 `TurnPlan.family`, the routine family of a `bundle` plan, read from the state's subject and the
 pack's `routine_steps.family_by_shelf` (shelf root or shelf key → family). No invariant, ownership
 row or state rule changes; the model-written schema is unchanged (its snapshot differs only in the
@@ -335,7 +344,7 @@ On the planned path the tool does not re-judge `price_max` on the recent text (t
 
 ## Reducer, thread and parking
 
-The subject of a conversation is `(category_key, product_type)`. Only a change of subject parks anything; a change of any other dimension is an ordinary constraint change.
+The subject of a conversation is `(category_key, product_type)`. Only a change of subject parks anything; a change of any other dimension is an ordinary constraint change. (v3.0) A change of subject means a half that is already set gets a different value; filling an empty half is a refinement and parks nothing. Several values for one half in the same turn keep the last one, counted as `subject_multiple`.
 
 ### Order of application within a turn
 

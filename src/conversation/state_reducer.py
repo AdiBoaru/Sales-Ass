@@ -725,8 +725,10 @@ def _handle_set_topic(
     state: ConversationStateV2, proposal: StateUpdateProposal, policy: ReducerPolicy
 ) -> _Outcome:
     category = _proposed_category(proposal)
-    if proposal.subject:
-        # Raftul nerezolvat nu e o schimbare de raft: subiectul poate purta doar tipul.
+    interpreted = proposal.origin == "interpretation"
+    if proposal.subject or (interpreted and category is None and proposal.product_type):
+        # Raftul nerezolvat nu e o schimbare de raft: subiectul poate purta doar tipul. NX-348: la
+        # fel pe interpretare, unde clientul a numit doar tipul («vreau un ser»).
         category = category or state.topic.category_key
     elif category is None and proposal.goal is None:
         return RejectedUpdate("set_topic", "invalid_payload", None, proposal.source)
@@ -735,14 +737,37 @@ def _handle_set_topic(
         # dar nu poate muta unul pe care îl susține deja setul arătat clientului.
         return RejectedUpdate("set_topic", "subject_owned", category, proposal.source)
     previous = state.topic.category_key
-    interpreted = proposal.origin == "interpretation"
     if interpreted:
-        # NX-331: subiectul e PERECHEA (raft, tip). Un tip nepropus se păstrează pe același raft și
-        # se golește pe altul (tipul vechi descria subiectul vechi).
-        product_type = proposal.product_type or (
-            state.topic.product_type if category == previous else None
+        # NX-331: subiectul e PERECHEA (raft, tip). NX-348 (kernel.v3.0, decis de Adi pe
+        # 2026-09-29): subiectul se SCHIMBĂ doar când o jumătate deja setată primește ALTĂ valoare.
+        # Completarea unei jumătăți goale (primul tip pe un raft fără tip, primul raft pe un subiect
+        # fără raft) e RAFINARE: nevoile subiectului rămân, nimic nu se parchează. Un tip nepropus
+        # se păstrează pe același raft (și la rafinare) și se golește pe alt raft.
+        old_type = state.topic.product_type
+        shelf_changed = previous is not None and category is not None and category != previous
+        product_type = proposal.product_type or (None if shelf_changed else old_type)
+        type_changed = (
+            old_type is not None and product_type is not None and product_type != old_type
         )
-        same_subject = (category, product_type) == (previous, state.topic.product_type)
+        if not shelf_changed and not type_changed and (previous or old_type):
+            topic = replace(
+                state.topic,
+                category_key=category or previous,
+                product_type=product_type,
+                goal=proposal.goal or state.topic.goal,
+            )
+            refined = (topic.category_key, topic.product_type) != (previous, old_type)
+            return (
+                replace(state, topic=topic),
+                Applied(
+                    "set_topic",
+                    topic.category_key,
+                    SOFT,
+                    proposal.source,
+                    "applied" if refined else "unchanged",
+                ),
+            )
+        same_subject = (category, product_type) == (previous, old_type)
     else:
         product_type = proposal.product_type if proposal.subject else state.topic.product_type
         same_subject = category == previous

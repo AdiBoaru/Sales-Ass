@@ -213,6 +213,13 @@
     },
     {
       "file": "src/conversation/delta.py",
+      "function": "_subject_proposal",
+      "field": "needs_topic",
+      "why": "NX-348: schimbarile de SUBIECT ale turului (raft si/sau tip de produs) devin UN `set_topic` pe pereche, scris din interpretarea VALIDATA; tipul era trimis inainte ca `set_need` si respins mereu (`topic_key`). Aceeasi forma ca `to_delta` (I3): o propunere typed, aplicata doar de reducer; `inferred` nu produce propunere (I23).",
+      "fate": "stays"
+    },
+    {
+      "file": "src/conversation/delta.py",
       "function": "to_delta",
       "field": "needs_topic",
       "why": "NX-330 (pasul 3a al kernelului): traducerea interpretarii VALIDATE in propuneri typed -- forma tinta a contractului (I3): starea se schimba doar prin propuneri, iar singurul care le aplica e reducerul. Sursa e proveniența calculata de cod (`provenance.py`), deci `inferred` nu produce propunere (I23). Fara apelant in productie pana la pasul 6.",
