@@ -213,6 +213,13 @@
     },
     {
       "file": "src/conversation/delta.py",
+      "function": "_subject_proposal",
+      "field": "needs_topic",
+      "why": "NX-348: schimbarile de SUBIECT ale turului (raft si/sau tip de produs) devin UN `set_topic` pe pereche, scris din interpretarea VALIDATA; tipul era trimis inainte ca `set_need` si respins mereu (`topic_key`). Aceeasi forma ca `to_delta` (I3): o propunere typed, aplicata doar de reducer; `inferred` nu produce propunere (I23).",
+      "fate": "stays"
+    },
+    {
+      "file": "src/conversation/delta.py",
       "function": "to_delta",
       "field": "needs_topic",
       "why": "NX-330 (pasul 3a al kernelului): traducerea interpretarii VALIDATE in propuneri typed -- forma tinta a contractului (I3): starea se schimba doar prin propuneri, iar singurul care le aplica e reducerul. Sursa e proveniența calculata de cod (`provenance.py`), deci `inferred` nu produce propunere (I23). Fara apelant in productie pana la pasul 6.",
@@ -230,6 +237,13 @@
       "function": "_evict_oldest_unmapped",
       "field": "needs_topic",
       "why": "NX-331: reducerul e SINGURUL scriitor al starii v2 (I3); functia e un pas pur al lui (rol `reducer` in tests/kernel_modules.json). Plafonul `unmapped` (I25): al patrulea semnal pe subiect il inlocuieste pe cel mai vechi.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/conversation/state_reducer.py",
+      "function": "_rescoped",
+      "field": "needs_topic",
+      "why": "NX-348: cand subiectul isi primeste PRIMUL raft (rafinare, kernel.v3.0), nevoile lui de subiect scrise fara raft (`scope=None`) primesc raftul, altfel o schimbare de subiect ulterioara nu le-ar parca si nu le-ar retrage. Scris DOAR de reducer (singurul scriitor al starii v2).",
       "fate": "stays"
     },
     {

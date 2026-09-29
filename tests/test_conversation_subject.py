@@ -279,7 +279,8 @@ def test_the_subject_proposal_is_applied_without_a_shelf():
 def test_the_subject_proposal_keeps_the_current_shelf_when_its_own_is_unresolved():
     state = ConversationStateV2(topic=Topic(category_key="ten", product_type=SER))
     reduced = reduce_all(state, [_subject_proposal(CREMA)], _policy())
-    assert reduced.state.topic == Topic(category_key="ten", product_type=CREMA)
+    # NX-348: tipul scris de proprietarul subiectului e DEDUS din setul arătat, deci e marcat.
+    assert reduced.state.topic == Topic(category_key="ten", product_type=CREMA, type_learned=True)
 
 
 def test_a_model_inferred_topic_cannot_move_a_subject_backed_by_the_shown_set():

@@ -76,9 +76,46 @@ class TurnDelta:
     counters: Mapping[str, int] = field(default_factory=dict)
 
 
+#: NX-348: tipul de produs e a doua jumătate a SUBIECTULUI (`Topic.product_type`, NX-314/NX-331),
+#: nu o nevoie. Trimis ca `set_need`, reducerul îl respingea mereu (`topic_key`), deci pe calea
+#: interpretată un «vreau un ser» explicit nu ajungea niciodată în stare.
+PRODUCT_TYPE = "product_type"
+SUBJECT_DIMENSIONS = frozenset({CATEGORY, PRODUCT_TYPE})
+
+
 def _is_subject(c: CheckedChange) -> bool:
-    return (c.change.op in ("set", "add") and c.dimension == CATEGORY) or (
+    return (c.change.op in ("set", "add") and c.dimension in SUBJECT_DIMENSIONS) or (
         c.change.op == "clear" and c.change.target == "topic"
+    )
+
+
+def _subject_proposal(
+    changes: Sequence[CheckedChange], turn_id: str, counters: dict[str, int]
+) -> StateUpdateProposal | None:
+    """NX-348: schimbările de subiect ale turului (raft și/sau tip) → UN `set_topic` pe PERECHE.
+    Două propuneri separate ar parca de două ori: raftul nou ar goli tipul, apoi tipul ar schimba
+    iar perechea. Mai multe valori pe aceeași jumătate («un ruj și un fond de ten»): perechea nu mai
+    e sigură, deci rămâne doar ULTIMA schimbare de subiect scrisă, singură (o pereche amestecată
+    din valori diferite ar numi un subiect pe care clientul nu l-a cerut), numărat
+    `subject_multiple`. Sursa propunerii e cea mai tare dintre schimbări (`explicit` întâi)."""
+    category = [c for c in changes if c.dimension == CATEGORY]
+    kind = [c for c in changes if c.dimension == PRODUCT_TYPE]
+    if not category and not kind:
+        return None
+    if len(category) > 1 or len(kind) > 1:
+        counters["subject_multiple"] = counters.get("subject_multiple", 0) + 1
+        last = changes[-1]
+        category = [last] if last.dimension == CATEGORY else []
+        kind = [last] if last.dimension == PRODUCT_TYPE else []
+    lead = next(
+        (c for c in changes if c.provenance == "explicit" and c in (*category, *kind)), None
+    )
+    lead = lead or (category or kind)[-1]
+    return StateUpdateProposal(
+        "set_topic",
+        category_key=str(category[-1].canonical_value) if category else None,
+        product_type=str(kind[-1].canonical_value) if kind else None,
+        **_common(lead, _SOURCE_BY_PROVENANCE[lead.provenance], turn_id),
     )
 
 
@@ -243,6 +280,7 @@ def to_delta(
     proposals: list[StateUpdateProposal] = []
     ranking: list[RankingSignal] = []
     rejected: list[CheckedChange] = []
+    subject: list[CheckedChange] = []
 
     for c in ordered:
         if c.rejected is not None:
@@ -265,14 +303,11 @@ def to_delta(
                 continue
             proposals += structural
             continue
-        if c.dimension == CATEGORY:
-            proposals.append(
-                StateUpdateProposal(
-                    "set_topic",
-                    category_key=str(c.canonical_value),
-                    **_common(c, source, turn_id),
-                )
-            )
+        if c.dimension in SUBJECT_DIMENSIONS and c.canonical_value is not None:
+            # NX-348: se adună, apoi UN `set_topic` pe pereche, în poziția subiectului (primul).
+            if not subject:
+                proposals.append(None)  # type: ignore[arg-type]  # locul propunerii de subiect
+            subject.append(c)
             continue
         value = c.canonical_value
         if c.change.relative_to is not None:
@@ -290,9 +325,12 @@ def to_delta(
             continue
         proposals += made
 
+    if subject:
+        made = _subject_proposal(subject, turn_id, counters)
+        proposals = [made if p is None else p for p in proposals]
     return TurnDelta(
         thread=thread,
-        proposals=tuple(proposals),
+        proposals=tuple(p for p in proposals if p is not None),
         ranking=tuple(ranking),
         rejected=tuple(rejected),
         counters=counters,

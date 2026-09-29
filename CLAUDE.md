@@ -63,7 +63,7 @@ gate-ul NX-210**. Direcția aprobată către care migrăm:
 
 **Înghețate până la GO-ul de la NX-210:** enforcement-ul QuerySpec/Match Gate (NX-188, NX-189).
 
-**Kernelul conversațional — contractul `kernel.v1.0` (înghețat 2026-09-25, NORMATIV; azi `kernel.v2.1`: MAJOR la v2.0, NX-336 PR B, sensul lui I5, poarta de replay derogată de Adi; minor la v2.1, NX-336 D3, `TurnPlan.family`).**
+**Kernelul conversațional — contractul `kernel.v1.0` (înghețat 2026-09-25, NORMATIV; azi `kernel.v3.0`: MAJOR la v2.0, NX-336 PR B, sensul lui I5; minor la v2.1, NX-336 D3, `TurnPlan.family`; MAJOR la v3.0, NX-348, sensul unei schimbări de subiect; porțile de replay derogate de Adi).**
 Sursa: [`docs/KERNEL-CONTRACT-v1.md`](docs/KERNEL-CONTRACT-v1.md); designul din care vine, ca
 referință: [`docs/KERNEL-DESIGN.md`](docs/KERNEL-DESIGN.md). Modelul scrie O interpretare a turului
 (`TurnInterpretation`: acte, schimbări de stare adresate prin handle, referințe, ambiguități); codul
@@ -450,6 +450,18 @@ rădăcina; momentul (`am`/`pm`) din nevoile planului; bugetul doar ca sumă spu
 răspunsului și în câmpul citit de widget. Un tur căzut după ce un executor a rulat își scoate
 evenimentele (citirile de DB rămân, declarat). Probă: `pytest tests/test_interpreted_turn_c.py
 tests/test_interpreted_turn_a.py tests/test_interpreted_turn_b.py tests/test_kernel_contract.py -q`.
+
+**NX-348 — `kernel.v3.0` (MAJOR, decis de Adi pe 2026-09-29): tipul de produs ajunge în subiect, iar
+completarea subiectului e rafinare.** Un `set product_type` din interpretare era respins MEREU de
+reducer (`topic_key`), deci «vreau un ser» nu ajungea la planner. Delta trimite acum raftul și tipul
+turului într-un singur `set_topic` pe pereche (`_subject_proposal`; mai multe valori ⇒ ultima,
+`subject_multiple`); reducerul acceptă tipul fără raft (păstrează raftul) și schimbă subiectul doar
+când o jumătate DEJA SETATĂ primește altă valoare: completarea unei jumătăți goale păstrează nevoile,
+dar doar pe o pereche care EXISTĂ în catalog (`pair_compatible`, citirea `kernel_subject_pairs`);
+altfel e subiect nou. Tipul dedus din setul arătat (`Topic.type_learned`) e jumătate goală, iar o
+schimbare de subiect SPRE subiectul parcat e un schimb (ca `resume`), fără să piardă nevoile parcate.
+Poarta de replay derogată (niciun tur interpretat servit). Intră în `main` după rularea v4. Card:
+[`tasks/stage1/NX-348.md`](tasks/stage1/NX-348.md); probă: `pytest tests/test_nx348_subject_type.py -q`.
 
 **NX-238 — retrievalul trece printr-un PORT, iar candidatul e inert (verdict `NOT-READY`).**
 `src/retrieval/` e contractul stabil pe care îl consumă NX-239: `RetrievalPort` + `RetrievalBundle`

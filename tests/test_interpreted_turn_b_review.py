@@ -466,9 +466,9 @@ def test_r8_i5_v2_an_aside_commit_moves_only_the_prune_and_the_memory(pack):
 
 
 def test_r8_the_contract_is_kernel_v2_0_with_the_new_i5():
-    assert KERNEL_CONTRACT_VERSION == "kernel.v2.1"
+    assert KERNEL_CONTRACT_VERSION == "kernel.v3.0"
     text = (gates.ROOT / "docs" / "KERNEL-CONTRACT-v1.md").read_text(encoding="utf-8")
-    assert "**Current version: `kernel.v2.1`" in text
+    assert "**Current version: `kernel.v3.0`" in text
     assert "**`kernel.v2.0` (MAJOR, NX-336 PR B" in text
     assert "identity on the CONVERSATION state" in text
     assert "replay gate is waived" in text.lower()
