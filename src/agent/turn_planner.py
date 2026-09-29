@@ -42,12 +42,18 @@ from src.catalog.query_terms import (
     stopwords,
     tokens,
 )
-from src.catalog.vocabulary import CatalogVocabulary, topic_root_of
+from src.catalog.vocabulary import (
+    CatalogVocabulary,
+    ResolutionStatus,
+    resolve_any,
+    topic_root_of,
+)
 from src.conversation.ambiguity_gate import GateOutcome, target_question_key
 from src.conversation.answer_policy import read_query
 from src.conversation.delta import RankingSignal
 from src.conversation.interpretation import (
     Act,
+    CheckedChange,
     Executor,
     Reference,
     ResolvedRef,
@@ -156,8 +162,11 @@ def _read_act_query(
     query: str | None,
     has_words: bool,
     changes: Sequence[StateChange],
+    checked: Sequence[CheckedChange] | None,
     locale: str,
-    carried: Collection[str],
+    carried: Mapping[str, str],
+    protected: Collection[str],
+    vocab: CatalogVocabulary | None,
 ) -> tuple[str | None, str | None]:
     """SINGURUL loc din planner care citește `Act.query` și citatele schimbărilor (cuvintele
     clientului). Întoarce `(reziduul, cererea întreagă)`, ca VALORI; nicio decizie nu ramifică pe
@@ -166,49 +175,117 @@ def _read_act_query(
     NX-352 (sonda NX-351): cererea întreagă nu e o căutare. Pe treapta `strict` fiecare cuvânt e o
     poartă (lecția NX-298), deci «si ceva mai ieftin ?» sau «pai mi se usuca pielea dupa dus» dădeau
     zero produse sau potriviri pe un cuvânt întâmplător. REZIDUUL = cuvintele cererii, în forma
-    scrisă de client, care nu sunt formula locale-i (cuvinte goale, filleri, comparatori, negații:
-    tabelele din `query_terms`) și nici cuvintele unei NEVOI sau ale prețului din turul ăsta, a
-    cărei dimensiune intră CHIAR în căutare ca filtru sau preferință (`carried`, calculat de
-    constructorul `SearchArgs`; o marcă soft pe o coloană, care ajunge doar în `gaps`, își păstrează
-    cuvântul în text, altfel s-ar pierde de tot). Cuvintele subiectului
-    («telefon», «cremă de față») RĂMÂN: numesc ce este produsul, iar numele raftului nu apare în
-    numele produselor (NX-293). Un cuvânt nemapat (`unmapped`) rămâne: e textul căutat."""
+    scrisă de client, fără:
+    - formula locale-i (cuvinte goale, filleri, negații; comparatorii relativi doar ca FRAZĂ,
+      «mai ieftin»: tabelele din `query_terms`);
+    - cuvântul NEGAT de o schimbare `avoid` («fără parfum»): un cuvânt ocolit n-are voie să fie
+      poartă de text (ar cere exact ce e ocolit);
+    - cuvintele care au NUMIT valoarea unei schimbări ACCEPTATE (`CheckedChange.matched`, plus
+      unitatea), când valoarea ajunge FILTRU (`carried`); o schimbare respinsă nu consumă nimic;
+    - citatul unei descrieri (`implicit`) care ajunge PREFERINȚĂ, fără valorile altor fațete din el
+      (vocabularul) și fără rafturi (un raft nu concurează, ca la validator).
+    Rămân: cuvintele subiectului (citatul lui întreg, și eticheta subiectului curent, `protected`),
+    cuvintele nemapate și cuvintele unei valori spuse care ajunge doar preferință (marca pe o fațetă
+    de atribut) sau nicăieri (marca soft pe o coloană)."""
     if not has_words or query is None:
         return None, None
     formula = set(stopwords(locale)) | formula_fillers(locale) | negation_markers(locale)
-    for phrase, _op in (*comparators(locale), *relative_comparators(locale)):
-        formula.update(tokens(phrase))
-    consumed: set[str] = set()
-    kept: set[str] = set()
-    for change in changes:
-        if not change.quote:
-            continue
-        if change.dimension in _SUBJECT_WORDS:
-            kept.update(tokens(change.quote))
-        elif change.dimension in carried:
-            consumed.update(tokens(change.quote))
-    # Un citat de nevoie care cuprinde și cuvântul subiectului («cremă pentru ten uscat») nu scoate
-    # subiectul din căutare.
-    consumed -= kept
     words = [raw.strip(_PUNCTUATION) for raw in query.split()]
-    # Pozițiile cuvintelor care formează, în șir, citatul unei schimbări de subiect.
     flat = [(i, t) for i, w in enumerate(words) for t in tokens(w)]
+
+    def _spans(phrase: Sequence[str]) -> set[int]:
+        out: set[int] = set()
+        for start in range(len(flat) - len(phrase) + 1):
+            if phrase and [t for _i, t in flat[start : start + len(phrase)]] == list(phrase):
+                out.update(i for i, _t in flat[start : start + len(phrase)])
+        return out
+
+    dropped: set[int] = set()
+    for phrase, _op in relative_comparators(locale):
+        dropped |= _spans(tokens(phrase))
+    # Un comparator absolut («maxim», «sub», «fix») e formulă doar lângă un număr: altfel poate fi
+    # un cuvânt de produs («spray fix pentru machiaj»).
+    for phrase, _op in comparators(locale):
+        size = len(tokens(phrase))
+        for start in range(len(flat) - size):
+            if [t for _i, t in flat[start : start + size]] == tokens(phrase) and any(
+                ch.isdigit() for ch in flat[start + size][1]
+            ):
+                dropped.update(i for i, _t in flat[start : start + size])
+    # (dimensiune, relație, cuvintele citatului, proveniență, cuvintele care au numit valoarea)
+    items: list[tuple[str, str, list[str], str, tuple[str, ...]]] = []
+    if checked is not None:
+        for c in checked:
+            if c.rejected is None and c.strength != "ranking" and c.change.quote:
+                unit = tokens(c.change.unit) if c.change.unit else []
+                named = (*c.matched, *unit) if c.matched else ()
+                items.append(
+                    (
+                        c.dimension,
+                        c.change.relation or "eq",
+                        tokens(c.change.quote),
+                        c.provenance,
+                        named,
+                    )
+                )
+    else:
+        for change in changes:
+            if change.quote:
+                quote = tokens(change.quote)
+                items.append(
+                    (change.dimension, change.relation or "eq", quote, "explicit", tuple(quote))
+                )
+    kept: set[str] = set(protected)
     spans: set[int] = set()
-    for change in changes:
-        quote = tokens(change.quote) if change.dimension in _SUBJECT_WORDS and change.quote else []
-        for start in range(len(flat) - len(quote) + 1):
-            if quote and [t for _i, t in flat[start : start + len(quote)]] == quote:
-                spans.update(i for i, _t in flat[start : start + len(quote)])
+    consumed: set[str] = set()
+    for dimension, relation, quote, provenance, named in items:
+        if dimension in _SUBJECT_WORDS:
+            kept.update(quote)
+            spans |= _spans(quote)
+        elif relation == "avoid":
+            consumed.update(quote)
+        elif carried.get(dimension) == "filter":
+            consumed.update(named)
+        elif carried.get(dimension) == "prefer" and provenance != "explicit":
+            consumed.update(set(quote) - _other_values(quote, dimension, vocab))
     residue: list[str] = []
+    seen: set[str] = set()
     for index, word in enumerate(words):
         own = tokens(word)
+        if not own or index in dropped:
+            continue
         # Un cuvânt gol DIN numele subiectului («cremă de față») rămâne: numele se caută întreg.
         keep = index in spans or any(
             w not in formula and (w in kept or w not in consumed) for w in own
         )
-        if own and keep and word not in residue:
+        key = " ".join(own)
+        if keep and key not in seen:
+            seen.add(key)
             residue.append(word)
     return (" ".join(residue) or None), (query.strip() or None)
+
+
+def _other_values(
+    quote: Sequence[str], dimension: str, vocab: CatalogVocabulary | None
+) -> set[str]:
+    """Cuvintele unei descrieri care numesc o valoare a ALTEI fațete din vocabular («vitamina c»
+    într-un citat larg despre ten): rămân în căutare. Rafturile nu contează (un raft nu concurează
+    cu o valoare, ca la validator)."""
+    if vocab is None:
+        return set()
+    out: set[str] = set()
+    for start in range(len(quote)):
+        for size in (3, 2, 1):
+            chunk = list(quote[start : start + size])
+            if len(chunk) < size:
+                continue
+            hit = resolve_any(vocab, " ".join(chunk))
+            if hit.status is ResolutionStatus.KNOWN and hit.dimension not in (
+                dimension,
+                "category",
+            ):
+                out.update(chunk)
+    return out
 
 
 #: NX-352: dimensiunile ale căror cuvinte rămân în căutare chiar dacă un citat de nevoie le
@@ -236,8 +313,10 @@ class _Planner:
         pack: object | None,
         vocab: CatalogVocabulary | None,
         locale: str,
+        checked: Sequence[CheckedChange] | None = None,
     ) -> None:
         self.interp = interp
+        self.checked = tuple(checked) if checked is not None else None
         self.state = state
         self.ranking = tuple(ranking)
         self.resolved = {r.ref_id: r for r in resolved}
@@ -470,7 +549,10 @@ class _Planner:
             return self._plan("bundle")
         ids = [p for ref in self._refs_of(act) if ref.outcome == "exact" for p in ref.product_ids]
         phrase = self._subject_label() or family
-        args = self._search_args(phrase, act, product_name=None)
+        # Rutina NU relaxează filtrele pe pași (`routine_tools`), deci o nevoie spusă, dar
+        # ne-`enforce_ready`, rămâne ordonare aici (recenzia NX-352: «rutina de seară» ar fi exclus
+        # produsele `am_pm` din fiecare pas).
+        args = self._search_args(phrase, act, product_name=None, relaxable=False)
         if args.price_max is not None and not self._sum_asked_this_turn():
             # bugetul conversației (al unui produs, «o cremă sub 50») nu plafonează suma rutinei
             args = args.model_copy(update={"price_max": None})
@@ -557,12 +639,26 @@ class _Planner:
         # Argumentele întâi: ele spun ce dimensiuni intră CHIAR în căutare (`carried`), deci ce
         # cuvinte ale cererii sunt deja purtate de un filtru sau de o preferință.
         before = list(self.gaps)
-        carried: set[str] = set()
+        carried: dict[str, str] = {}
         args = self._search_args(_PENDING, act, product_name=product_name, carried=carried)
-        residue, spoken = _read_act_query(
-            act.query, words, self.interp.changes, self.locale, carried
-        )
         subject = self._subject_label()
+        topic = self.state.topic
+        protected = {
+            t
+            for name_ in (subject, topic.product_type, *topic.type_umbrella)
+            if name_
+            for t in tokens(name_)
+        }
+        residue, spoken = _read_act_query(
+            act.query,
+            words,
+            self.interp.changes,
+            self.checked,
+            self.locale,
+            carried,
+            protected,
+            self.vocab,
+        )
         # NX-352: căutarea = reziduul cererii (fără formula conversației, nevoi și preț, care sunt
         # deja filtre sau preferințe); fără reziduu, subiectul. Cererea întreagă doar fără niciunul.
         if name is not None:
@@ -591,12 +687,15 @@ class _Planner:
         act: Act,
         *,
         product_name: str | None,
-        carried: set[str] | None = None,
+        carried: dict[str, str] | None = None,
+        relaxable: bool = True,
     ) -> SearchArgs:
         """SINGURUL constructor de `SearchArgs` din kernel (I2). Totul vine din starea redusă și din
-        semnalele turului; ce nu are câmp merge în `gaps`. `carried` (NX-352) primește dimensiunile
-        care intră chiar în argumente, ca filtru sau preferință."""
-        carried = set() if carried is None else carried
+        semnalele turului; ce nu are câmp merge în `gaps`. `carried` (NX-352) primește, pe fiecare
+        dimensiune care intră chiar în argumente, `filter` sau `prefer`. `relaxable=False` (rutina):
+        o nevoie spusă, dar ne-`enforce_ready`, rămâne preferință, fiindcă rutina NU relaxează
+        filtrele (recenzia NX-352)."""
+        carried = {} if carried is None else carried
         price_max: float | None = None
         brand: str | None = None
         concerns: list[str] = []
@@ -605,7 +704,7 @@ class _Planner:
         rank: list[str] = []
 
         def _prefer(dimension: str, value: str) -> None:
-            carried.add(dimension)
+            carried.setdefault(dimension, "prefer")
             source = self._source_key(dimension)
             bucket = prefer.setdefault(source, [])
             canonical = self._catalog_value(source, value)
@@ -619,7 +718,7 @@ class _Planner:
             if key == _BUDGET_MAX:
                 if self._hard(need, PRICE_DIMENSION) and _usable_amount(value):
                     price_max = float(value)  # type: ignore[arg-type]
-                    carried.add(PRICE_DIMENSION)
+                    carried[PRICE_DIMENSION] = "filter"
                 else:
                     self._gap("soft_budget")
             elif key == _BUDGET_MIN:
@@ -636,7 +735,7 @@ class _Planner:
             elif dimension == BRAND_DIMENSION:
                 if self._hard(need, dimension):
                     brand = value
-                    carried.add(dimension)
+                    carried[dimension] = "filter"
                 elif self._on_attributes(dimension):
                     _prefer(dimension, value)
                 else:
@@ -647,7 +746,7 @@ class _Planner:
                 # relaxare a căutării o scoate dacă nu iese nimic, ca pe v1. Doar descrisă
                 # (`implicit`) rămâne ordonare. Sonda NX-351: ca preferință, «ai ceva anti aging?»
                 # aducea o treime de produse anti-aging.
-                spoken = need.source == "user_explicit"
+                spoken = relaxable and need.source == "user_explicit"
                 if not self._hard(need, dimension) and not spoken:
                     if self._on_attributes(dimension):
                         _prefer(dimension, value)
@@ -655,10 +754,10 @@ class _Planner:
                         self._gap("unsupported_need")
                 elif dimension in self.searchable or self._source_key(dimension) in self.searchable:
                     features.append(value)
-                    carried.add(dimension)
+                    carried[dimension] = "filter"
                 else:
                     concerns.append(value)
-                    carried.add(dimension)
+                    carried[dimension] = "filter"
             else:
                 self._gap("unsupported_need")
 
@@ -754,14 +853,17 @@ def plan_turn(
     pack: object | None,
     vocab: CatalogVocabulary | None,
     locale: str,
+    checked: Sequence[CheckedChange] | None = None,
 ) -> PlannedTurn:
     """PUR. Planul unui tur interpretat.
 
     `state` = starea DUPĂ reducer, cu ecranul de dinaintea turului (ce vede poarta); `ranking` =
     `TurnDelta.ranking`; `changed` = `TurnDelta.proposals` nevide, primit ca `bool` (nu recalculat
     din text), OBLIGATORIU (un apelant care l-ar uita ar pagina orice rafinare): pe `show_more`
-    separă paginarea de o rafinare. Nu ridică niciodată, iar o intrare fără nimic de făcut dă
-    `reply_only` (P6)."""
+    separă paginarea de o rafinare. `checked` (NX-352) = schimbările VALIDATE ale turului: doar
+    cele acceptate pot scoate cuvinte din textul căutării (recenzia NX-352: o schimbare respinsă nu
+    are voie să consume cererea). Fără ele, schimbările brute, tratate ca spuse (teste, sonde
+    vechi). Nu ridică niciodată, iar o intrare fără nimic de făcut dă `reply_only` (P6)."""
     return _Planner(
         interp,
         state,
@@ -772,6 +874,7 @@ def plan_turn(
         pack=pack,
         vocab=vocab,
         locale=locale,
+        checked=checked,
     ).run()
 
 

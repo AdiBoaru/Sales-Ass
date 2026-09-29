@@ -390,9 +390,9 @@ def test_a_bundle_with_a_declared_family_carries_it_and_the_state_args():
     plan = _only(planned)
     assert (plan.executor, plan.family, plan.product_ids) == ("bundle", "fata", [pid])
     assert plan.search_args is not None and plan.search_args.price_max == 200.0
-    # NX-352 (`kernel.v5.0`): `skin_type` nu e `enforce_ready` pe SOLE, dar spus de client e filtru
-    # RELAXABIL, ca la căutare
-    assert plan.search_args.concerns == ["dry"] and plan.search_args.prefer == {}
+    # `skin_type` nu e `enforce_ready` pe SOLE: pe căutare, spus de client, ar fi filtru relaxabil
+    # (NX-352), dar rutina NU relaxează filtrele pe pași, deci aici rămâne ordonare (recenzia)
+    assert plan.search_args.prefer == {"skin_type": ["dry"]} and plan.search_args.concerns is None
     assert "routine_budget" not in planned.gaps
 
 

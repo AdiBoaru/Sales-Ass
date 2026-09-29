@@ -93,6 +93,19 @@ LAYERS: tuple[tuple[str, str], ...] = (
 LAYER_NAMES: tuple[str, ...] = tuple(name for name, _ in LAYERS)
 
 
+#: NX-352: câmpuri DERIVATE de cod dintr-un strat, pe care o etichetă nu le scrie (`matched` =
+#: cuvintele citatului care au numit valoarea). Nu intră în comparația straturilor.
+_DERIVED: dict[str, tuple[str, ...]] = {"checked": ("matched",)}
+
+
+def _without(value: Any, keys: tuple[str, ...]) -> Any:
+    if isinstance(value, list):
+        return [_without(v, keys) for v in value]
+    if isinstance(value, dict):
+        return {k: v for k, v in value.items() if k not in keys}
+    return value
+
+
 def _plain(value: Any) -> Any:
     """Forma comparabilă a unei valori de strat: modelele devin dict-uri JSON, recursiv."""
     if isinstance(value, BaseModel):
@@ -131,6 +144,8 @@ def first_divergence(expected: dict[str, Any], actual: KernelTrace) -> Divergenc
         if name not in expected:
             continue
         want, got = _plain(expected[name]), _plain(getattr(actual, attr))
+        if name in _DERIVED:
+            want, got = _without(want, _DERIVED[name]), _without(got, _DERIVED[name])
         if want != got:
             return Divergence(name, want, got, tuple(passed))
         passed.append(name)
@@ -256,6 +271,8 @@ def _redacted(trace: KernelTrace, redact: Callable[[str], str]) -> KernelTrace:
                 "change": change(c.change),
                 "canonical_value": text(c.canonical_value),
                 "dimension": text(c.dimension),
+                # NX-352: cuvintele clientului care au numit valoarea (text de client, P12).
+                "matched": tuple(text(w) for w in c.matched),
             }
         )
         for c in trace.checked_changes

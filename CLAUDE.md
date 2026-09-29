@@ -372,9 +372,14 @@ numele subiectului rămâne întreg. Fără reziduu, eticheta subiectului, cu ti
 (NX-293); cererea întreagă e ultima rezervă. (2) O nevoie de fațetă SPUSĂ (`user_explicit`) e filtru
 RELAXABIL în `concerns`/`features` chiar fără `enforce_ready`; una doar descrisă rămâne preferință;
 prețul și marca filtrează tot doar din nevoi dure (I7 reformulat). (3) «ceva mai ieftin» pe o țintă
-ambiguă = MEDIANA prețurilor recitite ale candidaților (`relative_price_median`). Re-sonda NX-351 iese
-GO (M1 0,499 vs 0,487, M2 0,578 vs 0,594, 2 ture goale, 0 erori; fraza clientului 64 → 26 de planuri),
-dar pe turele deja analizate: aprinderea rămâne a canary-ului. Card:
+ambiguă spre ecran (deictică, de atribut, nu ținta unui act) = MEDIANA prețurilor recitite ale
+candidaților disponibili (`relative_price_median`). Recenzia adversarială (7 constatări, reparate):
+negația scoate cuvântul negat, doar schimbările ACCEPTATE consumă cuvinte (`plan_turn(checked=
+accepted_changes(...))`), o valoare filtrată consumă doar cuvintele care au numit-o
+(`CheckedChange.matched`, redactat în trace), rutina (fără relaxare) ține nevoia spusă ca preferință,
+iar pe calea planificată filtrele de fațetă contează drept rostite pentru garda NX-313. Re-sonda NX-351
+iese GO (M1 0,452 vs 0,487, M2 0,597 vs 0,594, 2 ture goale, 0 erori; fraza clientului 64 → 28 de
+planuri), dar pe turele deja analizate: aprinderea rămâne a canary-ului. Card:
 [`tasks/stage1/NX-352.md`](tasks/stage1/NX-352.md); probă: `pytest tests/test_nx352_planner_query.py
 tests/test_kernel_planner.py tests/test_kernel_delta.py -q`.
 **Pasul 6 PR A (NX-336) — schela turului interpretat, DARK: lanțul rulează pe un tur real, v1

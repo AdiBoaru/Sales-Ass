@@ -189,6 +189,10 @@ class CheckedChange(_CodeWritten):
     # codurile de tip din vocabular care poartă toate cuvintele-tip spuse («cremă» → cremă de față,
     # de corp, de mâini). Scrisă doar de validator (singurul cititor al citatului); goală în rest.
     umbrella: tuple[str, ...] = ()
+    # NX-352 (kernel.v5.0): pe o schimbare `explicit`, cuvintele citatului care au NUMIT valoarea
+    # (fraza din vocabular, sau numărul). Plannerul scoate din textul căutării doar aceste cuvinte
+    # când valoarea ajunge filtru: un citat larg nu șterge restul cererii. Goală în rest.
+    matched: tuple[str, ...] = ()
 
 
 class ResolvedRef(_CodeWritten):

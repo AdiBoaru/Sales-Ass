@@ -435,7 +435,7 @@ class _Checker:
             )
             return self._finish(change, dimension, None, level)
 
-        hit_at = -1
+        hit_at, hit_size = -1, 0
         if change.number is not None:
             canonical_number = self._number(change, dimension)
             if canonical_number is None:
@@ -445,7 +445,7 @@ class _Checker:
             level: Provenance = located
             if located == "explicit" and number_at < 0:
                 level = "implicit"  # citatul e al clientului, numărul nu
-            hit_at = number_at
+            hit_at, hit_size = number_at, len(_number_tokens(change.number))
             number_in_quote = number_at >= 0
         else:
             if not change.value:
@@ -454,7 +454,9 @@ class _Checker:
             level = located
             number_in_quote = False
             if located == "explicit":
-                level, hit_at, mismatch = self._resolve_quote(evidence, dimension, canonical)
+                level, hit_at, mismatch, hit_size = self._resolve_quote(
+                    evidence, dimension, canonical
+                )
                 if mismatch:
                     return reject("semantic_mismatch", canonical)
 
@@ -464,6 +466,11 @@ class _Checker:
                 return reject("polarity_conflict", canonical)
         level = self._polarity_level(level, relation, evidence, dimension, number_in_quote)
         checked = self._finish(change, dimension, canonical, level)
+        if level == "explicit" and hit_at >= 0 and hit_size:
+            # NX-352: cuvintele citatului care au NUMIT valoarea (nu tot citatul): doar ele pot
+            # pleca din textul căutării, fiindcă doar pe ele le poartă filtrul.
+            matched = tuple(evidence.words[hit_at : hit_at + hit_size])
+            checked = checked.model_copy(update={"matched": matched})
         if dimension == SUBJECT_TYPE and level == "implicit" and evidence.located:
             umbrella = self._umbrella(evidence, canonical)
             if umbrella:
@@ -472,15 +479,15 @@ class _Checker:
 
     def _resolve_quote(
         self, evidence: _Evidence, dimension: str, canonical: str | float | None
-    ) -> tuple[Provenance, int, bool]:
-        """Pasul 2. (nivel, poziția valorii în citat, e contrazisă?)."""
+    ) -> tuple[Provenance, int, bool, int]:
+        """Pasul 2. (nivel, poziția valorii în citat, e contrazisă?, câte cuvinte o numesc)."""
         if dimension == UNMAPPED or canonical is None or self.vocab is None:
-            return "implicit", -1, False
+            return "implicit", -1, False, 0
         other = False
-        for start, _size, phrase in self._ngrams(evidence.words):
+        for start, size, phrase in self._ngrams(evidence.words):
             on = self._resolve_on(phrase, dimension)
             if on is not None and on.key == canonical:
-                return "explicit", start, False
+                return "explicit", start, False, size
         for _start, _size, phrase in self._ngrams(evidence.words):
             anywhere = self._resolve_anywhere(phrase)
             if anywhere is None:
@@ -491,7 +498,7 @@ class _Checker:
                 continue
             if (anywhere.dimension, anywhere.key) != (dimension, canonical):
                 other = True
-        return "implicit", -1, other
+        return "implicit", -1, other, 0
 
     def _umbrella(self, evidence: _Evidence, canonical: str | float | None) -> tuple[str, ...]:
         """NX-350: UMBRELA unui tip spus vag: codurile de tip care poartă cuvântul-tip spus de

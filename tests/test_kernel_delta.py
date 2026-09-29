@@ -13,7 +13,7 @@ from hypothesis import strategies as st
 
 from src.catalog.vocabulary import CatalogVocabulary, VocabEntry
 from src.conversation.delta import RankingSignal, to_delta
-from src.conversation.interpretation import ResolvedRef
+from src.conversation.interpretation import Act, ResolvedRef
 from src.conversation.needs import NeedVocabulary
 from src.conversation.provenance import (
     UserWords,
@@ -249,6 +249,48 @@ def test_a_relative_bound_on_an_ambiguous_target_is_the_median_of_the_candidates
     p = only(d)
     assert (p.key, p.value, p.strength) == ("budget_max", 60.0, "hard")
     assert d.counters.get("relative_price_median") == 1
+
+
+def _median_case(*, kind="deictic", targeted=False, available=(True, True, True)):
+    change = ch(dimension="price", relation="lte", relative_to="r1", quote="mai ieftin")
+    ids = ("p1", "p2", "p3")
+    prices = (40.0, 110.0, 60.0)
+    facts = ReferenceFacts(
+        products={
+            pid: ProductFacts(pid, pid, price, ok)
+            for pid, price, ok in zip(ids, prices, available, strict=True)
+        }
+    )
+    resolved = [
+        ResolvedRef(
+            ref_id="r1",
+            kind=kind,
+            outcome="ambiguous",
+            product_ids=list(ids),
+            source="shown_now",
+            reason="no_anchor",
+        )
+    ]
+    i = interp(change, refs=[ref("r1")])
+    if targeted:
+        i = i.model_copy(update={"acts": [Act(kind="detail", targets=["r1"], query=None)]})
+    checked = check_changes(
+        i, words=UserWords("si ceva mai ieftin"), vocab=SOLE_VOCAB, pack=SOLE, locale="ro"
+    )
+    return to_delta(i, checked, resolved, facts, needs=NeedVocabulary.from_pack(SOLE), turn_id="t1")
+
+
+def test_the_median_is_fenced_to_a_screen_reference_that_the_gate_does_not_ask_about():
+    """Recenzia NX-352 (constatarea 5): mediana doar pe o referință spre ECRAN (deictică, de
+    atribut), nu pe un nume ambiguu; nu când referința e ținta unui act (poarta întreabă «la care
+    te referi?»); și doar pe candidații disponibili."""
+    assert only(_median_case()).value == 60.0
+    assert only(_median_case(kind="attribute")).value == 60.0
+    for fenced in (_median_case(kind="name"), _median_case(targeted=True)):
+        assert fenced.proposals == ()
+        assert [c.rejected for c in fenced.rejected] == ["unknown_reference"]
+    # p3 (60) epuizat: mediana dintre 40 și 110
+    assert only(_median_case(available=(True, True, False))).value == 75.0
 
 
 # --- thread și contoare --------------------------------------------------------------------------

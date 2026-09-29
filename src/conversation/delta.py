@@ -24,7 +24,7 @@ clasifica static fiecare scriitor. Modul PUR: aceleași intrări ⇒ același `T
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from statistics import median
 from typing import Any, Literal
@@ -134,27 +134,46 @@ def _subject_proposal(
 
 
 def _relative_price(
-    c: CheckedChange, resolved: Sequence[ResolvedRef], facts: ReferenceFacts
+    c: CheckedChange,
+    resolved: Sequence[ResolvedRef],
+    facts: ReferenceFacts,
+    targets: Collection[str] = frozenset(),
 ) -> float | None:
     """Prețul RECITIT al produsului la care se raportează schimbarea, sau None.
 
     NX-352 (`kernel.v5.0`, decis de Adi pe 2026-09-29): o țintă AMBIGUĂ («ceva mai ieftin» cu mai
     multe produse pe ecran) se raportează la MEDIANA prețurilor recitite ale candidaților, deci
-    «mai ieftin decât majoritatea celor arătate». Fără cel puțin doi candidați cu preț cunoscut,
-    nimic (ca înainte)."""
+    «mai ieftin decât majoritatea celor arătate». Recenzia NX-352 o îngrădește:
+    - doar pe o referință care arată spre ECRAN (deictică, de atribut), nu pe un nume sau un ordinal
+      ambigue (acolo clientul a numit ceva anume, doar nu știm care);
+    - nu când referința e și ȚINTA unui act al turului: poarta întreabă atunci «la care te referi?»,
+      iar o limită dură scrisă din ce sistemul însuși n-a lămurit ar supraviețui răspunsului;
+    - doar pe candidații DISPONIBILI (un produs epuizat nu e o alternativă de preț).
+    Fără cel puțin doi candidați rămași cu preț cunoscut, nimic (ca înainte)."""
     ref = next((r for r in resolved if r.ref_id == c.change.relative_to), None)
     if ref is None:
         return None
-    prices = [
-        float(price)
-        for pid in ref.product_ids
-        if (price := getattr(facts.products.get(pid), "price", None)) is not None
-    ]
     if ref.outcome == "exact" and len(ref.product_ids) == 1:
-        return prices[0] if prices else None
-    if ref.outcome == "ambiguous" and len(prices) >= 2:
-        return float(median(prices))
-    return None
+        price = getattr(facts.products.get(ref.product_ids[0]), "price", None)
+        return float(price) if price is not None else None
+    if (
+        ref.outcome != "ambiguous"
+        or ref.kind not in _MEDIAN_KINDS
+        or c.change.relative_to in targets
+    ):
+        return None
+    prices = [
+        float(fact.price)
+        for pid in ref.product_ids
+        if (fact := facts.products.get(pid)) is not None
+        and fact.price is not None
+        and fact.available is not False
+    ]
+    return float(median(prices)) if len(prices) >= 2 else None
+
+
+#: NX-352: referințele care arată spre ECRAN; pe ele o țintă ambiguă de preț relativ are mediană.
+_MEDIAN_KINDS = frozenset({"deictic", "attribute"})
 
 
 def _ambiguous(c: CheckedChange, resolved: Sequence[ResolvedRef]) -> bool:
@@ -289,6 +308,7 @@ def to_delta(
     """`CheckedChange`-uri → `TurnDelta`. PUR. Nu atinge starea: propunerile le aplică reducerul."""
     needs = needs or NeedVocabulary()
     facts = facts or ReferenceFacts()
+    targets = {t for act in interp.acts for t in act.targets}
     by_handle = {h.handle: h for h in handles}
     counters: dict[str, int] = {}
 
@@ -360,7 +380,7 @@ def to_delta(
             continue
         value = c.canonical_value
         if c.change.relative_to is not None:
-            value = _relative_price(c, resolved, facts)
+            value = _relative_price(c, resolved, facts, targets)
             if value is None:
                 rejected.append(
                     c.model_copy(update={"rejected": "unknown_reference", "strength": "ranking"})
@@ -403,4 +423,13 @@ def to_delta(
     )
 
 
-__all__ = ["UNMAPPED_KEY", "RankingSignal", "TurnDelta", "to_delta"]
+def accepted_changes(
+    checked: Sequence[CheckedChange], delta: TurnDelta
+) -> tuple[CheckedChange, ...]:
+    """NX-352: schimbările validate pe care și delta le-a primit (nici validatorul, nici delta nu
+    le-a respins). Doar ele pot scoate cuvinte din textul căutării (`plan_turn(checked=...)`)."""
+    refused = {id(r.change) for r in delta.rejected}
+    return tuple(c for c in checked if c.rejected is None and id(c.change) not in refused)
+
+
+__all__ = ["UNMAPPED_KEY", "RankingSignal", "TurnDelta", "accepted_changes", "to_delta"]

@@ -30,17 +30,25 @@ and fewer carrying the stated needs than v1:
   `concerns`/`features` even when the facet is not `enforce_ready`; the search's relaxation ladder drops
   it when nothing comes back, as on v1. A need that is only described (`implicit`) stays a ranking
   preference. Price and brand still filter only from a hard need (the brand filter is never relaxed).
-  I7 is restated accordingly.
+  I7 is restated accordingly. A routine (`bundle`) does not relax its step filters, so there a stated
+  but not `enforce_ready` need stays a preference. On the planned search these facet filters count as
+  uttered for the guessed-filter guard (NX-313): the kernel already judged their provenance.
 - **The search text is the residue of the request.** `SearchArgs.query` is the act's words minus the
-  locale's formula (stop words, fillers, comparators, negations: the `query_terms` tables) and minus the
-  words of a need or price change that already reaches the search as a filter or a preference; the words
-  that name the subject stay whole. Without a residue the query is the subject's name, the product type
+  locale's formula (stop words, fillers, negations, relative comparators as phrases, absolute ones only
+  next to a number: the `query_terms` tables), minus the object of an `avoid` change, minus the words
+  that NAMED the value of an accepted change that reaches the search as a FILTER
+  (`CheckedChange.matched`, written by the validator, redacted in the trace), and minus a described
+  (`implicit`) need that reaches it as a preference, except the values of other facets inside that
+  description. Only changes accepted by the validator and the delta count (`plan_turn(checked=…)`).
+  The words that name the subject stay whole, as do the current subject's name and umbrella. Without a residue the query is the subject's name, the product type
   before the shelf (a shelf name does not occur in product names, NX-293); the whole request is the last
   resort. On the `strict` rung every word is a gate, so the whole sentence („si ceva mai ieftin ?")
   returned nothing (64 of 81 probed plans searched the customer's sentence).
 - **A relative price on an ambiguous target is the median.** „Ceva mai ieftin” with several products on
-  screen is cheaper than most of them: the bound is the median of the candidates' re-read prices
-  (counted `relative_price_median`); fewer than two known prices ⇒ rejected, as before.
+  screen is cheaper than most of them: the bound is the median of the available candidates' re-read
+  prices (counted `relative_price_median`), only for a reference pointing at the screen (deictic,
+  attribute) that is not also the target of an act (there the gate asks which one); fewer than two
+  known prices ⇒ rejected, as before.
 
 The replay gate is waived, as for v2.0 to v4.0: no interpreted turn has been served in production. The
 model-written schema is unchanged.

@@ -81,7 +81,7 @@ from src.conversation.ambiguity_gate import (  # noqa: E402
     lookup_attributes,
 )
 from src.conversation.clarification_policy import ClarificationPolicy  # noqa: E402
-from src.conversation.delta import TurnDelta, to_delta  # noqa: E402
+from src.conversation.delta import TurnDelta, accepted_changes, to_delta  # noqa: E402
 from src.conversation.interpretation import (  # noqa: E402
     ResolvedRef,
     TurnInterpretation,
@@ -505,6 +505,7 @@ async def kernel_turn(
         pack=pack,
         vocab=vocab,
         locale=locale,
+        checked=accepted_changes(validated.checked, delta),
     )
     after = reduce_turn(state, delta, executor, resolved, primary, corrects, policy).state
     return KernelTurn(validated, tuple(resolved), delta, gate, planned, after)
