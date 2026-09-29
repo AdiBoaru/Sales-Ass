@@ -38,7 +38,7 @@ from typing import TYPE_CHECKING, Any
 from src.agent.deterministic import page_source
 from src.agent.turn_planner import PlannedTurn, plan_turn
 from src.catalog.reference_facts import facts_from_row, fetch_reference_facts
-from src.catalog.subject_pairs import pair_exists, subject_type_pairs
+from src.catalog.subject_pairs import mark_pairs, needs_pairs, subject_type_pairs
 from src.catalog.vocabulary_cache import get_vocabulary
 from src.config import get_settings
 from src.conversation.ambiguity_gate import (
@@ -492,39 +492,19 @@ async def _with_pair_compatibility(
     state: ConversationStateV2,
     vocab: Any,
 ) -> TurnDelta:
-    """NX-348: pe propunerea de subiect a interpretării, dacă perechea (raft, tip) care ar rezulta
-    există în catalog. Citirea (UN checkout, `business_id = $1`) se face doar când perechea are
-    ambele jumătăți; picată ⇒ `None`, iar reducerul tratează completarea ca schimbare de subiect
-    (nevoile se parchează, nu se pierd)."""
-    wanted = [
-        p
-        for p in delta.proposals
-        if p.op == "set_topic" and p.origin == "interpretation" and p.pair_compatible is None
-    ]
-    if not wanted:
+    """NX-348: propunerea de subiect primește perechea (raft, tip) VERIFICATĂ în catalog. Citirea
+    (UN checkout, `business_id = $1`) se face doar când perechea are ambele jumătăți; picată ⇒ nicio
+    pereche verificată (completarea devine schimbare de subiect: nevoile se parchează, nu se pierd),
+    numărat `subject_pairs_unavailable` în contoarele deltei (trace + `kernel_delta`)."""
+    if not needs_pairs(delta, state):
         return delta
-    learned = state.topic.type_learned
-    rows: list[Any] | None = None
-    out = []
-    for p in delta.proposals:
-        if p not in wanted:
-            out.append(p)
-            continue
-        shelf = p.category_key or state.topic.category_key
-        kind = p.product_type or (None if learned else state.topic.product_type)
-        if shelf is None or kind is None:
-            out.append(p)
-            continue
-        if rows is None:
-            try:
-                async with deps.db(SUBJECT_PAIRS_OP) as conn:
-                    rows = await subject_type_pairs(conn, business_id)
-            except Exception:  # noqa: BLE001 — fără date: completarea nu e rafinare
-                rows = []
-                out.append(p)
-                continue
-        out.append(replace(p, pair_compatible=pair_exists(shelf, kind, rows, vocab)))
-    return replace(delta, proposals=tuple(out))
+    try:
+        async with deps.db(SUBJECT_PAIRS_OP) as conn:
+            rows = await subject_type_pairs(conn, business_id)
+    except Exception:  # noqa: BLE001 — orice eroare a citirii: fără dovadă, numărat, nu tăcut
+        counters = {**delta.counters, "subject_pairs_unavailable": 1}
+        return replace(delta, counters=counters)
+    return mark_pairs(delta, state, rows, vocab)
 
 
 async def _chain(

@@ -13,7 +13,7 @@ reguli ca interogările din `src/db/queries/catalog.py`:
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, replace
 from functools import lru_cache
 from typing import Any
@@ -444,6 +444,7 @@ def kernel_step(
     policy: ClarificationPolicy = GATE_POLICY,
     catalog: Callable[[CatalogLookup], ReferenceFacts] | None = None,
     answer_pending: bool = False,
+    pairs: Sequence[tuple[str, str]] | None = None,
 ) -> KernelStep:
     """Un tur complet pe calea interpretată, fără executori reali: validatorul de proveniență,
     resolverul (pe sursele stării), `to_delta`, reducerul, poarta, politica de răspuns și memoria
@@ -482,6 +483,11 @@ def kernel_step(
     delta = to_delta(
         interpretation, checked, resolved, known, handles=handles, needs=needs, turn_id=turn_id
     )
+    if pairs is not None:
+        # NX-348: aceeași verificare a perechii (raft, tip) ca orchestratorul, pe catalogul dat.
+        from src.catalog.subject_pairs import mark_pairs  # noqa: PLC0415
+
+        delta = mark_pairs(delta, state, pairs, voc)
     changed = bool(delta.proposals)
     # NX-336 §1: cu `answer_pending`, o întrebare VIE se închide pe un tur care nu e paranteză, ca
     # în orchestrator (paritatea pe care o cere harnessul de stagiu). Implicit oprit: suitele NX-332

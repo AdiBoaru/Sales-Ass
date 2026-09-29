@@ -168,10 +168,10 @@ class StateUpdateProposal:
     # de azi: tipul propus de `_learn_subject` (NX-314) se actualizează fără parcare, iar resetul
     # pornește doar pe raft. Distincția e un câmp, nu o euristică, și dispare la pasul 5.
     origin: Literal["legacy", "interpretation"] = "legacy"
-    # NX-348: perechea (raft, tip) care ar rezulta din propunere EXISTĂ în catalog (`True`), nu
-    # există (`False`) sau nu se știe (`None`). Scrisă de orchestrator din datele turului, înaintea
-    # reducerului, ca reducerul să rămână pur și commit-ul să vadă aceeași decizie ca poarta.
-    pair_compatible: bool | None = None
+    # NX-348: perechea (raft, tip) VERIFICATĂ în catalog (`src/catalog/subject_pairs.py`), scrisă
+    # înaintea reducerului, ca reducerul să rămână pur. O completare e rafinare doar dacă perechea
+    # pe care o aplică reducerul e EXACT aceasta (un bool ar fi putut descrie altă stare).
+    pair_verified: tuple[str, str] | None = None
     # set_pending_question / resolve_question
     question_id: str | None = None
     reason: str | None = None
@@ -748,6 +748,23 @@ def _handle_set_topic(
 ) -> _Outcome:
     category = _proposed_category(proposal)
     interpreted = proposal.origin == "interpretation"
+    if (
+        interpreted
+        and category is not None
+        and state.parked is not None
+        and category != state.topic.category_key
+        and category == state.parked.topic.category_key
+    ):
+        # NX-348 (recenzia, N-E): o schimbare de subiect SPRE subiectul parcat e un SCHIMB
+        # (semantica `resume`), nu parcare + evacuare: altfel slotul parcat, cu nevoile lui, s-ar
+        # pierde exact când clientul se întoarce la el («înapoi la telefoane», inclusiv după un
+        # `resume` în același tur). După schimb, propunerea se aplică pe subiectul reluat.
+        swapped, record = _resume(state, policy)
+        rest = _handle_set_topic(swapped, proposal, policy)
+        if isinstance(rest, RejectedUpdate):
+            return swapped, record
+        after, more = rest
+        return after, (record, *(more if isinstance(more, tuple) else (more,)))
     if proposal.subject or (interpreted and category is None and proposal.product_type):
         # Raftul nerezolvat nu e o schimbare de raft: subiectul poate purta doar tipul. NX-348: la
         # fel pe interpretare, unde clientul a numit doar tipul («vreau un ser»).
@@ -764,9 +781,9 @@ def _handle_set_topic(
         # NX-331: subiectul e PERECHEA (raft, tip). NX-348 (kernel.v3.0, decis de Adi pe
         # 2026-09-29): subiectul se SCHIMBĂ doar când o jumătate deja setată primește ALTĂ valoare.
         # Completarea unei jumătăți goale, lângă o jumătate setată, e RAFINARE doar când perechea
-        # rezultată EXISTĂ în catalog (`pair_compatible`, recenzia NX-348): altfel e schimbare de
-        # subiect, iar cealaltă jumătate se golește. Un tip DEDUS de cod (`type_learned`) e o
-        # jumătate goală: clientul nu l-a spus.
+        # rezultată e cea VERIFICATĂ în catalog (`pair_verified`); altfel e schimbare de subiect,
+        # iar cealaltă jumătate se golește. Un tip DEDUS de cod (`type_learned`) e o jumătate goală
+        # și nu trece pe un raft nou.
         learned = state.topic.type_learned
         old_type = None if learned else state.topic.product_type
         new_type = proposal.product_type
@@ -775,41 +792,41 @@ def _handle_set_topic(
         fills_shelf = previous is None and category is not None and old_type is not None
         fills_type = new_type is not None and old_type is None and previous is not None
         if not shelf_changed and not type_changed:
-            if (fills_shelf or fills_type) and proposal.pair_compatible is not True:
+            result = (category or previous, new_type or old_type)
+            if (fills_shelf or fills_type) and proposal.pair_verified != result:
                 # Completare fără dovadă că perechea există: subiect nou, fără jumătatea veche.
                 product_type = new_type if fills_type else None
                 category = None if fills_type else category
                 same_subject = False
             else:
-                kept_type = new_type or state.topic.product_type
+                new_shelf = category is not None and category != previous
+                keep_learned = learned and new_type is None and not new_shelf
+                kept_type = new_type or (state.topic.product_type if keep_learned else old_type)
                 topic = replace(
                     state.topic,
                     category_key=category or previous,
                     product_type=kept_type,
                     goal=proposal.goal or state.topic.goal,
-                    type_learned=learned and new_type is None and kept_type is not None,
+                    type_learned=keep_learned and kept_type is not None,
                 )
                 changed = (topic.category_key, topic.product_type) != (
                     previous,
                     state.topic.product_type,
                 )
-                if previous is None and old_type is None and state.topic.product_type is None:
+                first = previous is None and old_type is None
+                if first and changed:
                     # Prima ancorare: subiect NOU (revizia lui), nimic de parcat.
                     topic = replace(topic, changed_at_revision=state.revision)
                 refined = replace(state, topic=topic)
                 if previous is None and topic.category_key is not None:
                     refined = _rescoped(refined, topic.category_key, policy)
-                outcome = (
-                    "unchanged"
-                    if not changed
-                    else ("applied" if previous is None and old_type is None else "refined")
-                )
+                outcome = "unchanged" if not changed else ("applied" if first else "refined")
                 return (
                     refined,
                     Applied("set_topic", topic.category_key, SOFT, proposal.source, outcome),
                 )
         else:
-            product_type = new_type or (None if shelf_changed else state.topic.product_type)
+            product_type = new_type or (None if shelf_changed or learned else old_type)
             same_subject = False
     else:
         product_type = proposal.product_type if proposal.subject else state.topic.product_type
@@ -838,8 +855,13 @@ def _handle_set_topic(
     )
     if previous is None and not (interpreted and state.topic.product_type):
         # Prima ancorare a subiectului nu retrage nimic: nu exista un subiect vechi de resetat.
+        # NX-348 (recenzia, N-F): dar nevoile de subiect spuse înainte primesc raftul, pe ORICE
+        # cale, altfel o schimbare de subiect ulterioară nu le-ar parca.
+        anchored = replace(state, topic=topic)
+        if category is not None:
+            anchored = _rescoped(anchored, category, policy)
         return (
-            replace(state, topic=topic),
+            anchored,
             Applied("set_topic", category, SOFT, proposal.source, "applied"),
         )
 

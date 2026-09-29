@@ -453,7 +453,8 @@ turului într-un singur `set_topic` pe pereche (`_subject_proposal`; mai multe v
 `subject_multiple`); reducerul acceptă tipul fără raft (păstrează raftul) și schimbă subiectul doar
 când o jumătate DEJA SETATĂ primește altă valoare: completarea unei jumătăți goale păstrează nevoile,
 dar doar pe o pereche care EXISTĂ în catalog (`pair_compatible`, citirea `kernel_subject_pairs`);
-altfel e subiect nou. Tipul dedus din setul arătat (`Topic.type_learned`) e jumătate goală.
+altfel e subiect nou. Tipul dedus din setul arătat (`Topic.type_learned`) e jumătate goală, iar o
+schimbare de subiect SPRE subiectul parcat e un schimb (ca `resume`), fără să piardă nevoile parcate.
 Poarta de replay derogată (niciun tur interpretat servit). Intră în `main` după rularea v4. Card:
 [`tasks/stage1/NX-348.md`](tasks/stage1/NX-348.md); probă: `pytest tests/test_nx348_subject_type.py -q`.
 

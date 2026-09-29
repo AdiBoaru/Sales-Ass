@@ -719,7 +719,12 @@ def adapt_v1(raw: object, vocab: NeedVocabulary) -> ConversationStateV2:
     )[-MAX_ASKED_QUESTIONS:]
 
     return ConversationStateV2(
-        topic=Topic(category_key=category, product_type=subject.product_type if subject else None),
+        # NX-348: tipul subiectului v1 îl scrie doar `_learn_subject` (dedus din setul arătat).
+        topic=Topic(
+            category_key=category,
+            product_type=subject.product_type if subject else None,
+            type_learned=bool(subject and subject.product_type),
+        ),
         needs=tuple(needs)[:MAX_NEEDS],
         revocations=(),
         pending_clarification=_pending_from_v1(raw.get("pending_question"), vocab),

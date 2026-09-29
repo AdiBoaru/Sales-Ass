@@ -1000,8 +1000,11 @@ def test_i4_no_blind_reset(name, data):
         kept = active(after)
         parked = {(n.key, n.normalized_value) for n in (after.parked.needs if after.parked else ())}
         evicted = "evicted" in outcomes(reduced, "park")
+        # NX-348: o schimbare de subiect spre subiectul PARCAT e un schimb (`resume` aplicat).
         switched = delta.thread == "resume" or any(
-            a.op == "set_topic" and a.outcome == "reset" for a in reduced.applied
+            (a.op == "set_topic" and a.outcome == "reset")
+            or (a.op == "resume" and a.outcome == "swapped")
+            for a in reduced.applied
         )
         for need in before.active_needs():
             mark = (need.key, need.normalized_value)
@@ -1013,10 +1016,19 @@ def test_i4_no_blind_reset(name, data):
             # dată), nu din câmpul `scope`: o nevoie de subiect spusă înaintea oricărui raft are
             # `scope=None` și pleacă (parcată) cu subiectul ei.
             spec = policy.vocabulary.spec_for(need.key)
-            topic_need = need.scope is not None or spec is None or spec.scoped
+            topic_need = spec is None or spec.scoped
             assert topic_need, f"nevoie pe conversație pierdută: {mark}"
             assert switched, f"nevoie pe subiect pierdută fără schimbare de subiect: {mark}"
-            assert mark in parked or evicted, f"nici parcată, nici evacuată: {mark}"
+            # NX-348 (recenzia a doua): evacuarea pierde doar slotul parcat VECHI, deci o nevoie
+            # activă a subiectului curent ajunge MEREU în slotul nou (scăparea `or evicted` ascundea
+            # pierderea la o schimbare spre subiectul parcat, reparată ca schimb în reducer).
+            # Două schimbări de subiect în ACELAȘI tur (a doua evacuează slotul abia creat) nu
+            # pot veni din delta: acolo mai multe valori se reduc la ultima (`subject_multiple`).
+            resets = sum(1 for a in reduced.applied if a.op == "set_topic" and a.outcome == "reset")
+            resets += sum(1 for a in reduced.applied if a.op == "resume" and a.outcome == "swapped")
+            assert mark in parked or (evicted and resets > 1), (
+                f"nevoie de subiect nici parcată: {mark} (evacuat={evicted})"
+            )
 
 
 @pytest.mark.parametrize("name", PACKS)

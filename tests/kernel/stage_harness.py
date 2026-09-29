@@ -100,6 +100,17 @@ def catalog(name: str) -> Catalog:
     )
 
 
+def subject_pairs_of(cat: Catalog) -> list[tuple[str, str]]:
+    """NX-348: perechile (raft, tip) ale catalogului de fixture, ca `subject_type_pairs` pe DB
+    (raftul fixture n-are cale, deci cheia ține loc de cale, ca în `pair_exists`)."""
+    out = set()
+    for item in cat.items.values():
+        kind = (item.get("attributes") or {}).get("product_type")
+        if item.get("category") and isinstance(kind, str):
+            out.add((item["category"], kind))
+    return sorted(out)
+
+
 def product_rows(cat: Catalog, ids: list[str]) -> list[dict[str, Any]]:
     """`get_products_by_ids` pe catalogul de fixture, în ordinea cerută."""
     out = []
@@ -259,6 +270,11 @@ def install(
         return []
 
     monkeypatch.setattr(it, "fetch_reference_facts", fetch)
+
+    async def pairs(conn, business_id):
+        return subject_pairs_of(cat)
+
+    monkeypatch.setattr(it, "subject_type_pairs", pairs)
     monkeypatch.setattr(it, "get_vocabulary", vocabulary)
     monkeypatch.setattr(it, "list_category_menu", menu)
     monkeypatch.setattr(det, "fetch_reference_facts", fetch)
@@ -417,6 +433,7 @@ def chain(journey: replay.Journey, cat: Catalog) -> Iterator[ChainTurn]:
             vocab=cat.vocab,
             catalog=cat.facts,
             answer_pending=True,
+            pairs=subject_pairs_of(cat),
         )
         yield ChainTurn(index, turn, state, previous, step)
         state = step.state_after

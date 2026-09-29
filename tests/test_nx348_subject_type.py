@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from src.catalog.subject_pairs import proposal_pair
 from src.conversation.delta import TurnDelta, to_delta
 from src.conversation.interpretation import (
     Act,
@@ -69,11 +70,12 @@ def step(state, *checked, compatible=None, corrects=False):
         needs=POLICY.vocabulary,
         turn_id="t",
     )
-    if compatible is not None:
+    if compatible:
+        # Perechea VERIFICATĂ e cea pe care o calculează orchestratorul (`proposal_pair`).
         delta = replace(
             delta,
             proposals=tuple(
-                replace(p, pair_compatible=compatible) if p.op == "set_topic" else p
+                replace(p, pair_verified=proposal_pair(p, state, delta.thread))
                 for p in delta.proposals
             ),
         )
@@ -318,3 +320,120 @@ def test_the_pairs_query_is_tenant_scoped():
 
     sql = " ".join(catalog._SUBJECT_TYPE_PAIRS_SQL.split())
     assert "p.business_id = $1" in sql and "c.business_id = p.business_id" in sql
+
+
+# --- recenzia adversarială NX-348, a doua trecere ---------------------------------------------
+
+
+def test_a_v1_subject_type_is_learned_after_the_v2_adapter():
+    """N-A: tipul subiectului v1 îl scrie doar `_learn_subject`, deci e DEDUS."""
+    from src.conversation.state_v2 import adapt_v1
+
+    doc = {
+        "search_constraints": {
+            "category_key": "telefoane",
+            "subject": {"type": "smartphone"},
+        }
+    }
+    state = adapt_v1(doc, POLICY.vocabulary)
+    assert state.topic.product_type == "smartphone" and state.topic.type_learned
+
+
+def test_a_learned_type_does_not_travel_to_a_new_shelf():
+    """N-B: primul raft peste un tip DEDUS nu păstrează tipul (clientul nu l-a spus)."""
+    from src.conversation.state_v2 import Topic
+
+    learned = ConversationStateV2(topic=Topic(product_type="smartphone", type_learned=True))
+    moved, _ = step(learned, _change("category", "laptopuri"))
+    assert (moved.state.topic.category_key, moved.state.topic.product_type) == ("laptopuri", None)
+    assert moved.state.topic.changed_at_revision == moved.state.revision
+
+
+def test_the_verified_pair_must_be_the_pair_the_reducer_applies():
+    """N-C: o pereche verificată pe ALTĂ stare (alt raft) nu face rafinare."""
+    state, _ = step(ConversationStateV2(), _change("category", "telefoane"))
+    delta = to_delta(
+        _interp(1), [_change("product_type", "smartphone")], needs=POLICY.vocabulary, turn_id="t"
+    )
+    stale = replace(
+        delta,
+        proposals=tuple(
+            replace(p, pair_verified=("laptopuri", "smartphone")) for p in delta.proposals
+        ),
+    )
+    result = reduce_turn(state.state, stale, (), (), None, False, POLICY)
+    assert result.state.topic.category_key is None  # nu e rafinare: subiect nou, raftul golit
+
+
+def test_a_resume_checks_the_pair_on_the_parked_subject():
+    state, _ = step(ConversationStateV2(), _change("category", "telefoane"))
+    state, _ = step(state.state, _change("category", "laptopuri"))
+    pair = proposal_pair(
+        to_delta(
+            _interp(1), [_change("product_type", "smartphone")], needs=POLICY.vocabulary
+        ).proposals[0],
+        state.state,
+        "resume",
+    )
+    assert pair == ("telefoane", "smartphone")
+
+
+def test_a_subject_change_to_the_parked_subject_is_a_swap_not_an_eviction():
+    """N-E (pre-existent, mascat de I4): «înapoi la telefoane» ca raft nou pierdea nevoile
+    subiectului parcat; acum e un SCHIMB, ca `resume`."""
+    state, _ = step(ConversationStateV2(), _change("category", "telefoane"))
+    state, _ = step(state.state, _change("brand", "samsung"))
+    state, _ = step(state.state, _change("category", "laptopuri"))
+    back, _ = step(state.state, _change("category", "telefoane"))
+    assert back.state.topic.category_key == "telefoane"
+    assert back.state.need_for("brand") is not None
+    assert back.state.parked.topic.category_key == "laptopuri"
+    assert "evicted" not in [a.outcome for a in back.applied if a.op == "park"]
+
+
+async def test_the_pairs_read_happens_only_when_needed_and_a_failure_is_counted():
+    """N-D: citirea doar pentru o pereche completă; picată ⇒ contor, nicio pereche verificată."""
+    from contextlib import asynccontextmanager
+
+    from src.agent import interpreted_turn as it
+    from tests.kernel import fixture_catalog as fc
+
+    ops: list[str] = []
+
+    class _Deps:
+        def db(self, op):
+            @asynccontextmanager
+            async def _cm():
+                ops.append(op)
+                raise ConnectionError("jos")
+                yield None  # pragma: no cover
+
+            return _cm()
+
+    vocab = fc.vocabulary("electronics")
+    only_type = to_delta(
+        _interp(1), [_change("product_type", "smartphone")], needs=POLICY.vocabulary
+    )
+    same = await it._with_pair_compatibility(_Deps(), "b", only_type, ConversationStateV2(), vocab)
+    assert same is only_type and ops == []
+
+    state, _ = step(ConversationStateV2(), _change("category", "telefoane"))
+    failed = await it._with_pair_compatibility(_Deps(), "b", only_type, state.state, vocab)
+    assert ops == [it.SUBJECT_PAIRS_OP]
+    assert failed.counters.get("subject_pairs_unavailable") == 1
+    assert all(p.pair_verified is None for p in failed.proposals)
+
+
+def test_a_legacy_first_shelf_gives_it_to_the_earlier_needs():
+    """N-F: prima ancorare pe calea v1 (`_learn_subject`) dă și ea raftul nevoilor spuse înainte,
+    altfel o schimbare interpretată ulterioară nu le-ar parca."""
+    from src.conversation.state_reducer import StateUpdateProposal as P
+
+    state, _ = step(ConversationStateV2(), _change("brand", "samsung"))
+    legacy = P("set_topic", category_key="telefoane", subject=True, source="catalog", turn_id="v1")
+    anchored = reduce_turn(
+        state.state, TurnDelta(thread="continue", proposals=(legacy,)), (), (), None, False, POLICY
+    )
+    moved, _ = step(anchored.state, _change("category", "laptopuri"))
+    assert moved.state.need_for("brand") is None
+    assert ("brand", "samsung") in {(n.key, n.normalized_value) for n in moved.state.parked.needs}

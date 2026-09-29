@@ -763,6 +763,7 @@ def _kernel_step(journey, cat, state, index):
         vocab=cat.vocab,
         catalog=cat.facts,
         answer_pending=True,
+        pairs=sh.subject_pairs_of(cat),
     )
 
 
