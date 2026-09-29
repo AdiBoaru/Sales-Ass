@@ -38,6 +38,7 @@ from typing import TYPE_CHECKING, Any
 from src.agent.deterministic import page_source
 from src.agent.turn_planner import PlannedTurn, plan_turn
 from src.catalog.reference_facts import facts_from_row, fetch_reference_facts
+from src.catalog.subject_pairs import pair_exists, subject_type_pairs
 from src.catalog.vocabulary_cache import get_vocabulary
 from src.config import get_settings
 from src.conversation.ambiguity_gate import (
@@ -72,7 +73,7 @@ from src.conversation.state_reducer import (
     StateUpdateProposal,
     reduce_turn,
 )
-from src.conversation.state_v2 import ConversationStateV2, project_v1
+from src.conversation.state_v2 import ConversationStateV2, Topic, project_v1
 from src.conversation.turn_interpreter import (
     InterpretedTurn,
     InterpretInput,
@@ -113,7 +114,8 @@ FALLBACK_REASONS: tuple[str, ...] = (
 MENU_OP = "kernel_category_menu"
 FACTS_OP = "kernel_reference_facts"
 VOCABULARY_OP = "kernel_load_vocabulary"
-KERNEL_READS: frozenset[str] = frozenset({MENU_OP, FACTS_OP, VOCABULARY_OP})
+SUBJECT_PAIRS_OP = "kernel_subject_pairs"
+KERNEL_READS: frozenset[str] = frozenset({MENU_OP, FACTS_OP, VOCABULARY_OP, SUBJECT_PAIRS_OP})
 #: Traceul unui tur neservit (`dark`): niciun executor n-a rulat.
 NO_EXECUTOR = "none"
 _DARK = "dark"
@@ -230,7 +232,14 @@ def _subject_is_new(before: ConversationStateV2, gate: ConversationStateV2, thre
     now = (gate.topic.category_key, gate.topic.product_type)
     if now == (None, None):
         return True
-    return now != (before.topic.category_key, before.topic.product_type)
+    if now == (before.topic.category_key, before.topic.product_type):
+        return False
+    # NX-348: o RAFINARE (completarea unei jumătăți goale) nu e subiect nou; reducerul păstrează
+    # atunci revizia subiectului (recenzia NX-348, constatarea 5).
+    return (
+        gate.topic.changed_at_revision != before.topic.changed_at_revision
+        or before.topic == Topic()
+    )
 
 
 def _apply_turn_view(
@@ -476,6 +485,48 @@ def _target_lost(chain: _Chain) -> bool:
     )
 
 
+async def _with_pair_compatibility(
+    deps: PipelineDeps,
+    business_id: str,
+    delta: TurnDelta,
+    state: ConversationStateV2,
+    vocab: Any,
+) -> TurnDelta:
+    """NX-348: pe propunerea de subiect a interpretării, dacă perechea (raft, tip) care ar rezulta
+    există în catalog. Citirea (UN checkout, `business_id = $1`) se face doar când perechea are
+    ambele jumătăți; picată ⇒ `None`, iar reducerul tratează completarea ca schimbare de subiect
+    (nevoile se parchează, nu se pierd)."""
+    wanted = [
+        p
+        for p in delta.proposals
+        if p.op == "set_topic" and p.origin == "interpretation" and p.pair_compatible is None
+    ]
+    if not wanted:
+        return delta
+    learned = state.topic.type_learned
+    rows: list[Any] | None = None
+    out = []
+    for p in delta.proposals:
+        if p not in wanted:
+            out.append(p)
+            continue
+        shelf = p.category_key or state.topic.category_key
+        kind = p.product_type or (None if learned else state.topic.product_type)
+        if shelf is None or kind is None:
+            out.append(p)
+            continue
+        if rows is None:
+            try:
+                async with deps.db(SUBJECT_PAIRS_OP) as conn:
+                    rows = await subject_type_pairs(conn, business_id)
+            except Exception:  # noqa: BLE001 — fără date: completarea nu e rafinare
+                rows = []
+                out.append(p)
+                continue
+        out.append(replace(p, pair_compatible=pair_exists(shelf, kind, rows, vocab)))
+    return replace(delta, proposals=tuple(out))
+
+
 async def _chain(
     ctx: TurnContext, deps: PipelineDeps, inp: InterpretInput, interpreted: InterpretedTurn
 ) -> _Chain:
@@ -512,6 +563,7 @@ async def _chain(
     )
     # „Schimbări în tur" = propunerile de nevoi; închiderea întrebării nu e o schimbare (plannerul
     # adaugă singur `resume` și semnalele `inferred`, contractul v1.1).
+    delta = await _with_pair_compatibility(deps, ctx.business.id, delta, state, vocab)
     changed = bool(delta.proposals)
     answered = question_answered(state, delta.thread, ctx.turn_id)
     if answered is not None:

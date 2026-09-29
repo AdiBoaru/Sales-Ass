@@ -2638,3 +2638,22 @@ async def facet_keys_in_scope(
         if len(keys) < limit_per_dimension:
             keys.append(str(r["value"]))
     return out
+
+
+# NX-348: perechile (calea raftului, tipul de produs) cu produse servabile, pentru rafinarea
+# subiectului pe calea interpretată. „Servabil" = aceeași definiție ca vocabularul (`status`).
+_SUBJECT_TYPE_PAIRS_SQL = """
+select c.path, p.attributes->>'product_type' as product_type
+  from products p
+  join categories c on c.id = p.primary_category_id and c.business_id = p.business_id
+ where p.business_id = $1
+   and p.status = 'active'
+   and jsonb_typeof(p.attributes -> 'product_type') = 'string'
+ group by 1, 2
+"""
+
+
+async def subject_type_pairs(conn: asyncpg.Connection, business_id: str) -> list[tuple[str, str]]:
+    """`(calea raftului, tipul)` pentru fiecare pereche cu cel puțin un produs servabil."""
+    rows = await conn.fetch(_SUBJECT_TYPE_PAIRS_SQL, business_id)
+    return [(str(r["path"] or ""), str(r["product_type"])) for r in rows if r["product_type"]]

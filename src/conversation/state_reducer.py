@@ -168,6 +168,10 @@ class StateUpdateProposal:
     # de azi: tipul propus de `_learn_subject` (NX-314) se actualizează fără parcare, iar resetul
     # pornește doar pe raft. Distincția e un câmp, nu o euristică, și dispare la pasul 5.
     origin: Literal["legacy", "interpretation"] = "legacy"
+    # NX-348: perechea (raft, tip) care ar rezulta din propunere EXISTĂ în catalog (`True`), nu
+    # există (`False`) sau nu se știe (`None`). Scrisă de orchestrator din datele turului, înaintea
+    # reducerului, ca reducerul să rămână pur și commit-ul să vadă aceeași decizie ca poarta.
+    pair_compatible: bool | None = None
     # set_pending_question / resolve_question
     question_id: str | None = None
     reason: str | None = None
@@ -721,6 +725,24 @@ def _proposed_category(proposal: StateUpdateProposal) -> str | None:
     return norm_key(proposal.category_key) or None
 
 
+def _rescoped(
+    state: ConversationStateV2, category: str, policy: ReducerPolicy
+) -> ConversationStateV2:
+    """NX-348: subiectul își primește PRIMUL raft. Nevoile lui de subiect scrise fără raft
+    (`scope=None`) îl primesc acum, altfel o schimbare de subiect ulterioară nu le-ar mai parca și
+    nu le-ar retrage (recenzia NX-348, constatarea 1)."""
+    needs = tuple(
+        replace(n, scope=category)
+        if n.is_active
+        and n.scope is None
+        and not _is_protected(n)
+        and _topic_scoped(n.key, policy.vocabulary)
+        else n
+        for n in state.needs
+    )
+    return replace(state, needs=needs)
+
+
 def _handle_set_topic(
     state: ConversationStateV2, proposal: StateUpdateProposal, policy: ReducerPolicy
 ) -> _Outcome:
@@ -737,43 +759,70 @@ def _handle_set_topic(
         # dar nu poate muta unul pe care îl susține deja setul arătat clientului.
         return RejectedUpdate("set_topic", "subject_owned", category, proposal.source)
     previous = state.topic.category_key
+    type_learned = False
     if interpreted:
         # NX-331: subiectul e PERECHEA (raft, tip). NX-348 (kernel.v3.0, decis de Adi pe
         # 2026-09-29): subiectul se SCHIMBĂ doar când o jumătate deja setată primește ALTĂ valoare.
-        # Completarea unei jumătăți goale (primul tip pe un raft fără tip, primul raft pe un subiect
-        # fără raft) e RAFINARE: nevoile subiectului rămân, nimic nu se parchează. Un tip nepropus
-        # se păstrează pe același raft (și la rafinare) și se golește pe alt raft.
-        old_type = state.topic.product_type
+        # Completarea unei jumătăți goale, lângă o jumătate setată, e RAFINARE doar când perechea
+        # rezultată EXISTĂ în catalog (`pair_compatible`, recenzia NX-348): altfel e schimbare de
+        # subiect, iar cealaltă jumătate se golește. Un tip DEDUS de cod (`type_learned`) e o
+        # jumătate goală: clientul nu l-a spus.
+        learned = state.topic.type_learned
+        old_type = None if learned else state.topic.product_type
+        new_type = proposal.product_type
         shelf_changed = previous is not None and category is not None and category != previous
-        product_type = proposal.product_type or (None if shelf_changed else old_type)
-        type_changed = (
-            old_type is not None and product_type is not None and product_type != old_type
-        )
-        if not shelf_changed and not type_changed and (previous or old_type):
-            topic = replace(
-                state.topic,
-                category_key=category or previous,
-                product_type=product_type,
-                goal=proposal.goal or state.topic.goal,
-            )
-            refined = (topic.category_key, topic.product_type) != (previous, old_type)
-            return (
-                replace(state, topic=topic),
-                Applied(
-                    "set_topic",
-                    topic.category_key,
-                    SOFT,
-                    proposal.source,
-                    "applied" if refined else "unchanged",
-                ),
-            )
-        same_subject = (category, product_type) == (previous, old_type)
+        type_changed = old_type is not None and new_type is not None and new_type != old_type
+        fills_shelf = previous is None and category is not None and old_type is not None
+        fills_type = new_type is not None and old_type is None and previous is not None
+        if not shelf_changed and not type_changed:
+            if (fills_shelf or fills_type) and proposal.pair_compatible is not True:
+                # Completare fără dovadă că perechea există: subiect nou, fără jumătatea veche.
+                product_type = new_type if fills_type else None
+                category = None if fills_type else category
+                same_subject = False
+            else:
+                kept_type = new_type or state.topic.product_type
+                topic = replace(
+                    state.topic,
+                    category_key=category or previous,
+                    product_type=kept_type,
+                    goal=proposal.goal or state.topic.goal,
+                    type_learned=learned and new_type is None and kept_type is not None,
+                )
+                changed = (topic.category_key, topic.product_type) != (
+                    previous,
+                    state.topic.product_type,
+                )
+                if previous is None and old_type is None and state.topic.product_type is None:
+                    # Prima ancorare: subiect NOU (revizia lui), nimic de parcat.
+                    topic = replace(topic, changed_at_revision=state.revision)
+                refined = replace(state, topic=topic)
+                if previous is None and topic.category_key is not None:
+                    refined = _rescoped(refined, topic.category_key, policy)
+                outcome = (
+                    "unchanged"
+                    if not changed
+                    else ("applied" if previous is None and old_type is None else "refined")
+                )
+                return (
+                    refined,
+                    Applied("set_topic", topic.category_key, SOFT, proposal.source, outcome),
+                )
+        else:
+            product_type = new_type or (None if shelf_changed else state.topic.product_type)
+            same_subject = False
     else:
         product_type = proposal.product_type if proposal.subject else state.topic.product_type
         same_subject = category == previous
+        type_learned = (proposal.subject and product_type is not None) or (
+            not proposal.subject and state.topic.type_learned
+        )
     if same_subject:
         topic = replace(
-            state.topic, goal=proposal.goal or state.topic.goal, product_type=product_type
+            state.topic,
+            goal=proposal.goal or state.topic.goal,
+            product_type=product_type,
+            type_learned=type_learned,
         )
         return (
             replace(state, topic=topic),
@@ -785,6 +834,7 @@ def _handle_set_topic(
         goal=proposal.goal,
         changed_at_revision=state.revision,
         product_type=product_type if (proposal.subject or interpreted) else None,
+        type_learned=type_learned and proposal.subject,
     )
     if previous is None and not (interpreted and state.topic.product_type):
         # Prima ancorare a subiectului nu retrage nimic: nu exista un subiect vechi de resetat.
@@ -814,8 +864,10 @@ def _topic_needs(state: ConversationStateV2, policy: ReducerPolicy) -> tuple[Nee
     pachetul o declară acum a conversației (bugetul, NX-331) nu e a subiectului, chiar dacă un
     document scris înainte îi poartă raftul în `scope`."""
     category = state.topic.category_key
-    if category is None:
+    if category is None and state.topic.product_type is None:
         return ()
+    # NX-348: un subiect FĂRĂ raft (doar tipul) are nevoile lui cu `scope=None`; fără asta, o
+    # schimbare de subiect nu le-ar parca și nu le-ar retrage (recenzia NX-348, constatarea 1).
     return tuple(
         n
         for n in state.needs
@@ -1346,12 +1398,26 @@ def _contradictions(
     subject = False
     for proposal in proposals:
         if proposal.op == "set_topic":
-            category = _proposed_category(proposal)
+            # NX-348: perechea EFECTIVĂ (fără raft = raftul curent); contrazice doar o jumătate
+            # DEJA SETATĂ de turul anterior care primește altă valoare (recenzia, constatarea 4).
+            category = _proposed_category(proposal) or before.topic.category_key
+            new_type = proposal.product_type
+            written_before = (
+                before.revision > 0 and before.topic.changed_at_revision == before.revision
+            )
             subject = subject or (
-                before.revision > 0
-                and before.topic.changed_at_revision == before.revision
-                and before.topic.category_key is not None
-                and category != before.topic.category_key
+                written_before
+                and (
+                    (
+                        before.topic.category_key is not None
+                        and category != before.topic.category_key
+                    )
+                    or (
+                        before.topic.product_type is not None
+                        and new_type is not None
+                        and new_type != before.topic.product_type
+                    )
+                )
             )
             continue
         if proposal.op not in ("set_need", "supersede", "revoke"):

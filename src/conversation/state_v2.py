@@ -158,6 +158,10 @@ class Topic:
     # NX-314: tipul DOMINANT al setului arătat (`src/conversation/subject.py`). Aditiv: un document
     # fără cheie se citește `None`, deci versiunea de schemă rămâne aceeași.
     product_type: str | None = None
+    # NX-348: tipul l-a DEDUS codul din setul arătat (`_learn_subject`, NX-314), nu clientul.
+    # Pentru rafinare (kernel.v3.0) un astfel de tip e o jumătate GOALĂ. Aditiv: cheia lipsește
+    # când e fals, deci documentele de azi rămân byte-identice.
+    type_learned: bool = False
 
     def to_jsonb(self) -> dict[str, Any]:
         return _compact(
@@ -166,6 +170,7 @@ class Topic:
                 "goal": self.goal,
                 "changed_at_revision": self.changed_at_revision,
                 "product_type": self.product_type,
+                "type_learned": True if self.type_learned and self.product_type else None,
             }
         )
 
@@ -177,6 +182,7 @@ class Topic:
             goal=_clip(raw.get("goal")) or None,
             changed_at_revision=_int(raw.get("changed_at_revision")),
             product_type=_clip(raw.get("product_type"), 48) or None,
+            type_learned=raw.get("type_learned") is True,
         )
 
 

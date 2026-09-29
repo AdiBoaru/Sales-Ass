@@ -1009,7 +1009,12 @@ def test_i4_no_blind_reset(name, data):
                 continue
             if policy.vocabulary.dimension_of(need.key) in crossed:
                 continue
-            assert need.scope is not None, f"nevoie pe conversație pierdută: {mark}"
+            # NX-348: „de subiect" se citește din pachet (`NeedSpec.scoped`, contractul: scope-ul e
+            # dată), nu din câmpul `scope`: o nevoie de subiect spusă înaintea oricărui raft are
+            # `scope=None` și pleacă (parcată) cu subiectul ei.
+            spec = policy.vocabulary.spec_for(need.key)
+            topic_need = need.scope is not None or spec is None or spec.scoped
+            assert topic_need, f"nevoie pe conversație pierdută: {mark}"
             assert switched, f"nevoie pe subiect pierdută fără schimbare de subiect: {mark}"
             assert mark in parked or evicted, f"nici parcată, nici evacuată: {mark}"
 

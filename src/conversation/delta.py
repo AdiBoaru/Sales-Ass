@@ -94,15 +94,23 @@ def _subject_proposal(
 ) -> StateUpdateProposal | None:
     """NX-348: schimbările de subiect ale turului (raft și/sau tip) → UN `set_topic` pe PERECHE.
     Două propuneri separate ar parca de două ori: raftul nou ar goli tipul, apoi tipul ar schimba
-    iar perechea. Mai multe valori pe aceeași jumătate («un ruj și un fond de ten»): rămâne ULTIMA,
-    ca actul principal (ultimul), iar turul se numără (`subject_multiple`)."""
+    iar perechea. Mai multe valori pe aceeași jumătate («un ruj și un fond de ten»): perechea nu mai
+    e sigură, deci rămâne doar ULTIMA schimbare de subiect scrisă, singură (o pereche amestecată
+    din valori diferite ar numi un subiect pe care clientul nu l-a cerut), numărat
+    `subject_multiple`. Sursa propunerii e cea mai tare dintre schimbări (`explicit` întâi)."""
     category = [c for c in changes if c.dimension == CATEGORY]
     kind = [c for c in changes if c.dimension == PRODUCT_TYPE]
     if not category and not kind:
         return None
     if len(category) > 1 or len(kind) > 1:
         counters["subject_multiple"] = counters.get("subject_multiple", 0) + 1
-    lead = (category or kind)[-1]
+        last = changes[-1]
+        category = [last] if last.dimension == CATEGORY else []
+        kind = [last] if last.dimension == PRODUCT_TYPE else []
+    lead = next(
+        (c for c in changes if c.provenance == "explicit" and c in (*category, *kind)), None
+    )
+    lead = lead or (category or kind)[-1]
     return StateUpdateProposal(
         "set_topic",
         category_key=str(category[-1].canonical_value) if category else None,

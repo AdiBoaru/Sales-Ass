@@ -5,11 +5,11 @@
 
 Fiecare loc din `src/**/*.py` care scrie starea conversației (v1 sau v2), derivat MECANIC prin `ast` (nu grep). Pregătește I3/I20 din [`docs/KERNEL-CONTRACT-v1.md`](KERNEL-CONTRACT-v1.md): pasul 3 nu poate face din reducer singurul scriitor peste o stare pe care o mai scriu și alții, fără să știe cine sunt aceia.
 
-**Totaluri:** 160 scriitori găsiți, 102 intrări de soartă declarate, 8 `unresolved`.
+**Totaluri:** 161 scriitori găsiți, 103 intrări de soartă declarate, 8 `unresolved`.
 - `becomes_proposal`: 0
 - `executor_output`: 9
 - `retired`: 16
-- `stays`: 135
+- `stays`: 136
 
 ## `needs_topic` -- nevoi + subiect/raft
 
@@ -67,6 +67,7 @@ Fiecare loc din `src/**/*.py` care scrie starea conversației (v1 sau v2), deriv
 | `src/conversation/state_reducer.py:_handle_set_topic` | v2 | `dataclasses_replace` | `topic` | Handler intern al reducerului -- vezi `_handle_confirm`. | `stays` |
 | `src/conversation/state_reducer.py:_handle_set_topic` | v2 | `dataclasses_replace` | `topic` | Handler intern al reducerului -- vezi `_handle_confirm`. | `stays` |
 | `src/conversation/state_reducer.py:_handle_set_topic` | v2 | `dataclasses_replace` | `topic` | Handler intern al reducerului -- vezi `_handle_confirm`. | `stays` |
+| `src/conversation/state_reducer.py:_rescoped` | v2 | `dataclasses_replace` | `needs` | NX-348: cand subiectul isi primeste PRIMUL raft (rafinare, kernel.v3.0), nevoile lui de subiect scrise fara raft (`scope=None`) primesc raftul, altfel o schimbare de subiect ulterioara nu le-ar parca si nu le-ar retrage. Scris DOAR de reducer (singurul scriitor al starii v2). | `stays` |
 | `src/conversation/state_reducer.py:_resume` | v2 | `dataclasses_replace` | `needs` | NX-331: reducerul e SINGURUL scriitor al starii v2 (I3); functia e un pas pur al lui (rol `reducer` in tests/kernel_modules.json). `resume` (I19): schimb cu slotul parcat, nevoile parcate reactivate, subiectul curent parcat. | `stays` |
 | `src/conversation/state_reducer.py:_resume` | v2 | `dataclasses_replace` | `parked` | NX-331: reducerul e SINGURUL scriitor al starii v2 (I3); functia e un pas pur al lui (rol `reducer` in tests/kernel_modules.json). `resume` (I19): schimb cu slotul parcat, nevoile parcate reactivate, subiectul curent parcat. | `stays` |
 | `src/conversation/state_reducer.py:_resume` | v2 | `dataclasses_replace` | `revocations` | NX-331: reducerul e SINGURUL scriitor al starii v2 (I3); functia e un pas pur al lui (rol `reducer` in tests/kernel_modules.json). `resume` (I19): schimb cu slotul parcat, nevoile parcate reactivate, subiectul curent parcat. | `stays` |

@@ -627,7 +627,13 @@ def test_subject_is_new_compares_the_gate_subject_with_the_one_before():
     assert it._subject_is_new(empty, phones, "continue") is True
     assert it._subject_is_new(phones, phones, "continue") is False
     typed = dataclasses.replace(phones, topic=dataclasses.replace(cases, product_type="husa"))
-    assert it._subject_is_new(phones, typed, "continue") is True
+    # NX-348 (kernel.v3.0): completarea tipului pe același subiect e RAFINARE (aceeași revizie a
+    # subiectului), deci nu e subiect nou; o schimbare reală poartă revizia turului.
+    assert it._subject_is_new(phones, typed, "continue") is False
+    moved = dataclasses.replace(
+        typed, topic=dataclasses.replace(typed.topic, changed_at_revision=5)
+    )
+    assert it._subject_is_new(phones, moved, "continue") is True
     # un subiect RELUAT nu e nou (recenzia, constatarea 2)
     assert it._subject_is_new(phones, typed, "resume") is False
 
