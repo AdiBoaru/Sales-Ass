@@ -26,6 +26,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
+from statistics import median
 from typing import Any, Literal
 
 from src.conversation.interpretation import CheckedChange, ResolvedRef, TurnInterpretation
@@ -135,13 +136,30 @@ def _subject_proposal(
 def _relative_price(
     c: CheckedChange, resolved: Sequence[ResolvedRef], facts: ReferenceFacts
 ) -> float | None:
-    """Prețul RECITIT al produsului la care se raportează schimbarea, sau None."""
+    """Prețul RECITIT al produsului la care se raportează schimbarea, sau None.
+
+    NX-352 (`kernel.v5.0`, decis de Adi pe 2026-09-29): o țintă AMBIGUĂ («ceva mai ieftin» cu mai
+    multe produse pe ecran) se raportează la MEDIANA prețurilor recitite ale candidaților, deci
+    «mai ieftin decât majoritatea celor arătate». Fără cel puțin doi candidați cu preț cunoscut,
+    nimic (ca înainte)."""
     ref = next((r for r in resolved if r.ref_id == c.change.relative_to), None)
-    if ref is None or ref.outcome != "exact" or len(ref.product_ids) != 1:
+    if ref is None:
         return None
-    product = facts.products.get(ref.product_ids[0])
-    price = getattr(product, "price", None)
-    return float(price) if price is not None else None
+    prices = [
+        float(price)
+        for pid in ref.product_ids
+        if (price := getattr(facts.products.get(pid), "price", None)) is not None
+    ]
+    if ref.outcome == "exact" and len(ref.product_ids) == 1:
+        return prices[0] if prices else None
+    if ref.outcome == "ambiguous" and len(prices) >= 2:
+        return float(median(prices))
+    return None
+
+
+def _ambiguous(c: CheckedChange, resolved: Sequence[ResolvedRef]) -> bool:
+    ref = next((r for r in resolved if r.ref_id == c.change.relative_to), None)
+    return ref is not None and ref.outcome == "ambiguous"
 
 
 def _common(c: CheckedChange, source: str, turn_id: str) -> dict[str, Any]:
@@ -348,6 +366,8 @@ def to_delta(
                     c.model_copy(update={"rejected": "unknown_reference", "strength": "ranking"})
                 )
                 continue
+            if _ambiguous(c, resolved):
+                counters["relative_price_median"] = counters.get("relative_price_median", 0) + 1
         made = _need_proposals(c, source, turn_id, needs, value)
         if made is None:
             rejected.append(

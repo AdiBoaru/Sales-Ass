@@ -91,14 +91,12 @@
           "search_args": {
             "category": "rochii",
             "concerns": [
+              "bumbac",
               "m"
             ],
             "prefer": {
               "color": [
                 "negru"
-              ],
-              "material": [
-                "bumbac"
               ]
             },
             "query": "rochii"

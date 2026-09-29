@@ -145,7 +145,7 @@
               ]
             },
             "ambiguity": {"verdict": "act", "reason": "confirm_implicit", "question": "Să înțeleg că e vorba de ea?"},
-            "plan": {"executor": "search", "search_args": {"query": "cineva drag", "category": "casa", "prefer": {"recipient": ["ea"]}}}
+            "plan": {"executor": "search", "search_args": {"query": "Casa", "category": "casa", "prefer": {"recipient": ["ea"]}}}
           }
         }
       ]

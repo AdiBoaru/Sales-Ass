@@ -29,12 +29,19 @@ conține literali de vertical (I14)."""
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 
 from src.agent.tool_budget import spec_for
 from src.agent.tool_definitions import TOOL_NAMES
-from src.catalog.query_terms import stopwords
+from src.catalog.query_terms import (
+    comparators,
+    formula_fillers,
+    negation_markers,
+    relative_comparators,
+    stopwords,
+    tokens,
+)
 from src.catalog.vocabulary import CatalogVocabulary, topic_root_of
 from src.conversation.ambiguity_gate import GateOutcome, target_question_key
 from src.conversation.answer_policy import read_query
@@ -44,6 +51,7 @@ from src.conversation.interpretation import (
     Executor,
     Reference,
     ResolvedRef,
+    StateChange,
     TurnInterpretation,
     TurnPlan,
 )
@@ -144,13 +152,71 @@ class PlannedTurn:
     primary: int = 0
 
 
-def _read_act_query(query: str | None, has_words: bool) -> str | None:
-    """SINGURUL loc din planner care citește `Act.query` (cuvintele clientului). Textul trece
-    NESCHIMBAT în `SearchArgs.query`, ca valoare, și doar când are cuvinte de conținut (dovada vine
-    din `answer_policy.read_query`, pe tabelele locale-i). Nicio decizie nu ramifică pe el."""
+def _read_act_query(
+    query: str | None,
+    has_words: bool,
+    changes: Sequence[StateChange],
+    locale: str,
+    carried: Collection[str],
+) -> tuple[str | None, str | None]:
+    """SINGURUL loc din planner care citește `Act.query` și citatele schimbărilor (cuvintele
+    clientului). Întoarce `(reziduul, cererea întreagă)`, ca VALORI; nicio decizie nu ramifică pe
+    text.
+
+    NX-352 (sonda NX-351): cererea întreagă nu e o căutare. Pe treapta `strict` fiecare cuvânt e o
+    poartă (lecția NX-298), deci «si ceva mai ieftin ?» sau «pai mi se usuca pielea dupa dus» dădeau
+    zero produse sau potriviri pe un cuvânt întâmplător. REZIDUUL = cuvintele cererii, în forma
+    scrisă de client, care nu sunt formula locale-i (cuvinte goale, filleri, comparatori, negații:
+    tabelele din `query_terms`) și nici cuvintele unei NEVOI sau ale prețului din turul ăsta, a
+    cărei dimensiune intră CHIAR în căutare ca filtru sau preferință (`carried`, calculat de
+    constructorul `SearchArgs`; o marcă soft pe o coloană, care ajunge doar în `gaps`, își păstrează
+    cuvântul în text, altfel s-ar pierde de tot). Cuvintele subiectului
+    («telefon», «cremă de față») RĂMÂN: numesc ce este produsul, iar numele raftului nu apare în
+    numele produselor (NX-293). Un cuvânt nemapat (`unmapped`) rămâne: e textul căutat."""
     if not has_words or query is None:
-        return None
-    return query.strip() or None
+        return None, None
+    formula = set(stopwords(locale)) | formula_fillers(locale) | negation_markers(locale)
+    for phrase, _op in (*comparators(locale), *relative_comparators(locale)):
+        formula.update(tokens(phrase))
+    consumed: set[str] = set()
+    kept: set[str] = set()
+    for change in changes:
+        if not change.quote:
+            continue
+        if change.dimension in _SUBJECT_WORDS:
+            kept.update(tokens(change.quote))
+        elif change.dimension in carried:
+            consumed.update(tokens(change.quote))
+    # Un citat de nevoie care cuprinde și cuvântul subiectului («cremă pentru ten uscat») nu scoate
+    # subiectul din căutare.
+    consumed -= kept
+    words = [raw.strip(_PUNCTUATION) for raw in query.split()]
+    # Pozițiile cuvintelor care formează, în șir, citatul unei schimbări de subiect.
+    flat = [(i, t) for i, w in enumerate(words) for t in tokens(w)]
+    spans: set[int] = set()
+    for change in changes:
+        quote = tokens(change.quote) if change.dimension in _SUBJECT_WORDS and change.quote else []
+        for start in range(len(flat) - len(quote) + 1):
+            if quote and [t for _i, t in flat[start : start + len(quote)]] == quote:
+                spans.update(i for i, _t in flat[start : start + len(quote)])
+    residue: list[str] = []
+    for index, word in enumerate(words):
+        own = tokens(word)
+        # Un cuvânt gol DIN numele subiectului («cremă de față») rămâne: numele se caută întreg.
+        keep = index in spans or any(
+            w not in formula and (w in kept or w not in consumed) for w in own
+        )
+        if own and keep and word not in residue:
+            residue.append(word)
+    return (" ".join(residue) or None), (query.strip() or None)
+
+
+#: NX-352: dimensiunile ale căror cuvinte rămân în căutare chiar dacă un citat de nevoie le
+#: cuprinde: numesc CE ESTE produsul. Un cuvânt nemapat nu e consumat de nimic (e textul căutat).
+_SUBJECT_WORDS = frozenset({"category", PRODUCT_TYPE})
+_PUNCTUATION = ".,;:!?…\"'()[]«»„”“"
+#: Cererea provizorie a argumentelor, înlocuită imediat cu reziduul (`SearchArgs.query` nu e goală).
+_PENDING = "·"
 
 
 def _lang(locale: str) -> str:
@@ -221,16 +287,13 @@ class _Planner:
         return any(self.needs.dimension_of(n.key) in self.facets for n in self.state.active_needs())
 
     def _subject_label(self) -> str | None:
-        """Eticheta subiectului, din date: raftul (`VocabEntry.label`), apoi tipul (etichetă de
-        pachet, apoi de vocabular), apoi cheia. Workaroundul declarat în contract:
+        """Eticheta subiectului, din date: tipul (umbrela, apoi tipul spus: etichetă de pachet,
+        apoi de vocabular, apoi cheia), apoi raftul (`VocabEntry.label`). NX-352: eticheta e TEXTUL
+        căutării când cererea n-are reziduu, iar numele tipului apare în numele produselor, pe când
+        numele raftului nu (NX-293), deci tipul întâi. Workaroundul declarat în contract:
         `SearchArgs.query` cere ≥ 1 caracter, iar treapta `filters_only` servește cererea fără
         cuvinte."""
         topic = self.state.topic
-        if topic.category_key:
-            for entry in self.vocab.categories if self.vocab else ():
-                if entry.key == topic.category_key and entry.label:
-                    return entry.label
-            return topic.category_key
         if topic.type_umbrella and (topic.type_learned or not topic.product_type):
             # NX-350: eticheta unei umbrele e CAPUL primului ei cod (cuvântul spus de client,
             # «cremă»), nu codul întreg: altfel căutarea fără cuvinte ar alege unul. Nu un cuvânt
@@ -249,6 +312,11 @@ class _Planner:
                 if entry.key == topic.product_type and entry.label:
                     return entry.label
             return topic.product_type
+        if topic.category_key:
+            for entry in self.vocab.categories if self.vocab else ():
+                if entry.key == topic.category_key and entry.label:
+                    return entry.label
+            return topic.category_key
         return None
 
     def _hard(self, need: Need, dimension: str) -> bool:
@@ -485,19 +553,29 @@ class _Planner:
         self, act: Act, index: int, *, name: str | None = None, subject_first: bool = False
     ) -> TurnPlan:
         words = read_query(act, pack=self.pack, locale=self.locale).has_words
-        spoken = _read_act_query(act.query, words)
-        subject = self._subject_label()
         product_name = name or self._missing_name(act)
+        # Argumentele întâi: ele spun ce dimensiuni intră CHIAR în căutare (`carried`), deci ce
+        # cuvinte ale cererii sunt deja purtate de un filtru sau de o preferință.
+        before = list(self.gaps)
+        carried: set[str] = set()
+        args = self._search_args(_PENDING, act, product_name=product_name, carried=carried)
+        residue, spoken = _read_act_query(
+            act.query, words, self.interp.changes, self.locale, carried
+        )
+        subject = self._subject_label()
+        # NX-352: căutarea = reziduul cererii (fără formula conversației, nevoi și preț, care sunt
+        # deja filtre sau preferințe); fără reziduu, subiectul. Cererea întreagă doar fără niciunul.
         if name is not None:
             phrase = name
         elif subject_first:
-            phrase = subject or spoken or product_name
+            phrase = subject or residue or spoken or product_name
         else:
-            phrase = spoken or subject or product_name
+            phrase = residue or subject or spoken or product_name
         if not phrase:
+            self.gaps[:] = before  # fără căutare, golurile argumentelor nu spun nimic
             self._gap("no_query")
             return self._plan("reply_only")
-        return self._plan("search", (), self._search_args(phrase, act, product_name=product_name))
+        return self._plan("search", (), args.model_copy(update={"query": phrase}))
 
     def _missing_name(self, act: Act) -> str | None:
         """O referință `name` negăsită printre țintele actului: căutarea e plasa
@@ -507,9 +585,18 @@ class _Planner:
                 return self._name(ref.ref_id)
         return None
 
-    def _search_args(self, phrase: str, act: Act, *, product_name: str | None) -> SearchArgs:
+    def _search_args(
+        self,
+        phrase: str,
+        act: Act,
+        *,
+        product_name: str | None,
+        carried: set[str] | None = None,
+    ) -> SearchArgs:
         """SINGURUL constructor de `SearchArgs` din kernel (I2). Totul vine din starea redusă și din
-        semnalele turului; ce nu are câmp merge în `gaps`."""
+        semnalele turului; ce nu are câmp merge în `gaps`. `carried` (NX-352) primește dimensiunile
+        care intră chiar în argumente, ca filtru sau preferință."""
+        carried = set() if carried is None else carried
         price_max: float | None = None
         brand: str | None = None
         concerns: list[str] = []
@@ -518,6 +605,7 @@ class _Planner:
         rank: list[str] = []
 
         def _prefer(dimension: str, value: str) -> None:
+            carried.add(dimension)
             source = self._source_key(dimension)
             bucket = prefer.setdefault(source, [])
             canonical = self._catalog_value(source, value)
@@ -531,6 +619,7 @@ class _Planner:
             if key == _BUDGET_MAX:
                 if self._hard(need, PRICE_DIMENSION) and _usable_amount(value):
                     price_max = float(value)  # type: ignore[arg-type]
+                    carried.add(PRICE_DIMENSION)
                 else:
                     self._gap("soft_budget")
             elif key == _BUDGET_MIN:
@@ -547,20 +636,29 @@ class _Planner:
             elif dimension == BRAND_DIMENSION:
                 if self._hard(need, dimension):
                     brand = value
+                    carried.add(dimension)
                 elif self._on_attributes(dimension):
                     _prefer(dimension, value)
                 else:
                     self._gap("soft_brand")
             elif dimension in self.facets:
-                if not self._hard(need, dimension):
+                # NX-352 (`kernel.v5.0`, decis de Adi pe 2026-09-29): o nevoie SPUSĂ de client
+                # (`explicit`) e filtru RELAXABIL chiar pe o fațetă ne-`enforce_ready`: scara de
+                # relaxare a căutării o scoate dacă nu iese nimic, ca pe v1. Doar descrisă
+                # (`implicit`) rămâne ordonare. Sonda NX-351: ca preferință, «ai ceva anti aging?»
+                # aducea o treime de produse anti-aging.
+                spoken = need.source == "user_explicit"
+                if not self._hard(need, dimension) and not spoken:
                     if self._on_attributes(dimension):
                         _prefer(dimension, value)
                     else:
                         self._gap("unsupported_need")
                 elif dimension in self.searchable or self._source_key(dimension) in self.searchable:
                     features.append(value)
+                    carried.add(dimension)
                 else:
                     concerns.append(value)
+                    carried.add(dimension)
             else:
                 self._gap("unsupported_need")
 

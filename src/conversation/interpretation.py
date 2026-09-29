@@ -57,7 +57,14 @@ from src.tools.catalog_tools import SearchArgs
 #: nu spune dacă e de față, de corp sau de mâini, iar un tip presupus ajuns în subiect orienta
 #: căutarea pe un tip necerut. Poarta de replay e DEROGATĂ, ca
 #: la v2.0 și v3.0: niciun tur interpretat n-a fost servit. Schema scrisă de model e neschimbată.
-KERNEL_CONTRACT_VERSION = "kernel.v4.0"
+#: `kernel.v5.0` (NX-352, MAJOR, decis de Adi pe 2026-09-29, după sonda NX-351 pe catalogul real):
+#: (1) o nevoie de fațetă SPUSĂ de client (`user_explicit`) e filtru RELAXABIL chiar fără
+#: `enforce_ready` (I7 reformulat: prețul și marca rămân doar din nevoi dure); (2) căutarea
+#: plannerului e REZIDUUL cererii (fără formula locale-i și fără cuvintele unei nevoi purtate deja),
+#: altfel numele subiectului, tipul înaintea raftului; (3) o limită relativă de preț pe o țintă
+#: AMBIGUĂ se raportează la MEDIANA prețurilor recitite ale candidaților. Poarta de replay e
+#: DEROGATĂ (niciun tur interpretat servit); schema scrisă de model e neschimbată.
+KERNEL_CONTRACT_VERSION = "kernel.v5.0"
 
 # --- scrise de model ----------------------------------------------------------------------------
 

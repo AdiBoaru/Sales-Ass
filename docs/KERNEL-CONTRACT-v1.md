@@ -23,7 +23,29 @@ Versioning: the contract is `kernel.v1.0`. **Minor** (`v1.1`): additive schema f
 
 No invariant, ownership row or state rule changes in v1.2, so no replay gate is required. The open questions step 6 raised on I5 (the safety prune on `aside`), I20 (the cart on `cart_ref`) and I15a/I12 (`grounding_guard` does not run on the v1 composition) are decided in the PRs that need them (B and C), under the minor/major rule.
 
-**Current version: `kernel.v4.0` (MAJOR, NX-350, decided by Adi on 2026-09-29).** The product type
+**Current version: `kernel.v5.0` (MAJOR, NX-352, decided by Adi on 2026-09-29).** Three planner and
+delta rules change after the real-catalog probe (NX-351), which served fewer products of the right kind
+and fewer carrying the stated needs than v1:
+- **A facet need the customer stated is a relaxable filter.** An `explicit` facet need goes into
+  `concerns`/`features` even when the facet is not `enforce_ready`; the search's relaxation ladder drops
+  it when nothing comes back, as on v1. A need that is only described (`implicit`) stays a ranking
+  preference. Price and brand still filter only from a hard need (the brand filter is never relaxed).
+  I7 is restated accordingly.
+- **The search text is the residue of the request.** `SearchArgs.query` is the act's words minus the
+  locale's formula (stop words, fillers, comparators, negations: the `query_terms` tables) and minus the
+  words of a need or price change that already reaches the search as a filter or a preference; the words
+  that name the subject stay whole. Without a residue the query is the subject's name, the product type
+  before the shelf (a shelf name does not occur in product names, NX-293); the whole request is the last
+  resort. On the `strict` rung every word is a gate, so the whole sentence („si ceva mai ieftin ?")
+  returned nothing (64 of 81 probed plans searched the customer's sentence).
+- **A relative price on an ambiguous target is the median.** „Ceva mai ieftin” with several products on
+  screen is cheaper than most of them: the bound is the median of the candidates' re-read prices
+  (counted `relative_price_median`); fewer than two known prices ⇒ rejected, as before.
+
+The replay gate is waived, as for v2.0 to v4.0: no interpreted turn has been served in production. The
+model-written schema is unchanged.
+
+**Previous version: `kernel.v4.0` (MAJOR, NX-350, decided by Adi on 2026-09-29).** The product type
 of the SUBJECT changes only from a type the customer stated (`explicit`). An `implicit` type (the
 customer's words do not name the whole code: „cremă" → `crema de fata`, which could as well be a body
 or hand cream) is remembered as the customer's UMBRELLA instead: the validator takes the quote word that
@@ -150,7 +172,7 @@ The model proposes meaning; code decides everything that is a fact, an identifie
 | Where a referenced object lives | — | owns (`ResolvedRef.source`) | The model has no field for it |
 | Product and variant ids | never | owns | Every candidate id, including parked and recent, is revalidated against the catalog |
 | Price, stock, product URL, product attributes | never | owns (catalog) | Re-read at resolution time |
-| Value of a relative change („mai ieftin decât”) | direction only | computes the number | From the resolved product's current price |
+| Value of a relative change („mai ieftin decât”) | direction only | computes the number | From the resolved product's current price; (v5.0) on an ambiguous target, the median of the candidates' re-read prices |
 | State mutation | proposes (delta) | applies (reducer) | Single writer: `state_reducer` |
 | State persistence and budget | — | owns | `serialize`, 6 KB; `inferred` never persisted |
 | Ambiguity candidates | proposes | owns final verdict | Ambiguity gate |
@@ -173,7 +195,7 @@ Twenty-six invariants, each with the test or gate that fails when it is broken. 
 | I4 | No blind reset: conversation-scoped needs are cleared only by `remove` or `clear all`; topic-scoped needs leave only through a subject change, and are parked, not lost | Property test over random op sequences × 5 packs |
 | I5 | `thread=aside` is the identity on the CONVERSATION state (needs, topic, executor-written references, `active_search`); the safety prune (NX-173, as a removal of blocked products from displayed/parked/recent sets) and the gate's question memory still apply on `aside` (v2.0) | Property test (`reduce_turn`) + commit tests (`tests/test_interpreted_turn_b*.py`) |
 | I6 | A revoked need is revived only by `explicit` evidence | Reducer unit test (exists as `revoked_key`) + property test |
-| I7 | Only `explicit` user evidence can produce a hard filter: explicit + hard-capable → hard; explicit + not hard-capable → soft; implicit → soft; inferred → ranking only, this turn | Property test on the delta mapper: no `implicit`/`inferred` change ever reaches a `WHERE` |
+| I7 | Only `explicit` user evidence can produce a hard filter: explicit + hard-capable → hard; explicit + not hard-capable → soft; implicit → soft; inferred → ranking only, this turn. (v5.0) An explicit facet need, hard or soft, is a relaxable facet filter (`concerns`/`features`); price and brand filter only from a hard need | Property test on the delta mapper and the planner: no `implicit`/`inferred` change ever reaches a `WHERE`; `price_max`/`brand` only from hard needs |
 | I8 | Hard-capable means an `enforce_ready` facet or a hard universal spec (budget, size, restriction) | Unit test on the vocabulary |
 | I9 | A number becomes a value of dimension D only if its unit belongs to D, or it has no unit and D is the price dimension | Unit tests across 5 packs („100 ml”, „256 GB”, „SPF 50”, „3 locuri”) |
 | I10 | A mutation (cart, checkout) executes only on `exact` targets | Gate unit test |
@@ -360,7 +382,7 @@ Never afterwards:
 The contract requires two additive changes in the search tool, both written only by the planner and both empty by default (empty ⇒ the SQL, the fusion and the session fingerprint are byte-identical to v1.0):
 
 - `SearchArgs.rank_terms` (v1.0). Today the only textual input is `query`, and on the `strict` rung the query is a gate: its terms are joined with AND. Passing unmapped words through `query` would turn „piele obosită după avion” into a hidden filter, which is the NX-298 lesson.
-- `SearchArgs.prefer` (v1.1, NX-333): the `soft` facet needs, the subject's product type (v4.0: or every code of its umbrella when no type was stated) and this turn's `inferred` facet signals, as attribute key → catalog values, merged in the tool with the NX-322 need-menu preference and passed to the existing fusion (`need_preference`). No new SQL. Without it, a `soft` need had no channel into the search, and since no facet is `enforce_ready` on today's data, every facet need the user stated would have vanished from the interpreted search, which is worse than today's path. Only dimensions that are **attribute** facets enter `prefer`: fusion reads the preference from `attributes`, so a column-backed dimension (the brand, on the real catalog) would order nothing and dilute the others; it goes into `gaps` instead.
+- `SearchArgs.prefer` (v1.1, NX-333): the `soft` facet needs (v5.0: only the described, `implicit` ones; a stated need is a relaxable filter), the subject's product type (v4.0: or every code of its umbrella when no type was stated) and this turn's `inferred` facet signals, as attribute key → catalog values, merged in the tool with the NX-322 need-menu preference and passed to the existing fusion (`need_preference`). No new SQL. Without it, a `soft` need had no channel into the search, and since no facet is `enforce_ready` on today's data, every facet need the user stated would have vanished from the interpreted search, which is worse than today's path. Only dimensions that are **attribute** facets enter `prefer`: fusion reads the preference from `attributes`, so a column-backed dimension (the brand, on the real catalog) would order nothing and dilute the others; it goes into `gaps` instead.
 
 „Weight capped below any facet match” is measured, not assumed (`tests/test_kernel_planner.py`): with today's fusion weights and the real fusion pool (50), a facet preference always beats the one-position lift a rank term gives between two adjacent products. The declared limit: a rank term is a secondary key, so inside a large tie group of the text rank (the `filters_only` rung, where hundreds of products rank zero) it can lift a product by several positions at once, and one preferred dimension (0.25) undoes a lift of at most 7 positions from the top of the pool; with several preferred dimensions the preference is their mean, so the bound is lower. Moving `rank_terms` into a fusion signal would lift that limit and is a contract change on measurement, not on principle.
 
@@ -431,7 +453,7 @@ The planner reads the reduced state, the resolved references and the gate verdic
 | --- | --- | --- |
 | `find` | no subject, no query words, no facet needs | `ask`: a subject question from the pack's top shelves, gain-gated |
 | `find` | subject known, no new words („Ce recomanzi?”) | `search` from state. The plan carries no query; because today's `SearchArgs.query` requires ≥ 1 character, the `SearchArgs` builder fills it with the subject's label and the `filters_only` rung serves it. This is a declared v1 workaround inside the builder, not planner logic |
-| `find` | subject or query words present | `search`, `SearchArgs` derived as in design section D |
+| `find` | subject or query words present | `search`, `SearchArgs` derived as in design section D; (v5.0) `query` = the residue of the request, else the subject's name (type before shelf), else the whole request |
 | `find` | an `implicit` need with gain ≥ 0.30, not yet asked | `search` + one confirmation question as the closing line (the NX-315 `question` slot) |
 | `show_more` | `active_search` present, no changes this turn | `page` |
 | `show_more` | changes this turn | `search` (it is a refinement) |

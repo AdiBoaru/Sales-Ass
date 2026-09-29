@@ -200,19 +200,55 @@ def test_a_relative_bound_is_computed_from_the_reread_price():
     assert (p.key, p.value, p.strength) == ("budget_max", 89.9, "hard")
 
 
-def test_a_relative_bound_on_an_ambiguous_target_is_rejected_not_guessed():
-    change = ch(dimension="price", relation="lte", relative_to="r1", quote="mai ieftin decât ăsta")
-    ambiguous = ResolvedRef(
+def _ambiguous_r1(*ids):
+    return ResolvedRef(
         ref_id="r1",
         kind="deictic",
         outcome="ambiguous",
-        product_ids=["p1", "p2"],
+        product_ids=list(ids),
         source="shown_now",
         reason="no_anchor",
     )
-    d = delta_for(change, said="mai ieftin decât ăsta", refs=[ref("r1")], resolved=[ambiguous])
-    assert d.proposals == ()
-    assert [c.rejected for c in d.rejected] == ["unknown_reference"]
+
+
+def test_a_relative_bound_on_an_ambiguous_target_without_reread_prices_is_rejected():
+    """Fără cel puțin două prețuri recitite, o țintă ambiguă nu dă nicio limită (nu se ghicește)."""
+    change = ch(dimension="price", relation="lte", relative_to="r1", quote="mai ieftin decât ăsta")
+    one = ReferenceFacts(products={"p1": ProductFacts("p1", "Crema", 50.0, True)})
+    for facts in (None, one):
+        d = delta_for(
+            change,
+            said="mai ieftin decât ăsta",
+            refs=[ref("r1")],
+            resolved=[_ambiguous_r1("p1", "p2")],
+            facts=facts,
+        )
+        assert d.proposals == ()
+        assert [c.rejected for c in d.rejected] == ["unknown_reference"]
+
+
+def test_a_relative_bound_on_an_ambiguous_target_is_the_median_of_the_candidates():
+    """NX-352 (`kernel.v5.0`, decis de Adi): «ceva mai ieftin» cu mai multe produse pe ecran ⇒
+    mai ieftin decât MAJORITATEA lor: mediana prețurilor recitite, numărată."""
+    change = ch(dimension="price", relation="lte", relative_to="r1", quote="mai ieftin")
+    facts = ReferenceFacts(
+        products={
+            "p1": ProductFacts("p1", "A", 40.0, True),
+            "p2": ProductFacts("p2", "B", 110.0, True),
+            "p3": ProductFacts("p3", "C", 60.0, True),
+            "p4": ProductFacts("p4", "D", None, True),
+        }
+    )
+    d = delta_for(
+        change,
+        said="si ceva mai ieftin?",
+        refs=[ref("r1")],
+        resolved=[_ambiguous_r1("p1", "p2", "p3", "p4")],
+        facts=facts,
+    )
+    p = only(d)
+    assert (p.key, p.value, p.strength) == ("budget_max", 60.0, "hard")
+    assert d.counters.get("relative_price_median") == 1
 
 
 # --- thread și contoare --------------------------------------------------------------------------

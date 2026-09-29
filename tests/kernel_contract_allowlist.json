@@ -56,7 +56,7 @@
     {
       "file": "src/agent/turn_planner.py",
       "function": "_read_act_query",
-      "reason": "NX-333: cererea actului (Act.query) intra NESCHIMBATA in SearchArgs.query, ca valoare, si doar cand are cuvinte de continut (dovada din answer_policy.read_query, pe tabelele locale-i). Nicio decizie a plannerului nu ramifica pe text: ramificarea e pe QueryEvidence.has_words."
+      "reason": "NX-333 + NX-352 (kernel.v5.0): cererea actului (Act.query) si citatele schimbarilor turului se citesc AICI o singura data si ies ca VALORI: reziduul cererii (fara formula locale-i din tabelele query_terms si fara cuvintele unei nevoi purtate deja de un filtru sau de o preferinta; numele subiectului ramane intreg) si cererea intreaga. Nicio decizie a plannerului nu ramifica pe text: alegerea frazei e pe prezenta valorilor (reziduu, subiect, cerere)."
     },
     {
       "file": "src/conversation/kernel_trace.py",
