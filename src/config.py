@@ -1776,6 +1776,26 @@ class Settings(BaseSettings):
     interpreted_turn_enabled: bool = Field(
         default=False, validation_alias="INTERPRETED_TURN_ENABLED"
     )
+    # NX-353 (pasul 7): kernelul pe trafic real. DARK = lanțul rulează pe fiecare tur eligibil,
+    # execută DOAR căutarea planificată (read-only, fără compunere) și înregistrează ce ar fi
+    # servit, iar v1 răspunde (contextul restaurat). Cere doar starea v2 CITITĂ, deci rulează în
+    # paralel cu umbra stării. OFF = byte-identic.
+    interpreted_turn_dark_enabled: bool = Field(
+        default=False, validation_alias="INTERPRETED_TURN_DARK_ENABLED"
+    )
+    # Plafonul apelului de interpretare în modul DARK (secunde, peste retry): clientul așteaptă
+    # răspunsul v1 după el, deci un furnizor blocat nu are voie să adauge `llm_call_total_cap_s`
+    # pe fiecare tur. Expirat ⇒ `kernel_turn{fallback_reason: "dark_timeout"}`, v1 răspunde.
+    interpreted_turn_dark_timeout_s: float = Field(
+        default=5.0, gt=0, le=30, validation_alias="INTERPRETED_TURN_DARK_TIMEOUT_S"
+    )
+    # Canary: cu `INTERPRETED_TURN_ENABLED`, doar conversațiile cu bucket < procent sunt SERVITE de
+    # kernel (sticky, `kernel_mode`); celelalte merg pe dark (dacă e aprins) sau pe v1.
+    interpreted_turn_canary_percent: int = Field(
+        default=100, ge=0, le=100, validation_alias="INTERPRETED_TURN_CANARY_PERCENT"
+    )
+    # Slug-urile tenanților pe care rulează kernelul (dark sau servit); gol = toți.
+    interpreted_turn_tenants: str = Field(default="", validation_alias="INTERPRETED_TURN_TENANTS")
     # Pragul de information gain sub care NU întrebăm (răspundem cu ce avem + declarăm ce nu
     # știm). Siguranța și conflictele hard trec peste el — sunt corectitudine, nu UX.
     clarification_min_information_gain: float = Field(
@@ -2157,7 +2177,20 @@ class Settings(BaseSettings):
         v2, persistența v1 citește `search_constraints`, pe care kernelul nu-l scrie), de ramura v2
         a scurtăturilor exacte (care rulează ÎNAINTEA interpretării) și de gardul de rafinare (fără
         el «mai arată-mi, dar sub 100» ar trece drept paginare pură). Creierul unic revendică și el
-        turul, deci cele două se exclud."""
+        turul, deci cele două se exclud.
+
+        NX-353: modul DARK cere doar starea v2 CITITĂ (nu scrie nimic, nu servește, nu rulează
+        scurtăturile) și exclude creierul unic, ca servirea."""
+        if self.interpreted_turn_dark_enabled:
+            if not self.conversation_state_v2_enabled:
+                raise ValueError(
+                    "INTERPRETED_TURN_DARK_ENABLED cere CONVERSATION_STATE_V2_ENABLED (starea v2 "
+                    "citită: lanțul kernelului o citește)"
+                )
+            if self.single_brain_enabled:
+                raise ValueError(
+                    "INTERPRETED_TURN_DARK_ENABLED e incompatibil cu SINGLE_BRAIN_ENABLED"
+                )
         if not self.interpreted_turn_enabled:
             return self
         missing = [

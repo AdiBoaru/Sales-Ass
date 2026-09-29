@@ -13,6 +13,7 @@ docs/agent-tools-architecture.md.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -411,6 +412,34 @@ async def _offered_phrases(
     }
 
 
+def canary_bucket(business_id: str, conversation_id: str | None) -> int:
+    """NX-353: bucket-ul STICKY al unei conversații (0-99), determinist pe (tenant, conversație).
+    Nu e o decizie de securitate (ca la NX-238): stabilitatea ajunge."""
+    raw = f"nx353:{business_id}:{conversation_id or ''}".encode()
+    return int(hashlib.sha256(raw).hexdigest()[:8], 16) % 100
+
+
+def kernel_mode(settings: Any, business: Any, conversation_id: str | None) -> str | None:
+    """NX-353 (pasul 7): `serve` (canary: `INTERPRETED_TURN_ENABLED` și bucket < procent), `dark`
+    (`INTERPRETED_TURN_DARK_ENABLED`: lanțul rulează, v1 răspunde) sau `None`. Tenanții din
+    `INTERPRETED_TURN_TENANTS` (slug-uri), gol = toți. PUR."""
+    tenants = {
+        t.strip()
+        for t in str(getattr(settings, "interpreted_turn_tenants", "") or "").split(",")
+        if t.strip()
+    }
+    if tenants and getattr(business, "slug", None) not in tenants:
+        return None
+    percent = int(getattr(settings, "interpreted_turn_canary_percent", 100))
+    if getattr(settings, "interpreted_turn_enabled", False) and (
+        canary_bucket(str(getattr(business, "id", "")), conversation_id) < percent
+    ):
+        return "serve"
+    if getattr(settings, "interpreted_turn_dark_enabled", False):
+        return "dark"
+    return None
+
+
 async def _recognize_chip_press(ctx: TurnContext, deps: PipelineDeps) -> None:
     """NX-316: scrie `ctx.chip_move` (owner UNIC) dacă mesajul reproduce o mutare oferită.
 
@@ -424,7 +453,9 @@ async def _recognize_chip_press(ctx: TurnContext, deps: PipelineDeps) -> None:
     Fără niciun consumator (ambele flaguri stinse) nu rulează nimic: zero citiri în plus."""
     settings = get_settings()
     serve = bool(getattr(settings, "chip_moves_v2_enabled", False))
-    kernel = bool(getattr(settings, "interpreted_turn_enabled", False))
+    # NX-353: și modul dark are nevoie de fapt (aceeași eligibilitate ca servirea), iar un tenant
+    # din afara listei n-are consumator, deci nici citiri în plus
+    kernel = kernel_mode(settings, ctx.business, ctx.conversation_id) is not None
     if not (serve or kernel):
         return
     try:
@@ -959,15 +990,22 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     # NX-338: chip-ul se judecă pe FAPT (`chip_recognized`), nu pe servire (`chip_move`, None cu
     # `CHIP_MOVES_V2_ENABLED` stins), altfel apăsările ar ajunge la modelul de interpretare.
     s = get_settings()
-    kernel = (
-        getattr(s, "interpreted_turn_enabled", False)
-        and ctx.state_v2 is not None
+    eligible = (
+        ctx.state_v2 is not None
         and action_command(ctx) is None
         and ctx.chip_recognized is None
         and not is_pure_pagination(ctx)
     )
+    # NX-353 (pasul 7): SERVIT (canary, per conversație, sticky) sau DARK (lanțul rulează, v1
+    # răspunde); tenanții din `INTERPRETED_TURN_TENANTS`, gol = toți.
+    mode = kernel_mode(s, ctx.business, ctx.conversation_id) if eligible else None
+    if mode == "dark":
+        from src.agent.interpreted_turn import run_interpreted_turn  # noqa: PLC0415
+
+        # Fără scurtături și fără executori: nimic din răspuns nu se schimbă (întoarce mereu False)
+        await run_interpreted_turn(ctx, deps, dark=True)
     memo = None
-    if kernel:
+    if mode == "serve":
         # Pașii scurtăturilor exacte se memorează: dacă kernelul nu servește, trecerea completă
         # de mai jos îi refolosește, deci turul căzut e turul cu flagul stins (fără citiri și
         # evenimente dublate).

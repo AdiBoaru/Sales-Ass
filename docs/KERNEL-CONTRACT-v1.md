@@ -603,8 +603,19 @@ One component per PR, and no step starts before the previous one is merged with 
 | 5 | Interpretation adapter (`turn_interpreter`): prompt, per-tenant schema, `complete_schema` call, validation into `CheckedChange` | Provider accepts the schema (one smoke call, run by Adi); offline agreement report on real SOLE turns | I18, I22 |
 | — | Production: `CONVERSATION_STATE_V2_ENABLED` shadow, then v2 write | Shadow diff read and explained | — |
 | 6 | Full stage behind `INTERPRETED_TURN_ENABLED` (OFF), wired to existing executors and compose, trace written | `ScriptedLLM` journeys × 5 packs green; differential harness still equal with OFF | I13 (replay), I15a, I15b, I20 |
-| 7 | Dark replay on the full corpus (one run, started by Adi) → canary via NX-249 → production | Section H metrics hold on every family | all |
+| 7 | Dark on live traffic (`INTERPRETED_TURN_DARK_ENABLED`) → canary per conversation (`INTERPRETED_TURN_CANARY_PERCENT`) → production (NX-353) | The pre-registered GO rule in `tasks/stage1/NX-353.md` §4 holds on the dark report, then the canary rule registered before the canary starts | all |
 
 What each step must not do: steps 1–4 call no model and touch no live path, step 5 writes no state, and step 6 changes nothing while the flag is off.
+
+**Step 7 (NX-353).** The replay and the NX-351/352 probe measured turns that were already analysed, so they are a necessary check, not the proof. Step 7 gets the proof from new traffic in three stages:
+
+- **Dark.** `INTERPRETED_TURN_DARK_ENABLED` runs the chain on every eligible turn (the same conditions as serving). It needs the v2 state *read*, not written, so it can run next to the state shadow. It refuses the single brain.
+- **What dark does not do.** It runs no exact shortcut and no executor (compose would be a second model call). On a primary `search` plan it runs only the planned search, which is read-only, and records what the kernel would have served in `ctx.trace["kernel_dark"]`: product ids, lexical step, ms, executor, plan count, plus the kernel's own state after the reducer (type or umbrella codes, shelf key, active facet needs). These are catalog keys, never customer text.
+- **Time cap.** The customer waits for v1 after the branch, so in dark mode the interpretation call has its own cap (`INTERPRETED_TURN_DARK_TIMEOUT_S`, 5 s including retries). When it expires the turn falls back with `dark_timeout`. Serving is unchanged. In dark mode, `kernel_turn` also carries `mode: "dark"`, so the report never mixes dark and served populations.
+- **v1 still answers.** The context is restored (`ContextSnapshot`), so the turn equals the flag-off turn on the I16 surface. The exceptions are the reads made inside the branch and the kernel's events (`kernel_turn{fallback_reason: "dark"}`, plus the new `kernel_dark{executor, searched, kernel_n, lexical_step}`).
+- **Canary.** With `INTERPRETED_TURN_ENABLED` on, only conversations whose sticky bucket `sha256("nx353:{business_id}:{conversation_id}") mod 100` is below the percent are served; the rest go dark (if on) or to v1.
+- **Tenants.** `INTERPRETED_TURN_TENANTS` limits both modes to a list of slugs.
+- **Why not NX-249.** Its controller only assigns on `/web/v2/turns`, and production runs on `/web/chat`.
+- **The report.** `scripts/kernel_canary_report.py` is read-only and applies the GO rule. The match metrics are a *proxy*: their truth is the kernel's own state, so they favour the kernel. Manual review of 20 seeded turns is the real label.
 
 From here on, a failing conversation goes into the replay corpus and gets fixed in the one layer its trace blames. Only a change to a rule bumps the contract version.

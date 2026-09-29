@@ -1802,6 +1802,7 @@ guidance_required_enabled = false
 howto_from_catalog_enabled = false
 injection_screen_enabled = false
 input_pii_mask_enabled = true
+interpreted_turn_dark_enabled = false
 interpreted_turn_enabled = false
 labeled_quantity_grounding_enabled = true
 lead_score_hint_enabled = true

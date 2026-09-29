@@ -29,6 +29,7 @@ celor două situri declarate: restaurarea (`_restore_state_fields`) și vederea 
 
 from __future__ import annotations
 
+import asyncio
 import copy
 import logging
 from collections.abc import Mapping
@@ -59,7 +60,7 @@ from src.conversation.interpretation import (
 )
 from src.conversation.interpretation_check import OUTCOMES
 from src.conversation.kernel_trace import KernelTrace, cap_trace, redact_trace, state_view
-from src.conversation.needs import NeedVocabulary
+from src.conversation.needs import UNMAPPED_KEY, NeedVocabulary
 from src.conversation.references import (
     MUTATING_ACTS,
     ReferenceFacts,
@@ -99,6 +100,8 @@ log = logging.getLogger(__name__)
 #: putut citi: fallback ÎNAINTEA apelului), `snapshot_error` (instantaneul contextului a picat),
 #: `executor_refused` (niciun executor n-a servit turul), `no_sentence` (PR C) și `dark` (lanțul a
 #: mers, dar niciun executor nu există încă: `execute_plans` întoarce `None` până la PR C).
+#: NX-353: `dark_timeout` = plafonul NOSTRU pe interpretarea din modul dark (nu o eroare a
+#: furnizorului, ca la NX-311: altă reparație).
 FALLBACK_REASONS: tuple[str, ...] = (
     *(o for o in OUTCOMES if o != "ok"),
     "exception",
@@ -107,6 +110,7 @@ FALLBACK_REASONS: tuple[str, ...] = (
     "executor_refused",
     "no_sentence",
     "dark",
+    "dark_timeout",
 )
 #: Etichetele operațiilor de DB ale kernelului: excepția declarată de la suprafața I16 (un tur căzut
 #: pe v1 e identic cu flagul stins în afara lor). Toate trei sunt ale kernelului, cu nume proprii
@@ -119,6 +123,7 @@ KERNEL_READS: frozenset[str] = frozenset({MENU_OP, FACTS_OP, VOCABULARY_OP, SUBJ
 #: Traceul unui tur neservit (`dark`): niciun executor n-a rulat.
 NO_EXECUTOR = "none"
 _DARK = "dark"
+_DARK_TIMEOUT = "dark_timeout"
 _EXCEPTION = "exception"
 _VOCABULARY_UNAVAILABLE = "vocabulary_unavailable"
 _SNAPSHOT_ERROR = "snapshot_error"
@@ -675,11 +680,13 @@ def _chain_record(
     return trace.model_dump(mode="json"), events
 
 
-def _record_fallback(ctx: TurnContext, reason: str, snapshot: str) -> None:
+def _record_fallback(ctx: TurnContext, reason: str, snapshot: str, *, dark: bool = False) -> None:
     if reason not in FALLBACK_REASONS:
         reason = _EXCEPTION
     ctx.trace["kernel_fallback"] = {"reason": reason, "vocabulary_snapshot": snapshot}
-    ctx.emit("kernel_turn", served=False, executor=None, plans=0, fallback_reason=reason)
+    # NX-353: `mode` doar în modul dark (servirea rămâne byte-identică): raportul separă populațiile
+    mode = {"mode": "dark"} if dark else {}
+    ctx.emit("kernel_turn", served=False, executor=None, plans=0, fallback_reason=reason, **mode)
 
 
 # --- executorii și commit-ul (PR B) ---------------------------------------------------------------
@@ -796,18 +803,103 @@ async def _serve(
 # --- ramura ---------------------------------------------------------------------------------------
 
 
-async def run_interpreted_turn(ctx: TurnContext, deps: PipelineDeps) -> bool:
+def _dark_truth(state: ConversationStateV2) -> dict[str, Any]:
+    """NX-353: ce a validat kernelul din cuvintele clientului, după reducer: tipul spus (sau
+    codurile umbrelei), raftul și nevoile de fațetă active (`contains`, valori de vocabular). Sunt
+    CHEI de catalog, nu text de client; raportul le folosește ca adevăr PROXY (declarat)."""
+    topic = state.topic
+    types = [topic.product_type] if topic.product_type else list(topic.type_umbrella)
+    return {
+        "types": types,
+        "type_learned": bool(topic.type_learned),
+        "shelf": topic.category_key,
+        # `unmapped` poartă cuvintele clientului (recenzia NX-353): nu e o cheie de catalog
+        "needs": [
+            [n.key, n.normalized_value]
+            for n in state.active_needs()
+            if n.operator == "contains"
+            and isinstance(n.normalized_value, str)
+            and n.key != UNMAPPED_KEY
+        ],
+    }
+
+
+def _dark_record(chain: _Chain) -> dict[str, Any]:
+    """NX-353: înregistrarea dark a turului, înaintea căutării (executorul real, planurile,
+    adevărul proxy, dacă starea v2 se scrie). O căutare picată își păstrează restul câmpurilor."""
+    planned = chain.planned
+    return {
+        "executor": planned.plans[planned.primary].executor,
+        "plans": len(planned.plans),
+        "searched": False,
+        "kernel_ids": [],
+        "lexical_step": None,
+        "ms": None,
+        "error": None,
+        "truth": _dark_truth(chain.reduced.state),
+        # ce memorie a citit kernelul: fără scriere, e starea ținută de v1 (declarat)
+        "state_v2_write": bool(
+            getattr(get_settings(), "conversation_state_v2_write_enabled", False)
+        ),
+    }
+
+
+async def _dark_search(
+    ctx: TurnContext, deps: PipelineDeps, chain: _Chain, out: dict[str, Any]
+) -> None:
+    """NX-353 (pasul 7, DARK): ce ar fi servit kernelul, fără să servească. Pe un plan `search`
+    principal rulează DOAR căutarea planificată (read-only, aceeași ca pe calea servită, fără
+    compunere, deci fără al doilea apel de model) și reține primele `card_slots` id-uri în `out`.
+    Zero text de client: id-uri de produs, treapta lexicală, ms."""
+    from time import perf_counter  # noqa: PLC0415
+
+    from src.tools.catalog_tools import run_planned_search  # noqa: PLC0415 — ciclul unelte
+
+    plan = chain.planned.plans[chain.planned.primary]
+    if plan.executor != "search" or plan.search_args is None:
+        return
+    mark = len(ctx.events)
+    started = perf_counter()
+    result = await run_planned_search(ctx, deps, plan.search_args)
+    out["ms"] = round((perf_counter() - started) * 1000, 1)
+    slots = int(getattr(get_settings(), "card_slots", 6))
+    ids = [str(p.get("product_id") or p.get("id")) for p in (result.products or [])]
+    out["kernel_ids"] = [i for i in ids if i and i != "None"][:slots]
+    search = next((e for e in ctx.events[mark:] if e.type == "product_search"), None)
+    out["lexical_step"] = (search.properties or {}).get("lexical_step") if search else None
+    out["searched"] = True
+
+
+async def _interpret(
+    deps: PipelineDeps, inp: InterpretInput, business_id: str, *, dark: bool
+) -> InterpretedTurn | None:
+    """Apelul de interpretare. În modul DARK are plafonul lui (`INTERPRETED_TURN_DARK_TIMEOUT_S`):
+    clientul așteaptă răspunsul v1 după el, iar un furnizor blocat ar adăuga altfel până la
+    `llm_call_total_cap_s` pe FIECARE tur, pentru un rezultat pe care nu-l folosește nimeni
+    (recenzia NX-353). `None` = plafonul a expirat. Pe servire, neschimbat."""
+    call = interpret_turn(deps.llm, inp, business_id=business_id)
+    if not dark:
+        return await call
+    cap = float(getattr(get_settings(), "interpreted_turn_dark_timeout_s", 5.0))
+    try:
+        return await asyncio.wait_for(call, timeout=cap)
+    except TimeoutError:
+        return None
+
+
+async def run_interpreted_turn(ctx: TurnContext, deps: PipelineDeps, *, dark: bool = False) -> bool:
     """Turul pe calea interpretată. Întoarce `True` doar când un executor a servit turul; atunci
     `ctx.kernel_turn` e scris (ultimul), iar commit-ul trece doar prin reducer. PR B: niciun
     executor nu e legat (`execute_plans` ⇒ `None`), deci în producție turul rămâne DARK și ramura
     întoarce `False` (calea v1 răspunde și persistă ca azi). Nu aruncă (P6): orice eșec e un
     `kernel_fallback{reason}`, iar contextul predat căii v1 e cel de dinaintea ramurii (o
     restaurare picată se numără, `kernel_restore_failed`, iar calea v1 continuă)."""
+    dark_mode = dark
     try:
         saved = ContextSnapshot.take(ctx)
     except Exception as e:  # noqa: BLE001 — P6: fără instantaneu nu se atinge nimic
         log.warning("interpreted_turn: instantaneu (%s)", type(e).__name__)
-        _record_fallback(ctx, _SNAPSHOT_ERROR, "")
+        _record_fallback(ctx, _SNAPSHOT_ERROR, "", dark=dark_mode)
         return False
     reason, snapshot, chain = _EXCEPTION, "", None
     try:
@@ -818,8 +910,13 @@ async def run_interpreted_turn(ctx: TurnContext, deps: PipelineDeps) -> bool:
     except Exception as e:  # noqa: BLE001 — P6: citirea de intrare picată ⇒ v1, zero apeluri
         log.warning("interpreted_turn: intrarea (%s)", type(e).__name__)
         inp = None
+    interpreted = None
     if inp is not None:
-        interpreted = await interpret_turn(deps.llm, inp, business_id=ctx.business.id)
+        interpreted = await _interpret(deps, inp, ctx.business.id, dark=dark_mode)
+        if interpreted is None:
+            log.warning("interpreted_turn: plafonul interpretării dark a expirat")
+            reason = _DARK_TIMEOUT
+    if interpreted is not None:
         ctx.emit("turn_interpretation", **interpreted.event)
         reason, snapshot = interpreted.outcome, interpreted.vocabulary_snapshot
         if interpreted.outcome == "ok":
@@ -828,9 +925,22 @@ async def run_interpreted_turn(ctx: TurnContext, deps: PipelineDeps) -> bool:
             except Exception as e:  # noqa: BLE001 — P6: după apel, tot un fallback
                 log.warning("interpreted_turn: lanțul (%s)", type(e).__name__)
                 reason = _EXCEPTION
-    served, record, kernel_turn, dark = False, None, None, False
+    served, record, kernel_turn, dark_record = False, None, None, None
+    dark = False
     mark = len(ctx.events)
-    if chain is not None:
+    if chain is not None and dark_mode:
+        # NX-353: fără executori și fără scurtături; doar căutarea planificată, read-only
+        dark = True
+        try:
+            dark_record = _dark_record(chain)
+            await _dark_search(ctx, deps, chain, dark_record)
+        except Exception as e:  # noqa: BLE001 — P6: căutarea picată se numără, v1 răspunde
+            log.warning("interpreted_turn: căutarea dark (%s)", type(e).__name__)
+            if dark_record is None:
+                dark_record = {"executor": None, "searched": False, "kernel_ids": []}
+            dark_record["searched"] = False
+            dark_record["error"] = type(e).__name__
+    elif chain is not None:
         try:
             verdict = await _serve(ctx, deps, chain, saved)
             if verdict in (_EXECUTOR_REFUSED, _NO_SENTENCE):
@@ -875,12 +985,26 @@ async def run_interpreted_turn(ctx: TurnContext, deps: PipelineDeps) -> bool:
         log.warning("interpreted_turn: restaurarea (%s)", type(e).__name__)
         ctx.emit("kernel_restore_failed", error=type(e).__name__)
     if record is None:
-        _record_fallback(ctx, reason, snapshot)
+        _record_fallback(ctx, reason, snapshot, dark=dark_mode)
         return False
     trace, events = record
     ctx.trace["kernel"] = trace
     for name, properties in events:
+        if dark_mode and name == "kernel_turn":
+            properties = {**properties, "mode": "dark"}
         ctx.emit(name, **properties)
+    if dark_record is not None:
+        # NX-353: ce ar fi servit kernelul (id-uri de produs, fără text de client); raportul îl
+        # compară cu setul servit de v1 pe același tur (`conversation_traces.recommended`).
+        ctx.trace["kernel_dark"] = dark_record
+        ctx.emit(
+            "kernel_dark",
+            executor=dark_record.get("executor"),
+            searched=bool(dark_record.get("searched")),
+            kernel_n=len(dark_record.get("kernel_ids") or ()),
+            lexical_step=dark_record.get("lexical_step"),
+            error=dark_record.get("error"),
+        )
     return False
 
 

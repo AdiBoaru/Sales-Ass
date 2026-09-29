@@ -384,6 +384,30 @@ erori; fraza clientului 64 → 14 planuri), pe turele deja analizate și cu marj
 a canary-ului. Card:
 [`tasks/stage1/NX-352.md`](tasks/stage1/NX-352.md); probă: `pytest tests/test_nx352_planner_query.py
 tests/test_kernel_planner.py tests/test_kernel_delta.py tests/test_nx348_subject_type.py -q`.
+**Pasul 7 (NX-353, decis de Adi pe 2026-09-29): kernelul pe trafic real, întâi DARK pe tot
+traficul, apoi canary per conversație.** Replay-ul și sonda NX-351/352 au măsurat ture deja analizate;
+dovada vine de pe trafic nou. `INTERPRETED_TURN_DARK_ENABLED` (OFF): ramura rulează pe fiecare tur
+eligibil (aceleași condiții ca servirea), fără scurtături și fără executori (compunerea ar fi al doilea
+apel de model); pe un plan `search` principal rulează DOAR căutarea planificată (read-only) și scrie
+în `ctx.trace["kernel_dark"]` id-urile, treapta lexicală, ms-urile și starea kernelului după reducer
+(tipul sau umbrela, raftul, nevoile active: chei de catalog, zero text de client). Contextul se
+restaurează, deci turul e cel stins pe suprafața I16, în afara citirilor din ramură și a evenimentelor
+kernelului (`kernel_turn{fallback_reason: "dark"}` + nou `kernel_dark`). Dark-ul cere starea v2 CITITĂ,
+nu scrisă (rulează lângă umbra stării), și refuză creierul unic. Clientul așteaptă v1 DUPĂ ramură,
+deci interpretarea dark are plafonul ei (`INTERPRETED_TURN_DARK_TIMEOUT_S`, 5 s, retry inclus;
+expirat ⇒ `dark_timeout`), iar `kernel_turn` poartă `mode: "dark"` doar în dark (servirea rămâne
+byte-identică), ca raportul să nu amestece populațiile. Canary: cu `INTERPRETED_TURN_ENABLED`,
+doar conversațiile cu bucket STICKY `sha256("nx353:{business_id}:{conversation_id}") mod 100` <
+`INTERPRETED_TURN_CANARY_PERCENT` sunt servite, restul merg pe dark sau pe v1; `INTERPRETED_TURN_TENANTS`
+(slug-uri) limitează ambele moduri (controllerul NX-249 asignează doar pe `/web/v2/turns`, producția e pe
+`/web/chat`). Raportul `scripts/kernel_canary_report.py` (read-only, 0 $; evenimentele pe conexiunea de
+operator, fiindcă `analytics_events` e append-only pentru `bot_runtime`) aplică regula GO
+PRE-ÎNREGISTRATĂ (≥ 60 de ture pe ≥ 5 zile; erori ≤ 5%; căutare goală unde v1 a servit ≤ max(2, 5%);
+subiect și nevoi kernel ≥ v1 − 0,05; interpretarea p90 ≤ 4 s; 20 de ture citite de Adi); o poartă
+nemăsurată dă `INSUFFICIENT`, niciodată GO. Metricile de potrivire sunt PROXY (adevărul e starea
+kernelului, deci îl favorizează, declarat). Card: [`tasks/stage1/NX-353.md`](tasks/stage1/NX-353.md);
+probă: `pytest tests/test_nx353_kernel_dark_canary.py tests/test_nx353_canary_report.py -q` +
+`PYTHONPATH=. python scripts/kernel_canary_report.py --business sole-ro --since <data>`.
 **Pasul 6 PR A (NX-336) — schela turului interpretat, DARK: lanțul rulează pe un tur real, v1
 răspunde.** `INTERPRETED_TURN_ENABLED` (OFF; poarta de boot cere stările v2 citite ȘI scrise,
 scurtăturile pe resolverul v2 + `NAMED_SHORTCUT_TARGETS_ENABLED` și gardul de rafinare, refuză
