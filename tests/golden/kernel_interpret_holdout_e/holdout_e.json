@@ -1,0 +1,1351 @@
+{
+  "schema_version": "kernel-journey.v1",
+  "_note": "Set E: journey-uri de evaluare pentru stratul `interpretation`, scrise independent, pe pachetele de fixture (electronics, fashion, furniture, gifts) și pe pachetul sole-ro cu catalogul sintetic al harnessului. Doar eticheta `interpretation`, în forma compactă (tests/kernel/replay.py): un câmp absent nu se evaluează, `changes: []` afirmă că turul nu schimbă nimic. Etichetele urmează contractul kernelului plus regulile de etichetare decise de proprietarul produsului: (1) un cuvânt generic mai larg decât orice tip al pachetului nu primește tip de produs; (2) un raft numit ca obiect al cererii sau al întrebării e `set category`, dar nu și cuvântul de raft din numele unui tip, din destinația unui articol sau din descrierea clientului; (3) se etichetează doar schimbările NOI, nu o valoare deja activă repetată; (4) un cuvânt care descrie clientul și numește o valoare din vocabular e o schimbare pe acea dimensiune. Fără `sources`, fără `state_before`; `shown` doar pe pachetele de fixture.",
+  "journeys": [
+    {
+      "journey_id": "e01-electronics-phone-budget-compare-cart",
+      "pack": "electronics",
+      "family": ["find", "budget", "compare", "cart"],
+      "locale": "ro",
+      "source": "NX-350 set E",
+      "turns": [
+        {
+          "user_input": "salut, caut un telefon pana in 2000 lei",
+          "shown": ["el-01", "el-02", "el-03"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "telefon"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "telefoane", "quote": "telefon"},
+                {"op": "set", "dimension": "price", "relation": "lte", "number": 2000, "unit": "lei", "quote": "pana in 2000 lei"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "care e diferenta intre primul si al doilea?",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "compare", "targets": ["r1", "r2"]}],
+              "changes": [],
+              "references": [
+                {"id": "r1", "text": "primul", "kind": "ordinal", "ordinal": 1},
+                {"id": "r2", "text": "al doilea", "kind": "ordinal", "ordinal": 2}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "ok, pune-l in cos pe al doilea",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "cart", "targets": ["r1"]}],
+              "changes": [],
+              "references": [
+                {"id": "r1", "text": "al doilea", "kind": "ordinal", "ordinal": 2}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "e02-electronics-laptop-then-tablets-then-back",
+      "pack": "electronics",
+      "family": ["find", "subject_change", "shelf_question", "resume", "extreme"],
+      "locale": "ro",
+      "source": "NX-350 set E",
+      "turns": [
+        {
+          "user_input": "am nevoie de un laptop, ceva pana in 4000 de lei",
+          "shown": ["el-18", "el-19", "el-20"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "laptop"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "laptopuri", "quote": "laptop"},
+                {"op": "set", "dimension": "price", "relation": "lte", "number": 4000, "unit": "lei", "quote": "pana in 4000 de lei"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "si tablete ce ai?",
+          "shown": ["el-11", "el-12", "el-13"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "tablete"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "tablete", "quote": "tablete"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "hmm ma intorc la laptopuri, care era cel mai ieftin?",
+          "expect": {
+            "interpretation": {
+              "thread": "resume",
+              "acts": [{"kind": "detail", "targets": ["r1"]}],
+              "references": [
+                {"id": "r1", "text": "cel mai ieftin", "kind": "extreme", "dimension": "price", "direction": "min"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "e03-electronics-phone-cases-question-link",
+      "pack": "electronics",
+      "family": ["find", "shelf_in_type_name", "detail_question", "link"],
+      "locale": "ro",
+      "source": "NX-350 set E",
+      "turns": [
+        {
+          "user_input": "aveti huse de telefon? ceva negru",
+          "shown": ["el-25", "el-26"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "huse"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "huse", "quote": "huse"},
+                {"op": "add", "dimension": "color", "relation": "eq", "value": "negru", "quote": "negru"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "prima e din silicon?",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "detail", "targets": ["r1"]}],
+              "changes": [],
+              "references": [
+                {"id": "r1", "text": "prima", "kind": "ordinal", "ordinal": 1}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "trimite-mi linkul la a doua",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "link", "targets": ["r1"]}],
+              "changes": [],
+              "references": [
+                {"id": "r1", "text": "a doua", "kind": "ordinal", "ordinal": 2}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "e04-electronics-not-carried-then-gaming-laptop",
+      "pack": "electronics",
+      "family": ["find", "not_carried", "unmapped", "extreme"],
+      "locale": "ro",
+      "source": "NX-350 set E",
+      "turns": [
+        {
+          "user_input": "buna, vindeti si televizoare?",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "televizoare"}]
+            }
+          }
+        },
+        {
+          "user_input": "ok atunci un laptop bun de gaming",
+          "shown": ["el-19", "el-20"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "laptop"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "laptopuri", "quote": "laptop"},
+                {"op": "add", "dimension": "unmapped", "relation": "contains", "value": "gaming", "quote": "bun de gaming"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "cel cu ecranul mai mare cat costa?",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "detail", "targets": ["r1"]}],
+              "changes": [],
+              "references": [
+                {"id": "r1", "text": "cel cu ecranul mai mare", "kind": "extreme", "dimension": "screen", "direction": "max"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "e05-electronics-typo-storage-relative-price-delivery",
+      "pack": "electronics",
+      "family": ["find", "misspelling", "units", "relative_price", "store_info"],
+      "locale": "ro",
+      "source": "NX-350 set E",
+      "turns": [
+        {
+          "user_input": "vreau telefn cu minim 256 GB",
+          "shown": ["el-02", "el-03", "el-05"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "telefn"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "telefoane", "quote": "telefn"},
+                {"op": "add", "dimension": "storage", "relation": "gte", "number": 256, "unit": "gb", "quote": "minim 256 GB"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "e prea scump al doilea, ai ceva mai ieftin?",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find"}],
+              "changes": [
+                {"op": "set", "dimension": "price", "relation": "lte", "relative_to": "r1", "quote": "ceva mai ieftin"}
+              ],
+              "references": [
+                {"id": "r1", "text": "al doilea", "kind": "ordinal", "ordinal": 2}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "cat dureaza livrarea in brasov?",
+          "expect": {
+            "interpretation": {
+              "thread": "aside",
+              "acts": [{"kind": "store_info", "query": "livrarea"}],
+              "changes": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "e06-electronics-greeting-order",
+      "pack": "electronics",
+      "family": ["chitchat", "order_status"],
+      "locale": "ro",
+      "source": "NX-350 set E",
+      "turns": [
+        {
+          "user_input": "buna ziua",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "chitchat"}],
+              "changes": []
+            }
+          }
+        },
+        {
+          "user_input": "am facut o comanda ieri, cand ajunge?",
+          "expect": {
+            "interpretation": {
+              "thread": "aside",
+              "acts": [{"kind": "order_status"}],
+              "changes": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "e07-electronics-loose-buy-then-storage-then-cart",
+      "pack": "electronics",
+      "family": ["find", "loose_buy", "units", "cart", "name"],
+      "locale": "ro",
+      "source": "NX-350 set E",
+      "turns": [
+        {
+          "user_input": "vreau sa-mi cumpar un laptop nou, ce imi recomanzi?",
+          "shown": ["el-18", "el-20", "el-22"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "laptop"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "laptopuri", "quote": "laptop"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "sa aiba cel putin 512 GB",
+          "shown": ["el-19", "el-20", "el-22"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find"}],
+              "changes": [
+                {"op": "add", "dimension": "storage", "relation": "gte", "number": 512, "unit": "gb", "quote": "cel putin 512 GB"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "adauga Samsung-ul in cos",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "cart", "targets": ["r1"]}],
+              "changes": [],
+              "references": [
+                {"id": "r1", "text": "Samsung-ul", "kind": "name", "name": "Samsung"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "e08-electronics-shelf-two-brands",
+      "pack": "electronics",
+      "family": ["find", "brand", "color"],
+      "locale": "ro",
+      "source": "NX-350 set E",
+      "turns": [
+        {
+          "user_input": "arata-mi tablete lenovo sau xiaomi",
+          "shown": ["el-11", "el-13", "el-17"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "tablete"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "tablete", "quote": "tablete"},
+                {"op": "add", "dimension": "brand", "relation": "eq", "value": "Lenovo", "quote": "lenovo"},
+                {"op": "add", "dimension": "brand", "relation": "eq", "value": "Xiaomi", "quote": "xiaomi"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "e09-fashion-dress-size-color-page",
+      "pack": "fashion",
+      "family": ["find", "size", "color", "show_more", "repeated_value"],
+      "locale": "ro",
+      "source": "NX-350 set E",
+      "turns": [
+        {
+          "user_input": "caut o rochie neagra marimea M",
+          "shown": ["fa-02", "fa-07"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "rochie"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "rochii", "quote": "rochie"},
+                {"op": "add", "dimension": "color", "relation": "eq", "value": "negru", "quote": "neagra"},
+                {"op": "set", "dimension": "size", "relation": "eq", "value": "M", "quote": "marimea M"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "mai ai si altele tot negre?",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "show_more"}],
+              "changes": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "e10-fashion-umbrella-wear-then-shirts",
+      "pack": "fashion",
+      "family": ["find", "umbrella_word", "self_description", "shelf_request"],
+      "locale": "ro",
+      "source": "NX-350 set E",
+      "turns": [
+        {
+          "user_input": "am nevoie de ceva de purtat, port S",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find"}],
+              "changes": [
+                {"op": "set", "dimension": "size", "relation": "eq", "value": "S", "quote": "port S"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "arata-mi camasi",
+          "shown": ["fa-15", "fa-16", "fa-20"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "camasi"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "camasi", "quote": "camasi"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "e11-fashion-dresses-shoes-back",
+      "pack": "fashion",
+      "family": ["find", "subject_change", "shelf_question", "resume", "extreme"],
+      "locale": "ro",
+      "source": "NX-350 set E",
+      "turns": [
+        {
+          "user_input": "rochii rosii aveti?",
+          "shown": ["fa-03", "fa-08"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "rochii rosii"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "rochii", "quote": "rochii"},
+                {"op": "add", "dimension": "color", "relation": "eq", "value": "rosu", "quote": "rosii"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "si pantofi?",
+          "shown": ["fa-24", "fa-22"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "pantofi"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "pantofi", "quote": "pantofi"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "ok, revin la rochii. cea mai ieftina cat era?",
+          "expect": {
+            "interpretation": {
+              "thread": "resume",
+              "acts": [{"kind": "detail", "targets": ["r1"]}],
+              "references": [
+                {"id": "r1", "text": "cea mai ieftina", "kind": "extreme", "dimension": "price", "direction": "min"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "e12-fashion-skirt-budget-relative-cart",
+      "pack": "fashion",
+      "family": ["find", "budget", "relative_price", "cart"],
+      "locale": "ro",
+      "source": "NX-350 set E",
+      "turns": [
+        {
+          "user_input": "vreau o fusta pana in 200 lei",
+          "shown": ["fa-09", "fa-10", "fa-11"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "fusta"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "fuste", "quote": "fusta"},
+                {"op": "set", "dimension": "price", "relation": "lte", "number": 200, "unit": "lei", "quote": "pana in 200 lei"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "a treia e cam scumpa, ai ceva mai ieftin decat ea?",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find"}],
+              "changes": [
+                {"op": "set", "dimension": "price", "relation": "lte", "relative_to": "r1", "quote": "mai ieftin decat ea"}
+              ],
+              "references": [
+                {"id": "r1", "text": "a treia", "kind": "ordinal", "ordinal": 3}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "bine, pune-o in cos pe prima",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "cart", "targets": ["r1"]}],
+              "changes": [],
+              "references": [
+                {"id": "r1", "text": "prima", "kind": "ordinal", "ordinal": 1}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "e13-fashion-self-described-size-returns",
+      "pack": "fashion",
+      "family": ["find", "self_description", "store_info"],
+      "locale": "ro",
+      "source": "NX-350 set E",
+      "turns": [
+        {
+          "user_input": "sunt mai plinuta si port de obicei XL, ce rochii ai?",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "rochii"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "rochii", "quote": "rochii"},
+                {"op": "set", "dimension": "size", "relation": "eq", "value": "XL", "quote": "port de obicei XL"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "cat costa returul daca nu-mi vine?",
+          "expect": {
+            "interpretation": {
+              "thread": "aside",
+              "acts": [{"kind": "store_info", "query": "returul"}],
+              "changes": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "e14-fashion-shoes-compare",
+      "pack": "fashion",
+      "family": ["find", "size", "compare"],
+      "locale": "ro",
+      "source": "NX-350 set E",
+      "turns": [
+        {
+          "user_input": "caut pantofi albi, marime L",
+          "shown": ["fa-23", "fa-26"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "pantofi"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "pantofi", "quote": "pantofi"},
+                {"op": "add", "dimension": "color", "relation": "eq", "value": "alb", "quote": "albi"},
+                {"op": "set", "dimension": "size", "relation": "eq", "value": "L", "quote": "marime L"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "compara primii doi",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "compare", "targets": ["r1", "r2"]}],
+              "changes": [],
+              "references": [
+                {"id": "r1", "text": "primii doi", "kind": "ordinal", "ordinal": 1},
+                {"id": "r2", "text": "primii doi", "kind": "ordinal", "ordinal": 2}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "e15-furniture-sofa-seats-budget",
+      "pack": "furniture",
+      "family": ["find", "units", "complaint_budget"],
+      "locale": "ro",
+      "source": "NX-350 set E",
+      "turns": [
+        {
+          "user_input": "caut o canapea de 3 locuri, gri",
+          "shown": ["fu-02", "fu-05", "fu-08"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "canapea"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "canapele", "quote": "canapea"},
+                {"op": "set", "dimension": "seats", "relation": "eq", "number": 3, "unit": "locuri", "quote": "3 locuri"},
+                {"op": "add", "dimension": "color", "relation": "eq", "value": "gri", "quote": "gri"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "prea scumpe astea, am maxim 2500",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find"}],
+              "changes": [
+                {"op": "set", "dimension": "price", "relation": "lte", "number": 2500, "quote": "maxim 2500"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "e16-furniture-umbrella-then-tables-repeat",
+      "pack": "furniture",
+      "family": ["find", "umbrella_word", "shelf_request", "repeated_value", "units", "link"],
+      "locale": "ro",
+      "source": "NX-350 set E",
+      "turns": [
+        {
+          "user_input": "caut niste mobila, ceva din lemn",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "mobila"}],
+              "changes": [
+                {"op": "add", "dimension": "material", "relation": "eq", "value": "lemn", "quote": "lemn"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "arata-mi mese",
+          "shown": ["fu-11", "fu-13", "fu-15"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "mese"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "mese", "quote": "mese"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "o masa pentru 6 persoane",
+          "shown": ["fu-12", "fu-15"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "masa"}],
+              "changes": [
+                {"op": "set", "dimension": "seats", "relation": "eq", "number": 6, "unit": "persoane", "quote": "6 persoane"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "trimite link la Masa Nord 5",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "link", "targets": ["r1"]}],
+              "changes": [],
+              "references": [
+                {"id": "r1", "text": "Masa Nord 5", "kind": "name", "name": "Masa Nord 5"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "e17-furniture-leather-chairs-cart",
+      "pack": "furniture",
+      "family": ["find", "shelf_question", "cart", "name"],
+      "locale": "ro",
+      "source": "NX-350 set E",
+      "turns": [
+        {
+          "user_input": "scaune din piele aveti?",
+          "shown": ["fu-20", "fu-24"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "scaune"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "scaune", "quote": "scaune"},
+                {"op": "add", "dimension": "material", "relation": "eq", "value": "piele", "quote": "piele"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "adauga in cos Scaun Vik 2, patru bucati",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "cart", "targets": ["r1"]}],
+              "changes": [],
+              "references": [
+                {"id": "r1", "text": "Scaun Vik 2", "kind": "name", "name": "Scaun Vik 2"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "e18-furniture-sofas-bundle-assembly",
+      "pack": "furniture",
+      "family": ["find", "bundle", "store_info"],
+      "locale": "ro",
+      "source": "NX-350 set E",
+      "turns": [
+        {
+          "user_input": "arata-mi canapele din stofa",
+          "shown": ["fu-01", "fu-03"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "canapele"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "canapele", "quote": "canapele"},
+                {"op": "add", "dimension": "material", "relation": "eq", "value": "stofa", "quote": "stofa"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "si ce ar merge langa ea? vreau sa fac un set complet",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "bundle"}]
+            }
+          }
+        },
+        {
+          "user_input": "livrati si montati?",
+          "expect": {
+            "interpretation": {
+              "thread": "aside",
+              "acts": [{"kind": "store_info", "query": "livrati si montati"}],
+              "changes": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "e19-furniture-not-carried-then-table-feature",
+      "pack": "furniture",
+      "family": ["find", "not_carried", "unmapped"],
+      "locale": "ro",
+      "source": "NX-350 set E",
+      "turns": [
+        {
+          "user_input": "aveti paturi?",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "paturi"}]
+            }
+          }
+        },
+        {
+          "user_input": "ok. atunci o masa extensibila",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "masa extensibila"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "mese", "quote": "masa"},
+                {"op": "add", "dimension": "unmapped", "relation": "contains", "value": "extensibila", "quote": "extensibila"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "e20-gifts-mom-birthday-wrap-cart",
+      "pack": "gifts",
+      "family": ["find", "umbrella_word", "loose_buy", "store_info", "cart"],
+      "locale": "ro",
+      "source": "NX-350 set E",
+      "turns": [
+        {
+          "user_input": "vreau sa cumpar un cadou pt mama de ziua ei, pana in 150 lei",
+          "shown": ["gi-01", "gi-05", "gi-09"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "cadou"}],
+              "changes": [
+                {"op": "set", "dimension": "recipient", "relation": "eq", "value": "ea", "quote": "mama"},
+                {"op": "set", "dimension": "occasion", "relation": "eq", "value": "zi de nastere", "quote": "ziua ei"},
+                {"op": "set", "dimension": "price", "relation": "lte", "number": 150, "unit": "lei", "quote": "pana in 150 lei"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "faceti si ambalaj de cadou?",
+          "expect": {
+            "interpretation": {
+              "thread": "aside",
+              "acts": [{"kind": "store_info", "query": "ambalaj de cadou"}],
+              "changes": []
+            }
+          }
+        },
+        {
+          "user_input": "ok atunci pune setul de ceai in cos",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "cart", "targets": ["r1"]}],
+              "changes": [],
+              "references": [
+                {"id": "r1", "text": "setul de ceai", "kind": "name", "name": "Set ceai"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "e21-gifts-games-for-a-child-page",
+      "pack": "gifts",
+      "family": ["find", "shelf_question", "recipient", "show_more"],
+      "locale": "ro",
+      "source": "NX-350 set E",
+      "turns": [
+        {
+          "user_input": "ce jocuri aveti?",
+          "shown": ["gi-04", "gi-12", "gi-15"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "jocuri"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "jocuri", "quote": "jocuri"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "e pentru un copil de 8 ani",
+          "shown": ["gi-15", "gi-23"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find"}],
+              "changes": [
+                {"op": "set", "dimension": "recipient", "relation": "eq", "value": "copil", "quote": "copil"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "mai arata-mi",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "show_more"}],
+              "changes": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "e22-gifts-brother-then-books",
+      "pack": "gifts",
+      "family": ["find", "umbrella_word", "shelf_question"],
+      "locale": "ro",
+      "source": "NX-350 set E",
+      "turns": [
+        {
+          "user_input": "caut un cadou pt fratele meu, nu stiu ce sa-i iau",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "cadou"}],
+              "changes": [
+                {"op": "set", "dimension": "recipient", "relation": "eq", "value": "el", "quote": "fratele meu"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "carti aveti?",
+          "shown": ["gi-03", "gi-11"],
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "carti"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "carti", "quote": "carti"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "e23-gifts-christmas-couple-delivery",
+      "pack": "gifts",
+      "family": ["find", "occasion", "recipient", "budget", "store_info"],
+      "locale": "ro",
+      "source": "NX-350 set E",
+      "turns": [
+        {
+          "user_input": "ceva de craciun pt un cuplu, maxim 300 ron",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find"}],
+              "changes": [
+                {"op": "set", "dimension": "occasion", "relation": "eq", "value": "craciun", "quote": "craciun"},
+                {"op": "set", "dimension": "recipient", "relation": "eq", "value": "cuplu", "quote": "cuplu"},
+                {"op": "set", "dimension": "price", "relation": "lte", "number": 300, "unit": "ron", "quote": "maxim 300 ron"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "daca comand azi ajunge pana pe 20 decembrie?",
+          "expect": {
+            "interpretation": {
+              "thread": "aside",
+              "acts": [{"kind": "store_info"}],
+              "changes": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "e24-sole-face-cream-dry-budget-repeat",
+      "pack": "sole-ro",
+      "family": ["find", "specific_type", "shelf_in_type_name", "budget", "repeated_value", "show_more"],
+      "locale": "ro",
+      "source": "NX-350 set E",
+      "turns": [
+        {
+          "user_input": "buna, vreau o crema de fata pentru ten uscat",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "crema de fata"}],
+              "changes": [
+                {"op": "set", "dimension": "product_type", "relation": "eq", "value": "crema de fata", "quote": "crema de fata"},
+                {"op": "add", "dimension": "skin_type", "relation": "eq", "value": "dry", "quote": "ten uscat"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "ceva mai ieftin de 80 de lei?",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find"}],
+              "changes": [
+                {"op": "set", "dimension": "price", "relation": "lte", "number": 80, "unit": "lei", "quote": "mai ieftin de 80 de lei"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "tot pt ten uscat, mai ai si altele?",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "show_more"}],
+              "changes": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "e25-sole-umbrella-cream-oily-texture",
+      "pack": "sole-ro",
+      "family": ["find", "umbrella_word", "self_description", "polarity"],
+      "locale": "ro",
+      "source": "NX-350 set E",
+      "turns": [
+        {
+          "user_input": "am nevoie de o crema hidratanta",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "crema hidratanta"}],
+              "changes": [
+                {"op": "add", "dimension": "concerns", "relation": "contains", "value": "hydration", "quote": "hidratanta"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "am tenul gras si ma lucesc repede",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find"}],
+              "changes": [
+                {"op": "add", "dimension": "skin_type", "relation": "eq", "value": "oily", "quote": "tenul gras"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "si sa nu fie grea pe piele",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find"}],
+              "changes": [
+                {"op": "add", "dimension": "texture", "relation": "avoid", "value": "grea", "quote": "sa nu fie grea"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "e26-sole-face-cream-then-shampoo-then-back",
+      "pack": "sole-ro",
+      "family": ["find", "specific_type", "self_description", "subject_change", "resume"],
+      "locale": "ro",
+      "source": "NX-350 set E",
+      "turns": [
+        {
+          "user_input": "caut o crema de fata, am ten sensibil",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "crema de fata"}],
+              "changes": [
+                {"op": "set", "dimension": "product_type", "relation": "eq", "value": "crema de fata", "quote": "crema de fata"},
+                {"op": "add", "dimension": "skin_type", "relation": "eq", "value": "sensitive", "quote": "ten sensibil"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "si un sampon hidratant?",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "sampon hidratant"}],
+              "changes": [
+                {"op": "set", "dimension": "product_type", "relation": "eq", "value": "sampon", "quote": "sampon"},
+                {"op": "add", "dimension": "concerns", "relation": "contains", "value": "hydration", "quote": "hidratant"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "revin la crema de fata, pana la urma ce-mi recomanzi?",
+          "expect": {
+            "interpretation": {
+              "thread": "resume",
+              "acts": [{"kind": "find"}]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "e27-sole-hair-shelf-shampoo-detail",
+      "pack": "sole-ro",
+      "family": ["find", "shelf_question", "specific_type", "unmapped", "detail_question"],
+      "locale": "ro",
+      "source": "NX-350 set E",
+      "turns": [
+        {
+          "user_input": "ce aveti la ingrijirea parului?",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "ingrijirea parului"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "par-ingrijirea-parului", "quote": "ingrijirea parului"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "sampoane cu volum?",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "sampoane cu volum"}],
+              "changes": [
+                {"op": "set", "dimension": "product_type", "relation": "eq", "value": "sampon", "quote": "sampoane"},
+                {"op": "add", "dimension": "unmapped", "relation": "contains", "value": "volum", "quote": "cu volum"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "Sampon Galvina Volum cat costa?",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "detail", "targets": ["r1"]}],
+              "changes": [],
+              "references": [
+                {"id": "r1", "text": "Sampon Galvina Volum", "kind": "name", "name": "Sampon Galvina Volum"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "e28-sole-not-carried-then-body-returns",
+      "pack": "sole-ro",
+      "family": ["find", "not_carried", "shelf_request", "store_info"],
+      "locale": "ro",
+      "source": "NX-350 set E",
+      "turns": [
+        {
+          "user_input": "aveti parfumuri?",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "parfumuri"}]
+            }
+          }
+        },
+        {
+          "user_input": "ok, atunci ceva de corp",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "corp"}],
+              "changes": [
+                {"op": "set", "dimension": "category", "relation": "eq", "value": "corp-ingrijirea-corpului", "quote": "corp"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "se poate returna daca e desigilat?",
+          "expect": {
+            "interpretation": {
+              "thread": "aside",
+              "acts": [{"kind": "store_info", "query": "returna"}],
+              "changes": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "e29-sole-routine-combination-evening",
+      "pack": "sole-ro",
+      "family": ["bundle", "umbrella_word", "self_description"],
+      "locale": "ro",
+      "source": "NX-350 set E",
+      "turns": [
+        {
+          "user_input": "vreau o rutina pentru ten mixt",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "bundle"}],
+              "changes": [
+                {"op": "add", "dimension": "skin_type", "relation": "eq", "value": "combination", "quote": "ten mixt"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "si una de seara",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "bundle"}],
+              "changes": [
+                {"op": "add", "dimension": "routine_time", "relation": "eq", "value": "pm", "quote": "de seara"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "e30-sole-foundation-finish-question-payment",
+      "pack": "sole-ro",
+      "family": ["find", "specific_type", "shelf_in_type_name", "detail_question", "store_info"],
+      "locale": "ro",
+      "source": "NX-350 set E",
+      "turns": [
+        {
+          "user_input": "caut un fond de ten satinat",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "fond de ten"}],
+              "changes": [
+                {"op": "set", "dimension": "product_type", "relation": "eq", "value": "fond de ten", "quote": "fond de ten"},
+                {"op": "add", "dimension": "finish", "relation": "eq", "value": "satin", "quote": "satinat"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "Fond de ten Ilvena Satin cat tine pe fata?",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "detail", "targets": ["r1"]}],
+              "changes": [],
+              "references": [
+                {"id": "r1", "text": "Fond de ten Ilvena Satin", "kind": "name", "name": "Fond de ten Ilvena Satin"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "ce metode de plata aveti?",
+          "expect": {
+            "interpretation": {
+              "thread": "aside",
+              "acts": [{"kind": "store_info", "query": "metode de plata"}],
+              "changes": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "e31-sole-sensitive-redness-serum-repeat",
+      "pack": "sole-ro",
+      "family": ["find", "self_description", "specific_type", "repeated_value", "detail_question"],
+      "locale": "ro",
+      "source": "NX-350 set E",
+      "turns": [
+        {
+          "user_input": "am pielea sensibila si ma inrosesc usor",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find"}],
+              "changes": [
+                {"op": "add", "dimension": "skin_type", "relation": "eq", "value": "sensitive", "quote": "pielea sensibila"},
+                {"op": "add", "dimension": "concerns", "relation": "contains", "value": "redness", "quote": "ma inrosesc"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "un ser de fata calmant ai?",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "ser de fata calmant"}],
+              "changes": [
+                {"op": "set", "dimension": "product_type", "relation": "eq", "value": "ser de fata", "quote": "ser de fata"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "Ser Delmira Calmant e ok pt mine?",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "detail", "targets": ["r1"]}],
+              "changes": [],
+              "references": [
+                {"id": "r1", "text": "Ser Delmira Calmant", "kind": "name", "name": "Ser Delmira Calmant"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "e32-sole-typo-mask",
+      "pack": "sole-ro",
+      "family": ["find", "misspelling", "specific_type"],
+      "locale": "ro",
+      "source": "NX-350 set E",
+      "turns": [
+        {
+          "user_input": "vreau o masca d fata pt hidratare",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "masca d fata"}],
+              "changes": [
+                {"op": "set", "dimension": "product_type", "relation": "eq", "value": "masca de fata", "quote": "masca d fata"},
+                {"op": "add", "dimension": "concerns", "relation": "contains", "value": "hydration", "quote": "hidratare"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "e33-sole-anti-aging-evening-budget-cart",
+      "pack": "sole-ro",
+      "family": ["find", "umbrella_word", "budget", "cart", "name"],
+      "locale": "ro",
+      "source": "NX-350 set E",
+      "turns": [
+        {
+          "user_input": "ceva anti rid pentru seara, pana in 150 lei",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "anti rid"}],
+              "changes": [
+                {"op": "add", "dimension": "concerns", "relation": "contains", "value": "anti_aging", "quote": "anti rid"},
+                {"op": "add", "dimension": "routine_time", "relation": "eq", "value": "pm", "quote": "seara"},
+                {"op": "set", "dimension": "price", "relation": "lte", "number": 150, "unit": "lei", "quote": "pana in 150 lei"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "ok, adauga Crema Jorvala Reparatoare Noapte in cos",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "cart", "targets": ["r1"]}],
+              "changes": [],
+              "references": [
+                {"id": "r1", "text": "Crema Jorvala Reparatoare Noapte", "kind": "name", "name": "Crema Jorvala Reparatoare Noapte"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "e34-sole-named-too-expensive-then-dull-skin",
+      "pack": "sole-ro",
+      "family": ["find", "relative_price", "name", "self_description"],
+      "locale": "ro",
+      "source": "NX-350 set E",
+      "turns": [
+        {
+          "user_input": "Ser Corvina Luminozitate e prea scump pt mine, ai ceva asemanator mai ieftin?",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find"}],
+              "changes": [
+                {"op": "set", "dimension": "price", "relation": "lte", "relative_to": "r1", "quote": "mai ieftin"}
+              ],
+              "references": [
+                {"id": "r1", "text": "Ser Corvina Luminozitate", "kind": "name", "name": "Ser Corvina Luminozitate"}
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "am un ten tern, fara stralucire",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find"}],
+              "changes": [
+                {"op": "add", "dimension": "concerns", "relation": "contains", "value": "dullness", "quote": "ten tern"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "e35-sole-greeting-order-umbrella-serum",
+      "pack": "sole-ro",
+      "family": ["chitchat", "order_status", "find", "umbrella_word"],
+      "locale": "ro",
+      "source": "NX-350 set E",
+      "turns": [
+        {
+          "user_input": "buna seara",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "chitchat"}],
+              "changes": []
+            }
+          }
+        },
+        {
+          "user_input": "unde e coletul meu? am comandat acum o saptamana",
+          "expect": {
+            "interpretation": {
+              "thread": "aside",
+              "acts": [{"kind": "order_status"}],
+              "changes": []
+            }
+          }
+        },
+        {
+          "user_input": "si daca tot sunt aici, un ser pentru pori dilatati",
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "find", "query": "ser pentru pori dilatati"}],
+              "changes": [
+                {"op": "add", "dimension": "concerns", "relation": "contains", "value": "pores", "quote": "pori dilatati"}
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1047,6 +1047,10 @@ HOLDOUT_C_SHA256 = "72fd676ef6dd092464021728cb31d0b535cc9687c4358e1edc47580a64f9
 #: (amprenta raportată de agent), iar autorul promptului nu i-a citit conținutul.
 HOLDOUT_D_DIR = ROOT / "tests" / "golden" / "kernel_interpret_holdout_d"
 HOLDOUT_D_SHA256 = "68c58e79a750e7f60b63055377422973a6b3fcf0e21597c697d788bd77571ac9"
+#: NX-350: setul E, scris de un agent independent care n-a văzut promptul, rapoartele, seturile
+#: A-D sau cardurile NX-339/345/347-350, pentru verdictul regulii `kernel.v4.0`. ÎNGHEȚAT.
+HOLDOUT_E_DIR = ROOT / "tests" / "golden" / "kernel_interpret_holdout_e"
+HOLDOUT_E_SHA256 = "6532611feb7cfd6c3ca11b8997f469a3f1d252aed877874a6a877d51b5cc425f"
 
 
 def holdout_c_digest(directory: Path = HOLDOUT_C_DIR) -> str:
@@ -1720,6 +1724,7 @@ async def _main_journeys(args: argparse.Namespace) -> int:
     frozen = {
         HOLDOUT_C_DIR.resolve(): HOLDOUT_C_SHA256,
         HOLDOUT_D_DIR.resolve(): HOLDOUT_D_SHA256,
+        HOLDOUT_E_DIR.resolve(): HOLDOUT_E_SHA256,
     }
     expected = frozen.get(Path(directory).resolve())
     if args.yes and expected is not None and holdout_c_digest(directory) != expected:
