@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 def conversation_transcript(
     history: list[Message],
     *,
-    max_turns: int = 6,
+    max_turns: int | None = None,
     max_chars: int = 1200,
     emit: Callable[..., None] | None = None,
     consumer: str | None = None,
@@ -64,7 +64,7 @@ def conversation_transcript(
     prior = history[:-1] if history else []
     if not get_settings().structured_history_enabled:
         lines: list[str] = []
-        for m in prior[-max_turns:]:
+        for m in prior[-(max_turns or 6) :]:
             body = (m.body or "").strip()
             if not body:
                 continue
@@ -72,10 +72,11 @@ def conversation_transcript(
             role = "Client" if m.direction == Direction.INBOUND else "Asistent"
             lines.append(f"{role}: {safe_body}")
         return "\n".join(lines)[-max_chars:]
-    # NX-255: toată fereastra încărcată (`HISTORY_LIMIT`), nu doar `max_turns`. Rezumatul acoperă
+    # NX-255: implicit toată fereastra încărcată (`HISTORY_LIMIT`), nu 6. Rezumatul acoperă
     # ce e ÎNAINTEA mesajelor încărcate, deci o fereastră de 6 din 8 lăsa un tur (mesajele 7-8 în
     # urmă) în afara ambelor (recenzia NX-255).
-    return _structured_transcript(prior[-HISTORY_LIMIT:], emit=emit, consumer=consumer)
+    window = max_turns if max_turns is not None else HISTORY_LIMIT
+    return _structured_transcript(prior[-window:], emit=emit, consumer=consumer)
 
 
 # NX-255 — legenda blocurilor `[a aratat]`. Emisă O SINGURĂ dată și DOAR când există cel puțin un
