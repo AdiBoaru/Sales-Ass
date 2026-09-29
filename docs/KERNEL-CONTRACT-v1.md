@@ -27,7 +27,9 @@ No invariant, ownership row or state rule changes in v1.2, so no replay gate is 
 subject change: the subject `(category_key, product_type)` changes only when a half that is already
 set gets a DIFFERENT value. Filling an empty half (the first product type on a shelf without one, the
 first shelf on a subject that has only a type) is a REFINEMENT: the subject's needs stay and nothing
-is parked. A product type the customer names now reaches `Topic.product_type` through one
+is parked, but only when the resulting pair exists in the catalog; otherwise (or without data) it is
+a subject change and the other half is dropped. A type the code inferred from the shown set counts as
+an empty half. Topic-scoped needs of a shelfless subject leave (parked) with it. A product type the customer names now reaches `Topic.product_type` through one
 `set_topic` proposal for the whole pair per turn (before, it was proposed as a need and always
 rejected as `topic_key`). The replay gate is waived, as for v2.0: no interpreted turn has been served
 in production. The model-written schema is unchanged.
