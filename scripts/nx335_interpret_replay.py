@@ -559,6 +559,22 @@ def observed(
     return observed_parts(interp, checked, kernel.resolved if kernel else (), state_before)
 
 
+def _umbrella_moves(state: ConversationStateV2, c: Any) -> bool:
+    """NX-350 (recenzia, constatarea 9): un tip `implicit` e ipoteză, dar umbrela lui MUTĂ subiectul
+    când e alt fel de produs decât cel de acum (un tip spus clar în afara ei, sau o umbrelă
+    disjunctă), exact regula reducerului."""
+    if c.rejected or c.dimension != "product_type" or c.provenance != "implicit":
+        return False
+    umbrella = set(getattr(c, "umbrella", ()) or ())
+    if not umbrella and isinstance(c.canonical_value, str):
+        umbrella = {c.canonical_value}
+    topic = state.topic
+    stated = None if topic.type_learned else topic.product_type
+    if stated is not None:
+        return stated not in umbrella
+    return bool(topic.type_umbrella) and not umbrella & set(topic.type_umbrella)
+
+
 def observed_parts(
     interp: TurnInterpretation,
     checked: Sequence[Any],
@@ -601,6 +617,7 @@ def observed_parts(
             and _moves_subject(state_before, c.dimension, format_value(c.canonical_value))
             for c in checked
         )
+        or any(_umbrella_moves(state_before, c) for c in checked)
     )
     for c in checked:
         if c.rejected:

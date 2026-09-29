@@ -26,15 +26,22 @@ No invariant, ownership row or state rule changes in v1.2, so no replay gate is 
 **Current version: `kernel.v4.0` (MAJOR, NX-350, decided by Adi on 2026-09-29).** The product type
 of the SUBJECT changes only from a type the customer stated (`explicit`). An `implicit` type (the
 customer's words do not name the whole code: „cremă" → `crema de fata`, which could as well be a body
-or hand cream) is remembered as the customer's UMBRELLA instead: the validator computes the type codes
-that carry every type word of the quote, with the locale's inflection suffixes
-(`CheckedChange.umbrella`, at most 8, largest first; without a type word, the code the model assumed),
-the delta puts them on the subject proposal (`set_topic.type_umbrella`, counted
-`subject_type_umbrella`), and the subject keeps them (`Topic.type_umbrella`). The reducer is the only
-writer: a new umbrella replaces the old one without parking; a stated type replaces the umbrella (a
-refinement); a vague type whose umbrella does not contain the subject's stated type is another kind of
-item, so it is a subject change on the same shelf (the old subject is parked). The planner prefers every
-code of the umbrella and labels the subject with the word they share. An umbrella never filters. The
+or hand cream) is remembered as the customer's UMBRELLA instead: the validator takes the quote word that
+is the HEAD of the assumed code (its first content word, with the locale's inflection suffixes; a word
+from a code's tail, like „ten" in „fond de ten", never opens an umbrella) and returns the assumed code
+first plus every other code with that head that also carries the quote's other words from the assumed
+code (`CheckedChange.umbrella`, at most 8, largest first; without a head word, only the assumed code).
+The delta puts them on the subject proposal (`set_topic.type_umbrella`, counted
+`subject_type_umbrella`; several vague types merge rank by rank), and the subject keeps them
+(`Topic.type_umbrella`). The reducer is the only writer, with one rule in both directions: what the
+customer says now is ANOTHER KIND of item when it does not overlap what they said (a stated type outside
+the umbrella, an umbrella without the stated type, or disjoint umbrellas), and that is a subject change
+(the old subject is parked; the shelf stays only when the turn names it or, for a stated type, on a
+verified pair). Otherwise an overlapping umbrella replaces the old one without parking and a stated
+type from the umbrella refines it. An umbrella-only subject parks, resumes, clears and is contradicted
+(I21) like any other subject. The planner prefers every code of the umbrella (a code-inferred type does
+not beat it) and labels the subject with the content word they share; the model's view shows it. An
+umbrella never filters. The
 replay gate is waived, as for v2.0 and v3.0: no interpreted turn has been served in production. The
 model-written schema is unchanged.
 
@@ -363,7 +370,7 @@ On the planned path the tool does not re-judge `price_max` on the recent text (t
 
 ## Reducer, thread and parking
 
-The subject of a conversation is `(category_key, product_type)`. Only a change of subject parks anything; a change of any other dimension is an ordinary constraint change. (v3.0) A change of subject means a half that is already set gets a different value; filling an empty half is a refinement and parks nothing. Several values for one half in the same turn keep the last one, counted as `subject_multiple`. (v4.0) The type half is set only by a stated (`explicit`) type; a vague one sets the subject's umbrella (`Topic.type_umbrella`), which counts as a subject for the gate and the planner. A new umbrella replaces the old one without parking; a stated type replaces the umbrella; a vague type whose umbrella does not contain the subject's stated type is a subject change on the same shelf.
+The subject of a conversation is `(category_key, product_type)`. Only a change of subject parks anything; a change of any other dimension is an ordinary constraint change. (v3.0) A change of subject means a half that is already set gets a different value; filling an empty half is a refinement and parks nothing. Several values for one half in the same turn keep the last one, counted as `subject_multiple`. (v4.0) The type half is set only by a stated (`explicit`) type; a vague one sets the subject's umbrella (`Topic.type_umbrella`), which counts as a subject for the gate and the planner. What the customer says now is another kind of item when it does not overlap what they said (a stated type outside the umbrella, an umbrella without the stated type, disjoint umbrellas): that is a subject change, and the shelf stays only when the turn names it (or, for a stated type, on a verified pair). An overlapping umbrella replaces the old one without parking; a stated type from the umbrella refines it.
 
 ### Order of application within a turn
 

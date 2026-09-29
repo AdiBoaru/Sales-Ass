@@ -28,7 +28,7 @@ from tests.kernel import fixture_catalog as fc
 POLICY = ReducerPolicy(vocabulary=NeedVocabulary.from_pack(fc.pack("electronics")))
 
 
-def _change(dimension, value, *, op="set", provenance="explicit", strength="soft"):
+def _change(dimension, value, *, op="set", provenance="explicit", strength="soft", umbrella=()):
     change = StateChange(
         op=op,
         target=None,
@@ -47,6 +47,7 @@ def _change(dimension, value, *, op="set", provenance="explicit", strength="soft
         provenance=provenance,
         strength=strength,
         rejected=None,
+        umbrella=umbrella,
     )
 
 
@@ -477,14 +478,142 @@ def test_a_stated_type_replaces_the_umbrella_without_parking():
     assert stated.state.parked is None and stated.state.need_for("brand") is not None
 
 
-def test_a_new_umbrella_replaces_the_old_one_without_parking():
-    state, _ = step(
-        ConversationStateV2(), _change("product_type", "smartphone", provenance="implicit")
-    )
+def _vague(umbrella):
+    return _change("product_type", umbrella[0], provenance="implicit", umbrella=umbrella)
+
+
+CREAMS = ("crema de fata", "crema de corp")
+LIPS = ("ruj", "luciu de buze")
+
+
+def test_an_overlapping_umbrella_replaces_the_old_one_without_parking():
+    state, _ = step(ConversationStateV2(), _vague(CREAMS))
     state, _ = step(state.state, _change("brand", "samsung"))
-    moved, _ = step(state.state, _change("product_type", "accesoriu", provenance="implicit"))
-    assert moved.state.topic.type_umbrella == ("accesoriu",)
+    moved, _ = step(state.state, _vague(("crema de corp", "crema de maini")))
+    assert moved.state.topic.type_umbrella == ("crema de corp", "crema de maini")
     assert moved.state.parked is None and moved.state.need_for("brand") is not None
+
+
+def test_a_disjoint_umbrella_is_another_kind_of_item_and_parks():
+    """Recenzia NX-350, constatarea 3: regula e aceeași pe ambele sensuri."""
+    state, _ = step(ConversationStateV2(), _vague(CREAMS))
+    state, _ = step(state.state, _change("brand", "samsung"))
+    moved, _ = step(state.state, _vague(LIPS))
+    assert moved.state.topic.type_umbrella == LIPS
+    assert moved.state.parked.topic.type_umbrella == CREAMS
+    assert moved.state.need_for("brand") is None
+    assert [n.key for n in moved.state.parked.needs] == ["brand"]
+
+
+def test_a_stated_type_outside_the_umbrella_parks_it():
+    state, _ = step(ConversationStateV2(), _change("category", "telefoane"), _vague(CREAMS))
+    state, _ = step(state.state, _change("brand", "apple"))
+    moved, _ = step(state.state, _change("product_type", "laptop"), compatible=True)
+    assert moved.state.topic.product_type == "laptop"
+    assert moved.state.parked.topic.type_umbrella == CREAMS
+    assert moved.state.need_for("brand") is None
+
+
+def test_a_stated_type_inside_an_umbrella_only_subject_refines_it():
+    """Constatarea 4: nu e „primul" subiect, deci revizia lui rămâne și nevoile la fel."""
+    state, _ = step(ConversationStateV2(), _vague(CREAMS))
+    revision = state.state.topic.changed_at_revision
+    state, _ = step(state.state, _change("brand", "apple"))
+    refined, _ = step(state.state, _change("product_type", "crema de corp"))
+    topic = refined.state.topic
+    assert (topic.product_type, topic.type_umbrella) == ("crema de corp", ())
+    assert topic.changed_at_revision == revision
+    assert refined.state.parked is None and refined.state.need_for("brand") is not None
+    assert [a.outcome for a in refined.applied if a.op == "set_topic"] == ["refined"]
+
+
+def test_the_same_vague_code_as_the_stated_type_parks_nothing():
+    """Constatarea 1: «ceva pentru ten» nu e alt fel de produs decât crema spusă clar."""
+    state, _ = step(ConversationStateV2(), _change("product_type", "crema de fata"))
+    state, _ = step(state.state, _change("brand", "apple"))
+    same, _ = step(state.state, _change("product_type", "crema de fata", provenance="implicit"))
+    assert same.state.topic == state.state.topic and same.state.parked is None
+
+
+def test_an_umbrella_only_subject_is_parked_and_resumed_whole():
+    """Constatarea 2: `_resume` și nevoile unui subiect fără raft și fără tip spus clar."""
+    state, _ = step(ConversationStateV2(), _change("product_type", "smartphone"))
+    state, _ = step(state.state, _change("brand", "samsung"))
+    state, _ = step(state.state, _vague(("accesoriu",)))
+    state, _ = step(state.state, _change("brand", "apple"))
+    delta = to_delta(
+        _interp(0).model_copy(update={"thread": "resume"}), [], needs=POLICY.vocabulary, turn_id="t"
+    )
+    back = reduce_turn(state.state, delta, (), (), None, False, POLICY).state
+    assert back.topic.product_type == "smartphone"
+    assert back.need_for("brand").normalized_value == "samsung"
+    assert back.parked.topic.type_umbrella == ("accesoriu",)
+    assert [n.normalized_value for n in back.parked.needs] == ["apple"]
+
+
+def test_clear_topic_retires_the_needs_of_an_umbrella_only_subject():
+    state, _ = step(ConversationStateV2(), _vague(CREAMS))
+    state, _ = step(state.state, _change("brand", "apple"))
+    cleared = reduce_turn(
+        state.state,
+        TurnDelta(
+            thread="continue",
+            proposals=(StateUpdateProposal("clear_topic", source="user_explicit", turn_id="t"),),
+        ),
+        (),
+        (),
+        None,
+        False,
+        POLICY,
+    ).state
+    assert cleared.need_for("brand") is None and cleared.topic.type_umbrella == CREAMS
+
+
+def test_correcting_the_umbrella_with_another_kind_is_a_subject_contradiction():
+    """Constatarea 4 (I21): corecția vag → vag disjunct retrage ce a spus turul anterior."""
+    state, _ = step(
+        ConversationStateV2(), _vague(CREAMS), _change("brand", "apple", provenance="implicit")
+    )
+    fixed, _ = step(state.state, _vague(LIPS), corrects=True)
+    assert fixed.state.need_for("brand") is None
+    assert "unconfirmed" not in [a.outcome for a in fixed.applied if a.op == "correction"]
+
+
+def test_two_vague_types_merge_in_turns_and_a_stated_one_counts_as_multiple():
+    """Constatarea 5: plafonul nu taie tăcut o umbrelă întreagă."""
+    creams = tuple(f"crema {i}" for i in range(8))
+    serums = ("ser de fata", "ser de par")
+    _, delta = step(ConversationStateV2(), _vague(creams), _vague(serums))
+    merged = delta.proposals[0].type_umbrella
+    assert "ser de fata" in merged and "ser de par" in merged and len(merged) == 8
+    _, delta = step(ConversationStateV2(), _change("product_type", "ruj"), _vague(CREAMS))
+    assert delta.proposals[0].product_type == "ruj"
+    assert delta.counters.get("subject_multiple") == 1
+
+
+def test_the_v1_path_anchoring_a_shelf_keeps_the_umbrella_and_a_learned_type_does_not_beat_it():
+    """Constatarea 7: o scriere v1 a subiectului nu uită umbrela, iar plannerul ordonează pe ea."""
+    from src.agent import turn_planner as tp
+
+    state, _ = step(ConversationStateV2(), _vague(CREAMS))
+    learn = StateUpdateProposal(
+        "set_topic",
+        category_key="ten",
+        product_type="crema de fata",
+        subject=True,
+        source="catalog",
+        turn_id="v1",
+    )
+    after = reduce_turn(
+        state.state, TurnDelta(thread="continue", proposals=(learn,)), (), (), None, False, POLICY
+    ).state
+    assert after.topic.type_umbrella == CREAMS and after.topic.type_learned
+    assert tp.subject_kinds(after.topic) == CREAMS
+    shelfless = replace(after.topic, category_key=None)
+    planner = tp._Planner.__new__(tp._Planner)
+    planner.state = replace(after, topic=shelfless)
+    planner.vocab, planner.pack, planner.locale = None, None, "ro"
+    assert planner._subject_label() == "crema"
 
 
 def test_a_vague_request_for_another_kind_of_item_is_a_subject_change():
@@ -518,7 +647,15 @@ def test_the_validator_computes_the_umbrella_from_the_customers_words():
     from src.conversation.interpretation import Act, StateChange, TurnInterpretation
     from src.conversation.provenance import UserWords, check_changes
 
-    kinds = ("crema de fata", "crema de corp", "crema de maini", "ser de fata", "sampon")
+    kinds = (
+        "crema de fata",
+        "crema de corp",
+        "crema de maini",
+        "ser de fata",
+        "sampon",
+        "fond de ten",
+        "masca de par",
+    )
     vocab = CatalogVocabulary(
         business_id="b",
         dimensions={
@@ -554,11 +691,22 @@ def test_the_validator_computes_the_umbrella_from_the_customers_words():
         return c.provenance, c.umbrella
 
     prov, umb = umbrella("vreau o crema de hidratare", "o crema de hidratare")
-    assert prov == "implicit" and set(umb) == {"crema de fata", "crema de corp", "crema de maini"}
+    assert prov == "implicit" and umb[0] == "crema de fata"
+    assert set(umb) == {"crema de fata", "crema de corp", "crema de maini"}
     prov, umb = umbrella("vreau creme de fata", "creme de fata")
     assert prov == "implicit" and umb == ("crema de fata",)
     prov, umb = umbrella("vreau o crema de fata", "crema de fata")
     assert prov == "explicit" and umb == ()
+    # Recenzia NX-350, constatarea 1: doar CAPUL unui cod deschide o umbrelă. «ten» e coada lui
+    # „fond de ten", «pare» nu e «par», «fata de» nu e o cremă: umbrela e codul presupus.
+    assert umbrella("vreau ceva pentru ten", "ceva pentru ten")[1] == ("crema de fata",)
+    _, umb = umbrella("o crema, mi se pare ca am pielea uscata", "o crema, mi se pare ca")
+    assert "masca de par" not in umb and "fond de ten" not in umb and umb[0] == "crema de fata"
+    _, umb = umbrella("o crema pentru ten uscat", "o crema pentru ten uscat")
+    assert set(umb) == {"crema de fata", "crema de corp", "crema de maini"}
+    assert umbrella("un ser mai ieftin fata de asta", "un ser mai ieftin fata de asta")[1] == (
+        "crema de fata",
+    )
 
 
 def test_the_planner_prefers_every_code_of_the_umbrella_and_labels_it_with_the_shared_word():
@@ -570,3 +718,41 @@ def test_the_planner_prefers_every_code_of_the_umbrella_and_labels_it_with_the_s
     label.state, label.vocab, label.pack, label.locale = state, None, None, "ro"
     assert label._subject_label() == "crema"
     assert label._subject()
+    # Constatarea 6: un cuvânt gol al locale-i comun tuturor codurilor nu e etichetă.
+    label.state = ConversationStateV2(topic=Topic(type_umbrella=("ser de fata", "masca de fata")))
+    assert label._subject_label() == "fata"
+
+
+def test_the_model_and_the_trace_see_the_umbrella():
+    """Constatarea 8: vederea modelului și forma compactă din trace poartă umbrela."""
+    from src.conversation.kernel_trace import state_view
+    from src.conversation.state_v2 import ParkedTopic, Topic
+    from src.conversation.turn_interpreter import _subject
+
+    class _Input:
+        pack = fc.pack("sole-ro")
+        locale = "ro"
+
+    inp = _Input()
+    inp.state = ConversationStateV2(
+        topic=Topic(type_umbrella=CREAMS),
+        parked=ParkedTopic(topic=Topic(type_umbrella=LIPS), needs=(), shown=()),
+    )
+    lines = _subject(inp)
+    assert any(line.startswith("type said broadly:") for line in lines)
+    assert "PARKED: ruj | luciu de buze" in lines
+    assert state_view(inp.state)["umbrella"] == list(CREAMS)
+    assert "umbrella" not in state_view(ConversationStateV2())
+
+
+def test_the_scorer_counts_an_umbrella_of_another_kind_as_moving_the_subject():
+    """Constatarea 9: D3 nu mai judecă „deja activ" pe un tur care parchează prin umbrelă."""
+    from scripts import nx335_interpret_replay as rp
+    from src.conversation.state_v2 import Topic
+
+    stated = ConversationStateV2(topic=Topic(product_type="crema de fata"))
+    assert rp._umbrella_moves(stated, _vague(LIPS))
+    assert not rp._umbrella_moves(stated, _vague(CREAMS))
+    vague = ConversationStateV2(topic=Topic(type_umbrella=CREAMS))
+    assert rp._umbrella_moves(vague, _vague(LIPS))
+    assert not rp._umbrella_moves(vague, _change("product_type", "ruj"))

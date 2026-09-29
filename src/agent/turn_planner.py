@@ -34,6 +34,7 @@ from dataclasses import dataclass
 
 from src.agent.tool_budget import spec_for
 from src.agent.tool_definitions import TOOL_NAMES
+from src.catalog.query_terms import stopwords
 from src.catalog.vocabulary import CatalogVocabulary, topic_root_of
 from src.conversation.ambiguity_gate import GateOutcome, target_question_key
 from src.conversation.answer_policy import read_query
@@ -63,7 +64,7 @@ from src.conversation.references import (
     RATING_DIMENSION,
     VARIANT_DIMENSION,
 )
-from src.conversation.state_v2 import HARD_CAPABLE_SOURCES, ConversationStateV2, Need
+from src.conversation.state_v2 import HARD_CAPABLE_SOURCES, ConversationStateV2, Need, Topic
 from src.domain.routine_steps import SEP
 from src.tools.base import CATALOG_READ_TOOLS
 from src.tools.catalog_tools import SearchArgs
@@ -230,6 +231,15 @@ class _Planner:
                 if entry.key == topic.category_key and entry.label:
                     return entry.label
             return topic.category_key
+        if topic.type_umbrella and (topic.type_learned or not topic.product_type):
+            # NX-350: eticheta unei umbrele e cuvântul pe care îl poartă TOATE codurile ei (ce a
+            # spus clientul, «cremă»), nu codul unuia: altfel căutarea fără cuvinte ar alege unul.
+            # Un tip DEDUS de cod nu o bate (recenzia, constatarea 7); cuvintele goale ale
+            # locale-i nu sunt etichetă (constatarea 6: «de» din „… de fata").
+            stop = stopwords(self.locale)
+            words = [[w for w in code.split() if w not in stop] for code in topic.type_umbrella]
+            shared = [w for w in words[0] if all(w in other for other in words[1:])]
+            return shared[0] if shared else topic.type_umbrella[0]
         if topic.product_type:
             getter = getattr(self.pack, "value_label", None)
             for loc in dict.fromkeys((self.locale, _lang(self.locale))):
@@ -240,12 +250,6 @@ class _Planner:
                 if entry.key == topic.product_type and entry.label:
                     return entry.label
             return topic.product_type
-        if topic.type_umbrella:
-            # NX-350: eticheta unei umbrele e cuvântul pe care îl poartă TOATE codurile ei (ce a
-            # spus clientul, «cremă»), nu codul unuia: altfel căutarea fără cuvinte ar alege unul.
-            words = [code.split() for code in topic.type_umbrella]
-            shared = [w for w in words[0] if all(w in other for other in words[1:])]
-            return shared[0] if shared else topic.type_umbrella[0]
         return None
 
     def _hard(self, need: Need, dimension: str) -> bool:
@@ -583,9 +587,7 @@ class _Planner:
 
         # NX-314 pe calea interpretată: tipul subiectului ORDONEAZĂ (fațeta nu e `enforce_ready`),
         # deci „cremă de față" pe un raft de 900 de produse urcă cremele, fără să scoată restul.
-        product_type = self.state.topic.product_type
-        # NX-350: fără tip spus clar, UMBRELA (toate codurile cuvântului clientului) ordonează.
-        kinds = (product_type,) if product_type else self.state.topic.type_umbrella
+        kinds = subject_kinds(self.state.topic)
         if kinds and self._on_attributes(PRODUCT_TYPE):
             for kind in kinds:
                 _prefer(PRODUCT_TYPE, kind)
@@ -733,6 +735,13 @@ def routine_family(
         if shelf and shelf in table:
             return str(table[shelf])
     return None
+
+
+def subject_kinds(topic: Topic) -> tuple[str, ...]:
+    """NX-350: tipurile pe care le ordonează subiectul. Fără tip spus clar, UMBRELA (toate codurile
+    cuvântului clientului); un tip DEDUS de cod nu o bate (recenzia NX-350, constatarea 7)."""
+    stated = topic.product_type if not (topic.type_learned and topic.type_umbrella) else None
+    return (stated,) if stated else topic.type_umbrella
 
 
 __all__ = [

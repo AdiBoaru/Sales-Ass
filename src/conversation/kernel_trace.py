@@ -156,6 +156,8 @@ def state_view(state: ConversationStateV2) -> dict[str, Any]:
         "needs": sorted(_need_label(n) for n in state.active_needs()),
         "shown": [d.product_id for d in state.references.displayed_products],
     }
+    if state.topic.type_umbrella:  # NX-350: umbrela subiectului, doar când există
+        view["umbrella"] = list(state.topic.type_umbrella)
     if state.parked is not None:
         view["parked"] = {
             "topic": state.parked.topic.category_key,

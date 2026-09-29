@@ -90,6 +90,18 @@ def _is_subject(c: CheckedChange) -> bool:
     )
 
 
+def _merge_umbrellas(umbrellas: Sequence[tuple[str, ...]]) -> tuple[str, ...]:
+    """NX-350 (recenzia, constatarea 5): mai multe tipuri vagi în același tur («o cremă sau un
+    ser») se unesc PE RÂND (primul cod al fiecăreia, apoi al doilea…), ca plafonul să nu taie
+    tăcut o umbrelă întreagă. Fiecare umbrelă își are codul presupus de model primul."""
+    merged: list[str] = []
+    for rank in range(max(len(u) for u in umbrellas)):
+        for codes in umbrellas:
+            if rank < len(codes) and codes[rank] not in merged:
+                merged.append(codes[rank])
+    return tuple(merged[:MAX_TYPE_UMBRELLA])
+
+
 def _subject_proposal(
     changes: Sequence[CheckedChange], turn_id: str, counters: dict[str, int]
 ) -> StateUpdateProposal | None:
@@ -282,7 +294,7 @@ def to_delta(
     ranking: list[RankingSignal] = []
     rejected: list[CheckedChange] = []
     subject: list[CheckedChange] = []
-    umbrella: list[str] = []
+    umbrella: list[tuple[str, ...]] = []
     umbrella_lead: CheckedChange | None = None
 
     for c in ordered:
@@ -319,9 +331,7 @@ def to_delta(
             if not subject and not umbrella:
                 proposals.append(None)  # type: ignore[arg-type]  # locul propunerii de subiect
             umbrella_lead = umbrella_lead or c
-            for code in c.umbrella or (str(c.canonical_value),):
-                if code not in umbrella:
-                    umbrella.append(code)
+            umbrella.append(c.umbrella or (str(c.canonical_value),))
             counters["subject_type_umbrella"] = counters.get("subject_type_umbrella", 0) + 1
             continue
         if c.dimension in SUBJECT_DIMENSIONS and c.canonical_value is not None:
@@ -349,7 +359,10 @@ def to_delta(
     if subject or umbrella:
         made = _subject_proposal(subject, turn_id, counters) if subject else None
         if umbrella and umbrella_lead is not None:
-            codes = tuple(umbrella[:MAX_TYPE_UMBRELLA])
+            if any(s.dimension == PRODUCT_TYPE for s in subject):
+                # Un tip spus clar lângă unul vag: clarul câștigă (reducerul), ca la NX-348.
+                counters["subject_multiple"] = counters.get("subject_multiple", 0) + 1
+            codes = _merge_umbrellas(umbrella)
             if made is None:
                 made = StateUpdateProposal(
                     "set_topic",

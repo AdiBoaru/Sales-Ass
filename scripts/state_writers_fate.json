@@ -243,7 +243,7 @@
       "file": "src/conversation/state_reducer.py",
       "function": "_apply_umbrella",
       "field": "needs_topic",
-      "why": "NX-350 (kernel.v4.0): umbrela unui tip spus vag. Pe un tip spus clar care nu e in umbrela, clientul cere alt fel de produs: subiect nou pe acelasi raft, iar nevoile subiectului se parcheaza (aceeasi regula ca orice schimbare de subiect). Scris DOAR de reducer.",
+      "why": "NX-350 (kernel.v4.0): umbrela unui tip spus vag. Cand ce spune clientul nu se suprapune cu ce spusese (tip spus clar in afara umbrelei, umbrele disjuncte), cere alt fel de produs: subiect nou (raftul ramane doar daca turul il numeste), iar nevoile subiectului se parcheaza (aceeasi regula ca orice schimbare de subiect). Scris DOAR de reducer.",
       "fate": "stays"
     },
     {

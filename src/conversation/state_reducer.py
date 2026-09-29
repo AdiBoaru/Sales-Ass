@@ -755,22 +755,30 @@ def _apply_umbrella(
     umbrella: tuple[str, ...],
     proposal: StateUpdateProposal,
     policy: ReducerPolicy,
+    *,
+    shelf_named: bool,
 ) -> _Outcome:
-    """NX-350: umbrela unui tip spus vag. Un tip spus CLAR care e în umbrelă rămâne (clientul l-a
-    reformulat mai larg); unul care nu e în ea ⇒ clientul cere alt fel de produs: subiect nou pe
-    același raft, cu umbrela (se parchează, ca orice schimbare de subiect). Fără tip spus clar,
-    umbrela completează sau înlocuiește umbrela veche, fără parcare; un tip DEDUS de cod rămâne doar
-    dacă e în umbrelă."""
+    """NX-350: umbrela unui tip spus vag. Regula e una, pe ambele sensuri (recenzia NX-350,
+    constatarea 3): clientul cere ALT FEL de produs când ce spune acum nu se suprapune cu ce
+    spusese (un tip spus clar în afara umbrelei, sau două umbrele disjuncte) ⇒ subiect nou, iar cel
+    vechi se parchează, ca orice schimbare de subiect. Raftul rămâne doar dacă TURUL îl numește
+    (`shelf_named`): altfel un raft ales pentru alt fel de produs ar orienta căutarea greșit
+    (aceeași regulă ca la NX-348, unde o pereche neverificată golește cealaltă jumătate).
+
+    Altfel: un tip spus clar în umbrelă rămâne (reformulare mai largă), iar o umbrelă care se
+    suprapune cu cea veche o înlocuiește fără parcare; un tip DEDUS de cod rămâne doar dacă e în
+    umbrelă."""
     topic = state.topic
     explicit = None if topic.type_learned else topic.product_type
     if explicit is not None and explicit in umbrella:
         return state, Applied("set_topic", topic.category_key, SOFT, proposal.source, "unchanged")
-    if explicit is not None:
+    other_kind = explicit is not None or _other_kind(topic.type_umbrella, None, umbrella)
+    if other_kind:
         outcome = "evicted" if state.parked is not None else "parked"
         parked = _parked_now(state, policy)
         retired = _retire_topic(state, proposal.turn_id, policy)
         new = Topic(
-            category_key=topic.category_key,
+            category_key=topic.category_key if shelf_named else None,
             changed_at_revision=state.revision,
             type_umbrella=umbrella,
         )
@@ -809,12 +817,14 @@ def _handle_set_topic(
         if proposal.product_type:
             return _handle_set_topic(state, base, policy)
         if not category:
-            return _apply_umbrella(state, proposal.type_umbrella, proposal, policy)
+            return _apply_umbrella(
+                state, proposal.type_umbrella, proposal, policy, shelf_named=False
+            )
         first = _handle_set_topic(state, base, policy)
         if isinstance(first, RejectedUpdate):
             return first
         after, records = first
-        second = _apply_umbrella(after, proposal.type_umbrella, proposal, policy)
+        second = _apply_umbrella(after, proposal.type_umbrella, proposal, policy, shelf_named=True)
         if isinstance(second, RejectedUpdate):
             return after, records
         final, more = second
@@ -862,7 +872,19 @@ def _handle_set_topic(
         type_changed = old_type is not None and new_type is not None and new_type != old_type
         fills_shelf = previous is None and category is not None and old_type is not None
         fills_type = new_type is not None and old_type is None and previous is not None
-        if not shelf_changed and not type_changed:
+        umbrella = state.topic.type_umbrella
+        # NX-350 (recenzia, constatarea 3): un tip spus clar în afara umbrelei e alt fel de produs,
+        # deci subiect nou (se parchează), ca umbrela vagă în afara unui tip spus clar. Raftul
+        # rămâne doar pe o pereche verificată (regula NX-348 a completării).
+        other_kind = (
+            new_type is not None and old_type is None and _other_kind(umbrella, new_type, ())
+        )
+        if other_kind and not shelf_changed:
+            product_type = new_type
+            if previous is not None:
+                category = previous if proposal.pair_verified == (previous, new_type) else None
+            same_subject = False
+        elif not shelf_changed and not type_changed:
             result = (category or previous, new_type or old_type)
             if (fills_shelf or fills_type) and proposal.pair_verified != result:
                 # Completare fără dovadă că perechea există: subiect nou, fără jumătatea veche.
@@ -886,7 +908,9 @@ def _handle_set_topic(
                     previous,
                     state.topic.product_type,
                 )
-                first = previous is None and old_type is None
+                # NX-350 (recenzia, constatarea 4): un subiect doar cu umbrelă nu e „primul": un tip
+                # spus clar din umbrelă îl rafinează, iar revizia subiectului rămâne.
+                first = previous is None and old_type is None and not umbrella
                 if first and changed:
                     # Prima ancorare: subiect NOU (revizia lui), nimic de parcat.
                     topic = replace(topic, changed_at_revision=state.revision)
@@ -925,8 +949,11 @@ def _handle_set_topic(
         changed_at_revision=state.revision,
         product_type=product_type if (proposal.subject or interpreted) else None,
         type_learned=type_learned and proposal.subject,
+        # NX-350 (recenzia, constatarea 7): calea v1 care ancorează raftul unui subiect doar cu
+        # umbrelă (primul raft) nu uită ce a spus clientul.
+        type_umbrella=state.topic.type_umbrella if not interpreted and previous is None else (),
     )
-    if previous is None and not (interpreted and state.topic.product_type):
+    if previous is None and not (interpreted and state.topic.has_subject):
         # Prima ancorare a subiectului nu retrage nimic: nu exista un subiect vechi de resetat.
         # NX-348 (recenzia, N-F): dar nevoile de subiect spuse înainte primesc raftul, pe ORICE
         # cale, altfel o schimbare de subiect ulterioară nu le-ar parca.
@@ -959,7 +986,7 @@ def _topic_needs(state: ConversationStateV2, policy: ReducerPolicy) -> tuple[Nee
     pachetul o declară acum a conversației (bugetul, NX-331) nu e a subiectului, chiar dacă un
     document scris înainte îi poartă raftul în `scope`."""
     category = state.topic.category_key
-    if category is None and state.topic.product_type is None:
+    if not state.topic.has_subject:  # NX-350: un subiect doar cu umbrelă are nevoi (scope=None)
         return ()
     # NX-348: un subiect FĂRĂ raft (doar tipul) are nevoile lui cu `scope=None`; fără asta, o
     # schimbare de subiect nu le-ar parca și nu le-ar retrage (recenzia NX-348, constatarea 1).
@@ -1385,7 +1412,7 @@ def _resume(
         return state, Applied("resume", None, SOFT, "user_explicit", "not_available")
 
     current = state.topic
-    has_current = current.category_key is not None or current.product_type is not None
+    has_current = current.has_subject  # NX-350: și un subiect doar cu umbrelă se parchează
     new_parked = _parked_now(state, policy) if has_current else None
     leaving = state.references.displayed_products
     state = _retire_topic(state, None, policy)
@@ -1474,6 +1501,18 @@ class _Contradiction:
         return bool(self.dimensions) or self.subject
 
 
+def _other_kind(
+    umbrella: tuple[str, ...], new_type: str | None, new_umbrella: tuple[str, ...]
+) -> bool:
+    """NX-350: ce spune clientul acum e alt fel de produs decât umbrela: un tip spus clar în afara
+    ei, sau o umbrelă disjunctă."""
+    if not umbrella:
+        return False
+    if new_type is not None:
+        return new_type not in umbrella
+    return bool(new_umbrella) and not set(umbrella) & set(new_umbrella)
+
+
 def _written_by_previous_turn(need: Need, before: ConversationStateV2) -> bool:
     """`updated_revision` = revizia turului care a scris nevoia. Revizia 0 e a documentului
     adaptat din v1, deci n-are un „tur anterior" care să-l fi scris."""
@@ -1512,6 +1551,9 @@ def _contradictions(
                         and new_type is not None
                         and new_type != before.topic.product_type
                     )
+                    # NX-350 (recenzia, constatarea 4): umbrela scrisă de turul anterior e
+                    # contrazisă de alt fel de produs, cu aceeași regulă ca la reducer.
+                    or _other_kind(before.topic.type_umbrella, new_type, proposal.type_umbrella)
                 )
             )
             continue
