@@ -174,18 +174,23 @@ def _subject(inp: InterpretInput) -> list[str]:
     topic = inp.state.topic
     kind = topic.product_type
     shown_kind = _value(inp.pack, "product_type", kind, inp.locale) if kind else NONE
+    lines = [f"shelf: {topic.category_key or NONE}", f"type: {shown_kind}"]
+    if topic.type_umbrella:
+        # NX-350 (recenzia, constatarea 8): tipul spus vag de client e al subiectului, deci
+        # modelul îl vede (altfel ar citi `type: none` și ar ghici iar unul singur).
+        kinds = " | ".join(
+            _value(inp.pack, "product_type", k, inp.locale) for k in topic.type_umbrella
+        )
+        lines.append(f"type said broadly: {kinds}")
     parked = inp.state.parked
     if parked is None:
-        return [f"shelf: {topic.category_key or NONE}", f"type: {shown_kind}", f"PARKED: {NONE}"]
+        return [*lines, f"PARKED: {NONE}"]
     # Recenzia NX-335: resolverul caută și în setul PARCAT (o referință `earlier` sau un nume
     # poate ținti acolo), deci modelul trebuie să-l vadă: nume scurte, fără id-uri, fără prețuri.
     items = " | ".join(display(d.name) for d in parked.shown) or NONE
-    return [
-        f"shelf: {topic.category_key or NONE}",
-        f"type: {shown_kind}",
-        f"PARKED: {parked.topic.category_key or parked.topic.product_type or NONE}",
-        f"parked items: {items}",
-    ]
+    held = parked.topic
+    name = held.category_key or held.product_type or " | ".join(held.type_umbrella) or NONE
+    return [*lines, f"PARKED: {name}", f"parked items: {items}"]
 
 
 def render_view(inp: InterpretInput) -> str:

@@ -645,7 +645,7 @@ class _Gate:
         if primary.kind != "find":
             return None
         topic = self.state.topic
-        if topic.category_key or topic.product_type:
+        if topic.has_subject:  # NX-350: o umbrelă e subiect
             return None
         if read_query(primary, pack=self.pack, locale=self.locale).has_words:
             return None

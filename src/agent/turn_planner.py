@@ -34,6 +34,7 @@ from dataclasses import dataclass
 
 from src.agent.tool_budget import spec_for
 from src.agent.tool_definitions import TOOL_NAMES
+from src.catalog.query_terms import stopwords
 from src.catalog.vocabulary import CatalogVocabulary, topic_root_of
 from src.conversation.ambiguity_gate import GateOutcome, target_question_key
 from src.conversation.answer_policy import read_query
@@ -63,7 +64,7 @@ from src.conversation.references import (
     RATING_DIMENSION,
     VARIANT_DIMENSION,
 )
-from src.conversation.state_v2 import HARD_CAPABLE_SOURCES, ConversationStateV2, Need
+from src.conversation.state_v2 import HARD_CAPABLE_SOURCES, ConversationStateV2, Need, Topic
 from src.domain.routine_steps import SEP
 from src.tools.base import CATALOG_READ_TOOLS
 from src.tools.catalog_tools import SearchArgs
@@ -214,8 +215,7 @@ class _Planner:
         return [r for r in self.interp.references if r.id not in targeted]
 
     def _subject(self) -> bool:
-        topic = self.state.topic
-        return bool(topic.category_key or topic.product_type)
+        return self.state.topic.has_subject
 
     def _facet_needs(self) -> bool:
         return any(self.needs.dimension_of(n.key) in self.facets for n in self.state.active_needs())
@@ -231,6 +231,14 @@ class _Planner:
                 if entry.key == topic.category_key and entry.label:
                     return entry.label
             return topic.category_key
+        if topic.type_umbrella and (topic.type_learned or not topic.product_type):
+            # NX-350: eticheta unei umbrele e CAPUL primului ei cod (cuvântul spus de client,
+            # «cremă»), nu codul întreg: altfel căutarea fără cuvinte ar alege unul. Nu un cuvânt
+            # din coadă, comun tuturor («fata» e raftul de machiaj, NX-319) și nici unul gol al
+            # locale-i (recenziile NX-350, constatările 6). Un tip DEDUS nu o bate (constatarea 7).
+            stop = stopwords(self.locale)
+            words = [w for w in topic.type_umbrella[0].split() if w not in stop]
+            return words[0] if words else topic.type_umbrella[0]
         if topic.product_type:
             getter = getattr(self.pack, "value_label", None)
             for loc in dict.fromkeys((self.locale, _lang(self.locale))):
@@ -578,10 +586,11 @@ class _Planner:
 
         # NX-314 pe calea interpretată: tipul subiectului ORDONEAZĂ (fațeta nu e `enforce_ready`),
         # deci „cremă de față" pe un raft de 900 de produse urcă cremele, fără să scoată restul.
-        product_type = self.state.topic.product_type
-        if product_type and self._on_attributes(PRODUCT_TYPE):
-            _prefer(PRODUCT_TYPE, product_type)
-        elif product_type:
+        kinds = subject_kinds(self.state.topic)
+        if kinds and self._on_attributes(PRODUCT_TYPE):
+            for kind in kinds:
+                _prefer(PRODUCT_TYPE, kind)
+        elif kinds:
             self._gap("subject_type")
 
         return SearchArgs(
@@ -675,7 +684,7 @@ def bundle_executor(
     intrare în `DomainPack.bundle_executors` pentru rădăcina raftului, raft sau `"*"`. PUR; pasul 6
     îl cheamă ca să afle CE unealtă execută planul `bundle`."""
     topic = state.topic
-    if not (topic.category_key or topic.product_type):
+    if not topic.has_subject:
         return None
     table = getattr(pack, "bundle_executors", None)
     if not isinstance(table, Mapping) or not table:
@@ -702,12 +711,12 @@ def routine_family(
     `None` fără subiect sau fără nicio potrivire: planul `bundle` rămâne pe calea de azi."""
     spec = getattr(pack, "routine_steps", None)
     families = getattr(spec, "families", None) or {}
-    ptype = state.topic.product_type
     by_type = getattr(spec, "by_product_type", None) or {}
-    if ptype and ptype in by_type:
-        family = str(by_type[ptype]).partition(SEP)[0]
-        if family in families:
-            return family
+    # NX-350: tipurile subiectului (`subject_kinds`: tipul spus clar, altfel umbrela; un tip DEDUS
+    # nu bate umbrela). Mai multe decid familia doar când TOATE cele cunoscute sunt ale aceleiași.
+    seen = {str(by_type[k]).partition(SEP)[0] for k in subject_kinds(state.topic) if k in by_type}
+    if len(seen) == 1 and next(iter(seen)) in families:
+        return next(iter(seen))
     key = state.topic.category_key
     table = getattr(spec, "family_by_shelf", None)
     if not key or not isinstance(table, Mapping) or not table:
@@ -718,6 +727,13 @@ def routine_family(
         if shelf and shelf in table:
             return str(table[shelf])
     return None
+
+
+def subject_kinds(topic: Topic) -> tuple[str, ...]:
+    """NX-350: tipurile pe care le ordonează subiectul. Fără tip spus clar, UMBRELA (toate codurile
+    cuvântului clientului); un tip DEDUS de cod nu o bate (recenzia NX-350, constatarea 7)."""
+    stated = topic.product_type if not (topic.type_learned and topic.type_umbrella) else None
+    return (stated,) if stated else topic.type_umbrella
 
 
 __all__ = [

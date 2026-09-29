@@ -799,3 +799,47 @@ async def test_a_changed_frozen_set_refuses_to_run(monkeypatch, capsys):
     )
     assert code == 2 and fake.calls == 0
     assert "refuz" in capsys.readouterr().out
+
+
+# --- NX-350: setul E, scris separat pentru verdictul regulii kernel.v4.0 --------------------------
+
+
+@pytest.fixture(scope="module")
+def cases_e():
+    return rp.journey_cases(rp.HOLDOUT_E_DIR, set_name="E")
+
+
+def test_set_e_is_frozen_before_any_run():
+    assert rp.holdout_c_digest(rp.HOLDOUT_E_DIR) == rp.HOLDOUT_E_SHA256
+
+
+def test_set_e_labels_are_well_formed_and_nothing_is_excluded(cases_e):
+    journeys = replay.load_journeys(rp.HOLDOUT_E_DIR)
+    assert [p for j in journeys for p in replay.label_problems(j)] == []
+    assert all(j.journey_id.startswith("e") for j in journeys)
+    assert not any(rp.injected_state(j) for j in journeys)
+    assert {c.set_name for c in cases_e} == {"E"}
+    assert len(cases_e) == 89
+
+
+def test_set_e_ids_are_disjoint_from_every_seen_set():
+    seen = (
+        replay.load_journeys()
+        + replay.load_journeys(rp.HOLDOUT_C_DIR)
+        + replay.load_journeys(rp.HOLDOUT_D_DIR)
+    )
+    e = replay.load_journeys(rp.HOLDOUT_E_DIR)
+    assert not ({j.journey_id for j in e} & {j.journey_id for j in seen})
+
+
+async def test_a_model_that_answers_the_set_e_label_scores_one(cases_e):
+    journeys = {j.journey_id: j for j in replay.load_journeys(rp.HOLDOUT_E_DIR)}
+    fake = CountingLLM(
+        [journeys[c.journey_id].turns[c.index].expect["interpretation"] for c in cases_e]
+    )
+    rows = await rp.run_journeys(cases_e, fake, efforts=("none",), seed=1, dry_run=False)
+    arm = rp.summarize_sets(rows, ("none",))["sets"]["E"]["none"]
+    assert arm["outcomes"] == {"ok": len(cases_e)}
+    for field in ("primary_act", "thread", "targets", "ambiguity"):
+        assert arm[field]["rate"] in (1.0, None), (field, arm[field]["rate"])
+    assert arm["changes"]["f1"] in (1.0, None), arm["changes"]["f1"]

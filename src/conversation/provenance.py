@@ -32,6 +32,7 @@ from decimal import Decimal, InvalidOperation
 from src.catalog.query_terms import (
     comparators,
     fold,
+    inflection_suffixes,
     negation_markers,
     relative_comparators,
     stopwords,
@@ -61,7 +62,7 @@ from src.conversation.needs import (
     UNIVERSAL_SPECS,
     NeedVocabulary,
 )
-from src.conversation.state_v2 import Need
+from src.conversation.state_v2 import MAX_TYPE_UMBRELLA, Need
 from src.domain.constraints import EMPTY_UNITS, UnitRegistry
 
 #: Plafoanele de runtime ale contractului (decizia 3 din „Review decisions"). Peste ele, restul se
@@ -208,6 +209,36 @@ class _Evidence:
     located: bool
     comparator_ops: frozenset[str]  # op-urile comparatorilor găsiți în citat
     negations: tuple[int, ...]  # pozițiile negațiilor, după scăderea comparatorilor
+
+
+#: NX-350: dimensiunea tipului de produs, a doua jumătate a subiectului (`Topic.product_type`).
+SUBJECT_TYPE = "product_type"
+
+
+def _same_stem(a: str, b: str, suffixes: Collection[str]) -> bool:
+    """Același cuvânt, eventual flexionat pe AMBELE părți («creme» = „crema": tulpina „crem" +
+    „e" / „a"), cu tulpina de cel puțin 3 litere. Sufixele sunt ale locale-i (P11)."""
+    if a == b:
+        return True
+    for sa in ("", *suffixes):
+        if sa and not a.endswith(sa):
+            continue
+        stem = a[: len(a) - len(sa)] if sa else a
+        if len(stem) < 3:
+            continue
+        for sb in ("", *suffixes):
+            if b == stem + sb:
+                return True
+    return False
+
+
+def _spells(words: Sequence[str], code: Sequence[str], suffixes: Collection[str]) -> bool:
+    """NX-350: citatul conține codul ÎNTREG, cuvânt cu cuvânt și în ordine (cu flexiune)."""
+    size = len(code)
+    return size > 0 and any(
+        all(_same_stem(words[i + j], code[j], suffixes) for j in range(size))
+        for i in range(len(words) - size + 1)
+    )
 
 
 def _read_quote(quote: str, user: UserWords, locale: str | None) -> _Evidence:
@@ -432,7 +463,12 @@ class _Checker:
             if any(p in window for p in evidence.negations):
                 return reject("polarity_conflict", canonical)
         level = self._polarity_level(level, relation, evidence, dimension, number_in_quote)
-        return self._finish(change, dimension, canonical, level)
+        checked = self._finish(change, dimension, canonical, level)
+        if dimension == SUBJECT_TYPE and level == "implicit" and evidence.located:
+            umbrella = self._umbrella(evidence, canonical)
+            if umbrella:
+                checked = checked.model_copy(update={"umbrella": umbrella})
+        return checked
 
     def _resolve_quote(
         self, evidence: _Evidence, dimension: str, canonical: str | float | None
@@ -456,6 +492,45 @@ class _Checker:
             if (anywhere.dimension, anywhere.key) != (dimension, canonical):
                 other = True
         return "implicit", -1, other
+
+    def _umbrella(self, evidence: _Evidence, canonical: str | float | None) -> tuple[str, ...]:
+        """NX-350: UMBRELA unui tip spus vag: codurile de tip care poartă cuvântul-tip spus de
+        client («cremă» → toate cremele; «creme de față» → doar „crema de fata").
+
+        Recenzia NX-350 (constatarea 1): un cuvânt-tip e doar unul care numește CE ESTE un cod,
+        adică CAPUL lui (primul cuvânt plin: „crema" din „crema de fata"), cu flexiune (aceeași
+        tulpină + un sufix al locale-i). Un cuvânt din coada codului descrie PENTRU CE e («ten»
+        din „fond de ten", «par» din „crema de par", «fata» din „fata de" = „față de"), deci nu
+        deschide o umbrelă.
+
+        Umbrela conține MEREU codul presupus de model (primul), altfel ar putea spune altceva
+        decât interpretarea validată: capul e al codului presupus. Fără el în citat, umbrela e doar
+        codul presupus. Plafon `MAX_TYPE_UMBRELLA`, cele mai mari coduri întâi, determinist."""
+        own = (str(canonical),) if isinstance(canonical, str) else ()
+        entries = self.vocab.entries(SUBJECT_TYPE) if self.vocab is not None else ()
+        suffixes = inflection_suffixes(self.locale)
+        codes = [
+            (e.key, [w for w in tokens(e.key) if w not in self.stop], e.count) for e in entries
+        ]
+        mine = next((words for key, words, _n in codes if key == canonical and words), None)
+        if mine is None:
+            return own
+        head = [w for w in evidence.words if _same_stem(w, mine[0], suffixes)]
+        if not head:
+            return own
+        # A doua recenzie (constatarea 4): umbrela se îngustează la codul presupus DOAR când
+        # citatul îl spune ÎNTREG, în șir, de la cap («creme de fata»); un cuvânt din coada codului
+        # aflat oriunde altundeva («o cremă mai ieftină față de cealaltă», «mi se pare») nu spune
+        # ce fel de cremă.
+        if _spells(evidence.words, tuple(tokens(str(canonical))), suffixes):
+            return own
+        hits = [
+            (key, count)
+            for key, words, count in codes
+            if key != canonical and words and _same_stem(head[0], words[0], suffixes)
+        ]
+        hits.sort(key=lambda kc: (-kc[1], kc[0]))
+        return (*own, *(k for k, _n in hits[: MAX_TYPE_UMBRELLA - len(own)]))
 
     def _polarity_level(
         self,

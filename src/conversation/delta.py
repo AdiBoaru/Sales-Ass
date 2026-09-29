@@ -25,7 +25,7 @@ clasifica static fiecare scriitor. Modul PUR: aceleași intrări ⇒ același `T
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Literal
 
 from src.conversation.interpretation import CheckedChange, ResolvedRef, TurnInterpretation
@@ -40,6 +40,7 @@ from src.conversation.provenance import (
 )
 from src.conversation.references import ReferenceFacts
 from src.conversation.state_reducer import StateUpdateProposal
+from src.conversation.state_v2 import MAX_TYPE_UMBRELLA
 
 CATEGORY = "category"
 #: Cheia universală a unei excluderi, când fațeta nu are propriul operator `not_contains`.
@@ -87,6 +88,18 @@ def _is_subject(c: CheckedChange) -> bool:
     return (c.change.op in ("set", "add") and c.dimension in SUBJECT_DIMENSIONS) or (
         c.change.op == "clear" and c.change.target == "topic"
     )
+
+
+def _merge_umbrellas(umbrellas: Sequence[tuple[str, ...]]) -> tuple[str, ...]:
+    """NX-350 (recenzia, constatarea 5): mai multe tipuri vagi în același tur («o cremă sau un
+    ser») se unesc PE RÂND (primul cod al fiecăreia, apoi al doilea…), ca plafonul să nu taie
+    tăcut o umbrelă întreagă. Fiecare umbrelă își are codul presupus de model primul."""
+    merged: list[str] = []
+    for rank in range(max(len(u) for u in umbrellas)):
+        for codes in umbrellas:
+            if rank < len(codes) and codes[rank] not in merged:
+                merged.append(codes[rank])
+    return tuple(merged[:MAX_TYPE_UMBRELLA])
 
 
 def _subject_proposal(
@@ -281,6 +294,8 @@ def to_delta(
     ranking: list[RankingSignal] = []
     rejected: list[CheckedChange] = []
     subject: list[CheckedChange] = []
+    umbrella: list[tuple[str, ...]] = []
+    umbrella_lead: CheckedChange | None = None
 
     for c in ordered:
         if c.rejected is not None:
@@ -303,9 +318,25 @@ def to_delta(
                 continue
             proposals += structural
             continue
+        if (
+            c.dimension == PRODUCT_TYPE
+            and c.provenance != "explicit"
+            and c.change.op in ("set", "add")
+            and c.canonical_value is not None
+        ):
+            # NX-350 (kernel.v4.0, decis de Adi pe 2026-09-29): un tip spus VAG («cremă de
+            # hidratare» → `crema de fata`, deși putea fi de corp sau de mâini) nu devine tipul
+            # subiectului: subiectul ține minte UMBRELA cuvintelor clientului (toate codurile care
+            # se potrivesc, calculate de validator), care ordonează în fiecare tur și nu parchează.
+            if not subject and not umbrella:
+                proposals.append(None)  # type: ignore[arg-type]  # locul propunerii de subiect
+            umbrella_lead = umbrella_lead or c
+            umbrella.append(c.umbrella or (str(c.canonical_value),))
+            counters["subject_type_umbrella"] = counters.get("subject_type_umbrella", 0) + 1
+            continue
         if c.dimension in SUBJECT_DIMENSIONS and c.canonical_value is not None:
             # NX-348: se adună, apoi UN `set_topic` pe pereche, în poziția subiectului (primul).
-            if not subject:
+            if not subject and not umbrella:
                 proposals.append(None)  # type: ignore[arg-type]  # locul propunerii de subiect
             subject.append(c)
             continue
@@ -325,8 +356,23 @@ def to_delta(
             continue
         proposals += made
 
-    if subject:
-        made = _subject_proposal(subject, turn_id, counters)
+    if subject or umbrella:
+        made = _subject_proposal(subject, turn_id, counters) if subject else None
+        if umbrella and umbrella_lead is not None:
+            if any(s.dimension == PRODUCT_TYPE for s in subject):
+                # Un tip spus clar lângă unul vag: clarul câștigă (reducerul), ca la NX-348.
+                counters["subject_multiple"] = counters.get("subject_multiple", 0) + 1
+            codes = _merge_umbrellas(umbrella)
+            if made is None:
+                made = StateUpdateProposal(
+                    "set_topic",
+                    type_umbrella=codes,
+                    **_common(
+                        umbrella_lead, _SOURCE_BY_PROVENANCE[umbrella_lead.provenance], turn_id
+                    ),
+                )
+            else:
+                made = replace(made, type_umbrella=codes)
         proposals = [made if p is None else p for p in proposals]
     return TurnDelta(
         thread=thread,

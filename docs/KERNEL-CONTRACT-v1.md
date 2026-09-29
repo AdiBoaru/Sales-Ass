@@ -23,7 +23,29 @@ Versioning: the contract is `kernel.v1.0`. **Minor** (`v1.1`): additive schema f
 
 No invariant, ownership row or state rule changes in v1.2, so no replay gate is required. The open questions step 6 raised on I5 (the safety prune on `aside`), I20 (the cart on `cart_ref`) and I15a/I12 (`grounding_guard` does not run on the v1 composition) are decided in the PRs that need them (B and C), under the minor/major rule.
 
-**Current version: `kernel.v3.0` (MAJOR, NX-348, decided by Adi on 2026-09-29).** The meaning of a
+**Current version: `kernel.v4.0` (MAJOR, NX-350, decided by Adi on 2026-09-29).** The product type
+of the SUBJECT changes only from a type the customer stated (`explicit`). An `implicit` type (the
+customer's words do not name the whole code: „cremă" → `crema de fata`, which could as well be a body
+or hand cream) is remembered as the customer's UMBRELLA instead: the validator takes the quote word that
+is the HEAD of the assumed code (its first content word, with the locale's inflection suffixes; a word
+from a code's tail, like „ten" in „fond de ten", never opens or narrows an umbrella) and returns the
+assumed code first plus every other code with that head (`CheckedChange.umbrella`, at most 8, largest
+first; only the assumed code when the quote has no head word or spells the whole code in a row).
+The delta puts them on the subject proposal (`set_topic.type_umbrella`, counted
+`subject_type_umbrella`; several vague types merge rank by rank), and the subject keeps them
+(`Topic.type_umbrella`). The reducer is the only writer, with one rule in both directions: what the
+customer says now is ANOTHER KIND of item when it does not overlap what they said (a stated type outside
+the umbrella, an umbrella without the stated type, or disjoint umbrellas), and that is a subject change
+(the old subject is parked; the shelf stays, as when a stated type changes in v3.0). Otherwise an
+overlapping umbrella replaces the old one without parking and a stated type from the umbrella refines
+it. An umbrella-only subject parks, resumes, clears and is contradicted (I21) like any other subject.
+The planner prefers every code of the umbrella (a code-inferred type does not beat it) and labels the
+subject with the head of its first code; the model's view shows it. An
+umbrella never filters. The
+replay gate is waived, as for v2.0 and v3.0: no interpreted turn has been served in production. The
+model-written schema is unchanged.
+
+**Previous version: `kernel.v3.0` (MAJOR, NX-348, decided by Adi on 2026-09-29).** The meaning of a
 subject change: the subject `(category_key, product_type)` changes only when a half that is already
 set gets a DIFFERENT value. Filling an empty half (the first product type on a shelf without one, the
 first shelf on a subject that has only a type) is a REFINEMENT: the subject's needs stay and nothing
@@ -294,7 +316,7 @@ Provenance is computed by code in four steps, in order. The model supplies only 
 | Provenance | Maps to `NeedSource` | Strength | Can revive a revoked need | Can override an explicit need |
 | --- | --- | --- | --- | --- |
 | explicit | `user_explicit` | hard if the dimension is hard-capable, else soft | yes | yes (supersede) |
-| implicit | `user_implicit` (new) | soft (`prefer`); a confirmation candidate for the gate | no | no |
+| implicit | `user_implicit` (new) | soft (`prefer`); a confirmation candidate for the gate. (v4.0) On `product_type`, the umbrella of the customer's words on the subject, never the subject's type | no | no |
 | inferred | `model_inferred` | ranking only, this turn; never persisted | no | no |
 
 `user_implicit` is added to `NeedSource` and left out of `HARD_CAPABLE_SOURCES` and `REVIVE_CAPABLE_SOURCES`. The existing reducer rules then apply unchanged.
@@ -338,7 +360,7 @@ Never afterwards:
 The contract requires two additive changes in the search tool, both written only by the planner and both empty by default (empty ⇒ the SQL, the fusion and the session fingerprint are byte-identical to v1.0):
 
 - `SearchArgs.rank_terms` (v1.0). Today the only textual input is `query`, and on the `strict` rung the query is a gate: its terms are joined with AND. Passing unmapped words through `query` would turn „piele obosită după avion” into a hidden filter, which is the NX-298 lesson.
-- `SearchArgs.prefer` (v1.1, NX-333): the `soft` facet needs, the subject's product type and this turn's `inferred` facet signals, as attribute key → catalog values, merged in the tool with the NX-322 need-menu preference and passed to the existing fusion (`need_preference`). No new SQL. Without it, a `soft` need had no channel into the search, and since no facet is `enforce_ready` on today's data, every facet need the user stated would have vanished from the interpreted search, which is worse than today's path. Only dimensions that are **attribute** facets enter `prefer`: fusion reads the preference from `attributes`, so a column-backed dimension (the brand, on the real catalog) would order nothing and dilute the others; it goes into `gaps` instead.
+- `SearchArgs.prefer` (v1.1, NX-333): the `soft` facet needs, the subject's product type (v4.0: or every code of its umbrella when no type was stated) and this turn's `inferred` facet signals, as attribute key → catalog values, merged in the tool with the NX-322 need-menu preference and passed to the existing fusion (`need_preference`). No new SQL. Without it, a `soft` need had no channel into the search, and since no facet is `enforce_ready` on today's data, every facet need the user stated would have vanished from the interpreted search, which is worse than today's path. Only dimensions that are **attribute** facets enter `prefer`: fusion reads the preference from `attributes`, so a column-backed dimension (the brand, on the real catalog) would order nothing and dilute the others; it goes into `gaps` instead.
 
 „Weight capped below any facet match” is measured, not assumed (`tests/test_kernel_planner.py`): with today's fusion weights and the real fusion pool (50), a facet preference always beats the one-position lift a rank term gives between two adjacent products. The declared limit: a rank term is a secondary key, so inside a large tie group of the text rank (the `filters_only` rung, where hundreds of products rank zero) it can lift a product by several positions at once, and one preferred dimension (0.25) undoes a lift of at most 7 positions from the top of the pool; with several preferred dimensions the preference is their mean, so the bound is lower. Moving `rank_terms` into a fusion signal would lift that limit and is a contract change on measurement, not on principle.
 
@@ -348,7 +370,7 @@ On the planned path the tool does not re-judge `price_max` on the recent text (t
 
 ## Reducer, thread and parking
 
-The subject of a conversation is `(category_key, product_type)`. Only a change of subject parks anything; a change of any other dimension is an ordinary constraint change. (v3.0) A change of subject means a half that is already set gets a different value; filling an empty half is a refinement and parks nothing. Several values for one half in the same turn keep the last one, counted as `subject_multiple`.
+The subject of a conversation is `(category_key, product_type)`. Only a change of subject parks anything; a change of any other dimension is an ordinary constraint change. (v3.0) A change of subject means a half that is already set gets a different value; filling an empty half is a refinement and parks nothing. Several values for one half in the same turn keep the last one, counted as `subject_multiple`. (v4.0) The type half is set only by a stated (`explicit`) type; a vague one sets the subject's umbrella (`Topic.type_umbrella`), which counts as a subject for the gate and the planner. What the customer says now is another kind of item when it does not overlap what they said (a stated type outside the umbrella, an umbrella without the stated type, disjoint umbrellas): that is a subject change, and the shelf stays, as when a stated type changes. An overlapping umbrella replaces the old one without parking; a stated type from the umbrella refines it.
 
 ### Order of application within a turn
 

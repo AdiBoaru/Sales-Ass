@@ -355,9 +355,13 @@ def test_an_inferred_shelf_does_not_move_the_subject():
     assert rp.observed_parts(_interp(), checked, (), hard)["change_active"] == [False, True]
 
 
-def test_after_nx348_an_implicit_type_is_a_fact_not_a_hypothesis():
-    """NX-348 a intrat înaintea rulării v4 (regula din NX-339): tipul mută subiectul, deci o
-    schimbare `implicit` pe tip, neetichetată, e pozitiv fals, nu ipoteză neutră."""
-    v = rp.compare(LABEL, _got([["set", "product_type", "ser", "eq"]], ["implicit"]))
-    assert (v["change_emitted"], v["neutral_hypotheses"], v["hypotheses"]) == (1, 0, 0)
-    assert "product_type" in rp.SUBJECT_DIMENSIONS
+def test_after_nx350_an_implicit_type_is_a_hypothesis_an_implicit_shelf_a_fact():
+    """NX-350 (kernel.v4.0): un tip `implicit` nu mai devine tipul subiectului (doar umbrela, care
+    ordonează), deci e ipoteză neutră; raftul `implicit` mută în continuare subiectul, deci e
+    fapt."""
+    kind = rp.compare(LABEL, _got([["set", "product_type", "ser", "eq"]], ["implicit"]))
+    assert (kind["change_emitted"], kind["neutral_hypotheses"], kind["hypotheses"]) == (0, 1, 1)
+    shelf = rp.compare(LABEL, _got([["set", "category", "ten", "eq"]], ["implicit"]))
+    assert (shelf["change_emitted"], shelf["neutral_hypotheses"]) == (1, 0)
+    explicit = rp.compare(LABEL, _got([["set", "product_type", "ser", "eq"]], ["explicit"]))
+    assert explicit["change_emitted"] == 1

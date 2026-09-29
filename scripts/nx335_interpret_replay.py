@@ -148,6 +148,10 @@ HYPOTHESIS_PROVENANCE = frozenset({"implicit", "inferred"})
 #: NX-348 a intrat în `main` ÎNAINTEA rulării v4, deci se aplică regula pre-înregistrată în
 #: NX-339: tipul de produs mută și el subiectul (NX-331), deci e dimensiune de subiect.
 SUBJECT_DIMENSIONS = frozenset({"category", "product_type"})
+#: NX-350 (kernel.v4.0): pe ce dimensiune de subiect o schimbare `implicit` e totuși FAPT. Tipul
+#: `implicit` devine doar umbrela subiectului (ordonează pe toate codurile cuvântului, nu pe
+#: valoarea modelului), deci doar raftul. Umbrela nu se compară cu eticheta (rapoartele n-o poartă).
+IMPLICIT_FACT_DIMENSIONS = frozenset({"category"})
 GATE_POLICY = ClarificationPolicy()
 FactsFn = Callable[[CatalogLookup], Awaitable[ReferenceFacts]]
 
@@ -555,6 +559,22 @@ def observed(
     return observed_parts(interp, checked, kernel.resolved if kernel else (), state_before)
 
 
+def _umbrella_moves(state: ConversationStateV2, c: Any) -> bool:
+    """NX-350 (recenzia, constatarea 9): un tip `implicit` e ipoteză, dar umbrela lui MUTĂ subiectul
+    când e alt fel de produs decât cel de acum (un tip spus clar în afara ei, sau o umbrelă
+    disjunctă), exact regula reducerului."""
+    if c.rejected or c.dimension != "product_type" or c.provenance != "implicit":
+        return False
+    umbrella = set(getattr(c, "umbrella", ()) or ())
+    if not umbrella and isinstance(c.canonical_value, str):
+        umbrella = {c.canonical_value}
+    topic = state.topic
+    stated = None if topic.type_learned else topic.product_type
+    if stated is not None:
+        return stated not in umbrella
+    return bool(topic.type_umbrella) and not umbrella & set(topic.type_umbrella)
+
+
 def observed_parts(
     interp: TurnInterpretation,
     checked: Sequence[Any],
@@ -591,11 +611,19 @@ def observed_parts(
         or any(not c.rejected and c.change.op == "clear" for c in checked)
         or any(
             not c.rejected
-            and c.provenance != "inferred"
+            and not _is_hypothesis(c.provenance, c.dimension)
             and c.dimension in SUBJECT_DIMENSIONS
             and c.canonical_value is not None
             and _moves_subject(state_before, c.dimension, format_value(c.canonical_value))
             for c in checked
+        )
+        or (
+            # Un tip spus clar în același tur bate umbrela (reducerul), deci atunci nu ea mută.
+            not any(
+                not c.rejected and c.dimension == "product_type" and c.provenance == "explicit"
+                for c in checked
+            )
+            and any(_umbrella_moves(state_before, c) for c in checked)
         )
     )
     for c in checked:
@@ -765,7 +793,9 @@ def _is_hypothesis(provenance: str | None, dimension: str) -> bool:
     raft mută subiectul, deci acolo e fapt."""
     if provenance == "inferred":
         return True
-    return provenance in HYPOTHESIS_PROVENANCE and dimension not in SUBJECT_DIMENSIONS
+    # NX-350 (kernel.v4.0): un tip `implicit` nu mai devine tipul subiectului (doar umbrela), deci e
+    # ipoteză; doar raftul `implicit` rămâne fapt (mută subiectul).
+    return provenance in HYPOTHESIS_PROVENANCE and dimension not in IMPLICIT_FACT_DIMENSIONS
 
 
 def _count_changes(want: Counter, want_null: Counter, got: Mapping[str, Any]) -> dict[str, int]:
@@ -1042,6 +1072,10 @@ HOLDOUT_C_SHA256 = "72fd676ef6dd092464021728cb31d0b535cc9687c4358e1edc47580a64f9
 #: (amprenta raportată de agent), iar autorul promptului nu i-a citit conținutul.
 HOLDOUT_D_DIR = ROOT / "tests" / "golden" / "kernel_interpret_holdout_d"
 HOLDOUT_D_SHA256 = "68c58e79a750e7f60b63055377422973a6b3fcf0e21597c697d788bd77571ac9"
+#: NX-350: setul E, scris de un agent independent care n-a văzut promptul, rapoartele, seturile
+#: A-D sau cardurile NX-339/345/347-350, pentru verdictul regulii `kernel.v4.0`. ÎNGHEȚAT.
+HOLDOUT_E_DIR = ROOT / "tests" / "golden" / "kernel_interpret_holdout_e"
+HOLDOUT_E_SHA256 = "6532611feb7cfd6c3ca11b8997f469a3f1d252aed877874a6a877d51b5cc425f"
 
 
 def holdout_c_digest(directory: Path = HOLDOUT_C_DIR) -> str:
@@ -1715,6 +1749,7 @@ async def _main_journeys(args: argparse.Namespace) -> int:
     frozen = {
         HOLDOUT_C_DIR.resolve(): HOLDOUT_C_SHA256,
         HOLDOUT_D_DIR.resolve(): HOLDOUT_D_SHA256,
+        HOLDOUT_E_DIR.resolve(): HOLDOUT_E_SHA256,
     }
     expected = frozen.get(Path(directory).resolve())
     if args.yes and expected is not None and holdout_c_digest(directory) != expected:

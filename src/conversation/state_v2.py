@@ -147,6 +147,17 @@ def _compact(doc: dict[str, Any], *, always: tuple[str, ...] = ()) -> dict[str, 
     return {k: v for k, v in doc.items() if k in always or v not in (None, "", [], {}, False, 0)}
 
 
+#: NX-350: câte coduri poartă umbrela tipului (P4: bugetul stării e în cod).
+MAX_TYPE_UMBRELLA = 8
+
+
+def _umbrella(raw: object) -> tuple[str, ...]:
+    """Umbrela tipului din jsonb, defensiv: doar o listă de coduri scurte, plafonată."""
+    if not isinstance(raw, list):
+        return ()
+    return tuple(v for v in (_clip(x, 48) for x in raw[:MAX_TYPE_UMBRELLA]) if v)
+
+
 @dataclass(frozen=True)
 class Topic:
     """Subiectul curent. `category_key` e trigger-ul de reset scope-uit (vezi reducerul):
@@ -162,6 +173,14 @@ class Topic:
     # Pentru rafinare (kernel.v3.0) un astfel de tip e o jumătate GOALĂ. Aditiv: cheia lipsește
     # când e fals, deci documentele de azi rămân byte-identice.
     type_learned: bool = False
+    # NX-350 (kernel.v4.0): tipul SPUS vag («cremă»): toate codurile care se potrivesc cuvântului
+    # clientului. Ordonează rezultatele în fiecare tur, nu parchează nimic, iar un tip spus clar îl
+    # înlocuiește. Aditiv: cheia lipsește când e gol.
+    type_umbrella: tuple[str, ...] = ()
+
+    @property
+    def has_subject(self) -> bool:
+        return bool(self.category_key or self.product_type or self.type_umbrella)
 
     def to_jsonb(self) -> dict[str, Any]:
         return _compact(
@@ -171,6 +190,7 @@ class Topic:
                 "changed_at_revision": self.changed_at_revision,
                 "product_type": self.product_type,
                 "type_learned": True if self.type_learned and self.product_type else None,
+                "type_umbrella": list(self.type_umbrella) or None,
             }
         )
 
@@ -183,6 +203,7 @@ class Topic:
             changed_at_revision=_int(raw.get("changed_at_revision")),
             product_type=_clip(raw.get("product_type"), 48) or None,
             type_learned=raw.get("type_learned") is True,
+            type_umbrella=_umbrella(raw.get("type_umbrella")),
         )
 
 
@@ -512,7 +533,7 @@ class ParkedTopic:
         if not isinstance(raw, dict):
             return None
         topic = Topic.from_jsonb(raw.get("topic"))
-        if topic.category_key is None and topic.product_type is None:
+        if not topic.has_subject:
             return None  # un slot fără subiect n-are ce relua
         return cls(
             topic=topic,
