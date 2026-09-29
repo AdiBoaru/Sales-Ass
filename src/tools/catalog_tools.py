@@ -30,7 +30,7 @@ from src.catalog.need_menu import (
     split_args,
     split_needs,
 )
-from src.catalog.query_terms import content_terms
+from src.catalog.query_terms import content_terms, stopwords
 from src.catalog.render_text import cut_at_sentence, display_name
 from src.catalog.vocabulary import (
     CATEGORY_DIMENSION,
@@ -910,31 +910,34 @@ def _is_relative_price_request(text: str) -> bool:
 
 def _price_as_filter_only(ctx: TurnContext, a: SearchArgs, *, planned: bool) -> None:
     """NX-354: prețul e deja filtru (`price_max`), deci nu se mai cere o dată ca text și nu mai
-    decide ordinea. Scrie DOAR `a.query` și `a.sort_mode`, înaintea amprentei de sesiune, ca
-    «mai arată-mi» să pagineze exact căutarea care a rulat.
+    decide ordinea. Doar pe calea v1: pe cea planificată textul și sortarea sunt ale plannerului
+    (NX-333), deci nu se ating. Scrie DOAR `a.query` și `a.sort_mode`, înaintea amprentei de
+    sesiune, ca «mai arată-mi» să pagineze exact căutarea care a rulat.
 
-    Textul: fără sumă, unitate de bani și comparație de preț (`strip_price_mentions`). Dacă din
-    cerere nu rămâne niciun cuvânt («sub 100 lei»), textul rămâne cum era: filtrele de subiect și
-    treapta `filters_only` (NX-293) au deja grijă de o cerere fără cuvinte, iar un `query` gol ar
-    fi altă cale, netestată aici.
+    Textul: fără numărul care e chiar plafonul, unitatea de bani și comparația lui
+    (`strip_price_mentions`). Dacă din cerere nu rămâne niciun cuvânt purtător de sens («sub 100 de
+    lei», «ceva sub 100 lei»), textul rămâne cum era: `content_terms` nu întoarce niciodată gol
+    (cade pe tokenii bruți), deci un `query` redus la «de» ar fi potrivit aproape orice produs.
 
     Ordinea: `price_asc` ales de MODEL rămâne doar dacă mesajul curent chiar cere «mai ieftin»
-    (același detector ca garda NX-319 și ramura deterministă). Pe calea planificată sortarea e a
-    plannerului (NX-333), deci nu se atinge."""
+    (același detector ca garda NX-319 și ramura deterministă)."""
+    if planned:
+        return
     units = getattr(getattr(ctx.business, "domain_pack", None), "units", None)
-    if units is not None and a.query:
-        stripped = strip_price_mentions(a.query, units=units, locale=ctx.language)
+    if units is not None and a.query and a.price_max is not None:
+        stripped = strip_price_mentions(
+            a.query, units=units, locale=ctx.language, price_max=float(a.price_max)
+        )
         if stripped != a.query:
-            before = len(content_terms(a.query, ctx.language))
-            after = len(content_terms(stripped, ctx.language))
-            if after:
+            stop = stopwords(ctx.language)
+            meaningful = [t for t in content_terms(stripped, ctx.language) if t not in stop]
+            if meaningful:
+                removed = len(content_terms(a.query, ctx.language)) - len(meaningful)
                 a.query = stripped
-            ctx.emit(
-                "query_price_words",
-                outcome="stripped" if after else "kept_nothing_left",
-                removed=before - after if after else 0,
-            )
-    if planned or a.sort_mode != "price_asc":
+                ctx.emit("query_price_words", outcome="stripped", removed=removed)
+            else:
+                ctx.emit("query_price_words", outcome="kept_nothing_left", removed=0)
+    if a.sort_mode != "price_asc":
         return
     texts = client_texts(ctx)
     if texts and _is_relative_price_request(texts[0]):

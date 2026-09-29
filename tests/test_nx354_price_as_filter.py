@@ -46,38 +46,75 @@ UNITS = build_units(
 
 
 @pytest.mark.parametrize(
-    ("query", "terms"),
+    ("query", "price_max", "terms"),
     [
         # conversația 1748f988, turul 3: exact textul salvat în `active_search`
         (
             "cremă de hidratare pentru ten uscat, hidratare, sub 100 de lei",
+            100,
             ["crema", "hidratare", "ten", "uscat"],
         ),
         # celelalte trei din măsurătoare
-        ("cadou sub 100 lei pentru ea sau el", ["cadou"]),
+        ("cadou sub 100 lei pentru ea sau el", 100, ["cadou"]),
         (
             "ser pentru piele uscată, hidratare și calmare, mai ieftin decât 70 lei",
+            69.99,  # marginea relativă ajunge cu un ban sub număr
             ["ser", "piele", "uscata", "hidratare", "calmare"],
         ),
-        ("crema spf 50 sub 80 lei", ["crema", "spf", "50"]),  # SPF-ul e cerință de produs
-        ("crema 50 ml sub 100", ["crema", "50", "ml"]),  # cantitatea rămâne, suma iese
-        ("crema de fata", ["crema", "fata"]),  # fără preț: neatins
+        ("crema spf 50 sub 80 lei", 80, ["crema", "spf", "50"]),  # SPF-ul e cerință de produs
+        ("crema 50 ml sub 100", 100, ["crema", "50", "ml"]),  # cantitatea rămâne, suma iese
+        ("crema de fata", 100, ["crema", "fata"]),  # fără preț: neatins
     ],
 )
-def test_price_words_leave_the_text(query: str, terms: list[str]) -> None:
-    assert content_terms(strip_price_mentions(query, units=UNITS, locale="ro"), "ro") == terms
+def test_price_words_leave_the_text(query: str, price_max: float, terms: list[str]) -> None:
+    out = strip_price_mentions(query, units=UNITS, locale="ro", price_max=price_max)
+    assert content_terms(out, "ro") == terms
+
+
+@pytest.mark.parametrize(
+    ("query", "price_max", "kept"),
+    [
+        # recenzia adversarială: cifre din interiorul cuvintelor
+        ("crema cu q10 sub 100 lei", 100, "q10"),
+        ("ser cu vitamina b5 sub 100 lei", 100, "b5"),
+        ("crema de zi 24h sub 100 lei", 100, "24h"),
+        ("masca 2in1 sub 100 lei", 100, "2in1"),
+        # numere care NU sunt plafonul
+        ("cushion nuanta 21", 150, "21"),
+        ("fond de ten nuanta 02 sub 150 lei", 150, "02"),
+        ("crema spf minim 50 sub 100 lei", 100, "50"),
+        ("ser vitamina c 20% sub 100 lei", 100, "20"),
+        ("sampon 3 in 1 sub 100 lei", 100, "3"),
+        ("crema pentru peste 40 de ani", 150, "40"),
+    ],
+)
+def test_numbers_that_are_not_the_bound_stay(query: str, price_max: float, kept: str) -> None:
+    out = strip_price_mentions(query, units=UNITS, locale="ro", price_max=price_max)
+    assert kept in out.split() or kept in out
+
+
+def test_comparison_words_away_from_the_price_stay() -> None:
+    """«peste» și «fix» se scot doar lipite de plafon, nu oriunde în cerere."""
+    out = strip_price_mentions(
+        "crema pentru peste 40 de ani", units=UNITS, locale="ro", price_max=150
+    )
+    assert "peste" in out
+    out = strip_price_mentions(
+        "spray fix makeup sub 100 lei", units=UNITS, locale="ro", price_max=100
+    )
+    assert "fix" in out and "100" not in out and "lei" not in out
 
 
 def test_without_units_the_text_is_untouched() -> None:
     """Fără registru de unități nu putem deosebi un preț de o cantitate: nu ghicim."""
     q = "crema sub 100 lei"
-    assert strip_price_mentions(q, units=EMPTY_UNITS, locale="ro") == q
+    assert strip_price_mentions(q, units=EMPTY_UNITS, locale="ro", price_max=100) == q
 
 
 def test_unknown_locale_keeps_comparison_words() -> None:
     """P11: frazele de comparație sunt ale limbii; pe o locale necunoscută nu aplicăm româna.
     Suma și unitatea de bani (ale tenantului) ies oricum."""
-    out = strip_price_mentions("crema mai ieftin 100 lei", units=UNITS, locale="xx")
+    out = strip_price_mentions("crema mai ieftin 100 lei", units=UNITS, locale="xx", price_max=100)
     assert "100" not in out and "lei" not in out and "ieftin" in out
 
 
@@ -134,19 +171,25 @@ def test_a_real_cheaper_request_keeps_price_sort(message: str) -> None:
     assert not _events(ctx, "price_sort_dropped")
 
 
-def test_planned_sort_is_the_planners() -> None:
-    """NX-333: pe calea planificată sortarea e a plannerului, nu a modelului."""
+def test_planned_path_is_untouched() -> None:
+    """NX-333: pe calea planificată textul și sortarea sunt ale plannerului."""
     ctx = _ctx("sub 100 lei")
-    a = SearchArgs(query="crema", price_max=100, sort_mode="price_asc")
+    a = SearchArgs(query="crema sub 100 lei", price_max=100, sort_mode="price_asc")
     _price_as_filter_only(ctx, a, planned=True)
-    assert a.sort_mode == "price_asc"
+    assert a.sort_mode == "price_asc" and a.query == "crema sub 100 lei"
+    assert not _events(ctx, "query_price_words")
 
 
-def test_nothing_left_keeps_the_original_text() -> None:
-    ctx = _ctx("sub 100 lei")
-    a = SearchArgs(query="sub 100 lei", price_max=100)
+@pytest.mark.parametrize(
+    "query", ["sub 100 lei", "sub 100 de lei", "ceva sub 100 de lei", "pana in 100 de lei"]
+)
+def test_nothing_left_keeps_the_original_text(query: str) -> None:
+    """`content_terms` nu întoarce niciodată gol (cade pe tokenii bruți): «sub 100 de lei» se
+    reducea la «de», o căutare care potrivește aproape orice. Recenzia adversarială."""
+    ctx = _ctx(query)
+    a = SearchArgs(query=query, price_max=100)
     _price_as_filter_only(ctx, a, planned=False)
-    assert a.query == "sub 100 lei"
+    assert a.query == query
     assert _events(ctx, "query_price_words") == [{"outcome": "kept_nothing_left", "removed": 0}]
 
 
