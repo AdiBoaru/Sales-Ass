@@ -1,16 +1,16 @@
-"""NX-352 — plannerul caută REZIDUUL cererii, nu fraza clientului (`kernel.v5.0`).
+"""NX-352 — textul căutării se COMPUNE din ce a validat kernelul, nu din fraza clientului
+(`kernel.v5.0`).
 
 Sonda NX-351 pe catalogul real: 64 din 81 de planuri `search` aveau fraza clientului ca `query`, iar
 pe treapta `strict` fiecare cuvânt e o poartă (lecția NX-298): «si ceva mai ieftin ?» dădea zero
-produse, «pai mi se usuca pielea dupa dus» potriviri pe «dus» (loțiuni de corp). Reziduul scoate
-formula locale-i (tabelele `query_terms`) și cuvintele unei nevoi purtate deja de un filtru sau de
-o preferință; numele subiectului rămâne întreg. Cazurile sunt formele reale ale sondei. Zero model,
-zero DB."""
+produse, «pai mi se usuca pielea dupa dus» potriviri pe «dus» (loțiuni de corp). O variantă care
+scădea din frază a picat la două recenzii; textul e acum subiectul numit (sau numele lui din stare),
+altfel o fațetă filtrată, altfel termenii nemapați. Cazurile sunt formele reale ale sondei și ale
+recenziilor. Zero model, zero DB."""
 
 from __future__ import annotations
 
 from src.agent.turn_planner import plan_turn
-from src.catalog.vocabulary import CatalogVocabulary, VocabEntry
 from src.conversation.interpretation import CheckedChange
 from tests.kernel import fixture_catalog as fc
 from tests.test_kernel_planner import (
@@ -139,6 +139,7 @@ def test_the_subject_name_stays_whole_next_to_a_spoken_need():
             "relation": "eq",
             "value": "crema de fata",
             "quote": "cremă de față",
+            "matched": ["crema", "de", "fata"],
         },
         {
             "op": "set",
@@ -159,24 +160,21 @@ def test_the_subject_name_stays_whole_next_to_a_spoken_need():
 
 
 def test_a_brand_that_does_not_reach_the_search_keeps_its_word():
-    """Pe SOLE marca e coloană: o marcă soft ajunge doar în `gaps`, deci cuvântul ei rămâne text,
-    altfel s-ar pierde de tot."""
+    """Pe SOLE marca e coloană: o marcă spusă, dar soft, ajunge doar în `gaps`, deci cuvântul ei
+    rămâne text lângă subiect, altfel s-ar pierde de tot."""
     change = {
         "op": "set",
         "dimension": "brand",
         "relation": "eq",
         "value": "cerave",
         "quote": "cerave",
+        "matched": ["cerave"],
     }
-    args = _args(
-        "ceva de la cerave",
-        [change],
-        needs=[_need("brand", "cerave", source="user_implicit")],
-    )
-    assert args.query == "cerave" and args.brand is None
+    args = _args("ceva de la cerave", [change], needs=[_need("brand", "cerave")])
+    assert "cerave" in args.query.split() and args.brand is None
 
 
-def test_without_residue_or_subject_the_whole_request_is_the_last_resort():
+def test_without_anything_validated_the_whole_request_is_the_last_resort():
     """Nimic de căutat în afara formulei și fără subiect: cererea întreagă, ca înainte (nu
     tăcere)."""
     price = {"op": "set", "dimension": "price", "relation": "lte", "quote": "mai ieftin"}
@@ -215,30 +213,46 @@ def test_a_rejected_change_consumes_nothing():
     assert "bumbac" in args.query and "rosu" in args.query
 
 
-def test_a_wide_description_keeps_the_values_of_other_facets():
-    """Constatarea 3: un citat larg de descriere nu șterge o valoare a ALTEI fațete din el."""
-    vocab = CatalogVocabulary(
-        business_id="b",
-        dimensions={
-            "key_ingredients": (VocabEntry(key="vitamina c", label="vitamina c", count=9),)
+def test_a_wide_description_does_not_become_the_search_text():
+    """Constatarea 3 (ambele recenzii): un citat larg de descriere nu mai e text; textul e
+    subiectul numit, iar ingredientul spus e filtru."""
+    changes = [
+        {
+            "op": "set",
+            "dimension": "product_type",
+            "relation": "eq",
+            "value": "ser de fata",
+            "quote": "un ser",
+            "matched": ["ser"],
         },
-    )
-    change = {
-        "op": "set",
-        "dimension": "skin_type",
-        "relation": "eq",
-        "value": "oily",
-        "quote": "un ser cu vitamina c pentru ten gras",
-        "provenance": "implicit",
-    }
+        {
+            "op": "add",
+            "dimension": "key_ingredients",
+            "relation": "eq",
+            "value": "vitamina c",
+            "quote": "vitamina c",
+            "matched": ["vitamina", "c"],
+        },
+        {
+            "op": "set",
+            "dimension": "skin_type",
+            "relation": "eq",
+            "value": "oily",
+            "quote": "un ser cu vitamina c pentru ten gras",
+            "provenance": "implicit",
+        },
+    ]
     args = _args(
         "as vrea un ser cu vitamina c pentru ten gras",
-        [change],
-        needs=[_need("skin_type", "oily", source="user_implicit")],
-        shelf=None,
-        vocab=vocab,
+        changes,
+        needs=[
+            _need("key_ingredients", "vitamina c"),
+            _need("skin_type", "oily", source="user_implicit"),
+        ],
+        product_type="ser de fata",
     )
-    assert "vitamina" in args.query and "c" in args.query.split()
+    assert args.query == "ser"
+    assert "vitamina c" in [*(args.concerns or []), *(args.features or [])]
 
 
 def test_an_absolute_comparator_is_formula_only_next_to_a_number():
@@ -252,11 +266,24 @@ def test_an_absolute_comparator_is_formula_only_next_to_a_number():
         "quote": "maxim 100 lei",
         "matched": ["100"],
     }
+    cream = {
+        "op": "set",
+        "dimension": "product_type",
+        "relation": "eq",
+        "value": "crema de fata",
+        "quote": "o crema",
+        "matched": ["crema"],
+    }
     capped = _args(
-        "o crema maxim 100 lei", [price], needs=[_need("budget_max", 100.0, "hard")], shelf=None
+        "o crema maxim 100 lei",
+        [cream, price],
+        needs=[_need("budget_max", 100.0, "hard")],
+        shelf=None,
+        product_type="crema de fata",
     )
     assert capped.query == "crema" and capped.price_max == 100.0
-    assert _args("un spray fix pentru machiaj", shelf=None).query == "spray fix machiaj"
+    # fără nimic validat, ultima rezervă e cererea întreagă: «fix» nu e aruncat ca comparator
+    assert "fix" in _args("un spray fix pentru machiaj", shelf=None).query
 
 
 def test_the_current_subject_is_protected_from_a_need_quote():
@@ -277,3 +304,43 @@ def test_the_current_subject_is_protected_from_a_need_quote():
         product_type="fond de ten",
     )
     assert "fond" in args.query and "ten" in args.query.split() and "uscat" not in args.query
+
+
+# --- a doua recenzie NX-352: textul se COMPUNE, nu se scade din frază -----------------------------
+
+
+def test_function_words_and_price_adjectives_never_become_the_search():
+    """«decât», «ieftină», «nu prea scump»: niciun cuvânt nevalidat nu mai e poartă de text."""
+    cream = {
+        "op": "set",
+        "dimension": "product_type",
+        "relation": "eq",
+        "value": "crema de fata",
+        "quote": "o crema",
+        "matched": ["crema"],
+    }
+    assert _args("o crema ieftina", [cream], product_type="crema de fata").query == "crema"
+    price = {"op": "set", "dimension": "price", "relation": "lte", "quote": "mai ieftin"}
+    telefoane = _args("ceva mai ieftin decat astea", [price], product_type="crema de fata")
+    assert "decat" not in telefoane.query and "ieftin" not in telefoane.query
+
+
+def test_a_correction_keeps_the_withdrawn_value_out_of_the_text():
+    """«ten gras, nu uscat» (`replace`): nici valoarea retrasă, nici cea nouă nu devin text lângă
+    subiect; nevoia nouă e filtru."""
+    replace = {
+        "op": "replace",
+        "target": "c1",
+        "dimension": "skin_type",
+        "relation": "eq",
+        "value": "oily",
+        "quote": "ten gras, nu uscat",
+        "matched": ["ten", "gras"],
+    }
+    args = _args(
+        "ten gras, nu uscat",
+        [replace],
+        needs=[_need("skin_type", "oily")],
+        product_type="crema de fata",
+    )
+    assert "uscat" not in args.query and "gras" not in args.query

@@ -333,7 +333,7 @@ def _cap_states(t: KernelTrace) -> KernelTrace:
 
 def _cap_quotes(t: KernelTrace) -> KernelTrace:
     checked = [
-        c.model_copy(update={"change": c.change.model_copy(update={"quote": ""})})
+        c.model_copy(update={"change": c.change.model_copy(update={"quote": ""}), "matched": ()})
         for c in t.checked_changes
     ]
     return t.model_copy(update={"checked_changes": checked})

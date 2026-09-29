@@ -293,6 +293,33 @@ def test_the_median_is_fenced_to_a_screen_reference_that_the_gate_does_not_ask_a
     assert only(_median_case(available=(True, True, False))).value == 75.0
 
 
+def test_the_median_applies_when_a_search_act_targets_the_screen():
+    """A doua recenzie NX-352: un `find` care arată spre ecran nu aduce o întrebare a porții, deci
+    mediana se aplică (altfel căutarea ar rula fără plafon)."""
+    change = ch(dimension="price", relation="lte", relative_to="r1", quote="mai ieftin")
+    facts = ReferenceFacts(
+        products={
+            "p1": ProductFacts("p1", "A", 40.0, True),
+            "p2": ProductFacts("p2", "B", 80.0, True),
+        }
+    )
+    i = interp(change, refs=[ref("r1")]).model_copy(
+        update={"acts": [Act(kind="find", targets=["r1"], query=None)]}
+    )
+    checked = check_changes(
+        i, words=UserWords("ceva mai ieftin"), vocab=SOLE_VOCAB, pack=SOLE, locale="ro"
+    )
+    d = to_delta(
+        i,
+        checked,
+        [_ambiguous_r1("p1", "p2")],
+        facts,
+        needs=NeedVocabulary.from_pack(SOLE),
+        turn_id="t1",
+    )
+    assert only(d).value == 60.0
+
+
 # --- thread și contoare --------------------------------------------------------------------------
 
 

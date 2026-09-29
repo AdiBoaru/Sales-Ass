@@ -174,6 +174,8 @@ def _relative_price(
 
 #: NX-352: referințele care arată spre ECRAN; pe ele o țintă ambiguă de preț relativ are mediană.
 _MEDIAN_KINDS = frozenset({"deictic", "attribute"})
+#: Actele a căror țintă ambiguă NU aduce o întrebare a porții (căutarea și rutina acționează).
+_NO_QUESTION_ACTS = frozenset({"find", "show_more", "bundle"})
 
 
 def _ambiguous(c: CheckedChange, resolved: Sequence[ResolvedRef]) -> bool:
@@ -308,7 +310,9 @@ def to_delta(
     """`CheckedChange`-uri → `TurnDelta`. PUR. Nu atinge starea: propunerile le aplică reducerul."""
     needs = needs or NeedVocabulary()
     facts = facts or ReferenceFacts()
-    targets = {t for act in interp.acts for t in act.targets}
+    # A doua recenzie NX-352: doar țintele actelor pe care poarta le poate întreba («la care te
+    # referi?»: citiri și mutații). Un `find` sau o rutină care arată spre ecran nu întreabă.
+    targets = {t for act in interp.acts if act.kind not in _NO_QUESTION_ACTS for t in act.targets}
     by_handle = {h.handle: h for h in handles}
     counters: dict[str, int] = {}
 

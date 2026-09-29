@@ -33,22 +33,27 @@ and fewer carrying the stated needs than v1:
   I7 is restated accordingly. A routine (`bundle`) does not relax its step filters, so there a stated
   but not `enforce_ready` need stays a preference. On the planned search these facet filters count as
   uttered for the guessed-filter guard (NX-313): the kernel already judged their provenance.
-- **The search text is the residue of the request.** `SearchArgs.query` is the act's words minus the
-  locale's formula (stop words, fillers, negations, relative comparators as phrases, absolute ones only
-  next to a number: the `query_terms` tables), minus the object of an `avoid` change, minus the words
-  that NAMED the value of an accepted change that reaches the search as a FILTER
-  (`CheckedChange.matched`, written by the validator, redacted in the trace), and minus a described
-  (`implicit`) need that reaches it as a preference, except the values of other facets inside that
-  description. Only changes accepted by the validator and the delta count (`plan_turn(checked=…)`).
-  The words that name the subject stay whole, as do the current subject's name and umbrella. Without a residue the query is the subject's name, the product type
-  before the shelf (a shelf name does not occur in product names, NX-293); the whole request is the last
-  resort. On the `strict` rung every word is a gate, so the whole sentence („si ceva mai ieftin ?")
-  returned nothing (64 of 81 probed plans searched the customer's sentence).
+- **The search text is COMPOSED from what the kernel validated.** `SearchArgs.query` is, in order:
+  the words that named the subject this turn (`CheckedChange.matched` of an `explicit` shelf or type,
+  written by the validator and redacted in the trace; for a shelf named in other words, the content
+  words of its quote, since a shelf name does not occur in product names, NX-293), else the subject's
+  name from the state (the type before the shelf, the umbrella's head for a vague type), plus the words
+  of a stated value that reaches no filter; without a subject, the words that named a facet filter;
+  else this turn's unmapped values; the whole request without the negated words is the last resort.
+  Only changes accepted by the validator and the delta count (`plan_turn(checked=…)`); an `avoid`
+  change never yields text. A first design SUBTRACTED from the sentence (the locale's formula, the
+  need words) and failed two adversarial reviews: every unforeseen word stayed a gate. On the `strict`
+  rung every word is a gate, so the whole sentence („si ceva mai ieftin ?") returned nothing (64 of 81
+  probed plans searched the customer's sentence).
 - **A relative price on an ambiguous target is the median.** „Ceva mai ieftin” with several products on
   screen is cheaper than most of them: the bound is the median of the available candidates' re-read
   prices (counted `relative_price_median`), only for a reference pointing at the screen (deictic,
-  attribute) that is not also the target of an act (there the gate asks which one); fewer than two
-  known prices ⇒ rejected, as before.
+  attribute) that is not also the target of an act the gate may ask about (reads, mutations; not
+  `find`, `show_more`, `bundle`); fewer than two known prices ⇒ rejected, as before.
+- **A shelf follows a new kind only on a verified pair.** When a stated type changes, or a vague type
+  of another kind replaces the subject, the old shelf stays only if the turn names it or the pair
+  (shelf, type) exists in the catalog (`mark_pairs`, which now also checks an umbrella by its first
+  code present on the shelf): the NX-348 fill rule, extended.
 
 The replay gate is waived, as for v2.0 to v4.0: no interpreted turn has been served in production. The
 model-written schema is unchanged.
@@ -461,7 +466,7 @@ The planner reads the reduced state, the resolved references and the gate verdic
 | --- | --- | --- |
 | `find` | no subject, no query words, no facet needs | `ask`: a subject question from the pack's top shelves, gain-gated |
 | `find` | subject known, no new words („Ce recomanzi?”) | `search` from state. The plan carries no query; because today's `SearchArgs.query` requires ≥ 1 character, the `SearchArgs` builder fills it with the subject's label and the `filters_only` rung serves it. This is a declared v1 workaround inside the builder, not planner logic |
-| `find` | subject or query words present | `search`, `SearchArgs` derived as in design section D; (v5.0) `query` = the residue of the request, else the subject's name (type before shelf), else the whole request |
+| `find` | subject or query words present | `search`, `SearchArgs` derived as in design section D; (v5.0) `query` is composed from what the kernel validated (the subject's words or name, a filtered facet's words, the unmapped values), the whole request is the last resort |
 | `find` | an `implicit` need with gain ≥ 0.30, not yet asked | `search` + one confirmation question as the closing line (the NX-315 `question` slot) |
 | `show_more` | `active_search` present, no changes this turn | `page` |
 | `show_more` | changes this turn | `search` (it is a refinement) |

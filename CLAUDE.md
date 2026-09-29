@@ -63,7 +63,7 @@ gate-ul NX-210**. Direcția aprobată către care migrăm:
 
 **Înghețate până la GO-ul de la NX-210:** enforcement-ul QuerySpec/Match Gate (NX-188, NX-189).
 
-**Kernelul conversațional — contractul `kernel.v1.0` (înghețat 2026-09-25, NORMATIV; azi `kernel.v5.0`: MAJOR la v2.0, NX-336 PR B, sensul lui I5; minor la v2.1, NX-336 D3, `TurnPlan.family`; MAJOR la v3.0, NX-348, sensul unei schimbări de subiect; MAJOR la v4.0, NX-350, un tip spus vag devine umbrelă, nu tipul subiectului; MAJOR la v5.0, NX-352, nevoia spusă e filtru relaxabil, căutarea e reziduul cererii, «mai ieftin» ambiguu = mediana; porțile de replay derogate de Adi).**
+**Kernelul conversațional — contractul `kernel.v1.0` (înghețat 2026-09-25, NORMATIV; azi `kernel.v5.0`: MAJOR la v2.0, NX-336 PR B, sensul lui I5; minor la v2.1, NX-336 D3, `TurnPlan.family`; MAJOR la v3.0, NX-348, sensul unei schimbări de subiect; MAJOR la v4.0, NX-350, un tip spus vag devine umbrelă, nu tipul subiectului; MAJOR la v5.0, NX-352, nevoia spusă e filtru relaxabil, căutarea se compune din ce a validat kernelul, «mai ieftin» ambiguu = mediana; porțile de replay derogate de Adi).**
 Sursa: [`docs/KERNEL-CONTRACT-v1.md`](docs/KERNEL-CONTRACT-v1.md); designul din care vine, ca
 referință: [`docs/KERNEL-DESIGN.md`](docs/KERNEL-DESIGN.md). Modelul scrie O interpretare a turului
 (`TurnInterpretation`: acte, schimbări de stare adresate prin handle, referințe, ambiguități); codul
@@ -364,24 +364,24 @@ clientului (`query` = `Act.query`, 64 din 81 de planuri, toate cele 4 ture goale
 nu sortează niciodată după preț. Reparația e în planner (card separat); verdictul de aprindere rămâne
 al canary-ului. Card: [`tasks/stage1/NX-351.md`](tasks/stage1/NX-351.md).
 **NX-352 — `kernel.v5.0` (MAJOR, decis de Adi pe 2026-09-29): reparația din stratul arătat de sondă.**
-(1) `query` al căutării planificate e REZIDUUL cererii (`turn_planner._read_act_query`, cititorul
-declarat): fără formula locale-i (tabelele `query_terms`: cuvinte goale, filleri, comparatori,
-negații) și fără cuvintele unei nevoi sau ale prețului care ajung deja în `SearchArgs` ca filtru sau
-preferință (`carried`, calculat de constructor; o marcă soft pe coloană își păstrează cuvântul);
-numele subiectului rămâne întreg. Fără reziduu, eticheta subiectului, cu tipul înaintea raftului
-(NX-293); cererea întreagă e ultima rezervă. (2) O nevoie de fațetă SPUSĂ (`user_explicit`) e filtru
-RELAXABIL în `concerns`/`features` chiar fără `enforce_ready`; una doar descrisă rămâne preferință;
-prețul și marca filtrează tot doar din nevoi dure (I7 reformulat). (3) «ceva mai ieftin» pe o țintă
-ambiguă spre ecran (deictică, de atribut, nu ținta unui act) = MEDIANA prețurilor recitite ale
-candidaților disponibili (`relative_price_median`). Recenzia adversarială (7 constatări, reparate):
-negația scoate cuvântul negat, doar schimbările ACCEPTATE consumă cuvinte (`plan_turn(checked=
-accepted_changes(...))`), o valoare filtrată consumă doar cuvintele care au numit-o
-(`CheckedChange.matched`, redactat în trace), rutina (fără relaxare) ține nevoia spusă ca preferință,
-iar pe calea planificată filtrele de fațetă contează drept rostite pentru garda NX-313. Re-sonda NX-351
-iese GO (M1 0,452 vs 0,487, M2 0,597 vs 0,594, 2 ture goale, 0 erori; fraza clientului 64 → 28 de
-planuri), dar pe turele deja analizate: aprinderea rămâne a canary-ului. Card:
+(1) Textul căutării planificate se COMPUNE din ce a validat kernelul (`turn_planner._read_act_query`,
+cititorul declarat): cuvintele care au numit subiectul în tur (`CheckedChange.matched`, scris de
+validator, redactat în trace; la un raft spus cu alte cuvinte, citatul), altfel numele subiectului din
+stare (tipul înaintea raftului, NX-293), plus o valoare spusă care nu ajunge filtru; fără subiect,
+cuvintele unei fațete filtrate; altfel termenii nemapați; cererea întreagă, fără cuvintele negate, e
+ultima rezervă. Doar schimbările ACCEPTATE contează (`plan_turn(checked=delta.accepted_changes(...))`).
+O primă variantă care SCĂDEA din frază (formula locale-i, nevoile) a picat la două recenzii: orice
+cuvânt neprevăzut rămânea poartă. (2) O nevoie de fațetă SPUSĂ (`user_explicit`) e filtru RELAXABIL
+chiar fără `enforce_ready` (nu în rutină, care nu relaxează); una doar descrisă rămâne preferință;
+prețul și marca filtrează doar din nevoi dure (I7 reformulat); pe calea planificată raftul și fațetele
+contează ca rostite pentru scară și pentru garda NX-313. (3) «ceva mai ieftin» pe o țintă ambiguă spre
+ecran = MEDIANA prețurilor candidaților disponibili (`relative_price_median`), nu pe ținta unui act care
+întreabă. (4) La un tip nou sau la o umbrelă de alt fel, raftul vechi rămâne doar dacă turul îl
+numește sau perechea există în catalog (`mark_pairs` verifică și umbrela). Re-sonda NX-351 iese GO (M1
+0,440 vs 0,487, prag 0,437; M2 0,632 vs 0,629; 1 tură goală; 0 erori; fraza clientului 64 → 14 planuri),
+pe turele deja analizate și cu marjă mică: aprinderea rămâne a canary-ului. Card:
 [`tasks/stage1/NX-352.md`](tasks/stage1/NX-352.md); probă: `pytest tests/test_nx352_planner_query.py
-tests/test_kernel_planner.py tests/test_kernel_delta.py -q`.
+tests/test_kernel_planner.py tests/test_kernel_delta.py tests/test_nx348_subject_type.py -q`.
 **Pasul 6 PR A (NX-336) — schela turului interpretat, DARK: lanțul rulează pe un tur real, v1
 răspunde.** `INTERPRETED_TURN_ENABLED` (OFF; poarta de boot cere stările v2 citite ȘI scrise,
 scurtăturile pe resolverul v2 + `NAMED_SHORTCUT_TARGETS_ENABLED` și gardul de rafinare, refuză

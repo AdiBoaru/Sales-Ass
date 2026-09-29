@@ -30,7 +30,7 @@
           "executor": "search",
           "search_args": {
             "category": "tablete",
-            "query": "Tablete"
+            "query": "tablete"
           }
         }
       ],

@@ -56,7 +56,7 @@
     {
       "file": "src/agent/turn_planner.py",
       "function": "_read_act_query",
-      "reason": "NX-333 + NX-352 (kernel.v5.0): cererea actului (Act.query) si citatele schimbarilor turului se citesc AICI o singura data si ies ca VALORI: reziduul cererii (fara formula locale-i din tabelele query_terms, fara obiectul unei negatii, fara cuvintele care au NUMIT valoarea unei schimbari ACCEPTATE purtate ca filtru si fara o descriere purtata ca preferinta; numele subiectului ramane intreg) si cererea intreaga. Nicio decizie a plannerului nu ramifica pe text: alegerea frazei e pe prezenta valorilor (reziduu, subiect, cerere)."
+      "reason": "NX-333 + NX-352 (kernel.v5.0): cererea actului (Act.query) si citatele schimbarilor ACCEPTATE ale turului se citesc AICI o singura data si ies ca VALORI: textul cautarii COMPUS din ce a validat kernelul (cuvintele care au numit subiectul, altfel numele lui din stare; fara subiect, cuvintele unei fatete filtrate; altfel termenii nemapati) si cererea intreaga fara cuvintele negate, ca ultima rezerva. Nicio decizie a plannerului nu ramifica pe text."
     },
     {
       "file": "src/conversation/kernel_trace.py",

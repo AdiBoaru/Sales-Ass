@@ -216,8 +216,10 @@ def test_find_with_a_known_subject_and_no_words_searches_the_subject_label(name)
 def test_find_with_words_searches_the_words(name):
     state = _state(_shelf(name))
     plan = _only(_plan(name, _interp(acts=[{"kind": "find", "query": "ceva elegant"}]), state))
-    # NX-352: formula conversației («ceva», cuvânt gol al locale-i) nu e căutare.
-    assert plan.executor == "search" and plan.search_args.query == "elegant"
+    # NX-352: textul se compune din ce a validat kernelul: cu subiect, subiectul. Un cuvânt pe care
+    # modelul nu l-a scris ca schimbare («elegant») nu e poartă (modelul îl scrie `unmapped`, deci
+    # ordonează prin `rank_terms`).
+    assert plan.executor == "search" and plan.search_args.query == _label(name)
 
 
 @pytest.mark.parametrize("name", PACKS)

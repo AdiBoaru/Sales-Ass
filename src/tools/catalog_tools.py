@@ -1828,10 +1828,13 @@ async def _search(
     ):
         category_uttered = False
         ctx.emit("category_subshelf_homograph", category_key=category_keys[0])
-    # NX-352 (recenzia): pe calea PLANIFICATĂ filtrele de fațetă vin doar din nevoi spuse sau dure
-    # ale stării (kernelul le-a judecat proveniența pe citat), iar plannerul trimite CODUL canonic
-    # («anti_aging»), pe care clientul nu l-a rostit literal. Re-judecate aici, garda NX-313 le-ar
-    # scoate ca ghicite: o a doua memorie peste reducer (ca `price_max`, NX-333).
+    # NX-352 (recenziile): pe calea PLANIFICATĂ raftul și filtrele de fațetă vin din STAREA redusă
+    # (kernelul le-a judecat proveniența pe citat), iar plannerul trimite CHEI canonice
+    # («anti_aging», `ten-ingrijirea-tenului`), nerostite literal. Re-judecate aici, garda
+    # NX-313 le-ar scoate ca ghicite, iar scara ar arunca raftul subiectului înaintea nevoii: o a
+    # doua memorie peste reducer (ca `price_max`, NX-333). Ambele contează ca rostite, deci scara
+    # relaxează întâi nevoia și păstrează raftul, ca pe v1 când amândouă sunt rostite.
+    category_uttered = category_uttered or planned
     facets_uttered = (
         planned
         or "concerns" in inherited

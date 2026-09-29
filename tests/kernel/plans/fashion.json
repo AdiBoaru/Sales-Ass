@@ -9,7 +9,7 @@
           "executor": "search",
           "search_args": {
             "category": "fuste",
-            "query": "Fuste"
+            "query": "fuste"
           }
         }
       ],
@@ -150,12 +150,16 @@
     {
       "disclosures": [],
       "dropped_acts": 0,
-      "gaps": [
-        "no_query"
-      ],
+      "gaps": [],
       "plans": [
         {
-          "executor": "reply_only"
+          "executor": "search",
+          "search_args": {
+            "concerns": [
+              "negru"
+            ],
+            "query": "negru"
+          }
         }
       ],
       "primary": 0,
@@ -166,12 +170,16 @@
     {
       "disclosures": [],
       "dropped_acts": 0,
-      "gaps": [
-        "no_query"
-      ],
+      "gaps": [],
       "plans": [
         {
-          "executor": "reply_only"
+          "executor": "search",
+          "search_args": {
+            "concerns": [
+              "negru"
+            ],
+            "query": "neagră"
+          }
         }
       ],
       "primary": 0,
@@ -224,12 +232,16 @@
     {
       "disclosures": [],
       "dropped_acts": 0,
-      "gaps": [
-        "no_query"
-      ],
+      "gaps": [],
       "plans": [
         {
-          "executor": "reply_only"
+          "executor": "search",
+          "search_args": {
+            "concerns": [
+              "negru"
+            ],
+            "query": "negru"
+          }
         }
       ],
       "primary": 0,
@@ -238,12 +250,17 @@
     {
       "disclosures": [],
       "dropped_acts": 0,
-      "gaps": [
-        "no_query"
-      ],
+      "gaps": [],
       "plans": [
         {
-          "executor": "reply_only"
+          "executor": "search",
+          "search_args": {
+            "concerns": [
+              "negru",
+              "bumbac"
+            ],
+            "query": "bumbac"
+          }
         }
       ],
       "primary": 0,

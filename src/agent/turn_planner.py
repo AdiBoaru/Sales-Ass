@@ -29,23 +29,17 @@ conține literali de vertical (I14)."""
 from __future__ import annotations
 
 import math
-from collections.abc import Collection, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from src.agent.tool_budget import spec_for
 from src.agent.tool_definitions import TOOL_NAMES
 from src.catalog.query_terms import (
-    comparators,
-    formula_fillers,
-    negation_markers,
-    relative_comparators,
     stopwords,
     tokens,
 )
 from src.catalog.vocabulary import (
     CatalogVocabulary,
-    ResolutionStatus,
-    resolve_any,
     topic_root_of,
 )
 from src.conversation.ambiguity_gate import GateOutcome, target_question_key
@@ -163,136 +157,112 @@ def _read_act_query(
     has_words: bool,
     changes: Sequence[StateChange],
     checked: Sequence[CheckedChange] | None,
-    locale: str,
     carried: Mapping[str, str],
-    protected: Collection[str],
-    vocab: CatalogVocabulary | None,
+    subject: str | None,
+    locale: str,
 ) -> tuple[str | None, str | None]:
     """SINGURUL loc din planner care citește `Act.query` și citatele schimbărilor (cuvintele
-    clientului). Întoarce `(reziduul, cererea întreagă)`, ca VALORI; nicio decizie nu ramifică pe
-    text.
+    clientului). Întoarce `(textul căutării, cererea întreagă fără cuvintele negate)`, ca VALORI;
+    nicio decizie nu ramifică pe text.
 
-    NX-352 (sonda NX-351): cererea întreagă nu e o căutare. Pe treapta `strict` fiecare cuvânt e o
-    poartă (lecția NX-298), deci «si ceva mai ieftin ?» sau «pai mi se usuca pielea dupa dus» dădeau
-    zero produse sau potriviri pe un cuvânt întâmplător. REZIDUUL = cuvintele cererii, în forma
-    scrisă de client, fără:
-    - formula locale-i (cuvinte goale, filleri, negații; comparatorii relativi doar ca FRAZĂ,
-      «mai ieftin»: tabelele din `query_terms`);
-    - cuvântul NEGAT de o schimbare `avoid` («fără parfum»): un cuvânt ocolit n-are voie să fie
-      poartă de text (ar cere exact ce e ocolit);
-    - cuvintele care au NUMIT valoarea unei schimbări ACCEPTATE (`CheckedChange.matched`, plus
-      unitatea), când valoarea ajunge FILTRU (`carried`); o schimbare respinsă nu consumă nimic;
-    - citatul unei descrieri (`implicit`) care ajunge PREFERINȚĂ, fără valorile altor fațete din el
-      (vocabularul) și fără rafturi (un raft nu concurează, ca la validator).
-    Rămân: cuvintele subiectului (citatul lui întreg, și eticheta subiectului curent, `protected`),
-    cuvintele nemapate și cuvintele unei valori spuse care ajunge doar preferință (marca pe o fațetă
-    de atribut) sau nicăieri (marca soft pe o coloană)."""
-    if not has_words or query is None:
-        return None, None
-    formula = set(stopwords(locale)) | formula_fillers(locale) | negation_markers(locale)
-    words = [raw.strip(_PUNCTUATION) for raw in query.split()]
-    flat = [(i, t) for i, w in enumerate(words) for t in tokens(w)]
-
-    def _spans(phrase: Sequence[str]) -> set[int]:
-        out: set[int] = set()
-        for start in range(len(flat) - len(phrase) + 1):
-            if phrase and [t for _i, t in flat[start : start + len(phrase)]] == list(phrase):
-                out.update(i for i, _t in flat[start : start + len(phrase)])
-        return out
-
-    dropped: set[int] = set()
-    for phrase, _op in relative_comparators(locale):
-        dropped |= _spans(tokens(phrase))
-    # Un comparator absolut («maxim», «sub», «fix») e formulă doar lângă un număr: altfel poate fi
-    # un cuvânt de produs («spray fix pentru machiaj»).
-    for phrase, _op in comparators(locale):
-        size = len(tokens(phrase))
-        for start in range(len(flat) - size):
-            if [t for _i, t in flat[start : start + size]] == tokens(phrase) and any(
-                ch.isdigit() for ch in flat[start + size][1]
-            ):
-                dropped.update(i for i, _t in flat[start : start + size])
-    # (dimensiune, relație, cuvintele citatului, proveniență, cuvintele care au numit valoarea)
-    items: list[tuple[str, str, list[str], str, tuple[str, ...]]] = []
+    NX-352 (sonda NX-351, două recenzii): cererea întreagă nu e o căutare. Pe treapta `strict`
+    fiecare cuvânt e o poartă (lecția NX-298), deci «si ceva mai ieftin ?» dădea zero produse, iar
+    «pai mi se usuca pielea dupa dus» potriviri pe «dus». O SCĂDERE din frază (formula locale-i,
+    nevoile) a picat la recenzie de două ori: orice cuvânt neprevăzut («decât», «ieftină», un cuvânt
+    dintr-o corecție) rămânea poartă. Deci textul se COMPUNE din ce a validat kernelul:
+    1. SUBIECTUL: cuvintele care l-au numit în turul ăsta (`CheckedChange.matched` al unui raft sau
+       tip `explicit`; la un raft spus cu alte cuvinte, `implicit`, cuvintele de conținut ale
+       citatului: «telefon» pentru „Telefoane", fiindcă numele raftului nu apare în numele
+       produselor, NX-293), altfel numele subiectului din stare (`subject`, tipul înaintea raftului;
+       la un tip vag, capul umbrelei);
+       plus cuvintele unei valori SPUSE care nu ajunge nici filtru, nici preferință (o marcă soft pe
+       o coloană), fiindcă textul e singurul ei canal;
+    2. fără subiect, cuvintele care au numit o fațetă ajunsă FILTRU («anti aging»; prețul nu: un
+       număr nu e text);
+    3. altfel valorile nemapate ale turului («gerovital»): lângă un subiect sau un filtru ele doar
+       ordonează (`rank_terms`, NX-333), fără ele sunt singurul text cerut;
+    4. cererea întreagă, fără cuvintele negate, e ultima rezervă.
+    Doar schimbările ACCEPTATE (de validator și de delta, `checked`) contează; una `avoid` nu dă
+    niciodată text."""
+    stop = stopwords(locale)
+    # (dimensiune, relație, proveniență, cuvintele care au numit valoarea, valoarea de text,
+    # cuvintele citatului, cuvintele citatului în forma scrisă de client)
+    items: list[tuple[str, str, str, tuple[str, ...], str | None, list[str], list[str]]] = []
     if checked is not None:
         for c in checked:
-            if c.rejected is None and c.strength != "ranking" and c.change.quote:
-                unit = tokens(c.change.unit) if c.change.unit else []
-                named = (*c.matched, *unit) if c.matched else ()
-                items.append(
-                    (
-                        c.dimension,
-                        c.change.relation or "eq",
-                        tokens(c.change.quote),
-                        c.provenance,
-                        named,
-                    )
-                )
+            if c.rejected is None and c.strength != "ranking":
+                value = c.canonical_value if isinstance(c.canonical_value, str) else None
+                raw = [w.strip(_PUNCTUATION) for w in (c.change.quote or "").split()]
+                relation = c.change.relation or "eq"
+                quote = tokens(c.change.quote) if c.change.quote else []
+                items.append((c.dimension, relation, c.provenance, c.matched, value, quote, raw))
     else:
         for change in changes:
-            if change.quote:
-                quote = tokens(change.quote)
-                items.append(
-                    (change.dimension, change.relation or "eq", quote, "explicit", tuple(quote))
-                )
-    kept: set[str] = set(protected)
-    spans: set[int] = set()
-    consumed: set[str] = set()
-    for dimension, relation, quote, provenance, named in items:
-        if dimension in _SUBJECT_WORDS:
-            kept.update(quote)
-            spans |= _spans(quote)
-        elif relation == "avoid":
-            consumed.update(quote)
-        elif carried.get(dimension) == "filter":
-            consumed.update(named)
-        elif carried.get(dimension) == "prefer" and provenance != "explicit":
-            consumed.update(set(quote) - _other_values(quote, dimension, vocab))
-    residue: list[str] = []
-    seen: set[str] = set()
-    for index, word in enumerate(words):
-        own = tokens(word)
-        if not own or index in dropped:
+            raw = [w.strip(_PUNCTUATION) for w in (change.quote or "").split()]
+            quote = tokens(change.quote) if change.quote else []
+            relation = change.relation or "eq"
+            items.append(
+                (change.dimension, relation, "explicit", tuple(quote), change.value, quote, raw)
+            )
+
+    def surface(words: Sequence[str], raw: Sequence[str]) -> list[str]:
+        """Cuvintele normalizate înapoi în forma clientului («husa» → «husă»)."""
+        out = []
+        for w in words:
+            out.append(next((r for r in raw if w in tokens(r)), w))
+        return out
+
+    live = [i for i in items if i[1] not in _NEGATIVE]
+    named_subject: list[str] = []
+    for dimension, _r, provenance, matched, _v, quote, raw in live:
+        if dimension not in _SUBJECT_WORDS:
             continue
-        # Un cuvânt gol DIN numele subiectului («cremă de față») rămâne: numele se caută întreg.
-        keep = index in spans or any(
-            w not in formula and (w in kept or w not in consumed) for w in own
-        )
-        key = " ".join(own)
-        if keep and key not in seen:
-            seen.add(key)
-            residue.append(word)
-    return (" ".join(residue) or None), (query.strip() or None)
-
-
-def _other_values(
-    quote: Sequence[str], dimension: str, vocab: CatalogVocabulary | None
-) -> set[str]:
-    """Cuvintele unei descrieri care numesc o valoare a ALTEI fațete din vocabular («vitamina c»
-    într-un citat larg despre ten): rămân în căutare. Rafturile nu contează (un raft nu concurează
-    cu o valoare, ca la validator)."""
-    if vocab is None:
-        return set()
-    out: set[str] = set()
-    for start in range(len(quote)):
-        for size in (3, 2, 1):
-            chunk = list(quote[start : start + size])
-            if len(chunk) < size:
-                continue
-            hit = resolve_any(vocab, " ".join(chunk))
-            if hit.status is ResolutionStatus.KNOWN and hit.dimension not in (
-                dimension,
-                "category",
-            ):
-                out.update(chunk)
-    return out
+        if provenance == "explicit":
+            named_subject += surface(matched, raw)
+        elif dimension == "category":
+            # cuvintele goale doar de la capete: «cremă de față» rămâne întreg
+            trimmed = list(quote)
+            while trimmed and trimmed[0] in stop:
+                trimmed.pop(0)
+            while trimmed and trimmed[-1] in stop:
+                trimmed.pop()
+            named_subject += surface(trimmed, raw)
+    spoken = [i for i in live if i[2] == "explicit" and i[0] not in _SUBJECT_WORDS]
+    # o valoare SPUSĂ care nu ajunge filtru (doar preferință slabă, sau nicăieri) își păstrează
+    # cuvântul în text; doar o valoare de TEXT (un număr, «256 GB», nu e text de căutare)
+    gapped = [
+        w
+        for d, _r, _p, m, v, _q, raw in spoken
+        if v and d != UNMAPPED_KEY and carried.get(d) != "filter"
+        for w in surface(m, raw)
+    ]
+    named_filters = [
+        w
+        for d, _r, _p, m, v, _q, raw in spoken
+        if v and carried.get(d) == "filter"
+        for w in surface(m, raw)
+    ]
+    unmapped = [v for d, _r, _p, _m, v, _q, _raw in live if d == UNMAPPED_KEY and v]
+    negated = {w for _d, r, _p, _m, _v, q, _raw in items if r in _NEGATIVE for w in q}
+    whole = None
+    if has_words and query is not None:
+        own = [w for w in query.split() if not set(tokens(w)) & negated]
+        whole = " ".join(own).strip() or None
+    head = named_subject or ([subject] if subject else [])
+    for candidate in ([*head, *gapped] if head else [], named_filters, [*unmapped, *gapped]):
+        text = " ".join(dict.fromkeys(w for w in candidate if w))
+        if text:
+            return text, whole
+    return None, whole
 
 
 #: NX-352: dimensiunile ale căror cuvinte rămân în căutare chiar dacă un citat de nevoie le
 #: cuprinde: numesc CE ESTE produsul. Un cuvânt nemapat nu e consumat de nimic (e textul căutat).
 _SUBJECT_WORDS = frozenset({"category", PRODUCT_TYPE})
+#: Relațiile care OCOLESC o valoare: cuvântul lor nu e niciodată text de căutare.
+_NEGATIVE = frozenset({"avoid"})
 _PUNCTUATION = ".,;:!?…\"'()[]«»„”“"
-#: Cererea provizorie a argumentelor, înlocuită imediat cu reziduul (`SearchArgs.query` nu e goală).
+#: Cererea provizorie a argumentelor, înlocuită imediat cu textul compus (`query` nu e goală).
 _PENDING = "·"
 
 
@@ -368,8 +338,8 @@ class _Planner:
     def _subject_label(self) -> str | None:
         """Eticheta subiectului, din date: tipul (umbrela, apoi tipul spus: etichetă de pachet,
         apoi de vocabular, apoi cheia), apoi raftul (`VocabEntry.label`). NX-352: eticheta e TEXTUL
-        căutării când cererea n-are reziduu, iar numele tipului apare în numele produselor, pe când
-        numele raftului nu (NX-293), deci tipul întâi. Workaroundul declarat în contract:
+        căutării când turul nu numește subiectul, iar numele tipului apare în numele produselor,
+        pe când numele raftului nu (NX-293), deci tipul întâi. Workaroundul declarat în contract:
         `SearchArgs.query` cere ≥ 1 caracter, iar treapta `filters_only` servește cererea fără
         cuvinte."""
         topic = self.state.topic
@@ -642,31 +612,23 @@ class _Planner:
         carried: dict[str, str] = {}
         args = self._search_args(_PENDING, act, product_name=product_name, carried=carried)
         subject = self._subject_label()
-        topic = self.state.topic
-        protected = {
-            t
-            for name_ in (subject, topic.product_type, *topic.type_umbrella)
-            if name_
-            for t in tokens(name_)
-        }
-        residue, spoken = _read_act_query(
+        text, whole = _read_act_query(
             act.query,
             words,
             self.interp.changes,
             self.checked,
-            self.locale,
             carried,
-            protected,
-            self.vocab,
+            subject,
+            self.locale,
         )
-        # NX-352: căutarea = reziduul cererii (fără formula conversației, nevoi și preț, care sunt
-        # deja filtre sau preferințe); fără reziduu, subiectul. Cererea întreagă doar fără niciunul.
+        # NX-352: căutarea se COMPUNE din ce a validat kernelul (subiectul, nevoile filtrate,
+        # termenii nemapați); cererea întreagă, fără cuvintele negate, e ultima rezervă.
         if name is not None:
             phrase = name
         elif subject_first:
-            phrase = subject or residue or spoken or product_name
+            phrase = subject or text or whole or product_name
         else:
-            phrase = residue or subject or spoken or product_name
+            phrase = text or whole or product_name
         if not phrase:
             self.gaps[:] = before  # fără căutare, golurile argumentelor nu spun nimic
             self._gap("no_query")
