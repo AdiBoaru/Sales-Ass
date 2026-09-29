@@ -1,0 +1,2603 @@
+{
+  "schema_version": "kernel-journey.v1",
+  "_note": "Set D: journey-uri nevăzute pentru stratul `interpretation` (etichete compacte, vezi tests/kernel/replay.py), scrise din contractul kernel.v2.x și regulile de etichetare ale proprietarului de produs, fără stare scrisă de mână (`state_before`/`sources` lipsesc): starea se construiește tur cu tur din interpretări și din `shown`. Un câmp absent din etichetă nu se evaluează; `changes: []` afirmă că turul nu schimbă nimic. Pe `sole-ro` turele n-au `shown`, fiindcă harnessul n-are rânduri de produs SOLE pentru ecran: referințele SOLE sunt pe nume din catalogul sintetic.",
+  "journeys": [
+    {
+      "journey_id": "d01-electronics-budget-page-compare",
+      "pack": "electronics",
+      "family": [
+        "find",
+        "budget",
+        "show_more",
+        "compare"
+      ],
+      "locale": "ro",
+      "source": "set D",
+      "turns": [
+        {
+          "user_input": "salut, caut un telefon bun pana in 2500 lei",
+          "shown": [
+            "el-01",
+            "el-02",
+            "el-03",
+            "el-04"
+          ],
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find",
+                  "query": "telefon"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "set",
+                  "dimension": "category",
+                  "relation": "eq",
+                  "value": "telefoane",
+                  "quote": "telefon"
+                },
+                {
+                  "op": "set",
+                  "dimension": "price",
+                  "relation": "lte",
+                  "number": 2500,
+                  "unit": "lei",
+                  "quote": "pana in 2500 lei"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "mai ai?",
+          "shown": [
+            "el-05"
+          ],
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "show_more"
+                }
+              ],
+              "changes": []
+            }
+          }
+        },
+        {
+          "user_input": "care e diferenta intre Apple si Xiaomi?",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "compare",
+                  "targets": [
+                    "r1",
+                    "r2"
+                  ]
+                }
+              ],
+              "references": [
+                {
+                  "id": "r1",
+                  "text": "Apple",
+                  "kind": "name",
+                  "name": "Apple"
+                },
+                {
+                  "id": "r2",
+                  "text": "Xiaomi",
+                  "kind": "name",
+                  "name": "Xiaomi"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "d02-electronics-storage-cheapest-cart",
+      "pack": "electronics",
+      "family": [
+        "find",
+        "units",
+        "extreme",
+        "cart"
+      ],
+      "locale": "ro",
+      "source": "set D",
+      "turns": [
+        {
+          "user_input": "vreau telefon cu minim 256gb",
+          "shown": [
+            "el-02",
+            "el-03",
+            "el-05"
+          ],
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find",
+                  "query": "telefon"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "set",
+                  "dimension": "category",
+                  "relation": "eq",
+                  "value": "telefoane",
+                  "quote": "telefon"
+                },
+                {
+                  "op": "add",
+                  "dimension": "storage",
+                  "relation": "gte",
+                  "number": 256,
+                  "unit": "GB",
+                  "quote": "minim 256gb"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "care e cel mai ieftin dintre ele?",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "detail",
+                  "targets": [
+                    "r1"
+                  ]
+                }
+              ],
+              "references": [
+                {
+                  "id": "r1",
+                  "text": "cel mai ieftin",
+                  "kind": "extreme",
+                  "dimension": "price",
+                  "direction": "min"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "ok pune-l pe apple in cos",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "cart",
+                  "targets": [
+                    "r1"
+                  ]
+                }
+              ],
+              "references": [
+                {
+                  "id": "r1",
+                  "text": "apple",
+                  "kind": "name",
+                  "name": "Apple"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "d03-electronics-shelf-question-then-repeat",
+      "pack": "electronics",
+      "family": [
+        "shelf_request",
+        "units",
+        "repeat_active"
+      ],
+      "locale": "ro",
+      "source": "set D",
+      "turns": [
+        {
+          "user_input": "aveti tablete?",
+          "shown": [
+            "el-11",
+            "el-12",
+            "el-13"
+          ],
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find",
+                  "query": "tablete"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "set",
+                  "dimension": "category",
+                  "relation": "eq",
+                  "value": "tablete",
+                  "quote": "tablete"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "vreau una cu ecran mare, macar 11 inch",
+          "shown": [
+            "el-12",
+            "el-13",
+            "el-17"
+          ],
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find",
+                  "query": "ecran mare"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "add",
+                  "dimension": "screen",
+                  "relation": "gte",
+                  "number": 11,
+                  "unit": "inch",
+                  "quote": "macar 11 inch"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "si ce alte tablete mai aveti?",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "show_more"
+                }
+              ],
+              "changes": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "d04-electronics-not-carried-then-laptops",
+      "pack": "electronics",
+      "family": [
+        "not_carried",
+        "find",
+        "budget"
+      ],
+      "locale": "ro",
+      "source": "set D",
+      "turns": [
+        {
+          "user_input": "aveti casti wireles?",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find",
+                  "query": "casti wireles"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "ok atunci arata-mi laptopuri sub 4000",
+          "shown": [
+            "el-18",
+            "el-19",
+            "el-20"
+          ],
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find",
+                  "query": "laptopuri"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "set",
+                  "dimension": "category",
+                  "relation": "eq",
+                  "value": "laptopuri",
+                  "quote": "laptopuri"
+                },
+                {
+                  "op": "set",
+                  "dimension": "price",
+                  "relation": "lte",
+                  "number": 4000,
+                  "quote": "sub 4000"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "d05-electronics-switch-and-resume",
+      "pack": "electronics",
+      "family": [
+        "subject_change",
+        "resume",
+        "ordinal"
+      ],
+      "locale": "ro",
+      "source": "set D",
+      "turns": [
+        {
+          "user_input": "arata-mi telefoane xiaomy",
+          "shown": [
+            "el-03",
+            "el-09"
+          ],
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find",
+                  "query": "telefoane xiaomy"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "set",
+                  "dimension": "category",
+                  "relation": "eq",
+                  "value": "telefoane",
+                  "quote": "telefoane"
+                },
+                {
+                  "op": "add",
+                  "dimension": "brand",
+                  "relation": "eq",
+                  "value": "Xiaomi",
+                  "quote": "xiaomy"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "arata-mi si niste huse",
+          "shown": [
+            "el-25",
+            "el-26",
+            "el-27"
+          ],
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find",
+                  "query": "huse"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "set",
+                  "dimension": "category",
+                  "relation": "eq",
+                  "value": "huse",
+                  "quote": "huse"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "ok revin la telefoanele xiaomi, al doilea ce ecran are?",
+          "expect": {
+            "interpretation": {
+              "thread": "resume",
+              "acts": [
+                {
+                  "kind": "detail",
+                  "targets": [
+                    "r1"
+                  ]
+                }
+              ],
+              "references": [
+                {
+                  "id": "r1",
+                  "text": "al doilea",
+                  "kind": "ordinal",
+                  "ordinal": 2
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "d06-electronics-generic-then-type",
+      "pack": "electronics",
+      "family": [
+        "generic_word",
+        "find"
+      ],
+      "locale": "ro",
+      "source": "set D",
+      "turns": [
+        {
+          "user_input": "buna, as vrea un gadget nou, ce-mi recomanzi?",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find"
+                }
+              ],
+              "changes": []
+            }
+          }
+        },
+        {
+          "user_input": "un telefon, alb daca se poate",
+          "shown": [
+            "el-02",
+            "el-06",
+            "el-10"
+          ],
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find",
+                  "query": "telefon"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "set",
+                  "dimension": "category",
+                  "relation": "eq",
+                  "value": "telefoane",
+                  "quote": "telefon"
+                },
+                {
+                  "op": "add",
+                  "dimension": "color",
+                  "relation": "eq",
+                  "value": "alb",
+                  "quote": "alb"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "d07-fashion-dress-size-avoid-detail-cart",
+      "pack": "fashion",
+      "family": [
+        "self_description",
+        "polarity",
+        "detail",
+        "cart"
+      ],
+      "locale": "ro",
+      "source": "set D",
+      "turns": [
+        {
+          "user_input": "caut o rochie, port marimea M",
+          "shown": [
+            "fa-01",
+            "fa-05"
+          ],
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find",
+                  "query": "rochie"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "set",
+                  "dimension": "category",
+                  "relation": "eq",
+                  "value": "rochii",
+                  "quote": "rochie"
+                },
+                {
+                  "op": "set",
+                  "dimension": "size",
+                  "relation": "eq",
+                  "value": "M",
+                  "quote": "marimea M"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "sa nu fie din poliester, transpir in el",
+          "shown": [
+            "fa-01",
+            "fa-05",
+            "fa-06"
+          ],
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "add",
+                  "dimension": "material",
+                  "relation": "avoid",
+                  "value": "poliester",
+                  "quote": "sa nu fie din poliester"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "din ce material e a doua?",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "detail",
+                  "targets": [
+                    "r1"
+                  ]
+                }
+              ],
+              "references": [
+                {
+                  "id": "r1",
+                  "text": "a doua",
+                  "kind": "ordinal",
+                  "ordinal": 2
+                }
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "o iau pe a doua",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "cart",
+                  "targets": [
+                    "r1"
+                  ]
+                }
+              ],
+              "references": [
+                {
+                  "id": "r1",
+                  "text": "a doua",
+                  "kind": "ordinal",
+                  "ordinal": 2
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "d08-fashion-generic-shelf-question-cheaper",
+      "pack": "fashion",
+      "family": [
+        "generic_word",
+        "shelf_request",
+        "relative_price"
+      ],
+      "locale": "ro",
+      "source": "set D",
+      "turns": [
+        {
+          "user_input": "as vrea ceva nou de imbracat",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find"
+                }
+              ],
+              "changes": []
+            }
+          }
+        },
+        {
+          "user_input": "ce camasi aveti?",
+          "shown": [
+            "fa-15",
+            "fa-16",
+            "fa-17"
+          ],
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find",
+                  "query": "camasi"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "set",
+                  "dimension": "category",
+                  "relation": "eq",
+                  "value": "camasi",
+                  "quote": "camasi"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "a treia e cam scumpa, ai ceva mai ieftin?",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "set",
+                  "dimension": "price",
+                  "relation": "lte",
+                  "relative_to": "r1",
+                  "quote": "mai ieftin"
+                }
+              ],
+              "references": [
+                {
+                  "id": "r1",
+                  "text": "a treia",
+                  "kind": "ordinal",
+                  "ordinal": 3
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "d09-fashion-shoes-link-returns",
+      "pack": "fashion",
+      "family": [
+        "find",
+        "link",
+        "store_info"
+      ],
+      "locale": "ro",
+      "source": "set D",
+      "turns": [
+        {
+          "user_input": "pantofi albi aveti?",
+          "shown": [
+            "fa-21",
+            "fa-26"
+          ],
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find",
+                  "query": "pantofi albi"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "set",
+                  "dimension": "category",
+                  "relation": "eq",
+                  "value": "pantofi",
+                  "quote": "pantofi"
+                },
+                {
+                  "op": "add",
+                  "dimension": "color",
+                  "relation": "eq",
+                  "value": "alb",
+                  "quote": "albi"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "trimite-mi linkul la Lia",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "link",
+                  "targets": [
+                    "r1"
+                  ]
+                }
+              ],
+              "references": [
+                {
+                  "id": "r1",
+                  "text": "Lia",
+                  "kind": "name",
+                  "name": "Lia"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "aveti retur gratuit?",
+          "expect": {
+            "interpretation": {
+              "thread": "aside",
+              "acts": [
+                {
+                  "kind": "store_info",
+                  "query": "retur gratuit"
+                }
+              ],
+              "changes": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "d10-fashion-switch-and-resume",
+      "pack": "fashion",
+      "family": [
+        "subject_change",
+        "resume"
+      ],
+      "locale": "ro",
+      "source": "set D",
+      "turns": [
+        {
+          "user_input": "vreau o fustă neagră",
+          "shown": [
+            "fa-11"
+          ],
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find",
+                  "query": "fustă"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "set",
+                  "dimension": "category",
+                  "relation": "eq",
+                  "value": "fuste",
+                  "quote": "fustă"
+                },
+                {
+                  "op": "add",
+                  "dimension": "color",
+                  "relation": "eq",
+                  "value": "negru",
+                  "quote": "neagră"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "arata-mi si niste rochii",
+          "shown": [
+            "fa-02",
+            "fa-07"
+          ],
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find",
+                  "query": "rochii"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "set",
+                  "dimension": "category",
+                  "relation": "eq",
+                  "value": "rochii",
+                  "quote": "rochii"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "mai bine ma intorc la fuste",
+          "expect": {
+            "interpretation": {
+              "thread": "resume",
+              "acts": [
+                {
+                  "kind": "find"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "d11-fashion-size-self-compare-complaint",
+      "pack": "fashion",
+      "family": [
+        "self_description",
+        "compare",
+        "polarity"
+      ],
+      "locale": "ro",
+      "source": "set D",
+      "turns": [
+        {
+          "user_input": "sunt cam plinuta, de obicei iau XL, ce rochii ai?",
+          "shown": [
+            "fa-02",
+            "fa-07"
+          ],
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find",
+                  "query": "rochii"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "set",
+                  "dimension": "category",
+                  "relation": "eq",
+                  "value": "rochii",
+                  "quote": "rochii"
+                },
+                {
+                  "op": "set",
+                  "dimension": "size",
+                  "relation": "eq",
+                  "value": "XL",
+                  "quote": "iau XL"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "compara Ilona cu Ema",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "compare",
+                  "targets": [
+                    "r1",
+                    "r2"
+                  ]
+                }
+              ],
+              "references": [
+                {
+                  "id": "r1",
+                  "text": "Ilona",
+                  "kind": "name",
+                  "name": "Ilona"
+                },
+                {
+                  "id": "r2",
+                  "text": "Ema",
+                  "kind": "name",
+                  "name": "Ema"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "ma zgarie poliesterul",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "add",
+                  "dimension": "material",
+                  "relation": "avoid",
+                  "value": "poliester",
+                  "quote": "poliesterul"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "d12-furniture-sofa-seats-then-budget",
+      "pack": "furniture",
+      "family": [
+        "find",
+        "units",
+        "budget"
+      ],
+      "locale": "ro",
+      "source": "set D",
+      "turns": [
+        {
+          "user_input": "caut canapea 3 locuri gri",
+          "shown": [
+            "fu-02",
+            "fu-05"
+          ],
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find",
+                  "query": "canapea"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "set",
+                  "dimension": "category",
+                  "relation": "eq",
+                  "value": "canapele",
+                  "quote": "canapea"
+                },
+                {
+                  "op": "set",
+                  "dimension": "seats",
+                  "relation": "eq",
+                  "number": 3,
+                  "unit": "locuri",
+                  "quote": "3 locuri"
+                },
+                {
+                  "op": "add",
+                  "dimension": "color",
+                  "relation": "eq",
+                  "value": "gri",
+                  "quote": "gri"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "e cam scumpa, ai ceva sub 2000?",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "set",
+                  "dimension": "price",
+                  "relation": "lte",
+                  "number": 2000,
+                  "quote": "sub 2000"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "d13-furniture-generic-table-chairs-bundle",
+      "pack": "furniture",
+      "family": [
+        "generic_word",
+        "subject_change",
+        "bundle"
+      ],
+      "locale": "ro",
+      "source": "set D",
+      "turns": [
+        {
+          "user_input": "am nevoie de mobila noua",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find"
+                }
+              ],
+              "changes": []
+            }
+          }
+        },
+        {
+          "user_input": "o masă din lemn pentru 6 persoane",
+          "shown": [
+            "fu-11",
+            "fu-15",
+            "fu-17"
+          ],
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find",
+                  "query": "masă"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "set",
+                  "dimension": "category",
+                  "relation": "eq",
+                  "value": "mese",
+                  "quote": "masă"
+                },
+                {
+                  "op": "add",
+                  "dimension": "material",
+                  "relation": "eq",
+                  "value": "lemn",
+                  "quote": "lemn"
+                },
+                {
+                  "op": "set",
+                  "dimension": "seats",
+                  "relation": "eq",
+                  "number": 6,
+                  "unit": "persoane",
+                  "quote": "6 persoane"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "si niste scaune",
+          "shown": [
+            "fu-19",
+            "fu-20"
+          ],
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find",
+                  "query": "scaune"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "set",
+                  "dimension": "category",
+                  "relation": "eq",
+                  "value": "scaune",
+                  "quote": "scaune"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "fa-mi un set complet: masa si 6 scaune",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "bundle"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "d14-furniture-buy-loosely-compare-cart",
+      "pack": "furniture",
+      "family": [
+        "loose_buy",
+        "compare",
+        "cart"
+      ],
+      "locale": "ro",
+      "source": "set D",
+      "turns": [
+        {
+          "user_input": "vreau sa cumpar o canapea din piele",
+          "shown": [
+            "fu-02",
+            "fu-04",
+            "fu-06"
+          ],
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find",
+                  "query": "canapea"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "set",
+                  "dimension": "category",
+                  "relation": "eq",
+                  "value": "canapele",
+                  "quote": "canapea"
+                },
+                {
+                  "op": "add",
+                  "dimension": "material",
+                  "relation": "eq",
+                  "value": "piele",
+                  "quote": "piele"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "compara a doua cu a treia",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "compare",
+                  "targets": [
+                    "r1",
+                    "r2"
+                  ]
+                }
+              ],
+              "references": [
+                {
+                  "id": "r1",
+                  "text": "a doua",
+                  "kind": "ordinal",
+                  "ordinal": 2
+                },
+                {
+                  "id": "r2",
+                  "text": "a treia",
+                  "kind": "ordinal",
+                  "ordinal": 3
+                }
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "ok, adauga in cos a doua",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "cart",
+                  "targets": [
+                    "r1"
+                  ]
+                }
+              ],
+              "references": [
+                {
+                  "id": "r1",
+                  "text": "a doua",
+                  "kind": "ordinal",
+                  "ordinal": 2
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "d15-furniture-width-aside-repeat",
+      "pack": "furniture",
+      "family": [
+        "units",
+        "aside",
+        "repeat_active"
+      ],
+      "locale": "ro",
+      "source": "set D",
+      "turns": [
+        {
+          "user_input": "am nevoie de o masa de maxim 140 cm latime",
+          "shown": [
+            "fu-11",
+            "fu-12"
+          ],
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find",
+                  "query": "masa"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "set",
+                  "dimension": "category",
+                  "relation": "eq",
+                  "value": "mese",
+                  "quote": "masa"
+                },
+                {
+                  "op": "add",
+                  "dimension": "width",
+                  "relation": "lte",
+                  "number": 140,
+                  "unit": "cm",
+                  "quote": "maxim 140 cm"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "livrati si in Cluj?",
+          "expect": {
+            "interpretation": {
+              "thread": "aside",
+              "acts": [
+                {
+                  "kind": "store_info",
+                  "query": "livrati si in Cluj"
+                }
+              ],
+              "changes": []
+            }
+          }
+        },
+        {
+          "user_input": "ok, mai arata-mi mese",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "show_more"
+                }
+              ],
+              "changes": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "d16-gifts-mom-birthday-shelf-detail",
+      "pack": "gifts",
+      "family": [
+        "generic_word",
+        "shelf_request",
+        "detail"
+      ],
+      "locale": "ro",
+      "source": "set D",
+      "turns": [
+        {
+          "user_input": "caut un cadou pt mama de ziua ei, pana in 150 lei",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "set",
+                  "dimension": "recipient",
+                  "relation": "eq",
+                  "value": "ea",
+                  "quote": "mama"
+                },
+                {
+                  "op": "set",
+                  "dimension": "occasion",
+                  "relation": "eq",
+                  "value": "zi de nastere",
+                  "quote": "ziua ei"
+                },
+                {
+                  "op": "set",
+                  "dimension": "price",
+                  "relation": "lte",
+                  "number": 150,
+                  "unit": "lei",
+                  "quote": "pana in 150 lei"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "ce ai la casa?",
+          "shown": [
+            "gi-01",
+            "gi-05",
+            "gi-09"
+          ],
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find",
+                  "query": "casa"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "set",
+                  "dimension": "category",
+                  "relation": "eq",
+                  "value": "casa",
+                  "quote": "casa"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "setul de ceai e frumos, din ce e facut?",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "detail",
+                  "targets": [
+                    "r1"
+                  ]
+                }
+              ],
+              "references": [
+                {
+                  "id": "r1",
+                  "text": "setul de ceai",
+                  "kind": "name",
+                  "name": "Set ceai"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "d17-gifts-kid-game-cheaper",
+      "pack": "gifts",
+      "family": [
+        "find",
+        "relative_price"
+      ],
+      "locale": "ro",
+      "source": "set D",
+      "turns": [
+        {
+          "user_input": "vreau un joc pt un copil",
+          "shown": [
+            "gi-07",
+            "gi-15",
+            "gi-23"
+          ],
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find",
+                  "query": "joc"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "set",
+                  "dimension": "category",
+                  "relation": "eq",
+                  "value": "jocuri",
+                  "quote": "joc"
+                },
+                {
+                  "op": "set",
+                  "dimension": "recipient",
+                  "relation": "eq",
+                  "value": "copil",
+                  "quote": "copil"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "al doilea e cam scump, ceva mai ieftin?",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "set",
+                  "dimension": "price",
+                  "relation": "lte",
+                  "relative_to": "r1",
+                  "quote": "mai ieftin"
+                }
+              ],
+              "references": [
+                {
+                  "id": "r1",
+                  "text": "al doilea",
+                  "kind": "ordinal",
+                  "ordinal": 2
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "d18-gifts-couple-bundle",
+      "pack": "gifts",
+      "family": [
+        "bundle"
+      ],
+      "locale": "ro",
+      "source": "set D",
+      "turns": [
+        {
+          "user_input": "e aniversarea noastra, vreau un cadou pt amandoi",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "set",
+                  "dimension": "occasion",
+                  "relation": "eq",
+                  "value": "aniversare",
+                  "quote": "aniversarea"
+                },
+                {
+                  "op": "set",
+                  "dimension": "recipient",
+                  "relation": "eq",
+                  "value": "cuplu",
+                  "quote": "pt amandoi"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "poti sa-mi faci un pachet cu mai multe lucruri?",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "bundle"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "d19-gifts-books-link-repeat",
+      "pack": "gifts",
+      "family": [
+        "shelf_request",
+        "link",
+        "repeat_active"
+      ],
+      "locale": "ro",
+      "source": "set D",
+      "turns": [
+        {
+          "user_input": "ce carti aveti?",
+          "shown": [
+            "gi-03",
+            "gi-11",
+            "gi-19"
+          ],
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find",
+                  "query": "carti"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "set",
+                  "dimension": "category",
+                  "relation": "eq",
+                  "value": "carti",
+                  "quote": "carti"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "trimite-mi linkul la a doua",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "link",
+                  "targets": [
+                    "r1"
+                  ]
+                }
+              ],
+              "references": [
+                {
+                  "id": "r1",
+                  "text": "a doua",
+                  "kind": "ordinal",
+                  "ordinal": 2
+                }
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "alte carti mai aveti?",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "show_more"
+                }
+              ],
+              "changes": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "d20-gifts-brother-switch-resume",
+      "pack": "gifts",
+      "family": [
+        "subject_change",
+        "resume"
+      ],
+      "locale": "ro",
+      "source": "set D",
+      "turns": [
+        {
+          "user_input": "ceva pt fratele meu, ii plac jocurile",
+          "shown": [
+            "gi-04",
+            "gi-12"
+          ],
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find",
+                  "query": "jocurile"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "set",
+                  "dimension": "category",
+                  "relation": "eq",
+                  "value": "jocuri",
+                  "quote": "jocurile"
+                },
+                {
+                  "op": "set",
+                  "dimension": "recipient",
+                  "relation": "eq",
+                  "value": "el",
+                  "quote": "fratele"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "sau poate ceva de ingrijire",
+          "shown": [
+            "gi-06",
+            "gi-22"
+          ],
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find",
+                  "query": "ingrijire"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "set",
+                  "dimension": "category",
+                  "relation": "eq",
+                  "value": "ingrijire",
+                  "quote": "ingrijire"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "hai inapoi la jocuri, primul cat costa?",
+          "expect": {
+            "interpretation": {
+              "thread": "resume",
+              "acts": [
+                {
+                  "kind": "detail",
+                  "targets": [
+                    "r1"
+                  ]
+                }
+              ],
+              "references": [
+                {
+                  "id": "r1",
+                  "text": "primul",
+                  "kind": "ordinal",
+                  "ordinal": 1
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "d21-sole-oily-skin-no-fragrance",
+      "pack": "sole-ro",
+      "family": [
+        "self_description",
+        "generic_word",
+        "negated_boolean"
+      ],
+      "locale": "ro",
+      "source": "set D",
+      "turns": [
+        {
+          "user_input": "buna, am tenul gras si ma lucesc toata ziua, ce crema imi recomanzi?",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find",
+                  "query": "crema"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "add",
+                  "dimension": "skin_type",
+                  "relation": "eq",
+                  "value": "oily",
+                  "quote": "tenul gras"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "sa nu aiba parfum",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "set",
+                  "dimension": "fragrance_free",
+                  "relation": "eq",
+                  "value": "true",
+                  "quote": "sa nu aiba parfum"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "d22-sole-generic-cream-then-type",
+      "pack": "sole-ro",
+      "family": [
+        "generic_word",
+        "product_type"
+      ],
+      "locale": "ro",
+      "source": "set D",
+      "turns": [
+        {
+          "user_input": "vreau o crema",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find",
+                  "query": "crema"
+                }
+              ],
+              "changes": []
+            }
+          }
+        },
+        {
+          "user_input": "o crema de fata pentru seara",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find",
+                  "query": "crema de fata"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "set",
+                  "dimension": "product_type",
+                  "relation": "eq",
+                  "value": "crema de fata",
+                  "quote": "crema de fata"
+                },
+                {
+                  "op": "add",
+                  "dimension": "routine_time",
+                  "relation": "eq",
+                  "value": "pm",
+                  "quote": "seara"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "d23-sole-shelf-question-repeat",
+      "pack": "sole-ro",
+      "family": [
+        "shelf_request",
+        "repeat_active",
+        "self_description"
+      ],
+      "locale": "ro",
+      "source": "set D",
+      "turns": [
+        {
+          "user_input": "ce aveți la îngrijirea tenului?",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find",
+                  "query": "îngrijirea tenului"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "set",
+                  "dimension": "category",
+                  "relation": "eq",
+                  "value": "ten-ingrijirea-tenului",
+                  "quote": "îngrijirea tenului"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "tot de la ingrijirea tenului, dar pt piele sensibila",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "add",
+                  "dimension": "skin_type",
+                  "relation": "eq",
+                  "value": "sensitive",
+                  "quote": "piele sensibila"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "d24-sole-dandruff-switch-resume",
+      "pack": "sole-ro",
+      "family": [
+        "self_description",
+        "shelf_request",
+        "subject_change",
+        "resume"
+      ],
+      "locale": "ro",
+      "source": "set D",
+      "turns": [
+        {
+          "user_input": "am mătreață, arată-mi ce aveți pentru păr",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find",
+                  "query": "păr"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "set",
+                  "dimension": "category",
+                  "relation": "eq",
+                  "value": "par-ingrijirea-parului",
+                  "quote": "păr"
+                },
+                {
+                  "op": "add",
+                  "dimension": "concerns",
+                  "relation": "contains",
+                  "value": "dandruff",
+                  "quote": "mătreață"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "a, si ce aveti la machiaj pt fata?",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find",
+                  "query": "machiaj pt fata"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "set",
+                  "dimension": "category",
+                  "relation": "eq",
+                  "value": "machiaj-fata",
+                  "quote": "machiaj pt fata"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "bun, revenim la par",
+          "expect": {
+            "interpretation": {
+              "thread": "resume",
+              "acts": [
+                {
+                  "kind": "find"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "d25-sole-routine-bundle",
+      "pack": "sole-ro",
+      "family": [
+        "bundle",
+        "self_description",
+        "budget"
+      ],
+      "locale": "ro",
+      "source": "set D",
+      "turns": [
+        {
+          "user_input": "fa-mi o rutina pt ten mixt",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "bundle"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "add",
+                  "dimension": "skin_type",
+                  "relation": "eq",
+                  "value": "combination",
+                  "quote": "ten mixt"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "refa rutina, dar cu max 200 lei in total",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "bundle"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "set",
+                  "dimension": "price",
+                  "relation": "lte",
+                  "number": 200,
+                  "unit": "lei",
+                  "quote": "max 200 lei"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "d26-sole-types-not-in-stock",
+      "pack": "sole-ro",
+      "family": [
+        "not_carried",
+        "product_type"
+      ],
+      "locale": "ro",
+      "source": "set D",
+      "turns": [
+        {
+          "user_input": "aveti pasta de dinti?",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find",
+                  "query": "pasta de dinti"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "set",
+                  "dimension": "product_type",
+                  "relation": "eq",
+                  "value": "pasta de dinti",
+                  "quote": "pasta de dinti"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "ok, atunci un gel de dus",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find",
+                  "query": "gel de dus"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "set",
+                  "dimension": "product_type",
+                  "relation": "eq",
+                  "value": "gel de dus",
+                  "quote": "gel de dus"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "d27-sole-foundation-finish-detail",
+      "pack": "sole-ro",
+      "family": [
+        "product_type",
+        "self_description",
+        "detail"
+      ],
+      "locale": "ro",
+      "source": "set D",
+      "turns": [
+        {
+          "user_input": "caut fond de ten mat pt ten gras",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find",
+                  "query": "fond de ten"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "set",
+                  "dimension": "product_type",
+                  "relation": "eq",
+                  "value": "fond de ten",
+                  "quote": "fond de ten"
+                },
+                {
+                  "op": "add",
+                  "dimension": "finish",
+                  "relation": "eq",
+                  "value": "matte",
+                  "quote": "mat"
+                },
+                {
+                  "op": "add",
+                  "dimension": "skin_type",
+                  "relation": "eq",
+                  "value": "oily",
+                  "quote": "ten gras"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "ce nuante are Ilvena?",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "detail",
+                  "targets": [
+                    "r1"
+                  ]
+                }
+              ],
+              "references": [
+                {
+                  "id": "r1",
+                  "text": "Ilvena",
+                  "kind": "name",
+                  "name": "Ilvena"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "d28-sole-redness-serum-howto",
+      "pack": "sole-ro",
+      "family": [
+        "self_description",
+        "generic_word",
+        "detail"
+      ],
+      "locale": "ro",
+      "source": "set D",
+      "turns": [
+        {
+          "user_input": "am roșeață pe obraji, ce ser imi recomanzi?",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find",
+                  "query": "ser"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "add",
+                  "dimension": "concerns",
+                  "relation": "contains",
+                  "value": "redness",
+                  "quote": "roșeață"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "cum se foloseste Delmira?",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "detail",
+                  "targets": [
+                    "r1"
+                  ]
+                }
+              ],
+              "references": [
+                {
+                  "id": "r1",
+                  "text": "Delmira",
+                  "kind": "name",
+                  "name": "Delmira"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "d29-sole-body-shelf-no-fragrance",
+      "pack": "sole-ro",
+      "family": [
+        "shelf_request",
+        "negated_boolean"
+      ],
+      "locale": "ro",
+      "source": "set D",
+      "turns": [
+        {
+          "user_input": "arata-mi ceva pt corp",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find",
+                  "query": "corp"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "set",
+                  "dimension": "category",
+                  "relation": "eq",
+                  "value": "corp-ingrijirea-corpului",
+                  "quote": "corp"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "ceva hidratant, fara parfum",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find",
+                  "query": "hidratant"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "add",
+                  "dimension": "concerns",
+                  "relation": "contains",
+                  "value": "hydration",
+                  "quote": "hidratant"
+                },
+                {
+                  "op": "set",
+                  "dimension": "fragrance_free",
+                  "relation": "eq",
+                  "value": "true",
+                  "quote": "fara parfum"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "d30-sole-hair-shelf-dry-hair",
+      "pack": "sole-ro",
+      "family": [
+        "shelf_request",
+        "self_description"
+      ],
+      "locale": "ro",
+      "source": "set D",
+      "turns": [
+        {
+          "user_input": "aveti produse pt par?",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find",
+                  "query": "produse pt par"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "set",
+                  "dimension": "category",
+                  "relation": "eq",
+                  "value": "par-ingrijirea-parului",
+                  "quote": "par"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "am părul uscat și vârfurile despicate",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "add",
+                  "dimension": "concerns",
+                  "relation": "contains",
+                  "value": "hair_dryness",
+                  "quote": "părul uscat"
+                },
+                {
+                  "op": "add",
+                  "dimension": "concerns",
+                  "relation": "contains",
+                  "value": "hair_damage",
+                  "quote": "vârfurile despicate"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "d31-sole-order-and-returns",
+      "pack": "sole-ro",
+      "family": [
+        "order_status",
+        "store_info",
+        "aside"
+      ],
+      "locale": "ro",
+      "source": "set D",
+      "turns": [
+        {
+          "user_input": "unde e comanda mea? am comandat acum 3 zile",
+          "expect": {
+            "interpretation": {
+              "thread": "aside",
+              "acts": [
+                {
+                  "kind": "order_status"
+                }
+              ],
+              "changes": []
+            }
+          }
+        },
+        {
+          "user_input": "si cum pot returna un produs?",
+          "expect": {
+            "interpretation": {
+              "thread": "aside",
+              "acts": [
+                {
+                  "kind": "store_info",
+                  "query": "returna un produs"
+                }
+              ],
+              "changes": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "d32-sole-dry-skin-cream-cheaper",
+      "pack": "sole-ro",
+      "family": [
+        "self_description",
+        "product_type",
+        "relative_price"
+      ],
+      "locale": "ro",
+      "source": "set D",
+      "turns": [
+        {
+          "user_input": "mi se usuca pielea pe fata dupa dus",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "add",
+                  "dimension": "skin_type",
+                  "relation": "eq",
+                  "value": "dry",
+                  "quote": "mi se usuca pielea"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "o crema de fata hidratanta",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find",
+                  "query": "crema de fata"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "set",
+                  "dimension": "product_type",
+                  "relation": "eq",
+                  "value": "crema de fata",
+                  "quote": "crema de fata"
+                },
+                {
+                  "op": "add",
+                  "dimension": "concerns",
+                  "relation": "contains",
+                  "value": "hydration",
+                  "quote": "hidratanta"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "ai ceva mai ieftin decat Aurelia?",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "set",
+                  "dimension": "price",
+                  "relation": "lte",
+                  "relative_to": "r1",
+                  "quote": "mai ieftin"
+                }
+              ],
+              "references": [
+                {
+                  "id": "r1",
+                  "text": "Aurelia",
+                  "kind": "name",
+                  "name": "Aurelia"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "d33-sole-pores-toner-fit",
+      "pack": "sole-ro",
+      "family": [
+        "self_description",
+        "product_type",
+        "detail"
+      ],
+      "locale": "ro",
+      "source": "set D",
+      "turns": [
+        {
+          "user_input": "am porii dilatati, un tonner bun?",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find",
+                  "query": "tonner"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "set",
+                  "dimension": "product_type",
+                  "relation": "eq",
+                  "value": "toner de fata",
+                  "quote": "tonner"
+                },
+                {
+                  "op": "add",
+                  "dimension": "concerns",
+                  "relation": "contains",
+                  "value": "pores",
+                  "quote": "porii dilatati"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "am ten mixt, merge Elvaro?",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "detail",
+                  "targets": [
+                    "r1"
+                  ]
+                }
+              ],
+              "changes": [
+                {
+                  "op": "add",
+                  "dimension": "skin_type",
+                  "relation": "eq",
+                  "value": "combination",
+                  "quote": "ten mixt"
+                }
+              ],
+              "references": [
+                {
+                  "id": "r1",
+                  "text": "Elvaro",
+                  "kind": "name",
+                  "name": "Elvaro"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "journey_id": "d34-sole-greeting-shelf-spf",
+      "pack": "sole-ro",
+      "family": [
+        "chitchat",
+        "loose_buy",
+        "shelf_request",
+        "units"
+      ],
+      "locale": "ro",
+      "source": "set D",
+      "turns": [
+        {
+          "user_input": "salut",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "chitchat"
+                }
+              ],
+              "changes": []
+            }
+          }
+        },
+        {
+          "user_input": "vreau sa-mi iau niste produse de ingrijirea tenului",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find",
+                  "query": "ingrijirea tenului"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "set",
+                  "dimension": "category",
+                  "relation": "eq",
+                  "value": "ten-ingrijirea-tenului",
+                  "quote": "ingrijirea tenului"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "user_input": "cu spf minim 30",
+          "expect": {
+            "interpretation": {
+              "acts": [
+                {
+                  "kind": "find"
+                }
+              ],
+              "changes": [
+                {
+                  "op": "add",
+                  "dimension": "spf",
+                  "relation": "gte",
+                  "number": 30,
+                  "unit": "spf",
+                  "quote": "spf minim 30"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

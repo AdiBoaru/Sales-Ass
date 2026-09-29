@@ -1015,8 +1015,15 @@ HOLDOUT_C_DIR = ROOT / "tests" / "golden" / "kernel_interpret_holdout"
 HOLDOUT_C_SHA256 = "72fd676ef6dd092464021728cb31d0b535cc9687c4358e1edc47580a64f9ba91"
 
 
+#: NX-347: setul D, scris de un agent independent care n-a văzut promptul, rezultatele, seturile
+#: A, B, C sau cardurile NX-339/345/347, pentru verdictul lui `interpret.v4`. ÎNGHEȚAT la scriere
+#: (amprenta raportată de agent), iar autorul promptului nu i-a citit conținutul.
+HOLDOUT_D_DIR = ROOT / "tests" / "golden" / "kernel_interpret_holdout_d"
+HOLDOUT_D_SHA256 = "68c58e79a750e7f60b63055377422973a6b3fcf0e21597c697d788bd77571ac9"
+
+
 def holdout_c_digest(directory: Path = HOLDOUT_C_DIR) -> str:
-    """SHA-256 peste fișierele setului C, sortate, cu CRLF→LF."""
+    """SHA-256 peste fișierele unui set nevăzut (C sau D), sortate, cu CRLF→LF."""
     digest = hashlib.sha256()
     for path in sorted(directory.glob("*.json")):
         digest.update(path.read_bytes().replace(b"\r\n", b"\n"))
@@ -1677,6 +1684,16 @@ async def _main_journeys(args: argparse.Namespace) -> int:
     efforts = _parse_efforts(args.efforts)
     excluded: Counter = Counter()
     directory = args.journeys_dir or JOURNEYS_DIR
+    frozen = {
+        HOLDOUT_C_DIR.resolve(): HOLDOUT_C_SHA256,
+        HOLDOUT_D_DIR.resolve(): HOLDOUT_D_SHA256,
+    }
+    expected = frozen.get(Path(directory).resolve())
+    if args.yes and expected is not None and holdout_c_digest(directory) != expected:
+        # NX-347: un set nevăzut schimbat după îngheț nu mai judecă nimic; fail-closed ÎNAINTEA
+        # oricărui apel de model (recenzia v4).
+        print(f"refuz: setul înghețat din {directory} nu mai are amprenta din cod")
+        return 2
     set_name = args.set_name or ("C" if args.journeys_dir else None)
     cases = journey_cases(directory, excluded=excluded, set_name=set_name)
     live = args.yes and not args.dry_run

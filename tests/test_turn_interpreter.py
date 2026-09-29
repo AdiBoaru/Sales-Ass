@@ -593,5 +593,40 @@ def test_v3_bundle_covers_items_used_together_without_naming_them(pack):
     assert "bundle: a set of items that go together" not in system
 
 
-def test_the_prompt_version_is_v3():
-    assert ic.INTERPRET_PROMPT_VERSION == "interpret.v3"
+# --- NX-347: interpret.v4 = v3 + trei reguli de RECUNOAȘTERE (clasele B, C, E, NX-345) -----
+
+#: Câte o frază-ancoră per regulă nouă. Formulările sunt generice (I14): niciun cuvânt de vertical.
+V4_RULES = {
+    "B raftul numit, și ca întrebare": "also inside a question, is a set on category",
+    "B un calificativ nu e raft": "a shelf word that is part of its name or only says",
+    "C ce ESTE clientul, nu rezultatul": "the value that names what they are or have",
+    "C un rezultat cerut rămâne schimbare": "a result the customer asks for is a change too",
+}
+
+
+def test_v4_has_no_rule_for_yes_no_dimensions():
+    """Recenzia v4: regula E („true/false, never avoid") nu putea produce ce cerea: validatorul
+    transformă orice fațetă da/nu în `unmapped` (vocabularul exclude booleenele), deci E ar fi
+    împins modelul DE LA singura formă pe care kernelul o poate executa (`avoid`). Defectul e al
+    validatorului, card separat (NX-349), nu al promptului."""
+    system = " ".join(ti.system_prompt(_input("electronics")).split())
+    assert "true or false takes" not in system and "never avoid" not in system
+
+
+@pytest.mark.parametrize("pack", ALL_PACKS)
+def test_every_v4_rule_is_in_the_rendered_prompt(pack):
+    system = " ".join(ti.system_prompt(_input(pack)).split())
+    missing = [rule for rule, anchor in V4_RULES.items() if anchor not in system]
+    assert missing == []
+
+
+@pytest.mark.parametrize("pack", ALL_PACKS)
+def test_v4_keeps_every_v2_and_v3_rule(pack):
+    """v4 ADAUGĂ trei reguli; nicio regulă de dinainte nu se pierde la rescriere."""
+    system = " ".join(ti.system_prompt(_input(pack)).split())
+    assert [rule for rule, anchor in V2_RULES.items() if anchor not in system] == []
+    assert "bundle: several items meant to be used together" in system
+
+
+def test_the_prompt_version_is_v4():
+    assert ic.INTERPRET_PROMPT_VERSION == "interpret.v4"

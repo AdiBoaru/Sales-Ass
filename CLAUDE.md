@@ -333,8 +333,13 @@ NEUTRĂ, cu metricile ei (contrazise ≤ 0,15, neetichetate ≤ 0,18 pe tur); `i
 deci e fapt; un `set` pe valoarea deja activă (`hard`, fără subiect mutat/golit) e neutru;
 „cremă" rămâne fără tip; raftul numit = `set category`. Scorerul le aplică (`change_provenance`/
 `change_active` în `observed`; `f1_all_emitted` și `--regressions … all_emitted` = regula veche). Pe
-rapoartele existente F1 pe A devine 0,874 (v3). Regula GO v4 e în NX-339; restul (etichete, setul D,
-`interpret.v4`, verdict) e [`NX-347`](tasks/stage1/NX-347.md). Defect de kernel găsit pe drum:
+rapoartele existente F1 pe A devine 0,874 (v3; 0,884 cu D3 reconstituit din lanț). Regula GO v4 e în NX-339; restul (etichete, setul D,
+`interpret.v4`, verdict) e [`NX-347`](tasks/stage1/NX-347.md). `interpret.v4` = v3 + două reguli de
+recunoaștere (raftul numit ca obiect al cererii, și ca întrebare ⇒ `set category`, dar nu un calificativ
+din numele unui tip; descrierea clientului pe valoarea care spune ce ESTE, iar un rezultat cerut rămâne
+schimbare). Setul
+D (88 de ture, agent independent) e înghețat (`68c58e79…`). Negația pe o fațetă da/nu nu e în v4:
+validatorul transformă orice fațetă booleană în `unmapped` ([`NX-349`](tasks/stage1/NX-349.md)). Defect de kernel găsit pe drum:
 [`NX-348`](tasks/stage1/NX-348.md) (`set product_type` respins mereu de reducer).
 **Verdict v3: NO-GO**, pe un singur punct: F1 pe A 0,768 (< 0,85). Restul trece (C act 0,944, F1
 0,976; A act 0,967, fir 1,0; 6 regresii ≤ zgomotul de 11), iar F1 pe A stă la 0,77-0,80 pe TOATE
