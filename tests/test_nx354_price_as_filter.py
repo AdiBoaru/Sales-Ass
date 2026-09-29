@@ -64,6 +64,14 @@ UNITS = build_units(
         ("crema spf 50 sub 80 lei", 80, ["crema", "spf", "50"]),  # SPF-ul e cerință de produs
         ("crema 50 ml sub 100", 100, ["crema", "50", "ml"]),  # cantitatea rămâne, suma iese
         ("crema de fata", 100, ["crema", "fata"]),  # fără preț: neatins
+        # a doua recenzie: intervale, comparator după sumă sau peste „de”, sumă lipită de unitate
+        ("crema intre 50 si 100 lei", 100, ["crema"]),
+        ("crema 100-150 lei", 150, ["crema"]),
+        ("crema de la 50 pana la 100 lei", 100, ["crema"]),
+        ("crema 100 lei maxim", 100, ["crema"]),
+        ("crema maxim de 150 lei", 150, ["crema"]),
+        ("crema sub 100lei", 100, ["crema"]),
+        ("parfum sub 1.000", 1000, ["parfum"]),
     ],
 )
 def test_price_words_leave_the_text(query: str, price_max: float, terms: list[str]) -> None:
@@ -90,7 +98,7 @@ def test_price_words_leave_the_text(query: str, price_max: float, terms: list[st
 )
 def test_numbers_that_are_not_the_bound_stay(query: str, price_max: float, kept: str) -> None:
     out = strip_price_mentions(query, units=UNITS, locale="ro", price_max=price_max)
-    assert kept in out.split() or kept in out
+    assert kept in content_terms(out, "ro")
 
 
 def test_comparison_words_away_from_the_price_stay() -> None:
