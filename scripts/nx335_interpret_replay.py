@@ -1015,8 +1015,15 @@ HOLDOUT_C_DIR = ROOT / "tests" / "golden" / "kernel_interpret_holdout"
 HOLDOUT_C_SHA256 = "72fd676ef6dd092464021728cb31d0b535cc9687c4358e1edc47580a64f9ba91"
 
 
+#: NX-347: setul D, scris de un agent independent care n-a văzut promptul, rezultatele, seturile
+#: A, B, C sau cardurile NX-339/345/347, pentru verdictul lui `interpret.v4`. ÎNGHEȚAT la scriere
+#: (amprenta raportată de agent), iar autorul promptului nu i-a citit conținutul.
+HOLDOUT_D_DIR = ROOT / "tests" / "golden" / "kernel_interpret_holdout_d"
+HOLDOUT_D_SHA256 = "68c58e79a750e7f60b63055377422973a6b3fcf0e21597c697d788bd77571ac9"
+
+
 def holdout_c_digest(directory: Path = HOLDOUT_C_DIR) -> str:
-    """SHA-256 peste fișierele setului C, sortate, cu CRLF→LF."""
+    """SHA-256 peste fișierele unui set nevăzut (C sau D), sortate, cu CRLF→LF."""
     digest = hashlib.sha256()
     for path in sorted(directory.glob("*.json")):
         digest.update(path.read_bytes().replace(b"\r\n", b"\n"))

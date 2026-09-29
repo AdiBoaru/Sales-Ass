@@ -598,9 +598,18 @@ def test_v3_bundle_covers_items_used_together_without_naming_them(pack):
 #: Câte o frază-ancoră per regulă nouă. Formulările sunt generice (I14): niciun cuvânt de vertical.
 V4_RULES = {
     "B raftul numit, și ca întrebare": "also inside a question, is a set on category",
-    "C descrierea pe dimensiunea ei": "on the dimension of that value and not on a related one",
-    "E fațeta da/nu, și ca negație": "A dimension listed as true or false takes true or",
+    "B un calificativ nu e raft": "a shelf word that is part of its name or only says",
+    "C ce ESTE clientul, nu rezultatul dorit": "the value that names what the customer is or has",
 }
+
+
+def test_v4_has_no_rule_for_yes_no_dimensions():
+    """Recenzia v4: regula E („true/false, never avoid") nu putea produce ce cerea: validatorul
+    transformă orice fațetă da/nu în `unmapped` (vocabularul exclude booleenele), deci E ar fi
+    împins modelul DE LA singura formă pe care kernelul o poate executa (`avoid`). Defectul e al
+    validatorului, card separat (NX-349), nu al promptului."""
+    system = " ".join(ti.system_prompt(_input("electronics")).split())
+    assert "true or false takes" not in system and "never avoid" not in system
 
 
 @pytest.mark.parametrize("pack", ALL_PACKS)

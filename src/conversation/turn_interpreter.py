@@ -271,19 +271,20 @@ op set: one value; add: one more value; remove: drop the handle in target; repla
 target gets a new value; clear: target "topic" drops the current subject, "all" drops everything. \
 dimension: one from {dimensions_header}, "category" for a shelf from {shelves_header} (value = the \
 shelf key), "price" for money, "unmapped" only as a last resort, when no dimension fits. A \
-shelf the customer names as what they want or ask about, also inside a question, is a set on \
-category with that shelf key. \
+shelf the customer names as the kind of item they want or ask about, also inside a question, is a \
+set on category with that shelf key; when the customer also names an item type, a shelf word that \
+is part of its name or only says what it is for is not a shelf, and neither is a word that \
+describes the customer. \
 relation: eq; lte (at most); gte (at least); contains; avoid (the customer does not want it). \
 value: a code from the menu only when the customer's words name that code, never a narrower code \
 for a broader word, and always of the same kind as the dimension's other values; when no code \
 fits, the customer's words. number and unit: only for a number the customer wrote. relative_to: \
 a reference id when the value is relative to an item on screen, with relation lte or gte and no \
 number. What the customer describes about themselves or about the items (a condition, a problem, \
-a complaint about price) is a change when a menu value names its cause, on the dimension of that \
-value and not on a related one; a complaint about the price of the items on screen is price with \
-lte relative to them. A dimension listed as true or false takes true or false whenever the \
-customer's words say whether the property holds, also as a negation ("without", "not"), never \
-avoid and never unmapped.
+a complaint about price) is a change when a menu value names its cause: the value that names \
+what the customer is or has, about the same part or item they describe, not one that names a \
+result they want; a complaint about the price of the items on screen is price with lte relative \
+to them.
 - quote: the customer's exact words that support the change, copied from CURRENT MESSAGE or from \
 a user line in HISTORY, never from a bot line. A change with no customer words behind it is a \
 guess: leave it out.

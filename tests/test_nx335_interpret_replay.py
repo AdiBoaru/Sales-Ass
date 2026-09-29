@@ -735,3 +735,55 @@ async def test_set_c_dry_run_makes_zero_calls(monkeypatch, capsys):
     assert await rp.main(["--journeys", "--journeys-dir", str(rp.HOLDOUT_C_DIR)]) == 0
     assert fake.calls == 0
     assert "'C': 89" in capsys.readouterr().out
+
+
+# --- NX-347: setul D, scris separat pentru verdictul lui interpret.v4 ----------------------------
+
+
+@pytest.fixture(scope="module")
+def cases_d():
+    return rp.journey_cases(rp.HOLDOUT_D_DIR, set_name="D")
+
+
+def test_set_d_is_frozen_before_any_run():
+    """Amprenta raportată de agentul care l-a scris; orice etichetă schimbată după aceea pică."""
+    assert rp.holdout_c_digest(rp.HOLDOUT_D_DIR) == rp.HOLDOUT_D_SHA256
+
+
+def test_set_d_labels_are_well_formed_and_nothing_is_excluded(cases_d):
+    journeys = replay.load_journeys(rp.HOLDOUT_D_DIR)
+    assert [p for j in journeys for p in replay.label_problems(j)] == []
+    assert all(j.journey_id.startswith("d") for j in journeys)
+    assert not any(rp.injected_state(j) for j in journeys)
+    assert {c.set_name for c in cases_d} == {"D"}
+    assert len(cases_d) == 88
+
+
+def test_set_d_does_not_overlap_the_seen_journeys_or_set_c():
+    """Id-urile sunt disjuncte. Textele pot coincide doar pe formule scurte și generice (două, de 7
+    și 19 caractere, măsurate la îngheț): o replică lungă copiată dintr-un set văzut ar pica."""
+    seen = replay.load_journeys() + replay.load_journeys(rp.HOLDOUT_C_DIR)
+    d = replay.load_journeys(rp.HOLDOUT_D_DIR)
+    assert not ({j.journey_id for j in d} & {j.journey_id for j in seen})
+    seen_texts = {t.user_input.strip().lower() for j in seen for t in j.turns}
+    common = [
+        t.user_input.strip().lower()
+        for j in d
+        for t in j.turns
+        if t.user_input.strip().lower() in seen_texts
+    ]
+    assert len(common) <= 2 and all(len(x) <= 20 for x in common)
+
+
+async def test_a_model_that_answers_the_set_d_label_scores_one(cases_d):
+    """Paritatea unealtei pe setul D, inclusiv pe schimbări (regula NX-345)."""
+    journeys = {j.journey_id: j for j in replay.load_journeys(rp.HOLDOUT_D_DIR)}
+    fake = CountingLLM(
+        [journeys[c.journey_id].turns[c.index].expect["interpretation"] for c in cases_d]
+    )
+    rows = await rp.run_journeys(cases_d, fake, efforts=("none",), seed=1, dry_run=False)
+    arm = rp.summarize_sets(rows, ("none",))["sets"]["D"]["none"]
+    assert arm["outcomes"] == {"ok": len(cases_d)}
+    for field in ("primary_act", "thread", "targets", "ambiguity"):
+        assert arm[field]["rate"] in (1.0, None), (field, arm[field])
+    assert arm["changes"]["f1"] in (1.0, None), arm["changes"]
