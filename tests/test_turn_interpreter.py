@@ -427,14 +427,17 @@ def test_a_quote_inside_the_window_is_explicit_and_outside_is_inferred():
     assert inferred.provenance == "inferred"
 
 
-def test_the_bot_turn_is_cut_at_a_sentence_boundary_and_the_user_turn_is_verbatim():
-    long_bot = "Prima propozitie e scurta. " + "cuvant " * 200
+def test_both_turns_reach_the_view_uncut():
+    """NX-356: nicio limită de caractere pe istoric (ca NX-255 pe calea care răspunde). O replică
+    de bot de mărimea celor reale (1.200-1.600) intră întreagă, inclusiv ce e la coadă."""
+    long_bot = "Prima propozitie e scurta. " + "cuvant " * 200 + "Vrei ceva pentru ten uscat?"
     user = "  Vreau   ceva, cu SPAȚII ciudate!  "
     inp = _input("gifts", history=(("user", user), ("bot", long_bot)))
     view = ti.render_view(inp)
     assert user in view
     bot_line = next(ln for ln in view.splitlines() if ln.startswith("bot: "))
-    assert len(bot_line) <= len("bot: ") + ti.MAX_BOT_CHARS + 1
+    assert bot_line == "bot: " + " ".join(long_bot.split())
+    assert bot_line.endswith("Vrei ceva pentru ten uscat?")
 
 
 def test_a_facet_without_value_labels_shows_the_canonical_code():
@@ -628,5 +631,6 @@ def test_v4_keeps_every_v2_and_v3_rule(pack):
     assert "bundle: several items meant to be used together" in system
 
 
-def test_the_prompt_version_is_v4():
-    assert ic.INTERPRET_PROMPT_VERSION == "interpret.v4"
+def test_the_prompt_version_is_v4_1():
+    """NX-356: instrucțiunile v4 neschimbate, vederea cu replica botului netăiată."""
+    assert ic.INTERPRET_PROMPT_VERSION == "interpret.v4.1"

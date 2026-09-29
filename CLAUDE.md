@@ -274,7 +274,7 @@ resolverul caută și acolo, ON SCREEN, EARLIER,
 PENDING, HISTORY), iar fiecare vine din ACEEAȘI sursă ca validatorul: handle-urile `cN` din
 `need_handles`, `#i` din `displayed_products` (sursa resolverului, acum `references.sources_from_state`,
 promovat din teste), cuvintele clientului din fereastra de 8 mesaje din care se derivă `UserWords`
-(clientul verbatim, botul tăiat la graniță de propoziție); pe ecran nume scurte (`display_name`),
+(clientul verbatim, botul întreg din NX-356, `interpret.v4.1`); pe ecran nume scurte (`display_name`),
 fără id-uri (I1) și fără prețuri. Promptul: instrucțiuni GENERICE în engleză (P11, `locale` numit,
 zero exemple în cod, poarta I14 pe adaptor), meniul de dimensiuni din pachet + vocabular (valori
 ordonate pe mărimea rotunjită cu `prompt_builder.shelf_size`, plafon 20, eticheta pachetului când
