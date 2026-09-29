@@ -63,7 +63,7 @@ gate-ul NX-210**. Direcția aprobată către care migrăm:
 
 **Înghețate până la GO-ul de la NX-210:** enforcement-ul QuerySpec/Match Gate (NX-188, NX-189).
 
-**Kernelul conversațional — contractul `kernel.v1.0` (înghețat 2026-09-25, NORMATIV; azi `kernel.v5.0`: MAJOR la v2.0, NX-336 PR B, sensul lui I5; minor la v2.1, NX-336 D3, `TurnPlan.family`; MAJOR la v3.0, NX-348, sensul unei schimbări de subiect; MAJOR la v4.0, NX-350, un tip spus vag devine umbrelă, nu tipul subiectului; MAJOR la v5.0, NX-352, nevoia spusă e filtru relaxabil, căutarea se compune din ce a validat kernelul, «mai ieftin» ambiguu = mediana; porțile de replay derogate de Adi).**
+**Kernelul conversațional — contractul `kernel.v1.0` (înghețat 2026-09-25, NORMATIV; azi `kernel.v5.1`: MAJOR la v2.0, NX-336 PR B, sensul lui I5; minor la v2.1, NX-336 D3, `TurnPlan.family`; MAJOR la v3.0, NX-348, sensul unei schimbări de subiect; MAJOR la v4.0, NX-350, un tip spus vag devine umbrelă, nu tipul subiectului; MAJOR la v5.0, NX-352, nevoia spusă e filtru relaxabil, căutarea se compune din ce a validat kernelul, «mai ieftin» ambiguu = mediana; minor la v5.1, NX-349, fațetele da/nu; porțile de replay derogate de Adi).**
 Sursa: [`docs/KERNEL-CONTRACT-v1.md`](docs/KERNEL-CONTRACT-v1.md); designul din care vine, ca
 referință: [`docs/KERNEL-DESIGN.md`](docs/KERNEL-DESIGN.md). Modelul scrie O interpretare a turului
 (`TurnInterpretation`: acte, schimbări de stare adresate prin handle, referințe, ambiguități); codul
@@ -546,6 +546,17 @@ rămâne e declarat în card. Scorerul: tipul `implicit` e ipoteză. F1 pe A pe 
 0,899; verdictul îl dă setul nevăzut E (regula în NX-339). Card:
 [`tasks/stage1/NX-350.md`](tasks/stage1/NX-350.md); probă: `pytest tests/test_nx348_subject_type.py
 tests/test_nx345_scorer.py -q`.
+
+**NX-349 — `kernel.v5.1` (minor): o fațetă da/nu nu mai ajunge `unmapped`.** Vocabularul catalogului
+nu ține booleeni, deci `set fragrance_free true` devenea `unmapped` „true", adică termen de ordonare
+(`rank_terms=['true']`). Acum validatorul (`provenance._flag`) acceptă `true`/`false` pe o fațetă `bool`
+a pachetului, judecate pe frazele PACHETULUI (eticheta locale-i numește starea adevărată, aliasurile
+starea lor): frază cu aceeași stare ⇒ `explicit`, opusă ⇒ `semantic_mismatch`, negație chiar înainte sau
+relație `avoid`/`lte`/`gte` ⇒ `polarity_conflict`, fără frază ⇒ `implicit`. Catalogul SOLE nu are niciun
+atribut boolean (2.758/2.758 fără `fragrance_free`), deci nevoia ajunge în stare, iar plannerul o
+dezvăluie `unsupported_need` (filtrul boolean în SQL rămâne declarat, fără date). Citatul unei fațete
+da/nu nu dă text de căutare, nici în rezerva cererii întregi: «fără parfum» ar fi căutat «parfum». Card:
+[`tasks/stage1/NX-349.md`](tasks/stage1/NX-349.md); probă: `pytest tests/test_nx349_bool_facets.py -q`.
 
 **NX-238 — retrievalul trece printr-un PORT, iar candidatul e inert (verdict `NOT-READY`).**
 `src/retrieval/` e contractul stabil pe care îl consumă NX-239: `RetrievalPort` + `RetrievalBundle`

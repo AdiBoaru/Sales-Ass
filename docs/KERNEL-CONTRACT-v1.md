@@ -23,7 +23,24 @@ Versioning: the contract is `kernel.v1.0`. **Minor** (`v1.1`): additive schema f
 
 No invariant, ownership row or state rule changes in v1.2, so no replay gate is required. The open questions step 6 raised on I5 (the safety prune on `aside`), I20 (the cart on `cart_ref`) and I15a/I12 (`grounding_guard` does not run on the v1 composition) are decided in the PRs that need them (B and C), under the minor/major rule.
 
-**Current version: `kernel.v5.0` (MAJOR, NX-352, decided by Adi on 2026-09-29).** Three planner and
+**Current version: `kernel.v5.1` (MINOR, NX-349).**
+
+**What v5.1 fixes.** On `kernel.v5.0` a boolean facet of the pack (`value_type: bool`, for example `fragrance_free`) never survived validation. The catalog vocabulary does not index booleans, so `set fragrance_free true` became `unmapped` with the value "true", and the planner sent that value to `rank_terms`.
+
+**How a boolean change is validated now:**
+- **Accepted values.** The validator accepts `true`/`false` on a declared boolean facet without a vocabulary entry.
+- **How the quote is judged.** It is judged on the pack phrases that name the facet: the locale's label names the true state, and an alias names the state in its value.
+  - The quote contains one of those phrases with the same state ⇒ `explicit`.
+  - The phrase names the opposite state ⇒ `semantic_mismatch`.
+  - A negation right before the phrase, or a relation other than `eq`/`contains` ⇒ `polarity_conflict`.
+  - No phrase in the quote ⇒ `implicit`.
+- **Strength.** `hard` needs `enforce_ready`, as for any facet (I8).
+- **State and plan.** The need reaches the state as a boolean. The search has no boolean filter, and the SOLE catalog holds no boolean attribute, so the planner discloses `unsupported_need`.
+- **Search text.** The words of a boolean facet's quote never become search text: neither in the planner's composed text (`matched` stays empty) nor in the whole-request fallback. Those words are often a negation, and «fără parfum» would otherwise search for «parfum».
+
+The schema the model writes is unchanged.
+
+**`kernel.v5.0` (MAJOR, NX-352, decided by Adi on 2026-09-29).** Three planner and
 delta rules change after the real-catalog probe (NX-351), which served fewer products of the right kind
 and fewer carrying the stated needs than v1:
 - **A facet need the customer stated is a relaxable filter.** An `explicit` facet need goes into

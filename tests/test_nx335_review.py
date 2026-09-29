@@ -150,6 +150,7 @@ def test_the_summary_reports_null_valued_pairs_separately():
         {"scope": "conversation"},
         {"source_key": "other_key"},
         {"operators": ("eq",)},
+        {"labels": {"ro": "Alta eticheta"}},  # NX-349: frazele unei fațete da/nu
     ],
 )
 def test_the_snapshot_id_sees_every_field_validation_reads(field_update):
