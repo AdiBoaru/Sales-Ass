@@ -354,6 +354,15 @@ neetichetate; pe A act 0,956, fir 1,000, F1 0,935, neetichetate 0,167 (aproape d
 (≤ 11). Câștigul pe A peste linia de bază (0,899) e în zgomot. GO-ul NU aprinde
 `INTERPRETED_TURN_ENABLED`: aprinderea e a pasului 6 (NX-336), cu sonda pe catalogul real; NX-349
 rămâne deschis.
+**NX-351 — sonda pe catalogul real: NO-GO** (2026-09-29, regula pre-înregistrată în card, 0 $).
+`scripts/nx351_kernel_catalog_probe.py` refolosește interpretările rulării A (zero apeluri de model),
+trece turele prin lanțul kernelului cu faptele din DB, execută planul `search` cu
+`run_planned_search` pe catalogul real și compară cu ce a servit v1, pe adevărul din etichete. Pe 44
+de ture comparabile: produsele cu subiectul adevărat 0,425 față de 0,487 la v1, cu nevoile adevărate
+0,489 față de 0,594, 4 ture fără niciun produs (prag 2). Cauza măsurată: plannerul caută FRAZA
+clientului (`query` = `Act.query`, 64 din 81 de planuri, toate cele 4 ture goale), iar «mai ieftin»
+nu sortează niciodată după preț. Reparația e în planner (card separat); verdictul de aprindere rămâne
+al canary-ului. Card: [`tasks/stage1/NX-351.md`](tasks/stage1/NX-351.md).
 **Pasul 6 PR A (NX-336) — schela turului interpretat, DARK: lanțul rulează pe un tur real, v1
 răspunde.** `INTERPRETED_TURN_ENABLED` (OFF; poarta de boot cere stările v2 citite ȘI scrise,
 scurtăturile pe resolverul v2 + `NAMED_SHORTCUT_TARGETS_ENABLED` și gardul de rafinare, refuză

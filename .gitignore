@@ -84,6 +84,8 @@ scripts/sim/runs/
 reports/stage1/
 # NX-335: instantaneul corpusului real (texte de client) și rapoartele de replay rămân LOCALE.
 reports/nx335/
+# NX-351: raportul sondei pe catalogul real (id-uri de tur și de produs) rămâne LOCAL.
+reports/nx351/
 .env.new
 
 # Spațiu local de lucru (hărți, note, rapoarte personale) — niciodată în git
