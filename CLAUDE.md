@@ -1182,6 +1182,19 @@ SQL byte-identic). Card: [`tasks/stage1/NX-314.md`](tasks/stage1/NX-314.md); pro
 `pytest tests/test_conversation_subject.py tests/test_cheaper_subject_sql.py -q` +
 `PYTHONPATH=. python scripts/nx314_subject_probe.py --replay`.
 
+**NX-355 — pe calea v1, ce a spus clientul rămâne în căutare de la un tur la altul.** Conversația
+`1748f988` (2026-09-29): „ten uscat”, pus de model în `concerns`, e `skin_type=dry`; `adapt_v1` îl
+căuta doar printre valorile `concerns`, deci ieșea `unknown` și dispărea la turul următor (24 din 87
+de fraze din `concern_map`-ul SOLE țintesc `skin_type`), iar fuziunea stivei v1 cara doar trei chei
+fixe. În plus, nevoile stivei nu intrau în căutare dacă modelul trimitea altele, iar un set ratat
+(măști la o căutare de cremă) muta subiectul. Acum: `rehome_list_value` mută valoarea în fațeta ei
+(un singur proprietar), stiva cară generic fațetele (`carry_facets`), `_carry_retained` pune nevoile
+stivei în căutare pe același raft (fără o fațetă schimbată de client; nevoile stării nu mai sunt
+judecate ca ghicite de NX-313), tipul subiectului ordonează căutarea care îl numește, iar un set de
+alt tip decât cel cerut nu mai mută subiectul. Pe catalogul real, turul 3: 6 din 6 produse pentru ten
+uscat, cremele primele. Flag `NEEDS_RETAINED_ENABLED` (ON). Card:
+[`tasks/stage1/NX-355.md`](tasks/stage1/NX-355.md); probă: `pytest tests/test_nx355_needs_retained.py -q`.
+
 **NX-318 — câte cuvinte identifică un produs depinde de ce ALTCEVA e pe ecran.** Aceeași conversație
 (`f4e1431e`). Codul decidea cu o constantă (minimum 2 cuvinte): `_mention_index` rata „EUBOS” scris
 singur, iar `_fit_anchor` tăia «IT'S SKIN The Fresh Blueberries» la «IT'S SKIN The Fresh», prefixul a

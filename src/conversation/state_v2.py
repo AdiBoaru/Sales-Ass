@@ -36,6 +36,7 @@ from src.conversation.needs import (
     NeedVocabulary,
     norm_key,
     normalize_need,
+    rehome_list_value,
 )
 from src.conversation.subject import MAX_SUBJECT_NEEDS, SUBJECT_KEY, ConversationSubject
 
@@ -696,6 +697,12 @@ def adapt_v1(raw: object, vocab: NeedVocabulary) -> ConversationStateV2:
 
     def _add(key: object, value: object, *, source: str) -> None:
         normalized = normalize_need(key, value, vocab)
+        if normalized is not None and normalized.value is None:
+            # NX-355: «ten uscat» scris ca `concerns` e `skin_type=dry`; fără mutare, nevoia ieșea
+            # `unknown` și se pierdea la turul următor.
+            moved = rehome_list_value(key, value, vocab)
+            if moved is not None:
+                normalized = normalize_need(*moved, vocab)
         if normalized is None or normalized.key in seen:
             return
         seen.add(normalized.key)
@@ -724,7 +731,11 @@ def adapt_v1(raw: object, vocab: NeedVocabulary) -> ConversationStateV2:
             continue
         if isinstance(value, list):
             for item in value[:MAX_NEEDS]:
-                _add_list_item(needs, seen, key, item, vocab, source="user_explicit")
+                moved = rehome_list_value(key, item, vocab)
+                if moved is not None:  # NX-355: valoarea e a altei fațete (vezi `_add`)
+                    _add(*moved, source="user_explicit")
+                else:
+                    _add_list_item(needs, seen, key, item, vocab, source="user_explicit")
         else:
             _add(key, value, source="user_explicit")
 

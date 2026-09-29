@@ -51,6 +51,7 @@ from src.catalog.vocabulary import (
     resolve,
     resolve_any,
 )
+from src.conversation.needs import corroborated_by
 
 #: Cheia din `search_constraints` (v1) sub care stă subiectul. Una singură, citită de toți.
 SUBJECT_KEY = "subject"
@@ -148,6 +149,21 @@ def product_type_of(product: Mapping[str, Any]) -> str | None:
         return None
     value = attrs.get("product_type")
     return value if isinstance(value, str) and value else None
+
+
+def search_named_type(queries: Iterable[object], product_type: str | None) -> bool:
+    """A cerut căutarea turului, în cuvinte, tipul `product_type`? PURĂ (NX-355).
+
+    Se uită la CAPUL tipului («crema» din «crema de fata»), cu aceeași potrivire ca proveniența
+    (`corroborated_by`, pe prefix, deci și «cremă»). Nu spune ce tip a cerut căutarea, doar dacă l-a
+    cerut pe ăsta: e direcția sigură. Un plural neregulat («măști» față de «mască») dă fals, iar
+    atunci apelantul se comportă ca înainte de NX-355."""
+    if not product_type:
+        return False
+    head = product_type.split()[0] if product_type.split() else ""
+    if not head:
+        return False
+    return any(isinstance(q, str) and q and corroborated_by(q, head) for q in queries)
 
 
 def resolve_shelf(vocab: CatalogVocabulary | None, raw: str | None) -> str | None:
