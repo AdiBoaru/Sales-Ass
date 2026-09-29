@@ -72,6 +72,7 @@ if hasattr(sys.stdout, "reconfigure"):
 
 from src.agent import usage  # noqa: E402
 from src.agent.turn_planner import PlannedTurn, plan_turn  # noqa: E402
+from src.catalog.subject_pairs import mark_pairs, subject_type_pairs  # noqa: E402
 from src.catalog.vocabulary import CatalogVocabulary, VocabEntry  # noqa: E402
 from src.config import INTERPRET_EFFORTS  # noqa: E402
 from src.conversation.ambiguity_gate import (  # noqa: E402
@@ -144,7 +145,9 @@ THRESHOLDS = {
 HYPOTHESIS_PROVENANCE = frozenset({"implicit", "inferred"})
 #: Recenzia NX-345a: pe dimensiunile care SCHIMBĂ SUBIECTUL, `implicit` e fapt: devine `set_topic`,
 #: parchează subiectul, iar plannerul caută pe raftul nou. Acolo nu e ipoteză, ci pozitiv fals.
-SUBJECT_DIMENSIONS = frozenset({"category"})
+#: NX-348 a intrat în `main` ÎNAINTEA rulării v4, deci se aplică regula pre-înregistrată în
+#: NX-339: tipul de produs mută și el subiectul (NX-331), deci e dimensiune de subiect.
+SUBJECT_DIMENSIONS = frozenset({"category", "product_type"})
 GATE_POLICY = ClarificationPolicy()
 FactsFn = Callable[[CatalogLookup], Awaitable[ReferenceFacts]]
 
@@ -439,6 +442,7 @@ async def kernel_turn(
     facts: FactsFn,
     recommended: Sequence[Mapping[str, Any]] = (),
     turn_id: str = "t",
+    pairs: Sequence[tuple[str, str]] | None = None,
 ) -> KernelTurn:
     """Lanțul din `tests/kernel/fixture_catalog.kernel_step`, cu faptele aduse de `facts` (DB
     read-only în rulare, fixture în teste) și ecranul sintetizat din `recommended`. Fără
@@ -470,6 +474,9 @@ async def kernel_turn(
     delta = to_delta(
         interp, validated.checked, resolved, known, handles=handles, needs=needs, turn_id=turn_id
     )
+    if pairs is not None:
+        # NX-348: aceeași verificare a perechii (raft, tip) ca orchestratorul (`mark_pairs`).
+        delta = mark_pairs(delta, state, pairs, vocab)
     primary = interp.acts[-1].targets[0] if interp.acts and interp.acts[-1].targets else None
     corrects = interp.corrects_previous_turn
     gate_state = reduce_turn(state, delta, (), resolved, primary, corrects, policy).state
@@ -587,7 +594,7 @@ def observed_parts(
             and c.provenance != "inferred"
             and c.dimension in SUBJECT_DIMENSIONS
             and c.canonical_value is not None
-            and format_value(c.canonical_value) != state_before.topic.category_key
+            and _moves_subject(state_before, c.dimension, format_value(c.canonical_value))
             for c in checked
         )
     )
@@ -622,6 +629,16 @@ def observed_parts(
     }
 
 
+def _moves_subject(state: ConversationStateV2, dimension: str, value: str) -> bool:
+    """NX-348 (kernel.v3.0): subiectul se mută când o jumătate DEJA SETATĂ primește altă valoare;
+    completarea unei jumătăți goale (sau a unui tip dedus) nu îl mută."""
+    if dimension == "category":
+        current = state.topic.category_key
+    else:
+        current = None if state.topic.type_learned else state.topic.product_type
+    return current is not None and value != current
+
+
 def already_active(
     state: ConversationStateV2,
     dimension: str,
@@ -636,8 +653,10 @@ def already_active(
     `<fațetă>_min/_max`), deci rămân judecate. PUR."""
     if value is None:
         return False
-    if dimension in SUBJECT_DIMENSIONS:
+    if dimension == "category":
         return state.topic.category_key == value
+    if dimension == "product_type":
+        return state.topic.product_type == value and not state.topic.type_learned
     for need in state.active_needs():
         if need.key != dimension or need.normalized_value is None:
             continue
@@ -918,6 +937,7 @@ async def run(
     seed: int,
     dry_run: bool,
     limit: int | None = None,
+    pairs: Sequence[tuple[str, str]] | None = None,
 ) -> list[dict[str, Any]]:
     """Un rând de raport per tur și braț. `dry_run` ⇒ ZERO apeluri: se construiește doar promptul
     (cu ecranul rotit din `recommended`), pentru tokeni și cost."""
@@ -950,6 +970,7 @@ async def run(
                         locale=inp.locale,
                         facts=facts,
                         recommended=turn.recommended,
+                        pairs=pairs,
                         turn_id=turn.turn_id,
                     )
                     chain.state = kernel.state_after
@@ -973,6 +994,7 @@ async def run(
                     locale=inp.locale,
                     facts=facts,
                     recommended=turn.recommended,
+                    pairs=pairs,
                     turn_id=turn.turn_id,
                 )
                 chain.state = kernel.state_after
@@ -1612,6 +1634,7 @@ async def main(argv: list[str] | None = None) -> int:
     live = args.yes and not args.dry_run
     llm = None
     facts: FactsFn = _empty_facts
+    pairs: list[tuple[str, str]] | None = None
     if live:
         from src.agent.llm import get_llm  # noqa: PLC0415
         from src.catalog.reference_facts import fetch_reference_facts  # noqa: PLC0415
@@ -1624,6 +1647,10 @@ async def main(argv: list[str] | None = None) -> int:
         async def facts(lookup: CatalogLookup) -> ReferenceFacts:
             return await fetch_reference_facts(deps, snap.business.id, lookup)
 
+        # NX-348: perechile (raft, tip) ale catalogului, o singură citire, ca în producție.
+        async with deps.db("kernel_subject_pairs") as conn:
+            pairs = await subject_type_pairs(conn, snap.business.id)
+
     try:
         rows = await run(
             snap,
@@ -1634,6 +1661,7 @@ async def main(argv: list[str] | None = None) -> int:
             seed=args.seed,
             dry_run=not live,
             limit=args.limit,
+            pairs=pairs,
         )
     finally:
         if live:
