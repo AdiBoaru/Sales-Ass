@@ -19,8 +19,11 @@ CARDS = {
 }
 
 
-def _kt(turn, day, reason="dark", served=False):
-    return rep.Event(turn, "kernel_turn", {"served": served, "fallback_reason": reason}, day)
+def _kt(turn, day, reason="dark", served=False, mode="dark"):
+    props = {"served": served, "fallback_reason": reason}
+    if mode:
+        props["mode"] = mode
+    return rep.Event(turn, "kernel_turn", props, day)
 
 
 def _dark(turn, kernel_ids, v1_ids, *, types=("ser",), needs=(), searched=True, learned=False):
@@ -166,7 +169,8 @@ def test_g5_fails_on_a_slow_interpretation():
 
 def test_served_turns_are_counted_apart_and_shadow_fields_aggregated():
     events, dark = _healthy()
-    events.append(_kt("s1", "2026-10-01", None, served=True))
+    events.append(_kt("s1", "2026-10-01", None, served=True, mode=None))
+    events.append(_kt("s2", "2026-10-01", "executor_refused", mode=None))
     events.append(
         rep.Event(
             "t1",
@@ -179,12 +183,58 @@ def test_served_turns_are_counted_apart_and_shadow_fields_aggregated():
         rep.Event("t2", "conversation_state_shadow_diff", {"fields": [], "differs": False}, "d")
     )
     report = rep.summarize(events, dark, CARDS)
-    assert report["volume"]["served"] == 1 and report["volume"]["unserved"] == 60
+    assert report["volume"]["served"] == 1 and report["volume"]["dark"] == 60
     assert report["state_shadow"] == {
         "turns": 2,
         "differs": 1,
         "fields": {"needs": 1, "topic": 1},
     }
+
+
+def test_serve_turns_do_not_pad_the_dark_population():
+    """Recenzia (F4): fallback-urile turelor servite de canary nu contează la volum, zile, G1."""
+    events, dark = _healthy(n=59)
+    events += [_kt(f"s{i}", "2026-10-09", "executor_refused", mode=None) for i in range(30)]
+    report = rep.summarize(events, dark, CARDS)
+    assert report["volume"]["dark"] == 59 and report["volume"]["days"] == 5
+    assert report["verdict"] == "INSUFFICIENT"
+
+
+def test_a_turn_counts_once():
+    events, dark = _healthy(n=60)
+    events += [_kt("t0", "2026-10-01", "provider_error")]  # același tur, a doua oară
+    dark += [_dark("t0", [], ["p1"])]
+    report = rep.summarize(events, dark, CARDS)
+    assert report["volume"]["dark"] == 60 and report["gates"]["G1_errors"]["errors"] == 0
+    assert report["gates"]["G2_empty"]["empty"] == 0
+
+
+def test_a_failing_dark_search_counts_as_an_error_in_g1():
+    """Recenzia (F3): turul rămâne `fallback_reason: dark`; eroarea vine din `kernel_dark`."""
+    events, dark = _healthy(n=60)
+    events += [
+        rep.Event(f"t{i}", "kernel_dark", {"error": "RuntimeError"}, "2026-10-01") for i in range(4)
+    ]
+    assert rep.summarize(events, dark, CARDS)["gates"]["G1_errors"]["errors"] == 4
+    events.append(rep.Event("t5", "kernel_dark", {"error": "RuntimeError"}, "2026-10-01"))
+    assert rep.summarize(events, dark, CARDS)["gates"]["G1_errors"]["passed"] is False
+
+
+def test_a_dark_timeout_is_an_error_and_a_censored_latency():
+    events, dark = _healthy(n=100)
+    events += [_kt(f"x{i}", "2026-10-01", "dark_timeout") for i in range(3)]
+    report = rep.summarize(events, dark, CARDS)
+    assert report["gates"]["G1_errors"]["errors"] == 3
+    # 3 apeluri reale rapide + 3 tăiate: p90 cade peste prag, nu sub
+    assert report["gates"]["G5_latency"]["calls"] == 6
+    assert report["gates"]["G5_latency"]["passed"] is False
+
+
+def test_unmapped_words_do_not_dilute_g4():
+    """Recenzia (F2): o pereche `unmapped` ar fi (0, 0) pe ambele părți și ar trage marja."""
+    assert rep.need_share([["unmapped", "x"]], [CARDS["p1"]]) is None
+    both = [["concerns", "acne"], ["unmapped", "x"]]
+    assert rep.need_share(both, [CARDS["p1"], CARDS["p2"]]) == 0.5
 
 
 def test_the_console_carries_no_customer_text():

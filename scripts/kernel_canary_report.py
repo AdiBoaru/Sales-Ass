@@ -62,8 +62,16 @@ ERROR_REASONS = frozenset(
         "exception",
         "snapshot_error",
         "vocabulary_unavailable",
+        # NX-353 (recenzia, adăugat înaintea oricărei rulări): plafonul NOSTRU pe interpretarea dark
+        "dark_timeout",
     }
 )
+#: Dimensiunea cuvintelor clientului fără cheie de catalog: niciun card n-o poartă, deci ar dilua
+#: G4 cu perechi (0, 0) (recenzia NX-353).
+UNMAPPED = "unmapped"
+#: Un apel tăiat de plafonul dark n-are rând în `per_call` (apelul a fost anulat): intră în G5
+#: CENZURAT, peste prag, altfel p90 ar ieși mai bun exact când furnizorul e blocat.
+CENSORED_MS = MAX_INTERPRET_P90_MS + 1
 EVENT_TYPES = (
     "kernel_turn",
     "turn_interpretation",
@@ -137,7 +145,7 @@ def subject_share(types: Sequence[str], cards: Sequence[Card]) -> float | None:
 
 def need_share(needs: Sequence[Sequence[str]], cards: Sequence[Card]) -> float | None:
     """G4: media pe nevoi a proporției cardurilor care poartă valoarea. `None` fără nevoi."""
-    pairs = [(str(n[0]), str(n[1])) for n in needs if len(n) >= 2]
+    pairs = [(str(n[0]), str(n[1])) for n in needs if len(n) >= 2 and n[0] != UNMAPPED]
     if not pairs:
         return None
     if not cards:
@@ -184,6 +192,19 @@ def interpret_latencies(events: Iterable[Event]) -> list[float]:
     return out
 
 
+def _first_per_turn(items: Iterable[Any]) -> Iterable[Any]:
+    """Primul rând pe `turn_id` (un retry de aftercare sau un eveniment dublat nu contează de două
+    ori); rândurile fără `turn_id` rămân, fiecare."""
+    seen: set[str] = set()
+    for item in items:
+        tid = getattr(item, "turn_id", None)
+        if tid:
+            if tid in seen:
+                continue
+            seen.add(tid)
+        yield item
+
+
 def sample_turns(turn_ids: Iterable[str], k: int = MANUAL_SAMPLE, seed: int = SEED) -> list[str]:
     """G6: `k` ture alese aleator cu seed FIX, din id-urile SORTATE (reproductibil)."""
     pool = sorted(set(turn_ids))
@@ -195,13 +216,28 @@ def summarize(
     dark_turns: Sequence[DarkTurn],
     cards: Mapping[str, Card],
 ) -> dict[str, Any]:
-    """Volum, umbra stării, interpretarea, comparația kernel/v1 și verdictul regulii GO. PUR."""
-    kernel_turns = [e for e in events if e.type == "kernel_turn"]
+    """Volum, umbra stării, interpretarea, comparația kernel/v1 și verdictul regulii GO. PUR.
+
+    Populația regulii GO sunt turele DARK (`kernel_turn.mode == "dark"`), una pe `turn_id`: turele
+    servite de canary (și fallback-urile lor) nu umflă nici numărul, nici zilele (recenzia)."""
+    kernel_turns = list(_first_per_turn(e for e in events if e.type == "kernel_turn"))
     served = [e for e in kernel_turns if e.properties.get("served") is True]
-    unserved = [e for e in kernel_turns if e.properties.get("served") is not True]
-    reasons = Counter(str(e.properties.get("fallback_reason")) for e in unserved)
-    errors = sum(n for r, n in reasons.items() if r in ERROR_REASONS)
-    days = sorted({e.day for e in unserved})
+    dark = [e for e in kernel_turns if e.properties.get("mode") == "dark"]
+    reasons = Counter(str(e.properties.get("fallback_reason")) for e in dark)
+    # o căutare dark care aruncă nu schimbă `fallback_reason` (turul rămâne `dark`): se numără
+    # din `kernel_dark.error`, pe aceleași ture
+    search_errors = {
+        e.turn_id
+        for e in events
+        if e.type == "kernel_dark" and e.properties.get("error") and e.turn_id
+    }
+    errors = sum(
+        1
+        for e in dark
+        if str(e.properties.get("fallback_reason")) in ERROR_REASONS or e.turn_id in search_errors
+    )
+    days = sorted({e.day for e in dark})
+    dark_turns = list(_first_per_turn(dark_turns))
     outcomes = Counter(
         str(e.properties.get("outcome")) for e in events if e.type == "turn_interpretation"
     )
@@ -210,7 +246,9 @@ def summarize(
     for e in shadow:
         if e.properties.get("differs"):
             shadow_fields.update(str(f) for f in e.properties.get("fields") or ())
-    latencies = interpret_latencies(events)
+    latencies = interpret_latencies(events) + [
+        CENSORED_MS for _ in range(reasons.get("dark_timeout", 0))
+    ]
     p90 = percentile(latencies, 0.9)
 
     # G2-G4: turele dark cu plan `search` unde v1 a servit ≥ 1 produs (aceeași populație)
@@ -237,7 +275,7 @@ def summarize(
         if k is not None and v is not None:
             m_needs.append((k, v))
 
-    n_unserved = len(unserved)
+    n_unserved = len(dark)
     empty_cap = max(EMPTY_FLOOR, EMPTY_RATE * len(compared))
     gates = {
         "G1_errors": {
@@ -275,7 +313,8 @@ def summarize(
         "volume": {
             "branch_turns": len(kernel_turns),
             "served": len(served),
-            "unserved": n_unserved,
+            "dark": n_unserved,
+            "dark_search_errors": len(search_errors),
             "days": len(days),
             "fallback_reasons": dict(sorted(reasons.items())),
             "dark_records": len(dark_turns),

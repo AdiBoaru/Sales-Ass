@@ -296,7 +296,9 @@ async def test_dark_records_what_the_kernel_would_have_served(monkeypatch, elect
         "searched": True,
         "kernel_n": 2,
         "lexical_step": "strict",
+        "error": None,
     }
+    assert record["error"] is None and record["state_v2_write"] is True
     (turn,) = _events(run.ctx, "kernel_turn")
     assert turn["served"] is False and turn["fallback_reason"] == "dark"
     assert "kernel" in run.ctx.trace, "traceul lanțului, ca pe PR A"
@@ -330,9 +332,96 @@ async def test_a_failing_dark_search_is_counted_and_v1_answers(monkeypatch, elec
     dark = await _run(monkeypatch, electronics, dark=True)
     off = await _run(monkeypatch, electronics, dark=False)
     record = dark.ctx.trace["kernel_dark"]
-    assert record == {"executor": "search", "searched": False, "error": "RuntimeError"}
-    assert _events(dark.ctx, "kernel_dark")[0]["searched"] is False
+    assert record["executor"] == "search" and record["searched"] is False
+    assert record["error"] == "RuntimeError" and record["kernel_ids"] == []
+    assert "truth" in record, "restul înregistrării rămâne (recenzia, F3)"
+    (event,) = _events(dark.ctx, "kernel_dark")
+    assert event["searched"] is False and event["error"] == "RuntimeError"
     assert _surface(dark) == _surface(off)
+
+
+async def test_a_stalled_interpretation_is_cut_in_dark(monkeypatch, electronics):
+    """Recenzia (F1): clientul așteaptă v1 DUPĂ ramură, deci un furnizor blocat nu are voie să
+    adauge minute pe tur. Plafonul expiră ⇒ `dark_timeout`, zero căutare, v1 răspunde."""
+    import asyncio
+
+    from src.agent import interpreted_turn as it
+
+    calls = _stub_search(monkeypatch, electronics, ["el-01"])
+    original = it.interpret_turn
+
+    async def stalled(*a, **kw):
+        await asyncio.sleep(30)
+        return await original(*a, **kw)
+
+    monkeypatch.setattr(it, "interpret_turn", stalled)
+    monkeypatch.setattr(get_settings(), "interpreted_turn_dark_timeout_s", 0.05)
+    dark = await _run(monkeypatch, electronics, dark=True)
+    monkeypatch.setattr(it, "interpret_turn", original)
+    off = await _run(monkeypatch, electronics, dark=False)
+    assert calls == [] and "kernel_dark" not in dark.ctx.trace
+    assert dark.ctx.trace["kernel_fallback"]["reason"] == "dark_timeout"
+    (turn,) = _events(dark.ctx, "kernel_turn")
+    assert turn["fallback_reason"] == "dark_timeout" and turn["mode"] == "dark"
+    assert not _events(dark.ctx, "turn_interpretation")
+    assert _surface(dark) == _surface(off)
+
+
+def test_the_serve_path_has_no_dark_timeout():
+    """Pe servire apelul rămâne cel de azi: plafonul e DOAR al modului dark."""
+    import inspect
+
+    from src.agent import interpreted_turn as it
+
+    source = inspect.getsource(it._interpret)
+    assert "if not dark:\n        return await call" in source
+
+
+async def test_every_kernel_turn_in_dark_is_marked(monkeypatch, electronics):
+    _stub_search(monkeypatch, electronics, ["el-01"])
+    run = await _run(monkeypatch, electronics, dark=True)
+    (turn,) = _events(run.ctx, "kernel_turn")
+    assert turn["mode"] == "dark"
+
+
+@pytest.mark.parametrize(("kind", "n"), [("link", 3), ("compare", 2), ("detail", 3)])
+async def test_a_recognized_press_under_dark_is_the_flag_off_turn(
+    monkeypatch, electronics, kind, n
+):
+    """Recenzia (F6): pe un ecran cu chip-uri oferite, dark-ul pornește recunoașterea (NX-338);
+    apăsarea nu ajunge la ramură, iar turul e cel stins în afara lui `chip_pressed{text_path}`
+    (declarat)."""
+    from tests.test_chip_press_recognition import _press
+    from tests.test_chip_press_recognition import _surface as chip_surface
+
+    monkeypatch.setattr(get_settings(), "chip_moves_v2_enabled", False)
+    runs = {}
+    for dark in (False, True):
+        _mode(monkeypatch, dark=dark)
+        ctx = _press(electronics, kind, n)
+        runs[dark] = await sh.run_turn(monkeypatch, electronics, ctx, sh.StageLLM(FIND))
+    assert runs[True].reached is False and runs[True].ctx.chip_recognized is not None
+    assert runs[False].ctx.chip_recognized is None, "stins: recunoașterea n-are consumator"
+    assert chip_surface(runs[True]) == chip_surface(runs[False])
+    assert runs[True].interpret_rows == []
+
+
+def test_the_truth_carries_catalog_keys_not_unmapped_words():
+    """Recenzia (F2): `unmapped` poartă cuvintele clientului, nu intră în înregistrarea dark."""
+    from src.agent.interpreted_turn import _dark_truth
+    from src.conversation.state_v2 import Need, Topic
+
+    state = ConversationStateV2(
+        topic=Topic(category_key="telefoane", type_umbrella=("smartphone", "telefon")),
+        needs=(
+            Need(key="unmapped", operator="contains", normalized_value="XYZTOKEN"),
+            Need(key="features", operator="contains", normalized_value="nfc"),
+        ),
+    )
+    truth = _dark_truth(state)
+    assert truth["needs"] == [["features", "nfc"]]
+    assert truth["types"] == ["smartphone", "telefon"] and truth["shelf"] == "telefoane"
+    assert "XYZTOKEN" not in json.dumps(truth)
 
 
 DARK_FAULTS = (

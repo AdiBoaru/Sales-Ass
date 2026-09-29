@@ -1783,6 +1783,12 @@ class Settings(BaseSettings):
     interpreted_turn_dark_enabled: bool = Field(
         default=False, validation_alias="INTERPRETED_TURN_DARK_ENABLED"
     )
+    # Plafonul apelului de interpretare în modul DARK (secunde, peste retry): clientul așteaptă
+    # răspunsul v1 după el, deci un furnizor blocat nu are voie să adauge `llm_call_total_cap_s`
+    # pe fiecare tur. Expirat ⇒ `kernel_turn{fallback_reason: "dark_timeout"}`, v1 răspunde.
+    interpreted_turn_dark_timeout_s: float = Field(
+        default=5.0, gt=0, le=30, validation_alias="INTERPRETED_TURN_DARK_TIMEOUT_S"
+    )
     # Canary: cu `INTERPRETED_TURN_ENABLED`, doar conversațiile cu bucket < procent sunt SERVITE de
     # kernel (sticky, `kernel_mode`); celelalte merg pe dark (dacă e aprins) sau pe v1.
     interpreted_turn_canary_percent: int = Field(

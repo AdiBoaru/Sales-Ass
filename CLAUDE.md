@@ -393,7 +393,10 @@ apel de model); pe un plan `search` principal rulează DOAR căutarea planificat
 (tipul sau umbrela, raftul, nevoile active: chei de catalog, zero text de client). Contextul se
 restaurează, deci turul e cel stins pe suprafața I16, în afara citirilor din ramură și a evenimentelor
 kernelului (`kernel_turn{fallback_reason: "dark"}` + nou `kernel_dark`). Dark-ul cere starea v2 CITITĂ,
-nu scrisă (rulează lângă umbra stării), și refuză creierul unic. Canary: cu `INTERPRETED_TURN_ENABLED`,
+nu scrisă (rulează lângă umbra stării), și refuză creierul unic. Clientul așteaptă v1 DUPĂ ramură,
+deci interpretarea dark are plafonul ei (`INTERPRETED_TURN_DARK_TIMEOUT_S`, 5 s, retry inclus;
+expirat ⇒ `dark_timeout`), iar `kernel_turn` poartă `mode: "dark"` doar în dark (servirea rămâne
+byte-identică), ca raportul să nu amestece populațiile. Canary: cu `INTERPRETED_TURN_ENABLED`,
 doar conversațiile cu bucket STICKY `sha256("nx353:{business_id}:{conversation_id}") mod 100` <
 `INTERPRETED_TURN_CANARY_PERCENT` sunt servite, restul merg pe dark sau pe v1; `INTERPRETED_TURN_TENANTS`
 (slug-uri) limitează ambele moduri (controllerul NX-249 asignează doar pe `/web/v2/turns`, producția e pe
