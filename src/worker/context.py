@@ -46,13 +46,14 @@ def conversation_transcript(
     nu plătim de două ori pentru rândurile noi. E și plasa care ține dacă vreun drum de scriere
     scapă neconvertit: istoricul e ultimul loc de dinaintea promptului.
 
-    NX-255 — cu `structured_history_enabled` se schimbă DOUĂ lucruri (flag stins ⇒ byte-identic):
+    NX-255 — cu `structured_history_enabled` (ON implicit) se schimbă DOUĂ lucruri (flag stins ⇒
+    byte-identic cu tăierea veche):
 
-    1. **Bugetul e pe ROL, nu un `[-max_chars:]` pe stringul unit.** Tăierea veche era oarbă: nu
-       știa de rol, de granițe de mesaj sau de cuvânt. Măsurat pe date reale, mesajul clientului
-       are ~28 de caractere, iar răspunsul botului ~750 — deci tăierea de coadă arunca exact
-       întrebările (ieftine, esențiale) ca să păstreze proza (scumpă, redundantă), și tăia la
-       mijlocul cuvântului: transcriptul putea începe cu „aza sistemul). Spune-mi te rog…".
+    1. **Nicio tăiere de caractere.** Vechiul `[-max_chars:]` pe stringul unit era orb: nu știa de
+       rol, de granițe de mesaj sau de cuvânt. Clientul scrie ~12-28 de caractere, botul
+       1.200-1.600, deci tăierea de coadă arunca exact întrebările (ieftine, esențiale) ca să
+       păstreze coada prozei, și tăia la mijlocul cuvântului. Fereastra `max_turns` rămâne singura
+       margine.
     2. **Turul botului poartă și ce a ARĂTAT** (`messages.payload.shown`, NX-255), cu vechimea în
        ture. Proza rămâne INTEGRALĂ, deliberat: modelul care își recitește propriul răspuns bun
        continuă la același nivel, iar asta întărește `VOICE_RULES` cu exemple reale în locul unei
@@ -129,38 +130,12 @@ def _render_shown(refs: list[dict], *, age: int) -> str:
     return f"Asistent [a aratat, {when}]: {items}"
 
 
-def _trim_sentence(text: str, limit: int) -> str:
-    """Taie `text` la cel mult `limit` caractere, ELIPSA INCLUSĂ, la ultima graniță de PROPOZIȚIE,
-    altfel la ultimul spațiu.
-
-    Elipsa trebuie să încapă în buget: dacă o adaugi peste `text[:limit]`, funcția întoarce
-    `limit + 1` caractere, iar bucla de buget care se sprijină pe ea nu obține ce a cerut. Pe un
-    singur pas nu se vede, dar plafonul devine o sugestie, nu o limită.
-
-    Singurul caz în care tăietura cade în interiorul unui cuvânt e un token fără niciun spațiu
-    (URL, hash) mai lung decât plafonul: acolo ORICE tăietură e în mijlocul lui. Rămâne mărginit
-    și vizibil trunchiat prin elipsă, spre deosebire de defectul pe care cardul îl repară, unde
-    fragmentul apărea la ÎNCEPUT și arăta ca o propoziție întreagă."""
-    if len(text) <= limit:
-        return text
-    head = text[:limit]
-    cut = max(head.rfind(". "), head.rfind("! "), head.rfind("? "))
-    if cut >= limit // 3:
-        return head[: cut + 1]
-    head = text[: max(limit - 1, 1)]
-    cut = head.rfind(" ")
-    return (head[:cut] if cut >= limit // 3 else head).rstrip() + "…"
-
-
 @dataclass
 class _Entry:
-    """O linie de transcript, cu ce se poate sacrifica din ea. `role` decide politica: linia de
-    client e INTANGIBILĂ, proza botului e primul lucru care cedează, blocul de fapte al botului
-    supraviețuiește prozei (ancora contează mai mult decât retorica)."""
+    """O linie de transcript și rolul ei (`client` | `assistant` | `shown`), pentru măsurătoare."""
 
-    role: str  # "client" | "assistant" | "shown"
+    role: str
     text: str
-    droppable: bool  # proza botului: se poate scurta/elimina păstrând restul turului
 
 
 def _structured_transcript(
@@ -170,40 +145,28 @@ def _structured_transcript(
     emit: Callable[..., None] | None,
     consumer: str | None = None,
 ) -> str:
-    """Transcriptul cu buget PE ROL (NX-255). Ordinea de degradare, deterministă:
+    """Transcriptul NETĂIAT (NX-255): fereastra de mesaje e singura margine.
 
-    1. se scurtează proza celor mai vechi ture de bot, la limită de propoziție, păstrându-le
-       blocul `[a arătat]` (faptele supraviețuiesc retoricii);
-    2. dacă tot nu încape, se ELIMINĂ intrări întregi, de la cea mai veche;
-    3. mesajul clientului nu se taie NICIODATĂ, și nimic nu se taie la mijlocul cuvântului.
-
-    Distincția „drop vs truncate" e deliberată: eliminarea unei intrări păstrează coerența, tăierea
-    la mijlocul cuvântului o distruge și produce exact fragmentul fără cap din findingul cardului.
+    Nu există plafon de caractere, deliberat. Varianta cu buget pe rol (3.500 de caractere, proza
+    botului cedând prima) tăia tot proza turelor vechi: pe `sole-ro` un răspuns are 1.200-1.600 de
+    caractere, deci trei ture de bot trec de orice plafon care nu e practic nelimitat. Iar un plafon
+    care se atinge pe fiecare conversație e exact defectul reparat aici, doar mutat mai încolo. Pe
+    conversația `1748f988` (2026-09-29) tăierea veche `[-1200:]` lăsa modelului, la turul 3, doar
+    coada listei de produse de la turul 2: niciun mesaj al clientului, deci nici „cremă”, nici „ten
+    uscat”. Mărimea rămâne mărginită în amonte: fereastra (`max_turns`), mesajul clientului la
+    intrare (`src/web/app.py`, 2.000 de caractere), răspunsul botului de forma lui.
     """
     s = get_settings()
     entries: list[_Entry] = []
     shown_turns = 0
-    client_trimmed = 0
     for i, m in enumerate(msgs):
         body = (m.body or "").strip()
         if m.direction == Direction.INBOUND:
-            if not body:
-                continue
-            # Plafon de SIGURANȚĂ, nu buget: la max observat 134 de caractere nu se atinge. Există
-            # ca un input nelimitat să nu poată mânca tot contextul, și taie tot la propoziție.
-            #
-            # Dacă se atinge totuși, se NUMĂRĂ. Tăierea tăcută a mesajului clientului e exact clasa
-            # de defect pe care cardul o repară; una care se întâmplă fără să lase urmă ar fi
-            # aceeași greșeală, doar cu o limită mai mare. Contorul e cum aflăm că plafonul nu mai
-            # e teoretic, fără să citim conversații.
-            safe_text = make_safe(body).text
-            safe = _trim_sentence(safe_text, s.history_client_max_chars)
-            if safe != safe_text:
-                client_trimmed += 1
-            entries.append(_Entry("client", f"Client: {safe}", False))
+            if body:
+                entries.append(_Entry("client", f"Client: {make_safe(body).text}"))
             continue
         if body:
-            entries.append(_Entry("assistant", f"Asistent: {make_safe(body).text}", True))
+            entries.append(_Entry("assistant", f"Asistent: {make_safe(body).text}"))
         refs = _shown_refs(m, s.history_shown_max_products)
         if refs:
             shown_turns += 1
@@ -211,54 +174,26 @@ def _structured_transcript(
             # „acum 3 ture" e ce înțelege un om și ce poate compara modelul cu `age_turns` din
             # evidence bundle (NX-240). Un tur = o pereche client/asistent, deci jumătate din pași.
             age = max(1, (len(msgs) - i + 1) // 2)
-            entries.append(_Entry("shown", _render_shown(refs, age=age), False))
+            entries.append(_Entry("shown", _render_shown(refs, age=age)))
 
     if not entries:
         return ""
 
     legend = [_SHOWN_LEGEND] if shown_turns else []
-
-    def rendered(items: list[_Entry]) -> str:
-        return "\n".join(legend + [e.text for e in items])
-
-    budget = s.history_max_chars
-    trimmed = dropped = 0
-    # (1) scurtează proza botului, de la cea mai VECHE (cea mai recentă e cea mai relevantă).
-    for e in entries:
-        if len(rendered(entries)) <= budget:
-            break
-        if not e.droppable:
-            continue
-        over = len(rendered(entries)) - budget
-        keep = max(len(e.text) - over, 120)
-        if keep < len(e.text):
-            e.text = _trim_sentence(e.text, keep)
-            trimmed += 1
-    # (2) elimină intrări întregi, tot de la cea mai veche. Mesajul clientului poate DISPĂREA
-    # (fereastra e mărginită prin definiție), dar nu poate fi mutilat — vezi (3).
-    while len(rendered(entries)) > budget and len(entries) > 1:
-        entries.pop(0)
-        dropped += 1
-
     if emit is not None:
-        # `consumer` din același motiv ca la `context_bytes` (NX-251): cât timp triajul și agentul
-        # construiesc amândoi transcriptul, evenimentul pleacă de DOUĂ ori pe același tur. Fără
-        # eticheta care spune cine l-a cerut, cele două sunt indistinctibile și orice agregare
-        # dublează tăcut octeții istoricului.
-        client_chars = sum(len(e.text) for e in entries if e.role == "client")
+        # `consumer`: transcriptul îl cer mai mulți consumatori pe același tur (agentul, compunerea
+        # comparației, executorii kernelului). Fără eticheta care spune cine l-a cerut, evenimentele
+        # sunt indistinctibile și orice agregare dublează tăcut mărimea istoricului.
         emit(
             "history_budget",
             consumer=consumer or "unknown",
-            client_chars=client_chars,
+            client_chars=sum(len(e.text) for e in entries if e.role == "client"),
             assistant_chars=sum(len(e.text) for e in entries if e.role == "assistant"),
             shown_chars=sum(len(e.text) for e in entries if e.role == "shown"),
             shown_turns=shown_turns,
-            trimmed_prose=trimmed,
-            trimmed_client=client_trimmed,  # trebuie să rămână 0 în practică (p90 = 46 chars)
-            dropped_entries=dropped,
             window_messages=total,
         )
-    return rendered(entries)
+    return "\n".join(legend + [e.text for e in entries])
 
 
 def customer_profile_block(contact: Contact, *, max_chars: int = 300) -> str:

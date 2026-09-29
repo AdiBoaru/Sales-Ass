@@ -45,63 +45,83 @@ REFS = [
 
 
 def test_flag_off_is_byte_identical_to_old_behaviour(monkeypatch):
-    """Reproduce exact algoritmul vechi și compară. Fără asta, „livrat sub flag" e o afirmație."""
+    """Reproduce exact algoritmul vechi și compară. Kill-switch-ul trebuie să fie chiar calea
+    veche, nu o aproximare a ei."""
     get_settings.cache_clear()
-    monkeypatch.delenv("STRUCTURED_HISTORY_ENABLED", raising=False)
+    monkeypatch.setenv("STRUCTURED_HISTORY_ENABLED", "false")
     try:
-        history = [_client("caut o cremă"), _bot("Îți recomand X.", REFS), _client("mai ieftin")]
-        expected = "\n".join(["Client: caut o cremă", "Asistent: Îți recomand X."])[-1200:]
+        long_bot = "Îți recomand X. " * 120
+        history = [_client("caut o cremă"), _bot(long_bot, REFS), _client("mai ieftin")]
+        expected = "\n".join(["Client: caut o cremă", f"Asistent: {long_bot.strip()}"])[-1200:]
         assert conversation_transcript(history) == expected
     finally:
         get_settings.cache_clear()
 
 
-# --- (1) clientul nu se taie niciodată -----------------------------------------------------------
+def test_flag_is_on_by_default(monkeypatch):
+    """ON implicit (defect măsurat, ca NX-311): fără variabilă de mediu, istoricul nu se taie."""
+    get_settings.cache_clear()
+    monkeypatch.delenv("STRUCTURED_HISTORY_ENABLED", raising=False)
+    try:
+        assert get_settings().structured_history_enabled is True
+    finally:
+        get_settings.cache_clear()
 
 
-def test_client_message_survives_whole_while_bot_prose_gives_way(structured):
-    """Bugetul se ia din proza botului, nu din întrebarea clientului. Ăsta e tot cardul într-un
-    test: la 28 de caractere medie, întrebarea e sub 4% din buget și e cea care contează."""
-    question = "vreau o rutina pentru ten uscat, dar sa nu contina alcool si sa fie sub 250 lei"
+# --- (1) nicio tăiere de caractere ---------------------------------------------------------------
+
+
+def _bot_reply_like_sole(n: int) -> str:
+    """Un răspuns de bot de mărimea celor reale pe `sole-ro` (1.200-1.600 de caractere): proză +
+    lista de produse cu prețuri + chips, exact forma din `messages.body`."""
+    lines = [f"Intro pentru setul {n}, cu ce am pus pe masă și cum alegi."]
+    for i in range(6):
+        lines.append(f"{i + 1}. Produs {n}.{i} cu nume lung de catalog, 110,00 lei  ⭐4.9")
+        lines.append("   Motivul cardului, o propoziție despre ingrediente și potrivire.")
+    lines.append("Îți mai pot arăta: Caut ceva pentru calmare · Vreau ceva sub 100 lei")
+    return "\n".join(lines) * 3
+
+
+def test_conversation_1748f988_every_client_message_reaches_turn_3(structured):
+    """Conversația reală `1748f988` (2026-09-29): la turul 3, tăierea veche `[-1200:]` lăsa doar
+    coada listei de la turul 2, fără NICIUN mesaj al clientului, deci modelul nu știa că e vorba de
+    o cremă pentru ten uscat și a servit măști de 10 lei."""
     history = [
-        _client(question),
-        _bot("Recomandarea mea. " * 400),  # ~7200 chars, peste plafonul de 3500
-        _client("acum"),
+        _client("vreau o crema de hidratare"),
+        _bot(_bot_reply_like_sole(1), REFS),
+        _client("am ten uscat"),
+        _bot(_bot_reply_like_sole(2), REFS),
+        _client("sub 100 de lei sa vad"),
     ]
+    assert len(_bot_reply_like_sole(1)) > 1200  # fiecare răspuns trece singur de vechiul plafon
     t = conversation_transcript(history)
-    assert f"Client: {question}" in t  # integral, cuvânt cu cuvânt
-    assert len(t) <= get_settings().history_max_chars
+    assert "Client: vreau o crema de hidratare" in t
+    assert "Client: am ten uscat" in t
+    # proza botului rămâne ÎNTREAGĂ, pe ambele ture
+    assert _bot_reply_like_sole(1).strip() in t
+    assert _bot_reply_like_sole(2).strip() in t
 
 
-def test_never_cuts_mid_word(structured):
-    """Defectul original: transcriptul putea începe cu „aza sistemul). Spune-mi te rog…"."""
-    history = [
-        _client("prima intrebare"),
-        _bot("Propozitie completa numarul unu. " * 300),
-        _client("acum"),
-    ]
+def test_no_character_cap_on_client_or_bot(structured):
+    """Nicio margine de caractere: un mesaj de client la plafonul de intrare (2.000, `web/app.py`)
+    și un răspuns de bot foarte lung trec neatinse. Singura margine e fereastra de mesaje."""
+    question = "vreau o rutina pentru ten uscat, fara alcool, sub 250 lei. " * 33  # ~2.000
+    prose = "Recomandarea mea. " * 400  # ~7.200
+    t = conversation_transcript([_client(question), _bot(prose), _client("acum")])
+    assert f"Client: {question.strip()}" in t
+    assert f"Asistent: {prose.strip()}" in t
+    assert "…" not in t
+
+
+def test_window_of_messages_is_the_only_bound(structured):
+    """Fereastra (`max_turns`, 6 mesaje anterioare) rămâne: mesajele mai vechi ies ÎNTREGI, nu
+    tăiate. Memoria pe termen lung e a stării (subiect, nevoi), nu a istoricului."""
+    history = [_client(f"intrebarea {i}") if i % 2 == 0 else _bot(f"raspuns {i}") for i in range(9)]
     t = conversation_transcript(history)
-    for line in t.splitlines():
-        if line.startswith("Asistent: ") and line.endswith("…"):
-            assert line[:-1].rstrip().endswith((".", "!", "?")) or line[-2] != " "
-    assert not t.startswith("aza")
-    # nicio linie nu începe cu un fragment de cuvânt: fiecare are eticheta ei de rol
+    assert "intrebarea 0" not in t and "raspuns 1" not in t
+    assert "Client: intrebarea 2" in t and "Asistent: raspuns 7" in t
     for line in t.splitlines():
         assert line.startswith(("Client: ", "Asistent: ", "Asistent [", "(Produsele"))
-
-
-def test_drops_whole_entries_rather_than_mutilating_client(structured, monkeypatch):
-    """Pasul 2 al politicii: când scurtarea prozei nu ajunge, se elimină intrări ÎNTREGI de la
-    cea mai veche. Un mesaj de client poate dispărea (fereastra e mărginită prin definiție), dar
-    nu poate fi mutilat."""
-    monkeypatch.setenv("HISTORY_MAX_CHARS", "300")
-    get_settings.cache_clear()
-    long_q = "intrebare veche " * 20  # 320 chars: nu încape nici singură
-    history = [_client(long_q), _bot("scurt"), _client("noua"), _bot("si mai scurt"), _client("x")]
-    t = conversation_transcript(history)
-    assert long_q.strip() not in t  # eliminată, nu tăiată
-    assert "…" not in t.split("Asistent:")[0]  # ce a rămas din client e intact
-    assert "Client: noua" in t
 
 
 # --- (2) ce a arătat botul ------------------------------------------------------------------------
@@ -167,63 +187,17 @@ def test_legend_obeys_voice_rules(structured):
     assert " - " not in _SHOWN_LEGEND
 
 
-def test_bot_prose_gives_way_before_its_facts(structured, monkeypatch):
-    """Ancora supraviețuiește retoricii: proza se scurtează, blocul de produse rămâne întreg."""
-    monkeypatch.setenv("HISTORY_MAX_CHARS", "600")
-    get_settings.cache_clear()
-    prose = "Fraza lunga si redundanta. " * 60
-    history = [_client("q"), _bot(prose, REFS), _client("acum")]
-    t = conversation_transcript(history)
-    assert "a3f2c1d4" in t and "b71e0055" in t  # ambele ref-uri, netăiate
-    kept = next(ln for ln in t.splitlines() if ln.startswith("Asistent: "))
-    assert len(kept) < len(prose)  # proza a cedat
-    assert kept.rstrip().endswith((".", "…"))  # dar la o graniță, nu la mijloc de cuvânt
-
-
-def test_trim_never_exceeds_its_limit(structured):
-    """Elipsa trebuie să încapă ÎN buget. Dacă se adaugă peste `text[:limit]`, funcția întoarce
-    `limit + 1` și plafonul devine o sugestie, nu o limită."""
-    from src.worker.context import _trim_sentence
-
-    for limit in (10, 40, 120, 121, 300):
-        for text in ("cuvinte multe " * 50, "unsingurtokenfoartelung" * 40, "A. B. C. " * 60):
-            assert len(_trim_sentence(text, limit)) <= limit, (limit, text[:20])
-
-
-def test_client_truncation_is_counted_not_silent(structured, monkeypatch):
-    """O tăiere tăcută a mesajului clientului ar fi aceeași greșeală ca defectul original, doar cu
-    o limită mai mare. Dacă plafonul de siguranță se atinge, trebuie să lase urmă."""
-    monkeypatch.setenv("HISTORY_CLIENT_MAX_CHARS", "50")
-    get_settings.cache_clear()
-    events: list[tuple[str, dict]] = []
-    conversation_transcript(
-        [_client("intrebare foarte lunga " * 20), _bot("r"), _client("acum")],
-        emit=lambda t, **p: events.append((t, p)),
-    )
-    assert events[0][1]["trimmed_client"] == 1
-
-
-def test_consumer_distinguishes_triage_from_agent(structured):
-    """Sub calea live, triajul ȘI agentul construiesc transcriptul, deci evenimentul pleacă de
-    două ori pe același tur. Fără etichetă, orice agregare dublează tăcut octeții istoricului."""
+def test_consumer_distinguishes_callers(structured):
+    """Mai mulți consumatori cer transcriptul pe același tur. Fără etichetă, orice agregare
+    dublează tăcut mărimea istoricului."""
     seen: list[str] = []
-    for who in ("triage", "agent"):
+    for who in ("agent", "compare"):
         conversation_transcript(
             [_client("q"), _bot("r", REFS), _client("acum")],
             emit=lambda t, **p: seen.append(p["consumer"]),
             consumer=who,
         )
-    assert seen == ["triage", "agent"]
-
-
-def test_client_not_counted_as_trimmed_at_real_world_lengths(structured):
-    """Contra-proba: la lungimile reale (max observat 134) plafonul nu se atinge niciodată."""
-    events: list[tuple[str, dict]] = []
-    conversation_transcript(
-        [_client("x" * 134), _bot("r"), _client("acum")],
-        emit=lambda t, **p: events.append((t, p)),
-    )
-    assert events[0][1]["trimmed_client"] == 0
+    assert seen == ["agent", "compare"]
 
 
 # --- robustețe pe date vechi/stricate -------------------------------------------------------------

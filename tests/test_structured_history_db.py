@@ -15,6 +15,8 @@ from src.db.queries.messages import get_recent_messages
 from src.models import Author, Direction
 from src.worker.context import _shown_refs
 
+pytestmark = pytest.mark.integration
+
 REFS = [
     {
         "product_id": "a3f2c1d4-0000-4000-8000-000000000001",
