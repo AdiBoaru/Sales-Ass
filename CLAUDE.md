@@ -348,6 +348,12 @@ validatorul transformă orice fațetă booleană în `unmapped` ([`NX-349`](task
 0,976; A act 0,967, fir 1,0; 6 regresii ≤ zgomotul de 11), iar F1 pe A stă la 0,77-0,80 pe TOATE
 prompturile, deci nu e al promptului: clasele (`product_type` spus în treacăt, `concerns` inferate,
 `unmapped`) cer reguli scrise în contract, apoi un set nevăzut nou. Flagul kernelului rămâne stins.
+**Verdict după NX-350: GO pentru interpretare** (2026-09-29, regula pre-înregistrată în NX-339): pe
+setul nevăzut E act 1,000, F1 0,974, 0 referințe necunoscute, 0/21 ipoteze contrazise, 0,073
+neetichetate; pe A act 0,956, fir 1,000, F1 0,935, neetichetate 0,167 (aproape de prag), 6 regresii
+(≤ 11). Câștigul pe A peste linia de bază (0,899) e în zgomot. GO-ul NU aprinde
+`INTERPRETED_TURN_ENABLED`: aprinderea e a pasului 6 (NX-336), cu sonda pe catalogul real; NX-349
+rămâne deschis.
 **Pasul 6 PR A (NX-336) — schela turului interpretat, DARK: lanțul rulează pe un tur real, v1
 răspunde.** `INTERPRETED_TURN_ENABLED` (OFF; poarta de boot cere stările v2 citite ȘI scrise,
 scurtăturile pe resolverul v2 + `NAMED_SHORTCUT_TARGETS_ENABLED` și gardul de rafinare, refuză
