@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from src.config import get_settings
+from src.db.queries.messages import HISTORY_LIMIT
 from src.models import Direction, Message
 from src.privacy import make_safe
 from src.web.localization import amount_text
@@ -52,8 +53,8 @@ def conversation_transcript(
     1. **Nicio tăiere de caractere.** Vechiul `[-max_chars:]` pe stringul unit era orb: nu știa de
        rol, de granițe de mesaj sau de cuvânt. Clientul scrie ~12-28 de caractere, botul
        1.200-1.600, deci tăierea de coadă arunca exact întrebările (ieftine, esențiale) ca să
-       păstreze coada prozei, și tăia la mijlocul cuvântului. Fereastra `max_turns` rămâne singura
-       margine.
+       păstreze coada prozei, și tăia la mijlocul cuvântului. Fereastra încărcată
+       (`HISTORY_LIMIT`) rămâne singura margine.
     2. **Turul botului poartă și ce a ARĂTAT** (`messages.payload.shown`, NX-255), cu vechimea în
        ture. Proza rămâne INTEGRALĂ, deliberat: modelul care își recitește propriul răspuns bun
        continuă la același nivel, iar asta întărește `VOICE_RULES` cu exemple reale în locul unei
@@ -71,9 +72,10 @@ def conversation_transcript(
             role = "Client" if m.direction == Direction.INBOUND else "Asistent"
             lines.append(f"{role}: {safe_body}")
         return "\n".join(lines)[-max_chars:]
-    return _structured_transcript(
-        prior[-max_turns:], total=len(prior), emit=emit, consumer=consumer
-    )
+    # NX-255: toată fereastra încărcată (`HISTORY_LIMIT`), nu doar `max_turns`. Rezumatul acoperă
+    # ce e ÎNAINTEA mesajelor încărcate, deci o fereastră de 6 din 8 lăsa un tur (mesajele 7-8 în
+    # urmă) în afara ambelor (recenzia NX-255).
+    return _structured_transcript(prior[-HISTORY_LIMIT:], emit=emit, consumer=consumer)
 
 
 # NX-255 — legenda blocurilor `[a aratat]`. Emisă O SINGURĂ dată și DOAR când există cel puțin un
@@ -86,8 +88,8 @@ def conversation_transcript(
 # datele randate, iar potrivirea pe ea nu trebuie să depindă de normalizarea Unicode.
 _SHOWN_LEGEND = (
     "(Produsele marcate „a aratat” sunt ce ai afișat deja clientului. Id-ul și numele sunt de "
-    "încredere pentru referințe de tipul „al doilea”. Prețurile sunt de atunci, deci reconfirmă-le "
-    "printr-un tool înainte să le rostești.)"
+    "încredere pentru referințe de tipul „al doilea”. Prețurile de acolo sunt de atunci: când "
+    "rostești un preț, ia-l din produsele turului de acum, nu din istoric.)"
 )
 
 
@@ -141,7 +143,6 @@ class _Entry:
 def _structured_transcript(
     msgs: list[Message],
     *,
-    total: int,
     emit: Callable[..., None] | None,
     consumer: str | None = None,
 ) -> str:
@@ -153,7 +154,7 @@ def _structured_transcript(
     care se atinge pe fiecare conversație e exact defectul reparat aici, doar mutat mai încolo. Pe
     conversația `1748f988` (2026-09-29) tăierea veche `[-1200:]` lăsa modelului, la turul 3, doar
     coada listei de produse de la turul 2: niciun mesaj al clientului, deci nici „cremă”, nici „ten
-    uscat”. Mărimea rămâne mărginită în amonte: fereastra (`max_turns`), mesajul clientului la
+    uscat”. Mărimea rămâne mărginită în amonte: fereastra (`HISTORY_LIMIT`), mesajul clientului la
     intrare (`src/web/app.py`, 2.000 de caractere), răspunsul botului de forma lui.
     """
     s = get_settings()
@@ -191,7 +192,7 @@ def _structured_transcript(
             assistant_chars=sum(len(e.text) for e in entries if e.role == "assistant"),
             shown_chars=sum(len(e.text) for e in entries if e.role == "shown"),
             shown_turns=shown_turns,
-            window_messages=total,
+            window_messages=len(msgs),
         )
     return "\n".join(legend + [e.text for e in entries])
 

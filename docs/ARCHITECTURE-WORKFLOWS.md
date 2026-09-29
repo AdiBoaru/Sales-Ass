@@ -663,7 +663,7 @@ Cu flagul aprins: mesajul clientului e **verbatim, netăiat**; turul botului pă
 `[a aratat]` cu ref-uri `{id, nume, preț}` din `messages.payload.shown` și vechimea în ture.
 Separarea e regula care face păstrarea prozei sigură: **proza spune CUM vorbești, blocul de produse
 spune CE e adevărat**, iar cifrele se reconfirmă prin tool. Nu există plafon de caractere:
-singura margine e fereastra de 6 mesaje (mesajul clientului e plafonat la intrare, 2.000 de
+singura margine e fereastra încărcată, `HISTORY_LIMIT` (mesajul clientului e plafonat la intrare, 2.000 de
 caractere). Un plafon pe caractere se atingea pe fiecare conversație cu răspunsuri de 1.200-1.600
 de caractere, adică defectul reparat, mutat mai încolo.
 

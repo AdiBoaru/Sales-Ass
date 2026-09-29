@@ -1336,7 +1336,8 @@ e **verbatim**, turul botului păstrează proza **integrală** (few-shot din pro
 sigură: **proza spune CUM vorbești, blocul spune CE e adevărat** — cifrele se reconfirmă prin tool.
 **Nicio limită de caractere** (decis de Adi, 2026-09-29): varianta cu buget pe rol (3.500)
 tăia tot proza turelor vechi, fiindcă pe `sole-ro` un răspuns are 1.200-1.600 de caractere. Singura
-margine e fereastra de 6 mesaje; mesajul clientului e plafonat la intrare (2.000, `web/app.py`).
+margine e fereastra ÎNCĂRCATĂ (`HISTORY_LIMIT`, 8 mesaje cu cel curent; cu 6, un tur nu apărea nici în
+istoric, nici în rezumat); mesajul clientului e plafonat la intrare (2.000, `web/app.py`).
 Declanșatorul: conversația `1748f988`, unde la turul 3 tăierea veche lăsa modelului doar coada
 listei de la turul 2, fără niciun mesaj al clientului. ON implicit, ca NX-311 (defect măsurat);
 `STRUCTURED_HISTORY_ENABLED=false` = tăierea veche, byte-identic. Card: [`tasks/stage1/NX-255.md`](tasks/stage1/NX-255.md); probă:

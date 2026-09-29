@@ -114,12 +114,18 @@ def test_no_character_cap_on_client_or_bot(structured):
 
 
 def test_window_of_messages_is_the_only_bound(structured):
-    """Fereastra (`max_turns`, 6 mesaje anterioare) rămâne: mesajele mai vechi ies ÎNTREGI, nu
-    tăiate. Memoria pe termen lung e a stării (subiect, nevoi), nu a istoricului."""
-    history = [_client(f"intrebarea {i}") if i % 2 == 0 else _bot(f"raspuns {i}") for i in range(9)]
+    """Fereastra e cea ÎNCĂRCATĂ (`HISTORY_LIMIT`), nu 6: rezumatul acoperă doar ce e înaintea
+    mesajelor încărcate, deci cu 6 din 8 un tur întreg nu apărea nicăieri (recenzia NX-255).
+    Mesajele mai vechi decât fereastra ies ÎNTREGI, nu tăiate."""
+    from src.db.queries.messages import HISTORY_LIMIT
+
+    n = HISTORY_LIMIT + 2  # ultimul e mesajul curent
+    history = [_client(f"intrebarea {i}") if i % 2 == 0 else _bot(f"raspuns {i}") for i in range(n)]
     t = conversation_transcript(history)
-    assert "intrebarea 0" not in t and "raspuns 1" not in t
-    assert "Client: intrebarea 2" in t and "Asistent: raspuns 7" in t
+    shown = [ln for ln in t.splitlines() if ln.startswith(("Client: ", "Asistent: "))]
+    assert len(shown) == HISTORY_LIMIT
+    assert "intrebarea 0" not in t  # cel mai vechi a ieșit, întreg
+    assert "Asistent: raspuns 1" in t and "Client: intrebarea 2" in t  # 7-8 în urmă: acum apar
     for line in t.splitlines():
         assert line.startswith(("Client: ", "Asistent: ", "Asistent [", "(Produsele"))
 
