@@ -459,8 +459,12 @@ class _Checker:
             if not change.value:
                 return reject("unknown_dimension")
             facet = self._bool_facet(dimension)
-            flag = _FLAGS.get(fold(change.value).strip()) if facet is not None else None
-            if facet is not None and flag is not None:
+            if facet is not None:
+                # Recenzia NX-349: pe o fațetă da/nu valoarea e o STARE. Altceva nu coboară pe
+                # `unmapped` (acolo «fara parfum» ar deveni termen de ordonare și text de căutare).
+                flag = self._flag_value(facet, change.value)
+                if flag is None:
+                    return reject("semantic_mismatch")
                 return self._flag(change, dimension, facet, flag, evidence)
             dimension, canonical = self._canonical(dimension, change.value)
             level = located
@@ -515,6 +519,15 @@ class _Checker:
         out.sort(key=lambda pv: -len(pv[0]))
         return out
 
+    def _flag_value(self, facet: object, value: str) -> bool | None:
+        """Starea pe care o scrie modelul: `true`/`false`, sau chiar o frază a pachetului care
+        numește fațeta (starea frazei). Altceva ⇒ `None` (respins de apelant)."""
+        folded = fold(value).strip()
+        if folded in _FLAGS:
+            return _FLAGS[folded]
+        words = tuple(tokens(value))
+        return next((state for phrase, state in self._flag_phrases(facet) if phrase == words), None)
+
     def _flag(
         self,
         change: StateChange,
@@ -524,14 +537,15 @@ class _Checker:
         evidence: _Evidence,
     ) -> CheckedChange:
         """NX-349: o fațetă da/nu nu are intrare de vocabular (catalogul nu indexează booleeni),
-        deci se judecă pe frazele PACHETULUI care o numesc. Citatul găsit + o frază a fațetei cu
-        aceeași stare ⇒ `explicit`; cu starea opusă ⇒ `semantic_mismatch`; o negație chiar înaintea
-        ei ⇒ `polarity_conflict`; fără frază ⇒ `implicit` («să nu conțină parfum» e descrierea, nu
-        numele fațetei). Valoarea canonică e `true`/`false` (ca `format_value`).
+        deci se judecă pe frazele PACHETULUI care o numesc. Starea SPUSĂ = starea frazei, întoarsă
+        de o negație chiar înaintea ei («nu fara parfum» = `false`); aceeași cu valoarea ⇒
+        `explicit`, alta ⇒ `semantic_mismatch`; fără frază ⇒ `implicit` («să nu conțină parfum» e
+        descrierea, nu numele fațetei). Valoarea canonică e `true`/`false` (ca `format_value`).
 
-        `matched` rămâne GOL, deliberat: cuvintele care numesc o fațetă da/nu sunt adesea o negație
-        a unui lucru («fără parfum»), iar plannerul (NX-352) duce cuvintele unei valori spuse, dar
-        nefiltrate, în textul căutării, unde «parfum» ar urca exact produsele parfumate."""
+        O negație care e chiar primul cuvânt al frazei nu o întoarce pe următoarea («fara alcool
+        fara parfum» e o enumerare). `matched` = fraza (cu negația care a întors-o): plannerul o
+        scoate din textul căutării, fiindcă «parfum» ar urca exact produsele parfumate (NX-352 duce
+        altfel cuvintele unei valori spuse, dar nefiltrate, în text)."""
         located: Provenance = "explicit" if evidence.located else "inferred"
         canonical = format_flag(flag)
 
@@ -548,20 +562,23 @@ class _Checker:
         if (change.relation or "eq") not in _FLAG_RELATIONS:
             return reject("polarity_conflict")
         level: Provenance = located
+        matched: tuple[str, ...] = ()
         if located == "explicit":
             level = "implicit"
+            words = evidence.words
             for phrase, state in self._flag_phrases(facet):
-                at = _find(evidence.words, phrase)
+                at = _find(words, phrase)
                 if at < 0:
                     continue
-                if state != flag:
-                    return reject("semantic_mismatch")
                 window = range(max(0, at - _NEGATION_WINDOW), at)
-                if any(p in window for p in evidence.negations):
-                    return reject("polarity_conflict")
+                flips = [p for p in evidence.negations if p in window and words[p] != phrase[0]]
+                if (state != bool(flips)) != flag:
+                    return reject("semantic_mismatch")
                 level = "explicit"
+                matched = tuple(words[min([at, *flips]) : at + len(phrase)])
                 break
-        return self._finish(change, dimension, canonical, level)
+        checked = self._finish(change, dimension, canonical, level)
+        return checked.model_copy(update={"matched": matched}) if matched else checked
 
     def _resolve_quote(
         self, evidence: _Evidence, dimension: str, canonical: str | float | None

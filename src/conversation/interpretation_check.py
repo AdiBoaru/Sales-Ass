@@ -220,7 +220,8 @@ def _facet_doc(facet: object) -> dict[str, Any]:
     """Câmpurile unei fațete pe care le CITEȘTE validarea (derivate din cod, recenzia NX-335):
     `check_changes`/`hard_capable` (`key`, `enforce_ready`), `facet_overlays` (`aliases`),
     `NeedVocabulary` (`value_type`, `operators`, `values`, `aliases`, `scope`, `enforce_ready`),
-    iar `source_key` îl citesc `lookup_attributes` și meniul adaptorului."""
+    iar `source_key` îl citesc `lookup_attributes` și meniul adaptorului. NX-349: `labels` (frazele
+    care numesc o fațetă da/nu, `provenance._flag_phrases`)."""
     return {
         "key": _plain(getattr(facet, "key", None)),
         "aliases": sorted(
@@ -232,6 +233,7 @@ def _facet_doc(facet: object) -> dict[str, Any]:
         "operators": sorted(str(o) for o in (getattr(facet, "operators", ()) or ())),
         "scope": _plain(getattr(facet, "scope", None)),
         "source_key": _plain(getattr(facet, "source_key", None)),
+        "labels": sorted((str(k), str(v)) for k, v in (getattr(facet, "labels", {}) or {}).items()),
     }
 
 

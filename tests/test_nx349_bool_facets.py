@@ -22,7 +22,7 @@ from src.conversation.interpretation import Act, StateChange, TurnInterpretation
 from src.conversation.state_v2 import ConversationStateV2
 from src.domain.facets import FacetType
 from tests.kernel import fixture_catalog as fc
-from tests.test_kernel_provenance import SOLE, ch, sole
+from tests.test_kernel_provenance import SOLE, SOLE_VOCAB, ch, sole
 
 FLAG = "fragrance_free"
 
@@ -73,10 +73,22 @@ def test_the_opposite_state_of_the_label_is_a_semantic_mismatch():
     assert checked.rejected == "semantic_mismatch"
 
 
-def test_a_negation_right_before_the_label_is_a_polarity_conflict():
+def test_a_negation_right_before_the_label_flips_the_state():
+    """Recenzia (3): «nu fara parfum» spune `false`, deci e singurul fel explicit de a-l spune pe
+    SOLE (fără aliasuri); cu `true` e o contrazicere."""
     said = "nu fara parfum, vreau cu parfum"
-    checked = sole(flag(quote="nu fara parfum"), said)
-    assert checked.rejected == "polarity_conflict"
+    checked = sole(flag("false", quote="nu fara parfum"), said)
+    assert checked.rejected is None and checked.provenance == "explicit"
+    assert checked.canonical_value == "false" and checked.matched == ("nu", "fara", "parfum")
+    assert sole(flag(quote="nu fara parfum"), said).rejected == "semantic_mismatch"
+
+
+def test_a_list_of_without_items_does_not_flip_the_next_one():
+    """Recenzia (3): «fara» e și marcator de negație, dar e primul cuvânt al etichetei: o
+    enumerare «fara alcool fara parfum» nu întoarce starea."""
+    said = "un sampon fara alcool fara parfum"
+    checked = sole(flag(quote="fara alcool fara parfum"), said)
+    assert checked.rejected is None and checked.provenance == "explicit"
 
 
 @pytest.mark.parametrize("relation", ["avoid", "lte", "gte"])
@@ -92,12 +104,20 @@ def test_the_flag_value_is_folded(value):
     assert sole(flag(value, quote="fara parfum"), said).canonical_value == "true"
 
 
-def test_a_non_flag_value_on_a_flag_facet_keeps_todays_path():
-    """O valoare care nu e `true`/`false` rămâne pe calea de azi (re-rezolvare, altfel
-    `unmapped`): NX-349 nu inventează un fanion din cuvintele modelului."""
+def test_a_value_that_is_not_a_state_is_rejected_not_moved_to_unmapped():
+    """Recenzia (2): pe `unmapped`, «fara parfum» ar fi devenit termen de ordonare și text de
+    căutare (adică exact produsele parfumate). O valoare care nu e o stare se respinge."""
     said = "un sampon cu parfum discret"
     checked = sole(flag("discret", quote="parfum discret"), said)
-    assert checked.dimension == "unmapped"
+    assert checked.dimension == FLAG and checked.rejected == "semantic_mismatch"
+    assert sole(flag("da", quote="parfum discret"), said).rejected == "semantic_mismatch"
+
+
+def test_a_pack_phrase_written_as_the_value_is_its_state():
+    said = "vreau un sampon fara parfum"
+    checked = sole(flag("fara parfum", quote="fara parfum"), said)
+    assert checked.dimension == FLAG and checked.canonical_value == "true"
+    assert checked.provenance == "explicit"
 
 
 def test_an_alias_of_the_pack_names_the_facet():
@@ -120,9 +140,9 @@ def test_an_alias_of_the_pack_names_the_facet():
     assert checked.provenance == "explicit"
 
 
-def test_matched_stays_empty_so_the_negated_word_never_becomes_search_text():
+def test_matched_is_the_phrase_the_planner_keeps_out_of_the_search_text():
     said = "vreau un sampon fara parfum"
-    assert sole(flag(quote="fara parfum"), said).matched == ()
+    assert sole(flag(quote="sampon fara parfum"), said).matched == ("fara", "parfum")
 
 
 def test_an_unknown_locale_has_no_label_so_the_flag_is_implicit():
@@ -151,7 +171,7 @@ def _find(query: str, *changes: StateChange) -> TurnInterpretation:
 )
 def test_the_chain_keeps_the_flag_in_state_and_discloses_the_gap(quote):
     said = f"vreau un sampon {quote}"
-    step = fc.kernel_step("sole-ro", ConversationStateV2(), _find(said, flag(quote=quote)), said)
+    step = _step(said, flag(quote=quote))
     needs = {n.key: n.normalized_value for n in step.gate_state.active_needs()}
     assert needs.get(FLAG) is True
     assert "unmapped" not in needs
@@ -165,8 +185,66 @@ def test_the_chain_keeps_the_flag_in_state_and_discloses_the_gap(quote):
 
 def test_the_chain_never_puts_the_label_words_in_the_search_text():
     said = "vreau un sampon fara parfum"
-    step = fc.kernel_step(
-        "sole-ro", ConversationStateV2(), _find(said, flag(quote="fara parfum")), said
+    args = _args(_step(said, flag(quote="fara parfum")))
+    assert "parfum" not in (args.query or "").split()
+
+
+def _step(said: str, *changes: StateChange, state=None, **kw):
+    """Un tur prin kernel pe VOCABULARUL SOLE (recenzia: pe vocabularul gol al fixture-ului
+    `_canonical` păstra dimensiunea, deci testul trecea și pe codul vechi)."""
+    return fc.kernel_step(
+        "sole-ro",
+        state or ConversationStateV2(),
+        _find(said, *changes),
+        said,
+        vocab=SOLE_VOCAB,
+        **kw,
     )
+
+
+def _args(step):
     args = step.planned.plans[step.planned.primary].search_args
-    assert args is not None and "parfum" not in (args.query or "").split()
+    assert args is not None
+    return args
+
+
+def test_an_inferred_flag_is_a_gap_not_a_preference():
+    """Recenzia (1): un fanion nespus devenea `prefer={fragrance_free: ['true']}`, iar
+    `preference_level` compară „true" cu `str(True)`: exact produsele fără parfum ieșeau pe 0."""
+    step = _step("vreau un sampon", flag(quote="fara parfum"))
+    args = _args(step)
+    assert FLAG not in (args.prefer or {}) and "true" not in (args.rank_terms or [])
+    assert "unsupported_need" in step.planned.gaps
+
+
+def test_the_subject_word_stays_in_the_fallback_text():
+    """Recenzia (5): din citatul fanionului ies doar cuvintele frazei, nu și «sampon»."""
+    args = _args(_step("vreau un sampon fara parfum", flag(quote="sampon fara parfum")))
+    words = (args.query or "").split()
+    assert "sampon" in words and "parfum" not in words
+
+
+def test_a_rejected_flag_keeps_its_words_out_of_the_fallback_text():
+    said = "vreau un sampon fara parfum"
+    args = _args(_step(said, flag("false", quote="fara parfum")))
+    assert "parfum" not in (args.query or "").split()
+
+
+def test_a_description_only_flag_leaves_no_stopword_only_text():
+    """Citatul descriptiv iese întreg din rezervă; dacă rămân doar cuvinte goale, nu e o căutare."""
+    step = _step("sa nu contina parfum", flag(quote="sa nu contina parfum"))
+    for plan in step.planned.plans:
+        # fără subiect și fără text, turul nu caută nimic (poarta întreabă); oricum, nu «parfum»
+        text = plan.search_args.query if plan.search_args is not None else None
+        assert text is None or "parfum" not in text.split()
+
+
+def test_replace_on_a_stored_flag_is_the_new_state():
+    """Recenzia (4): `replace c1 false` ca `supersede` dintr-o sursă `implicit` era respins tăcut
+    (`hard_downgrade`), deși același lucru ca `set` trecea."""
+    first = _step("vreau un sampon fara parfum", flag(quote="fara parfum"))
+    assert {n.key: n.normalized_value for n in first.state_after.active_needs()}[FLAG] is True
+    said = "de fapt vreau cu parfum"
+    replace = ch("replace", target="c1", dimension=FLAG, relation="eq", value="false", quote=said)
+    second = _step(said, replace, state=first.state_after, turn_id="t2")
+    assert {n.key: n.normalized_value for n in second.state_after.active_needs()}[FLAG] is False

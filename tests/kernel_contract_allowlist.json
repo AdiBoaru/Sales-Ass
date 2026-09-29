@@ -56,7 +56,7 @@
     {
       "file": "src/agent/turn_planner.py",
       "function": "_read_act_query",
-      "reason": "NX-333 + NX-352 (kernel.v5.0): cererea actului (Act.query) si citatele schimbarilor ACCEPTATE ale turului se citesc AICI o singura data si ies ca VALORI: textul cautarii COMPUS din ce a validat kernelul (cuvintele care au numit subiectul, altfel numele lui din stare; fara subiect, cuvintele unei fatete filtrate; altfel termenii nemapati) si cererea intreaga fara cuvintele negate, ca ultima rezerva. Nicio decizie a plannerului nu ramifica pe text."
+      "reason": "NX-333 + NX-352 (kernel.v5.0): cererea actului (Act.query) si citatele schimbarilor ACCEPTATE ale turului se citesc AICI o singura data si ies ca VALORI: textul cautarii COMPUS din ce a validat kernelul (cuvintele care au numit subiectul, altfel numele lui din stare; fara subiect, cuvintele unei fatete filtrate; altfel termenii nemapati) si cererea intreaga fara cuvintele negate, ca ultima rezerva. NX-349: citatele fatetelor da/nu (si cele respinse) ies din rezerva, fara cuvintele subiectului. Nicio decizie a plannerului nu ramifica pe text."
     },
     {
       "file": "src/conversation/kernel_trace.py",

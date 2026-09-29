@@ -256,7 +256,7 @@ def _read_act_query(
     gapped = [
         w
         for d, _r, _p, m, v, _q, raw in spoken
-        if v and d != UNMAPPED_KEY and carried.get(d) != "filter"
+        if v and d != UNMAPPED_KEY and d not in flags and carried.get(d) != "filter"
         for w in surface(m, raw)
     ]
     named_filters = [
@@ -266,11 +266,29 @@ def _read_act_query(
         for w in surface(m, raw)
     ]
     unmapped = [v for d, _r, _p, _m, v, _q, _raw in live if d == UNMAPPED_KEY and v]
-    negated = {w for d, r, _p, _m, _v, q, _raw in items if r in _NEGATIVE or d in flags for w in q}
+    negated = {w for _d, r, _p, _m, _v, q, _raw in items if r in _NEGATIVE for w in q}
+    # NX-349 (recenzia): cuvintele unei fațete da/nu ies din rezervă, chiar și când schimbarea a
+    # fost respinsă. Doar fraza care a numit-o (`matched`, cu negația ei), altfel citatul;
+    # niciodată cuvintele pe care le revendică subiectul turului («sampon» din «sampon fara
+    # parfum»).
+    claimed = {w for d, _r, _p, m, _v, q, _raw in items if d in _SUBJECT_WORDS for w in (*m, *q)}
+    flagged: set[str] = set()
+    precise = {id(c.change): c.matched for c in checked or () if c.dimension in flags and c.matched}
+    for change in changes:
+        # toate schimbările modelului pe un fanion, și cele respinse (`checked` le are doar pe
+        # cele acceptate): fraza care l-a numit, altfel tot citatul
+        if change.dimension in flags and change.quote:
+            words = precise.get(id(change)) or tuple(tokens(change.quote))
+            flagged |= {w for w in words if w not in claimed}
+    for c in checked or ():
+        if c.dimension in flags and c.matched:
+            flagged |= {w for w in c.matched if w not in claimed}
     whole = None
     if has_words and query is not None:
-        own = [w for w in query.split() if not set(tokens(w)) & negated]
+        own = [w for w in query.split() if not set(tokens(w)) & (negated | flagged)]
         whole = " ".join(own).strip() or None
+        if flagged and whole and all(t in stop for t in tokens(whole)):
+            whole = None  # doar cuvinte goale rămase: nu e o căutare
 
     def ordered(words: Sequence[str]) -> str:
         """În ordinea din cerere; o etichetă din stare (fără loc în cerere) rămâne întreagă."""
@@ -787,6 +805,10 @@ class _Planner:
             if signal.relation == "avoid":
                 # ÎNTÂI: un cuvânt ocolit nu are voie să devină termen care URCĂ produsele cu el.
                 self._gap("exclusion")
+            elif signal.dimension in self.flags:
+                # NX-349 (recenzia): un fanion `inferred` n-are ce ordona (`preference_level`
+                # compară „true" cu `str(True)`, iar pe SOLE niciun produs nu poartă atributul)
+                self._gap("unsupported_need")
             elif signal.dimension == UNMAPPED_KEY:
                 if isinstance(value, str) and value and value not in rank:
                     rank.append(value)

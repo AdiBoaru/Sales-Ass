@@ -280,6 +280,11 @@ def _structural_proposals(
             ),
         ]
     spec = needs.spec_for(handle.key)
+    if spec is not None and spec.kind is NeedKind.BOOLEAN:
+        # NX-349 (recenzia): pe un fanion înlocuirea E starea nouă. Ca `supersede`, o stare spusă
+        # doar descriptiv («de fapt vreau cu parfum», `implicit`) era respinsă tăcut
+        # (`hard_downgrade`), deși același lucru scris ca `set` trecea.
+        return [StateUpdateProposal("set_need", key=handle.key, value=c.canonical_value, **common)]
     if spec is not None and spec.kind is NeedKind.LIST:
         return [
             removed,
