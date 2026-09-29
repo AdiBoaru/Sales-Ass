@@ -51,7 +51,12 @@ from src.tools.catalog_tools import SearchArgs
 #: `Topic.product_type` printr-un singur `set_topic` pe pereche (înainte era respins ca
 #: `topic_key`). Poarta de replay e DEROGATĂ, ca la v2.0: niciun tur interpretat n-a fost servit.
 #: Schema scrisă de model e neschimbată.
-KERNEL_CONTRACT_VERSION = "kernel.v3.0"
+#: `kernel.v4.0` (NX-350, MAJOR, decis de Adi pe 2026-09-29): tipul SUBIECTULUI se schimbă doar
+#: dintr-un tip `explicit`; unul `implicit` devine semnal de ordonare al turului (ca `inferred`),
+#: nepersistat. Motivul: «cremă de hidratare» nu spune dacă e de față, de corp sau de mâini, iar un
+#: tip presupus ajuns în subiect filtra căutarea pe un tip necerut. Poarta de replay e DEROGATĂ, ca
+#: la v2.0 și v3.0: niciun tur interpretat n-a fost servit. Schema scrisă de model e neschimbată.
+KERNEL_CONTRACT_VERSION = "kernel.v4.0"
 
 # --- scrise de model ----------------------------------------------------------------------------
 

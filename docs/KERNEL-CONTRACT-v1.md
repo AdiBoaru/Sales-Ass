@@ -23,7 +23,14 @@ Versioning: the contract is `kernel.v1.0`. **Minor** (`v1.1`): additive schema f
 
 No invariant, ownership row or state rule changes in v1.2, so no replay gate is required. The open questions step 6 raised on I5 (the safety prune on `aside`), I20 (the cart on `cart_ref`) and I15a/I12 (`grounding_guard` does not run on the v1 composition) are decided in the PRs that need them (B and C), under the minor/major rule.
 
-**Current version: `kernel.v3.0` (MAJOR, NX-348, decided by Adi on 2026-09-29).** The meaning of a
+**Current version: `kernel.v4.0` (MAJOR, NX-350, decided by Adi on 2026-09-29).** The product type
+of the SUBJECT changes only from a type the customer stated (`explicit`). An `implicit` type (the
+customer's words do not name the whole code: „cremă" → `crema de fata`, which could as well be a body
+or hand cream) becomes a turn-local ranking signal, like `inferred`, and is never persisted. Counted as
+`subject_type_not_explicit`. The replay gate is waived, as for v2.0 and v3.0: no interpreted turn has
+been served in production. The model-written schema is unchanged.
+
+**Previous version: `kernel.v3.0` (MAJOR, NX-348, decided by Adi on 2026-09-29).** The meaning of a
 subject change: the subject `(category_key, product_type)` changes only when a half that is already
 set gets a DIFFERENT value. Filling an empty half (the first product type on a shelf without one, the
 first shelf on a subject that has only a type) is a REFINEMENT: the subject's needs stay and nothing

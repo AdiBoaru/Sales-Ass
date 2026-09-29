@@ -303,6 +303,19 @@ def to_delta(
                 continue
             proposals += structural
             continue
+        if (
+            c.dimension == PRODUCT_TYPE
+            and c.provenance != "explicit"
+            and c.change.op in ("set", "add")
+            and c.canonical_value is not None
+        ):
+            # NX-350 (kernel.v4.0, decis de Adi pe 2026-09-29): tipul SUBIECTULUI se schimbă doar
+            # dintr-un tip pe care clientul l-a SPUS (`explicit`). Unul presupus («cremă de
+            # hidratare» → `crema de fata`, deși putea fi de corp sau de mâini) doar ORDONEAZĂ
+            # rezultatele turului, ca `inferred`: altfel subiectul ar filtra pe un tip necerut.
+            ranking.append(RankingSignal(c.dimension, c.canonical_value, c.change.relation or "eq"))
+            counters["subject_type_not_explicit"] = counters.get("subject_type_not_explicit", 0) + 1
+            continue
         if c.dimension in SUBJECT_DIMENSIONS and c.canonical_value is not None:
             # NX-348: se adună, apoi UN `set_topic` pe pereche, în poziția subiectului (primul).
             if not subject:

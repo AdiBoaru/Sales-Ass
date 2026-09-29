@@ -437,3 +437,41 @@ def test_a_legacy_first_shelf_gives_it_to_the_earlier_needs():
     moved, _ = step(anchored.state, _change("category", "laptopuri"))
     assert moved.state.need_for("brand") is None
     assert ("brand", "samsung") in {(n.key, n.normalized_value) for n in moved.state.parked.needs}
+
+
+# --- NX-350 (kernel.v4.0): tipul subiectului doar din `explicit` ----------------------------------
+
+
+def test_an_implicit_type_does_not_reach_the_subject_it_only_ranks():
+    """«cremă de hidratare» → `crema de fata` e o presupunere (putea fi de corp sau de mâini): nu
+    schimbă subiectul, doar ordonează turul, iar turul se numără."""
+    result, delta = step(
+        ConversationStateV2(), _change("product_type", "smartphone", provenance="implicit")
+    )
+    assert result.state.topic.product_type is None
+    assert not [p for p in delta.proposals if p.op == "set_topic"]
+    assert [(s.dimension, s.value) for s in delta.ranking] == [("product_type", "smartphone")]
+    assert delta.counters.get("subject_type_not_explicit") == 1
+
+
+def test_an_implicit_type_next_to_an_explicit_shelf_keeps_only_the_shelf():
+    result, delta = step(
+        ConversationStateV2(),
+        _change("category", "telefoane"),
+        _change("product_type", "smartphone", provenance="implicit"),
+    )
+    topic = result.state.topic
+    assert (topic.category_key, topic.product_type) == ("telefoane", None)
+    assert [(s.dimension, s.value) for s in delta.ranking] == [("product_type", "smartphone")]
+
+
+def test_an_implicit_type_never_moves_or_parks_the_subject():
+    state, _ = step(
+        ConversationStateV2(),
+        _change("category", "telefoane"),
+        _change("product_type", "smartphone"),
+    )
+    state, _ = step(state.state, _change("brand", "samsung"))
+    same, _ = step(state.state, _change("product_type", "accesoriu", provenance="implicit"))
+    assert same.state.topic.product_type == "smartphone"
+    assert same.state.parked is None and same.state.need_for("brand") is not None

@@ -148,6 +148,9 @@ HYPOTHESIS_PROVENANCE = frozenset({"implicit", "inferred"})
 #: NX-348 a intrat în `main` ÎNAINTEA rulării v4, deci se aplică regula pre-înregistrată în
 #: NX-339: tipul de produs mută și el subiectul (NX-331), deci e dimensiune de subiect.
 SUBJECT_DIMENSIONS = frozenset({"category", "product_type"})
+#: NX-350 (kernel.v4.0): pe ce dimensiune de subiect o schimbare `implicit` e totuși FAPT. Tipul
+#: `implicit` rămâne semnal de ordonare, deci doar raftul.
+IMPLICIT_FACT_DIMENSIONS = frozenset({"category"})
 GATE_POLICY = ClarificationPolicy()
 FactsFn = Callable[[CatalogLookup], Awaitable[ReferenceFacts]]
 
@@ -765,7 +768,9 @@ def _is_hypothesis(provenance: str | None, dimension: str) -> bool:
     raft mută subiectul, deci acolo e fapt."""
     if provenance == "inferred":
         return True
-    return provenance in HYPOTHESIS_PROVENANCE and dimension not in SUBJECT_DIMENSIONS
+    # NX-350 (kernel.v4.0): un tip `implicit` nu mai intră în subiect (semnal de ordonare), deci e
+    # ipoteză; doar raftul `implicit` rămâne fapt (mută subiectul).
+    return provenance in HYPOTHESIS_PROVENANCE and dimension not in IMPLICIT_FACT_DIMENSIONS
 
 
 def _count_changes(want: Counter, want_null: Counter, got: Mapping[str, Any]) -> dict[str, int]:
