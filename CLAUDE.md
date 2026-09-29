@@ -470,16 +470,17 @@ clientului.** Verdictul v4 a picat pe A pe o singură clasă: «cremă de hidrat
 putea fi de corp sau de mâini. Acum validatorul calculează umbrela cuvintelor clientului
 (`CheckedChange.umbrella`: codul presupus, primul, plus codurile cu același CAP, cuvântul din citat
 care numește ce este codul, cu flexiunea din `query_terms`, ≤ 8; «ten» din coada lui „fond de ten” nu
-deschide nimic), delta o pune pe `set_topic` (`type_umbrella`, `subject_type_umbrella`), iar subiectul
-o ține minte (`Topic.type_umbrella`, `has_subject`). Reducerul are o regulă pe ambele sensuri
-(`_other_kind`): ce nu se suprapune cu ce spusese clientul (tip clar în afara umbrelei, umbrelă fără
-tipul clar, umbrele disjuncte) e alt fel de produs ⇒ subiect nou cu parcare, raftul păstrat doar dacă
-turul îl numește; altfel umbrela se înlocuiește fără parcare, iar un tip clar din ea o rafinează.
-Plannerul pune `prefer` pe toate codurile (`subject_kinds`), cu eticheta cuvântului plin comun
-(«crema»), iar vederea modelului arată umbrela. Prima variantă, „tipul `implicit` doar ordonează
-turul”, a picat la recenzie (se uita la turul următor), iar a doua recenzie a găsit 9 defecte ale
-umbrelei (cuvinte din coada codurilor, subiectul doar cu umbrelă invizibil la reluare, parcarea doar
-într-un sens), toate pinuite în teste. Scorerul: tipul `implicit` e ipoteză. F1 pe A pe raportul v4:
+deschide și nu îngustează nimic), delta o pune pe `set_topic` (`type_umbrella`,
+`subject_type_umbrella`), iar subiectul o ține minte (`Topic.type_umbrella`, `has_subject`). Reducerul
+are o regulă pe ambele sensuri (`_other_kind`): ce nu se suprapune cu ce spusese clientul (tip clar în
+afara umbrelei, umbrelă fără tipul clar, umbrele disjuncte) e alt fel de produs ⇒ subiect nou cu
+parcare, pe același raft (ca la NX-348 când tipul se schimbă); altfel umbrela se înlocuiește fără
+parcare, iar un tip clar din ea o rafinează. Plannerul pune `prefer` pe toate codurile
+(`subject_kinds`), cu eticheta = capul primului cod («crema»), iar vederea modelului arată umbrela.
+Prima variantă, „tipul `implicit` doar ordonează turul”, a picat la recenzie (se uita la turul
+următor); recenziile umbrelei au găsit 9 + 8 defecte (cuvinte din coada codurilor, subiectul doar cu
+umbrelă invizibil la reluare, parcarea doar într-un sens, raftul golit), pinuite în teste, iar ce
+rămâne e declarat în card. Scorerul: tipul `implicit` e ipoteză. F1 pe A pe raportul v4:
 0,899; verdictul îl dă setul nevăzut E (regula în NX-339). Card:
 [`tasks/stage1/NX-350.md`](tasks/stage1/NX-350.md); probă: `pytest tests/test_nx348_subject_type.py
 tests/test_nx345_scorer.py -q`.

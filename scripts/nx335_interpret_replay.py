@@ -617,7 +617,14 @@ def observed_parts(
             and _moves_subject(state_before, c.dimension, format_value(c.canonical_value))
             for c in checked
         )
-        or any(_umbrella_moves(state_before, c) for c in checked)
+        or (
+            # Un tip spus clar în același tur bate umbrela (reducerul), deci atunci nu ea mută.
+            not any(
+                not c.rejected and c.dimension == "product_type" and c.provenance == "explicit"
+                for c in checked
+            )
+            and any(_umbrella_moves(state_before, c) for c in checked)
+        )
     )
     for c in checked:
         if c.rejected:

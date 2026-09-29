@@ -232,6 +232,15 @@ def _same_stem(a: str, b: str, suffixes: Collection[str]) -> bool:
     return False
 
 
+def _spells(words: Sequence[str], code: Sequence[str], suffixes: Collection[str]) -> bool:
+    """NX-350: citatul conține codul ÎNTREG, cuvânt cu cuvânt și în ordine (cu flexiune)."""
+    size = len(code)
+    return size > 0 and any(
+        all(_same_stem(words[i + j], code[j], suffixes) for j in range(size))
+        for i in range(len(words) - size + 1)
+    )
+
+
 def _read_quote(quote: str, user: UserWords, locale: str | None) -> _Evidence:
     words = tuple(tokens(quote))
     located = bool(words) and any(
@@ -492,40 +501,33 @@ class _Checker:
         adică CAPUL lui (primul cuvânt plin: „crema" din „crema de fata"), cu flexiune (aceeași
         tulpină + un sufix al locale-i). Un cuvânt din coada codului descrie PENTRU CE e («ten»
         din „fond de ten", «par» din „crema de par", «fata» din „fata de" = „față de"), deci nu
-        deschide o umbrelă. Restul cuvintelor citatului îngustează doar dacă sunt în cod.
+        deschide o umbrelă.
 
         Umbrela conține MEREU codul presupus de model (primul), altfel ar putea spune altceva
-        decât interpretarea validată; un cuvânt-cap care nu-l acoperă e ignorat. Fără cuvânt-cap,
-        umbrela e doar codul presupus. Plafon `MAX_TYPE_UMBRELLA`, cele mai mari coduri întâi,
-        determinist."""
+        decât interpretarea validată: capul e al codului presupus. Fără el în citat, umbrela e doar
+        codul presupus. Plafon `MAX_TYPE_UMBRELLA`, cele mai mari coduri întâi, determinist."""
         own = (str(canonical),) if isinstance(canonical, str) else ()
         entries = self.vocab.entries(SUBJECT_TYPE) if self.vocab is not None else ()
         suffixes = inflection_suffixes(self.locale)
         codes = [
             (e.key, [w for w in tokens(e.key) if w not in self.stop], e.count) for e in entries
         ]
-        heads = {words[0] for _k, words, _n in codes if words}
-        mine = next((words for key, words, _n in codes if key == canonical), None)
+        mine = next((words for key, words, _n in codes if key == canonical and words), None)
         if mine is None:
             return own
-        quote = [w for w in evidence.words if w not in self.stop]
-        head = [w for w in quote if any(_same_stem(w, h, suffixes) for h in heads)]
-        # Capul trebuie să fie chiar al codului presupus; altfel nu știm ce umbrelă a vrut clientul.
-        head = [w for w in head if _same_stem(w, mine[0], suffixes)]
+        head = [w for w in evidence.words if _same_stem(w, mine[0], suffixes)]
         if not head:
             return own
-        # Cuvintele citatului care apar în codul presupus (în afara capului) îngustează umbrela.
-        narrow = [
-            w for w in quote if w not in head and any(_same_stem(w, t, suffixes) for t in mine)
-        ]
-        typed = [head[0], *narrow]
+        # A doua recenzie (constatarea 4): umbrela se îngustează la codul presupus DOAR când
+        # citatul îl spune ÎNTREG, în șir, de la cap («creme de fata»); un cuvânt din coada codului
+        # aflat oriunde altundeva («o cremă mai ieftină față de cealaltă», «mi se pare») nu spune
+        # ce fel de cremă.
+        if _spells(evidence.words, tuple(tokens(str(canonical))), suffixes):
+            return own
         hits = [
             (key, count)
             for key, words, count in codes
-            if key != canonical
-            and words
-            and _same_stem(typed[0], words[0], suffixes)
-            and all(any(_same_stem(w, t, suffixes) for t in words) for w in typed)
+            if key != canonical and words and _same_stem(head[0], words[0], suffixes)
         ]
         hits.sort(key=lambda kc: (-kc[1], kc[0]))
         return (*own, *(k for k, _n in hits[: MAX_TYPE_UMBRELLA - len(own)]))

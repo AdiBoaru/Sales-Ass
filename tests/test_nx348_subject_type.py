@@ -508,10 +508,31 @@ def test_a_disjoint_umbrella_is_another_kind_of_item_and_parks():
 def test_a_stated_type_outside_the_umbrella_parks_it():
     state, _ = step(ConversationStateV2(), _change("category", "telefoane"), _vague(CREAMS))
     state, _ = step(state.state, _change("brand", "apple"))
-    moved, _ = step(state.state, _change("product_type", "laptop"), compatible=True)
-    assert moved.state.topic.product_type == "laptop"
+    moved, _ = step(state.state, _change("product_type", "laptop"))
+    assert (moved.state.topic.category_key, moved.state.topic.product_type) == (
+        "telefoane",
+        "laptop",
+    )
     assert moved.state.parked.topic.type_umbrella == CREAMS
     assert moved.state.need_for("brand") is None
+
+
+def test_another_kind_keeps_the_shelf_and_naming_it_again_loses_nothing():
+    """A doua recenzie NX-350, constatările 1-2: «cremă pentru ten» → «un ser» rămâne pe raft (ca
+    la NX-348 când tipul se schimbă), iar «un ser pentru ten» apoi nu aduce înapoi cremele parcate
+    și nu evacuează nevoile serului."""
+    state, _ = step(ConversationStateV2(), _change("category", "ten"), _vague(CREAMS))
+    state, _ = step(state.state, _change("brand", "apple"))
+    serums = ("ser de fata", "ser de par")
+    state, _ = step(state.state, _vague(serums))
+    assert (state.state.topic.category_key, state.state.topic.type_umbrella) == ("ten", serums)
+    assert state.state.parked.topic.type_umbrella == CREAMS
+    state, _ = step(state.state, _change("brand", "samsung"))
+    again, _ = step(state.state, _change("category", "ten"), _vague(serums))
+    assert again.state.topic == state.state.topic
+    assert again.state.need_for("brand").normalized_value == "samsung"
+    assert again.state.parked.topic.type_umbrella == CREAMS
+    assert not [a for a in again.applied if a.op == "park"]
 
 
 def test_a_stated_type_inside_an_umbrella_only_subject_refines_it():
@@ -707,6 +728,9 @@ def test_the_validator_computes_the_umbrella_from_the_customers_words():
     assert umbrella("un ser mai ieftin fata de asta", "un ser mai ieftin fata de asta")[1] == (
         "crema de fata",
     )
+    # A doua recenzie, constatarea 4: coada codului oriunde altundeva nu îngustează umbrela.
+    said = "o crema mai ieftina fata de cealalta"
+    assert set(umbrella(said, said)[1]) == {"crema de fata", "crema de corp", "crema de maini"}
 
 
 def test_the_planner_prefers_every_code_of_the_umbrella_and_labels_it_with_the_shared_word():
@@ -718,9 +742,10 @@ def test_the_planner_prefers_every_code_of_the_umbrella_and_labels_it_with_the_s
     label.state, label.vocab, label.pack, label.locale = state, None, None, "ro"
     assert label._subject_label() == "crema"
     assert label._subject()
-    # Constatarea 6: un cuvânt gol al locale-i comun tuturor codurilor nu e etichetă.
+    # Constatarea 6 (ambele recenzii): eticheta e capul primului cod, nu un cuvânt din coadă comun
+    # tuturor («fata» e raftul de machiaj) și nici unul gol («de»).
     label.state = ConversationStateV2(topic=Topic(type_umbrella=("ser de fata", "masca de fata")))
-    assert label._subject_label() == "fata"
+    assert label._subject_label() == "ser"
 
 
 def test_the_model_and_the_trace_see_the_umbrella():

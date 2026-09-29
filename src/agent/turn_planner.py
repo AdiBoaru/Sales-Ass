@@ -232,14 +232,13 @@ class _Planner:
                     return entry.label
             return topic.category_key
         if topic.type_umbrella and (topic.type_learned or not topic.product_type):
-            # NX-350: eticheta unei umbrele e cuvântul pe care îl poartă TOATE codurile ei (ce a
-            # spus clientul, «cremă»), nu codul unuia: altfel căutarea fără cuvinte ar alege unul.
-            # Un tip DEDUS de cod nu o bate (recenzia, constatarea 7); cuvintele goale ale
-            # locale-i nu sunt etichetă (constatarea 6: «de» din „… de fata").
+            # NX-350: eticheta unei umbrele e CAPUL primului ei cod (cuvântul spus de client,
+            # «cremă»), nu codul întreg: altfel căutarea fără cuvinte ar alege unul. Nu un cuvânt
+            # din coadă, comun tuturor («fata» e raftul de machiaj, NX-319) și nici unul gol al
+            # locale-i (recenziile NX-350, constatările 6). Un tip DEDUS nu o bate (constatarea 7).
             stop = stopwords(self.locale)
-            words = [[w for w in code.split() if w not in stop] for code in topic.type_umbrella]
-            shared = [w for w in words[0] if all(w in other for other in words[1:])]
-            return shared[0] if shared else topic.type_umbrella[0]
+            words = [w for w in topic.type_umbrella[0].split() if w not in stop]
+            return words[0] if words else topic.type_umbrella[0]
         if topic.product_type:
             getter = getattr(self.pack, "value_label", None)
             for loc in dict.fromkeys((self.locale, _lang(self.locale))):
@@ -712,19 +711,12 @@ def routine_family(
     `None` fără subiect sau fără nicio potrivire: planul `bundle` rămâne pe calea de azi."""
     spec = getattr(pack, "routine_steps", None)
     families = getattr(spec, "families", None) or {}
-    ptype = state.topic.product_type
     by_type = getattr(spec, "by_product_type", None) or {}
-    if ptype and ptype in by_type:
-        family = str(by_type[ptype]).partition(SEP)[0]
-        if family in families:
-            return family
-    if not ptype and state.topic.type_umbrella:
-        # NX-350: o umbrelă decide familia doar când TOATE codurile ei cunoscute sunt ale aceleiași.
-        seen = {
-            str(by_type[k]).partition(SEP)[0] for k in state.topic.type_umbrella if k in by_type
-        }
-        if len(seen) == 1 and next(iter(seen)) in families:
-            return next(iter(seen))
+    # NX-350: tipurile subiectului (`subject_kinds`: tipul spus clar, altfel umbrela; un tip DEDUS
+    # nu bate umbrela). Mai multe decid familia doar când TOATE cele cunoscute sunt ale aceleiași.
+    seen = {str(by_type[k]).partition(SEP)[0] for k in subject_kinds(state.topic) if k in by_type}
+    if len(seen) == 1 and next(iter(seen)) in families:
+        return next(iter(seen))
     key = state.topic.category_key
     table = getattr(spec, "family_by_shelf", None)
     if not key or not isinstance(table, Mapping) or not table:

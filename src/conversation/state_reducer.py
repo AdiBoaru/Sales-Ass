@@ -755,15 +755,13 @@ def _apply_umbrella(
     umbrella: tuple[str, ...],
     proposal: StateUpdateProposal,
     policy: ReducerPolicy,
-    *,
-    shelf_named: bool,
 ) -> _Outcome:
     """NX-350: umbrela unui tip spus vag. Regula e una, pe ambele sensuri (recenzia NX-350,
     constatarea 3): clientul cere ALT FEL de produs când ce spune acum nu se suprapune cu ce
     spusese (un tip spus clar în afara umbrelei, sau două umbrele disjuncte) ⇒ subiect nou, iar cel
-    vechi se parchează, ca orice schimbare de subiect. Raftul rămâne doar dacă TURUL îl numește
-    (`shelf_named`): altfel un raft ales pentru alt fel de produs ar orienta căutarea greșit
-    (aceeași regulă ca la NX-348, unde o pereche neverificată golește cealaltă jumătate).
+    vechi se parchează, ca orice schimbare de subiect. Raftul RĂMÂNE, ca la NX-348 când tipul se
+    schimbă (a doua recenzie NX-350: golit, «cremă pentru ten» → «un ser» căuta serurile pe tot
+    catalogul, iar «un ser pentru ten» la turul următor aducea înapoi cremele parcate).
 
     Altfel: un tip spus clar în umbrelă rămâne (reformulare mai largă), iar o umbrelă care se
     suprapune cu cea veche o înlocuiește fără parcare; un tip DEDUS de cod rămâne doar dacă e în
@@ -778,7 +776,7 @@ def _apply_umbrella(
         parked = _parked_now(state, policy)
         retired = _retire_topic(state, proposal.turn_id, policy)
         new = Topic(
-            category_key=topic.category_key if shelf_named else None,
+            category_key=topic.category_key,
             changed_at_revision=state.revision,
             type_umbrella=umbrella,
         )
@@ -817,14 +815,12 @@ def _handle_set_topic(
         if proposal.product_type:
             return _handle_set_topic(state, base, policy)
         if not category:
-            return _apply_umbrella(
-                state, proposal.type_umbrella, proposal, policy, shelf_named=False
-            )
+            return _apply_umbrella(state, proposal.type_umbrella, proposal, policy)
         first = _handle_set_topic(state, base, policy)
         if isinstance(first, RejectedUpdate):
             return first
         after, records = first
-        second = _apply_umbrella(after, proposal.type_umbrella, proposal, policy, shelf_named=True)
+        second = _apply_umbrella(after, proposal.type_umbrella, proposal, policy)
         if isinstance(second, RejectedUpdate):
             return after, records
         final, more = second
@@ -875,14 +871,13 @@ def _handle_set_topic(
         umbrella = state.topic.type_umbrella
         # NX-350 (recenzia, constatarea 3): un tip spus clar în afara umbrelei e alt fel de produs,
         # deci subiect nou (se parchează), ca umbrela vagă în afara unui tip spus clar. Raftul
-        # rămâne doar pe o pereche verificată (regula NX-348 a completării).
+        # rămâne, ca la NX-348 când tipul se schimbă (a doua recenzie NX-350).
         other_kind = (
             new_type is not None and old_type is None and _other_kind(umbrella, new_type, ())
         )
         if other_kind and not shelf_changed:
             product_type = new_type
-            if previous is not None:
-                category = previous if proposal.pair_verified == (previous, new_type) else None
+            category = category or previous
             same_subject = False
         elif not shelf_changed and not type_changed:
             result = (category or previous, new_type or old_type)
