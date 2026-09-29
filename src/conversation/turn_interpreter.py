@@ -281,10 +281,10 @@ for a broader word, and always of the same kind as the dimension's other values;
 fits, the customer's words. number and unit: only for a number the customer wrote. relative_to: \
 a reference id when the value is relative to an item on screen, with relation lte or gte and no \
 number. What the customer describes about themselves or about the items (a condition, a problem, \
-a complaint about price) is a change when a menu value names its cause: the value that names \
-what the customer is or has, about the same part or item they describe, not one that names a \
-result they want; a complaint about the price of the items on screen is price with lte relative \
-to them.
+a complaint about price) is a change when a menu value names its cause: when they describe \
+themselves or the items, the value that names what they are or have, about the same part or item \
+they describe, rather than one that names a result of it; a result the customer asks for is a \
+change too. A complaint about the price of the items on screen is price with lte relative to them.
 - quote: the customer's exact words that support the change, copied from CURRENT MESSAGE or from \
 a user line in HISTORY, never from a bot line. A change with no customer words behind it is a \
 guess: leave it out.

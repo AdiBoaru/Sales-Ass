@@ -1684,6 +1684,16 @@ async def _main_journeys(args: argparse.Namespace) -> int:
     efforts = _parse_efforts(args.efforts)
     excluded: Counter = Counter()
     directory = args.journeys_dir or JOURNEYS_DIR
+    frozen = {
+        HOLDOUT_C_DIR.resolve(): HOLDOUT_C_SHA256,
+        HOLDOUT_D_DIR.resolve(): HOLDOUT_D_SHA256,
+    }
+    expected = frozen.get(Path(directory).resolve())
+    if args.yes and expected is not None and holdout_c_digest(directory) != expected:
+        # NX-347: un set nevăzut schimbat după îngheț nu mai judecă nimic; fail-closed ÎNAINTEA
+        # oricărui apel de model (recenzia v4).
+        print(f"refuz: setul înghețat din {directory} nu mai are amprenta din cod")
+        return 2
     set_name = args.set_name or ("C" if args.journeys_dir else None)
     cases = journey_cases(directory, excluded=excluded, set_name=set_name)
     live = args.yes and not args.dry_run

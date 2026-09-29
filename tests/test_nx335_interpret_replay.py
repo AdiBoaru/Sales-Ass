@@ -787,3 +787,15 @@ async def test_a_model_that_answers_the_set_d_label_scores_one(cases_d):
     for field in ("primary_act", "thread", "targets", "ambiguity"):
         assert arm[field]["rate"] in (1.0, None), (field, arm[field])
     assert arm["changes"]["f1"] in (1.0, None), arm["changes"]
+
+
+async def test_a_changed_frozen_set_refuses_to_run(monkeypatch, capsys):
+    """Recenzia v4: amprenta se verifică și în runner, înaintea oricărui apel, nu doar în test."""
+    fake = CountingLLM()
+    monkeypatch.setattr("src.agent.llm.get_llm", lambda: fake)
+    monkeypatch.setattr(rp, "HOLDOUT_D_SHA256", "0" * 64)
+    code = await rp.main(
+        ["--journeys", "--journeys-dir", str(rp.HOLDOUT_D_DIR), "--set-name", "D", "--yes"]
+    )
+    assert code == 2 and fake.calls == 0
+    assert "refuz" in capsys.readouterr().out

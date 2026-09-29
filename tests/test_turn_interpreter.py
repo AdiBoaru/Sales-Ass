@@ -599,7 +599,8 @@ def test_v3_bundle_covers_items_used_together_without_naming_them(pack):
 V4_RULES = {
     "B raftul numit, și ca întrebare": "also inside a question, is a set on category",
     "B un calificativ nu e raft": "a shelf word that is part of its name or only says",
-    "C ce ESTE clientul, nu rezultatul dorit": "the value that names what the customer is or has",
+    "C ce ESTE clientul, nu rezultatul": "the value that names what they are or have",
+    "C un rezultat cerut rămâne schimbare": "a result the customer asks for is a change too",
 }
 
 
