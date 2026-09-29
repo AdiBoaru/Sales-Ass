@@ -907,8 +907,15 @@ async def _learn_constraints(
     subject_on = getattr(settings, "conversation_subject_enabled", False)
     # NX-314: vocabularul intră doar cu subiectul aprins — stins, raftul rămâne șirul brut și
     # turul nu face nicio citire în plus (byte-identic). Vocabularul e cache-uit per tenant.
-    retained_on = settings.needs_retained_enabled
-    vocab = await get_vocabulary(deps, ctx.business.id) if (subject_on or retained_on) else None
+    vocab = await get_vocabulary(deps, ctx.business.id) if subject_on else None
+    # NX-355: vocabularul pentru cărare e separat de cel al subiectului, deliberat: cel al
+    # subiectului schimbă și forma raftului persistat (cheie, nu șirul brut), deci cu subiectul
+    # stins turul trebuie să rămână cel de dinainte.
+    catalog = (
+        vocab
+        if vocab is not None or not settings.needs_retained_enabled
+        else await get_vocabulary(deps, ctx.business.id)
+    )
     observed, stats = observed_constraints.from_search_args(run.search_args, message)
     # Raftul căutat e marker de SUBIECT, nu constrângere: nu se coroborează și e singurul care poate
     # reseta stiva. Se pasează chiar și cu `observed` gol — „am schimbat raftul" e o informație
@@ -920,7 +927,7 @@ async def _learn_constraints(
             ctx.state.search_constraints,
             observed,
             category,
-            carry_keys=_retained_keys(ctx, vocab),
+            carry_keys=_retained_keys(ctx, catalog),
         )
         ctx.state.search_constraints = merged
         ctx.state_proposals.extend(_need_proposals(ctx, observed))
