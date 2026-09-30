@@ -35,7 +35,7 @@ code decides on structure.
   recent earlier set of at least two”, not the immediately previous one: two details in a row leave
   a one-product set on top of the list. The rule is one pure function (`references.zoomed_list`);
   when the kernel serves, the exact v1 shortcuts step aside on an ordinal over such a screen
-  (`shortcut_deferred_to_kernel`), so link, detail and reviews follow it too. On v5.1, «compară
+  (trace key `shortcut_deferred_to_kernel`), so link, detail and reviews follow it too. On v5.1, «compară
   prima cu a treia» after «spune-mi mai multe despre a doua» came out `ordinal_out_of_range`, and
   «prima» was the product of the detail. The criterion is membership, not text: a single product
   from a new search is not in the earlier set, so the ordinal stays on screen. Not on `resume`
@@ -61,11 +61,12 @@ code decides on structure.
   `rank_terms`/`prefer`): an exclusion need from `user_explicit`, on an attribute facet, whose value
   the catalog carries exactly, removes the products carrying it after fusion (the NX-322b anti-fit
   net). On the universal `restriction` key the facet is found back through the vocabulary and must
-  be unique. On an additive facet a product goes when one of its values CONTAINS the excluded
-  phrase word by word (the article form of a word counts): «acid hialuronic» appears in 51 forms on
+  be unique. On a list facet with an open vocabulary (no declared values: the ingredients) a
+  product goes when one of its values CONTAINS the excluded phrase word by word (the article form of a word counts): «acid hialuronic» appears in 51 forms on
   the SOLE catalog («complex de 8 tipuri de acid hialuronic»), and an exact match caught 590 of 726;
   for an exclusion, removing too much is the safe error. A chemical synonym («hialuronat de sodiu»)
-  is not caught (pack data). On a `partitioning` facet (who the product is for) only the products
+  is not caught (pack data). On an enum or a text facet the match stays exact: `am_pm` is not
+  `am`, «gel crema» is not «gel». On a `partitioning` facet (who the product is for) only the products
   marked for the
   excluded values alone go: «nu pentru ten gras» keeps a cream declared for every skin type. A
   product without the attribute stays (UNKNOWN ≠ MISMATCH, D7). The NX-303 pool tail goes through

@@ -1730,6 +1730,7 @@ def excluded_hit(
     attributes: Any,
     exclude: Mapping[str, Sequence[str]],
     only: Collection[str] = (),
+    phrase_keys: Collection[str] = (),
 ) -> bool | None:
     """kernel.v6.0 (NX-364): produsul poartă o valoare exclusă? `True` = da (se scoate), `False` =
     nu, `None` = nu se știe (nicio fațetă exclusă n-are atribut pe produs), iar necunoscutul
@@ -1738,7 +1739,12 @@ def excluded_hit(
     `only` = fațetele `partitioning` („pentru cine”: tipul de ten). Acolo produsul e scos doar
     dacă e marcat NUMAI pentru valorile excluse, ca anti-potrivirea NX-322b: «nu pentru ten gras»
     nu scoate o cremă declarată pentru toate tipurile (recenzia v6.0). Pe fațetele aditive
-    (ingrediente, material) orice apariție exclude."""
+    (ingrediente, material) orice apariție exclude.
+
+    `phrase_keys` = fațetele LISTĂ cu vocabular DESCHIS (ingredientele). Doar acolo fraza se caută
+    în interiorul valorii («complex de 8 tipuri de acid hialuronic»). Pe un enum sau pe un text
+    potrivirea rămâne exactă: «nu de dimineață» nu scoate `am_pm`, «fără gel» nu scoate «gel
+    crema» (recenzia finală v6.0)."""
     attrs = attributes if isinstance(attributes, Mapping) else {}
     known = False
     for key, values in exclude.items():
@@ -1752,7 +1758,10 @@ def excluded_hit(
         if key in only:
             if have and have <= wanted:
                 return True
-        elif any(_names_phrase(value, phrase) for value in have for phrase in wanted):
+        elif key in phrase_keys:
+            if any(_names_phrase(value, phrase) for value in have for phrase in wanted):
+                return True
+        elif have & wanted:
             return True
     return False if known else None
 
@@ -1763,8 +1772,8 @@ def _names_phrase(value: str, phrase: str) -> bool:
     litere). Pe catalogul SOLE „acid hialuronic” apare în 51 de forme («complex de 8 tipuri de acid
     hialuronic», «acidul hialuronic»), iar potrivirea exactă prindea doar 590 din 726 de apariții
     (verificarea pe catalogul real, v6.0). La o EXCLUDERE, greșeala sigură e să scoți în plus."""
-    words = re.findall(r"[0-9a-z]+", value)
-    target = re.findall(r"[0-9a-z]+", phrase)
+    words = value.split()
+    target = phrase.split()
     if not target or len(target) > len(words):
         return False
 
@@ -1784,6 +1793,18 @@ def _partitioning_keys(ctx: TurnContext) -> frozenset[str]:
         str(getattr(f, "source_key", None) or f.key)
         for f in facets
         if getattr(f, "binding", "additive") == "partitioning"
+    )
+
+
+def _phrase_keys(ctx: TurnContext) -> frozenset[str]:
+    """Cheile de atribut ale fațetelor LISTĂ fără valori declarate (vocabular deschis: ingrediente),
+    singurele pe care o excludere caută fraza în interiorul valorii (`excluded_hit`)."""
+    facets = getattr(getattr(ctx.business, "domain_pack", None), "facets", ()) or ()
+    return frozenset(
+        str(getattr(f, "source_key", None) or f.key)
+        for f in facets
+        if getattr(getattr(f, "value_type", None), "value", None) == "list"
+        and not getattr(f, "values", ())
     )
 
 
@@ -2537,7 +2558,10 @@ async def _search(
     if a.exclude:
         before = len(ranked_final)
         only = _partitioning_keys(ctx)
-        verdicts = [excluded_hit(p.get("attributes"), a.exclude, only) for p in ranked_final]
+        phrases = _phrase_keys(ctx)
+        verdicts = [
+            excluded_hit(p.get("attributes"), a.exclude, only, phrases) for p in ranked_final
+        ]
         unknown = sum(1 for v in verdicts if v is None)
         ranked_final = [p for p, v in zip(ranked_final, verdicts, strict=True) if not v]
         # P12: fațetele și numărătorile, nu valorile rostite.
@@ -2616,7 +2640,9 @@ async def _search(
             # kernel.v6.0 (recenzia): coada intră în pool-ul paginat, deci trece prin ACELEAȘI
             # excluderi și ACELAȘI plafon de bandă ca pagina; altfel «mai arată-mi» servea exact
             # produsele scoase.
-            if a.exclude and excluded_hit(p.get("attributes"), a.exclude, _partitioning_keys(ctx)):
+            if a.exclude and excluded_hit(
+                p.get("attributes"), a.exclude, _partitioning_keys(ctx), _phrase_keys(ctx)
+            ):
                 continue
             if not within_band(p, band_cap):
                 continue

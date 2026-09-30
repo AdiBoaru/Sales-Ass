@@ -572,8 +572,8 @@ după fuziune și pe coada pool-ului; pe o fațetă `partitioning` scoate doar p
 valoarea exclusă; fără atribut, produsul rămâne (D7). Zoom-ul ordinalului e doar al surselor kernelului
 (`zoom_ordinals`), iar coșul pe un ordinal numărat pe listă întreabă (I10); regula e o singură
 funcție (`references.zoomed_list`, cea mai recentă listă de ≥ 2), iar cu kernelul servind scurtăturile
-exacte îi lasă ordinalul. Pe fațetele aditive excluderea potrivește fraza în valoare («complex de 8
-tipuri de acid hialuronic»); un tur fără cuvinte caută eticheta filtrului din stare, nu `no_query`. (4) O limită de preț fără număr e o BANDĂ a turului
+exacte îi lasă ordinalul. Pe fațetele listă cu vocabular deschis (ingrediente) excluderea potrivește
+fraza în valoare («complex de 8 tipuri de acid hialuronic»), pe enum și text rămâne exactă; un tur fără cuvinte caută eticheta filtrului din stare, nu `no_query`. (4) O limită de preț fără număr e o BANDĂ a turului
 (`band:low`, `ranking`, nepersistată), `SearchArgs.price_band="low"` = produsele până la mediana
 pool-ului cererii; pe v5.1 cobora pe `unmapped` și ordona după „ft scump”. Câmpurile noi sunt goale
 implicit (I16). Declarat: «par gras» n-are frază în pachet (date), calea v1 rămâne cu transcrierea în

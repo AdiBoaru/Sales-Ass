@@ -1105,8 +1105,10 @@ async def _pre_intents(ctx: TurnContext, deps: PipelineDeps, *, exact_only: bool
         # kernel.v6.0 (verificarea independentă): pe un ecran de detaliu intrat dintr-o listă,
         # ordinalul numără LISTA (`references.zoomed_list`). Scurtăturile ar fi numărat ecranul de
         # un card, deci turul e al kernelului, care aplică regula. Calea v1 (fără `exact_only`)
-        # rămâne neatinsă (I16).
-        ctx.emit("shortcut_deferred_to_kernel", reason="zoomed_ordinal")
+        # rămâne neatinsă (I16). Urma stă în trace, nu în evenimente: trecerea exactă care nu
+        # servește își scoate evenimentele (`ShortcutMemo.detach`), deci un eveniment n-ar ajunge
+        # niciodată în analytics (recenzia finală v6.0).
+        ctx.trace["shortcut_deferred_to_kernel"] = "zoomed_ordinal"
         return False
 
     # NX-316: un chip RECUNOSCUT (`ctx.chip_move`, scris de agent_stage) e o comandă declarată, nu

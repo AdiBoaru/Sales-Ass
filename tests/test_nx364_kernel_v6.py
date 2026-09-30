@@ -185,6 +185,10 @@ def test_an_unspoken_or_uncatalogued_exclusion_stays_a_gap(need):
 def test_excluded_hit_is_tri_state():
     exclude = {"key_ingredients": ["acid hialuronic"]}
     assert ct.excluded_hit({"key_ingredients": ["Acid Hialuronic", "ceramide"]}, exclude) is True
+    assert (
+        ct.excluded_hit({"key_ingredients": ["Acid Hialuronic"]}, exclude, (), {"key_ingredients"})
+        is True
+    )
     assert ct.excluded_hit({"key_ingredients": ["ceramide"]}, exclude) is False
     assert ct.excluded_hit({"concerns": ["hydration"]}, exclude) is None  # necunoscut: rămâne
     assert ct.excluded_hit(None, exclude) is None
@@ -554,9 +558,7 @@ async def test_exact_shortcuts_defer_an_ordinal_on_a_zoomed_screen_to_the_kernel
 
     ctx = _shortcut_ctx("trimite-mi linkul la primul", zoom=True)
     assert await det._pre_intents(ctx, object(), exact_only=True) is False
-    assert [
-        e.properties.get("reason") for e in ctx.events if e.type == "shortcut_deferred_to_kernel"
-    ] == ["zoomed_ordinal"]
+    assert ctx.trace.get("shortcut_deferred_to_kernel") == "zoomed_ordinal"
 
 
 async def test_no_deferral_without_a_list_behind_the_screen():
@@ -585,7 +587,33 @@ def test_an_additive_exclusion_matches_the_phrase_inside_catalog_values(value, h
     """Pe catalogul real, potrivirea exactă prindea 590 din 726 de apariții; la o EXCLUDERE,
     greșeala sigură e să scoți în plus."""
     exclude = {"key_ingredients": ["acid hialuronic"]}
-    assert ct.excluded_hit({"key_ingredients": ["ceramide", value]}, exclude) is hit
+    assert ct.excluded_hit({"key_ingredients": ["ceramide", value]}, exclude, (), PHRASES) is hit
+
+
+PHRASES = frozenset({"key_ingredients"})
+
+
+@pytest.mark.parametrize(
+    ("attrs", "exclude"),
+    [
+        ({"routine_time": "am_pm"}, {"routine_time": ["am"]}),  # enum: «nu de dimineață»
+        ({"routine_time": "am_pm"}, {"routine_time": ["pm"]}),
+        ({"texture": "gel crema"}, {"texture": ["gel"]}),  # text: «fără gel»
+        ({"concerns": ["hydration_boost"]}, {"concerns": ["hydration"]}),
+    ],
+)
+def test_containment_is_only_for_open_list_facets(attrs, exclude):
+    """Recenzia finală v6.0: fraza în interiorul valorii doar pe listele cu vocabular deschis
+    (ingrediente). Pe un enum sau un text, `am_pm` nu e `am`, iar «gel crema» nu e «gel»."""
+    assert ct.excluded_hit(attrs, exclude, (), PHRASES) is False
+    assert ct.excluded_hit({"routine_time": "am"}, {"routine_time": ["am"]}, (), PHRASES) is True
+
+
+def test_phrase_keys_come_from_the_pack():
+    from types import SimpleNamespace
+
+    ctx = SimpleNamespace(business=SimpleNamespace(domain_pack=fc.pack("sole-ro")))
+    assert ct._phrase_keys(ctx) == frozenset({"key_ingredients"})
 
 
 def test_an_exclusion_turn_without_a_subject_still_searches():
