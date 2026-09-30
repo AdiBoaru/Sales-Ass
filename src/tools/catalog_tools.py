@@ -12,10 +12,11 @@ import asyncio
 import hashlib
 import json
 import re
+import statistics
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -179,10 +180,19 @@ class SearchArgs(BaseModel):
     # ordonează, nu exclude. Fără el, pe datele de azi (nicio fațetă `enforce_ready`) toate nevoile
     # de fațetă ale clientului ar dispărea din căutarea interpretată.
     prefer: dict[str, list[str]] = Field(default_factory=dict)
+    # `exclude` (kernel.v6.0, NX-364): ce a EXCLUS clientul («nu vreau cu acid hialuronic»), cheie
+    # de atribut → valori canonice. Scoate din pool produsele care poartă valoarea, după fuziune
+    # (plasa anti-potrivirii NX-322b); un produs fără atributul respectiv RĂMÂNE: necunoscut nu e
+    # nepotrivit (D7). Gol ⇒ nimic nu se schimbă.
+    exclude: dict[str, list[str]] = Field(default_factory=dict)
+    # `price_band` (kernel.v6.0, NX-364): «să nu fie foarte scump», fără sumă. `low` păstrează din
+    # pool jumătatea mai ieftină a ce se potrivește cererii (până la mediana prețurilor lui), după
+    # fuziune, deci relevanța rămâne ordinea. `None` ⇒ nimic nu se schimbă.
+    price_band: Literal["low"] | None = None
 
 
 #: NX-333: câmpurile pe care le scrie DOAR plannerul. Intrarea modelului nu le poate purta.
-PLANNER_ONLY_FIELDS: tuple[str, ...] = ("rank_terms", "prefer")
+PLANNER_ONLY_FIELDS: tuple[str, ...] = ("rank_terms", "prefer", "exclude", "price_band")
 
 
 class DetailArgs(BaseModel):
@@ -1685,7 +1695,117 @@ def _session_filters(
     prefer = {key: values for key, values in prefer.items() if values}
     if prefer:
         out["prefer"] = prefer
+    exclude = {
+        key: sorted({normalize(v) for v in values if normalize(v)})
+        for key, values in sorted(a.exclude.items())
+    }
+    exclude = {key: values for key, values in exclude.items() if values}
+    if exclude:
+        out["exclude"] = exclude
+    if a.price_band:
+        out["price_band"] = a.price_band
     return out
+
+
+def price_band_cap(products: list[dict[str, Any]]) -> float | None:
+    """kernel.v6.0 (NX-364): MEDIANA prețurilor cunoscute ale pool-ului, plafonul benzii de jos.
+    Sub două prețuri cunoscute nu există o jumătate: `None`. PUR."""
+    prices = [float(p["price"]) for p in products if isinstance(p.get("price"), (int, float))]
+    return statistics.median(prices) if len(prices) >= 2 else None
+
+
+def within_band(product: dict[str, Any], cap: float | None) -> bool:
+    """Produsul încape sub plafon; fără plafon sau fără preț, încape (necunoscut nu e scump)."""
+    price = product.get("price")
+    return cap is None or not isinstance(price, (int, float)) or float(price) <= cap
+
+
+def lower_price_band(products: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Produsele cu prețul cel mult mediana pool-ului, în ordinea primită. PUR."""
+    cap = price_band_cap(products)
+    return [p for p in products if within_band(p, cap)]
+
+
+def excluded_hit(
+    attributes: Any,
+    exclude: Mapping[str, Sequence[str]],
+    only: Collection[str] = (),
+    phrase_keys: Collection[str] = (),
+) -> bool | None:
+    """kernel.v6.0 (NX-364): produsul poartă o valoare exclusă? `True` = da (se scoate), `False` =
+    nu, `None` = nu se știe (nicio fațetă exclusă n-are atribut pe produs), iar necunoscutul
+    RĂMÂNE în pool (D7). Comparația e pe forma normalizată, ca amprenta sesiunii. PUR.
+
+    `only` = fațetele `partitioning` („pentru cine”: tipul de ten). Acolo produsul e scos doar
+    dacă e marcat NUMAI pentru valorile excluse, ca anti-potrivirea NX-322b: «nu pentru ten gras»
+    nu scoate o cremă declarată pentru toate tipurile (recenzia v6.0). Pe fațetele aditive
+    (ingrediente, material) orice apariție exclude.
+
+    `phrase_keys` = fațetele LISTĂ cu vocabular DESCHIS (ingredientele). Doar acolo fraza se caută
+    în interiorul valorii («complex de 8 tipuri de acid hialuronic»). Pe un enum sau pe un text
+    potrivirea rămâne exactă: «nu de dimineață» nu scoate `am_pm`, «fără gel» nu scoate «gel
+    crema» (recenzia finală v6.0)."""
+    attrs = attributes if isinstance(attributes, Mapping) else {}
+    known = False
+    for key, values in exclude.items():
+        wanted = {normalize(v) for v in values if normalize(v)}
+        raw = attrs.get(key)
+        if raw is None:
+            continue
+        known = True
+        have = {normalize(str(x)) for x in (raw if isinstance(raw, (list, tuple)) else [raw])}
+        have.discard("")
+        if key in only:
+            if have and have <= wanted:
+                return True
+        elif key in phrase_keys:
+            if any(_names_phrase(value, phrase) for value in have for phrase in wanted):
+                return True
+        elif have & wanted:
+            return True
+    return False if known else None
+
+
+def _names_phrase(value: str, phrase: str) -> bool:
+    """Valoarea de catalog CONȚINE fraza exclusă, cuvânt cu cuvânt și în ordine; un cuvânt al
+    valorii poate fi forma articulată a celui exclus («acidul» pentru „acid”, prefix de cel puțin 4
+    litere). Pe catalogul SOLE „acid hialuronic” apare în 51 de forme («complex de 8 tipuri de acid
+    hialuronic», «acidul hialuronic»), iar potrivirea exactă prindea doar 590 din 726 de apariții
+    (verificarea pe catalogul real, v6.0). La o EXCLUDERE, greșeala sigură e să scoți în plus."""
+    words = value.split()
+    target = phrase.split()
+    if not target or len(target) > len(words):
+        return False
+
+    def same(w: str, t: str) -> bool:
+        return w == t or (len(t) >= 4 and w.startswith(t))
+
+    return any(
+        all(same(words[i + j], target[j]) for j in range(len(target)))
+        for i in range(len(words) - len(target) + 1)
+    )
+
+
+def _partitioning_keys(ctx: TurnContext) -> frozenset[str]:
+    """Cheile de atribut ale fațetelor `partitioning` ale pachetului (NX-257)."""
+    facets = getattr(getattr(ctx.business, "domain_pack", None), "facets", ()) or ()
+    return frozenset(
+        str(getattr(f, "source_key", None) or f.key)
+        for f in facets
+        if getattr(f, "binding", "additive") == "partitioning"
+    )
+
+
+def _phrase_keys(ctx: TurnContext) -> frozenset[str]:
+    """Cheile de atribut ale fațetelor LISTĂ fără valori declarate (vocabular deschis: ingrediente),
+    singurele pe care o excludere caută fraza în interiorul valorii (`excluded_hit`)."""
+    facets = getattr(getattr(ctx.business, "domain_pack", None), "facets", ()) or ()
+    return frozenset(
+        str(getattr(f, "source_key", None) or f.key)
+        for f in facets
+        if getattr(getattr(f, "value_type", None), "value", None) == "list"
+        and not getattr(f, "values", ())
+    )
 
 
 def _fp(filters: dict[str, Any]) -> str:
@@ -2433,6 +2553,39 @@ async def _search(
                     consumer="search_products",
                 )
 
+    # kernel.v6.0 (NX-364): excluderile SPUSE de client, în aceeași plasă de după fuziune și din
+    # același motiv ca anti-potrivirea (pool-ul sesiunii se seamănă din `ranked_final`).
+    if a.exclude:
+        before = len(ranked_final)
+        only = _partitioning_keys(ctx)
+        phrases = _phrase_keys(ctx)
+        verdicts = [
+            excluded_hit(p.get("attributes"), a.exclude, only, phrases) for p in ranked_final
+        ]
+        unknown = sum(1 for v in verdicts if v is None)
+        ranked_final = [p for p, v in zip(ranked_final, verdicts, strict=True) if not v]
+        # P12: fațetele și numărătorile, nu valorile rostite.
+        ctx.emit(
+            "search_excluded",
+            facets=sorted(a.exclude),
+            n_excluded=before - len(ranked_final),
+            n_unknown=unknown,
+        )
+
+    # kernel.v6.0 (NX-364): banda de preț vagă, pe pool-ul DEJA filtrat (după excluderi), ca
+    # mediana să fie a ce se potrivește cererii, nu a raftului întreg.
+    band_cap: float | None = None
+    if a.price_band == "low" and (ranked_final or pool_tail) and a.product_name is None:
+        # Recenzia v6.0: nu pe un produs NUMIT (un produs scump ar dispărea din propria căutare).
+        before = len(ranked_final)
+        # Sub două prețuri pe pagina filtrată (verificarea independentă v6.0), plafonul se ia pe
+        # pagină + coadă, altfel coada ar intra fără bandă.
+        band_cap = price_band_cap(ranked_final)
+        if band_cap is None:
+            band_cap = price_band_cap([*ranked_final, *pool_tail])
+        ranked_final = [p for p in ranked_final if within_band(p, band_cap)]
+        ctx.emit("price_band_applied", band="low", pool=before, kept=len(ranked_final))
+
     # NX-134: diversificare sortiment — reordonează pool-ul ca prima pagină să acopere scara de preț
     # + branduri (nu top-N clone). DOAR pe `relevance` (sort explicit = ordinea cerută de client,
     # neatinsă) și NU pe produs numit (A1: căutăm exact acel produs). Top-1/pick-ul nu se mișcă.
@@ -2483,6 +2636,15 @@ async def _search(
             if len(ranked_final) >= MAX_SEARCH_POOL:
                 break
             if str(p.get("id")) in have:
+                continue
+            # kernel.v6.0 (recenzia): coada intră în pool-ul paginat, deci trece prin ACELEAȘI
+            # excluderi și ACELAȘI plafon de bandă ca pagina; altfel «mai arată-mi» servea exact
+            # produsele scoase.
+            if a.exclude and excluded_hit(
+                p.get("attributes"), a.exclude, _partitioning_keys(ctx), _phrase_keys(ctx)
+            ):
+                continue
+            if not within_band(p, band_cap):
                 continue
             ranked_final.append(p)
             added += 1

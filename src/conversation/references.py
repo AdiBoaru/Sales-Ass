@@ -63,6 +63,7 @@ REASONS: tuple[str, ...] = (
     "named",
     "named_with_qualifier",
     "attribute_match",
+    "ordinal_in_zoomed_list",
     "extreme",
     "the_other",
     "earlier_single",
@@ -148,6 +149,10 @@ class ReferenceSources:
     focus: str | None = None  # `selected_product` (v2); None pe v1
     displayed_revision: int = 0
     thread: Thread = "continue"
+    #: `kernel.v6.0` (NX-364): ordinalul pe lista „în care s-a intrat” (`_zoomed_list`). Îl pune
+    #: DOAR `sources_from_state`, adică calea kernelului; scurtăturile căii v1 își construiesc
+    #: sursele separat și rămân pe ecran (I16, recenzia v6.0).
+    zoom_ordinals: bool = False
 
     @property
     def focus_source(self) -> Source:
@@ -415,6 +420,10 @@ class _Resolver:
 
     def ordinal(self, ref: Reference) -> _Raw:
         src, items = self.sources.focus_source, self.sources.focus_set
+        found = "ordinal_in_set"
+        zoomed = self._zoomed_list(items)
+        if zoomed is not None:
+            src, items, found = "shown_earlier", zoomed, "ordinal_in_zoomed_list"
         n = ref.ordinal
         if n is None or n < 1:
             return _Raw("ordinal", "not_found", (), src, "invalid_reference")
@@ -423,7 +432,12 @@ class _Resolver:
         if n > len(items):
             ids = tuple(it.product_id for it in items)
             return _Raw("ordinal", "ambiguous", ids, src, "ordinal_out_of_range")
-        return _Raw("ordinal", "exact", (items[n - 1].product_id,), src, "ordinal_in_set")
+        return _Raw("ordinal", "exact", (items[n - 1].product_id,), src, found)
+
+    def _zoomed_list(self, items: tuple[ShownItem, ...]) -> tuple[ShownItem, ...] | None:
+        if not self.sources.zoom_ordinals or self.sources.thread == "resume":
+            return None
+        return zoomed_list(items, self.sources.shown_earlier)
 
     def deictic(self, ref: Reference) -> _Raw:
         s = self.sources
@@ -829,6 +843,29 @@ def plan_lookup(
     )
 
 
+def zoomed_list(
+    screen: Sequence[ShownItem], earlier: Sequence[Sequence[ShownItem]]
+) -> tuple[ShownItem, ...] | None:
+    """`kernel.v6.0` (NX-364): lista „în care a intrat” clientul, sau None. PUR.
+
+    Un singur produs pe ecran, membru al celei mai recente liste ANTERIOARE de cel puțin două
+    produse, înseamnă că clientul a intrat în DETALIUL unui produs din listă. Ordinalele de după
+    («compară prima cu a treia») numără lista, nu ecranul de un card: pe conversația `0e88752a`
+    ecranul detaliului făcea din «a treia» `ordinal_out_of_range`.
+
+    „Cea mai recentă listă de cel puțin două”, nu setul imediat anterior: două detalii la rând
+    lasă în `recent_sets` un set de un produs (detaliul de dinainte) peste listă (verificarea
+    independentă v6.0). Criteriul e structural (apartenența la listă), nu textual: un produs unic
+    dintr-o căutare nouă nu e în listă, deci ordinalul rămâne pe ecran. O singură regulă, citită de
+    resolver și de scurtăturile care renunță în fața ei (`deterministic`)."""
+    if len(screen) != 1:
+        return None
+    lst = next((tuple(s) for s in earlier if len(s) >= 2), None)
+    if lst is None or screen[0].product_id not in {it.product_id for it in lst}:
+        return None
+    return lst
+
+
 def sources_from_state(state: ConversationStateV2, thread: str) -> ReferenceSources:
     """Sursele resolverului din starea REDUSĂ (NX-335, promovat din helperul de test NX-331):
     ecranul (`displayed_products`), seturile de mai devreme (`recent_sets`), setul parcat și
@@ -851,6 +888,7 @@ def sources_from_state(state: ConversationStateV2, thread: str) -> ReferenceSour
         parked=items(parked.shown) if parked is not None else (),
         focus=state.references.selected_product,
         thread=thread,  # type: ignore[arg-type]
+        zoom_ordinals=True,
     )
 
 
@@ -935,4 +973,5 @@ __all__ = [
     "plan_lookup",
     "resolve_references",
     "sources_from_state",
+    "zoomed_list",
 ]

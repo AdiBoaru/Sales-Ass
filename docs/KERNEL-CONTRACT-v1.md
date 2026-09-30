@@ -23,7 +23,74 @@ Versioning: the contract is `kernel.v1.0`. **Minor** (`v1.1`): additive schema f
 
 No invariant, ownership row or state rule changes in v1.2, so no replay gate is required. The open questions step 6 raised on I5 (the safety prune on `aside`), I20 (the cart on `cart_ref`) and I15a/I12 (`grounding_guard` does not run on the v1 composition) are decided in the PRs that need them (B and C), under the minor/major rule.
 
-**Current version: `kernel.v5.1` (MINOR, NX-349).**
+**Current version: `kernel.v6.0` (MAJOR, NX-364, asked for by Adi on 2026-09-30).**
+
+**Why.** Four real conversations on 2026-09-30 (`sole-ro`) hit four rules of v5.1 that the NX-363
+defect detectors now count on all traffic. Each change keeps the kernel's split: the model proposes,
+code decides on structure.
+
+- **An ordinal after a detail counts the list the customer zoomed into.** When the screen holds one
+  product and that product is a member of the most recent earlier set of at least two, an ordinal
+  resolves on that set (`source: shown_earlier`, reason `ordinal_in_zoomed_list`). „The most
+  recent earlier set of at least two”, not the immediately previous one: two details in a row leave
+  a one-product set on top of the list. The rule is one pure function (`references.zoomed_list`);
+  when the kernel serves, the exact v1 shortcuts step aside on an ordinal over such a screen
+  (trace key `shortcut_deferred_to_kernel`), so link, detail and reviews follow it too. On v5.1, «compară
+  prima cu a treia» after «spune-mi mai multe despre a doua» came out `ordinal_out_of_range`, and
+  «prima» was the product of the detail. The criterion is membership, not text: a single product
+  from a new search is not in the earlier set, so the ordinal stays on screen. Not on `resume`
+  (the focus is the parked set). Only the kernel's sources zoom (`ReferenceSources.zoom_ordinals`,
+  set by `sources_from_state`); the v1 shortcuts build their own sources and keep the ordinal on
+  screen (I16). A mutation (cart) whose target was counted on the list and differs from the product
+  on screen is `must_ask` with both candidates (I10): on a detail screen «adaugă-l pe primul» may
+  mean the card or the first of the list.
+- **Provenance confirms an inflected name of the proposed value.** Step 2 also accepts the quote
+  when it spells, word by word and in order, one of the proposed value's known names (its key and
+  the overlay phrases that map to it), with the locale's inflection table (the rule the NX-350
+  umbrella already uses, stem of at least three letters), provided at least one of the name's words
+  is spelled exactly, and a three-letter stem only takes a suffix of two letters or more
+  («tenul» is „ten” plus the article, «pare» in «mi se pare» is not „par”): «am tenul uscat» is
+  `explicit` for `skin_type=dry`. Inflection only confirms,
+  it never contradicts: a short stem also matches verbs («mi se pare uscată» spells „par uscat”),
+  so an inflected contradiction could drop a need the customer stated. Nothing else moves: a
+  description still names no value and stays `implicit`. Measured on the labelled set A before the change: `implicit` facet changes are
+  right 46% of the time against 82% for `explicit`, so the vocabulary check stays; the offline
+  rerun of the validator on the 127 stored interpretations moved exactly two changes. A value the
+  pack has no phrase for («par gras» → `oily`) is a pack-data gap, not a code one.
+- **A spoken exclusion on a catalog value is a filter.** `SearchArgs.exclude` (planner-only, like
+  `rank_terms`/`prefer`): an exclusion need from `user_explicit`, on an attribute facet, whose value
+  the catalog carries exactly, removes the products carrying it after fusion (the NX-322b anti-fit
+  net). On the universal `restriction` key the facet is found back through the vocabulary and must
+  be unique. On a list facet with an open vocabulary (no declared values: the ingredients) a
+  product goes when one of its values CONTAINS the excluded phrase word by word (the article form of a word counts): «acid hialuronic» appears in 51 forms on
+  the SOLE catalog («complex de 8 tipuri de acid hialuronic»), and an exact match caught 590 of 726;
+  for an exclusion, removing too much is the safe error. A chemical synonym («hialuronat de sodiu»)
+  is not caught (pack data). On an enum or a text facet the match stays exact: `am_pm` is not
+  `am`, «gel crema» is not «gel». On a `partitioning` facet (who the product is for) only the products
+  marked for the
+  excluded values alone go: «nu pentru ten gras» keeps a cream declared for every skin type. A
+  product without the attribute stays (UNKNOWN ≠ MISMATCH, D7). The NX-303 pool tail goes through
+  the same exclusion. A routine (`bundle`) cannot exclude yet and discloses the `exclusion` gap.
+  Anything else stays the `exclusion` gap, as before. When the turn has no words to search and no
+  subject («nu vreau cu acid hialuronic» after «ceva de hidratare»), the search text is the locale
+  label of the first need filter carried from the state (the pack's `value_labels`), not `no_query`:
+  on v5.1 such a turn never searched, so the exclusion never ran. On the real turn «nu vreau cu acid hialuronic», all four products
+  v1 showed carried the ingredient.
+- **A price limit without a number is a band.** `lte`/`gte` on price with no number and no
+  `relative_to` no longer falls to `unmapped` (which made the words a rank term, «ft scump»). It is
+  checked as `price` with the value `band:low` / `band:high`, strength `ranking` (turn-local, I23:
+  a vague wish is not a budget). The planner turns `band:low` into `SearchArgs.price_band = "low"`
+  (planner-only): the tool keeps the products priced at most the median of the pool that matches the
+  request, after fusion and exclusions, in relevance order; the pool tail is capped at the same
+  median. Not on a search for a named product. A value with digits is a sum written without
+  `number`, not a band. `band:high`, and a band on a routine, stay the `soft_budget` gap. The replay
+  scorer counts a band like an `inferred` change (neutral), since it is never persisted.
+
+All three new `SearchArgs` fields are empty by default and enter the session fingerprint only when
+set, so the v1 path is byte-identical (I16). The replay gate is waived, as for v2.0 to v5.0: no
+interpreted turn has been served in production. The schema the model writes is unchanged.
+
+**`kernel.v5.1` (MINOR, NX-349).**
 
 **What v5.1 fixes.** On `kernel.v5.0` a boolean facet of the pack (`value_type: bool`, for example `fragrance_free`) never survived validation. The catalog vocabulary does not index booleans, so `set fragrance_free true` became `unmapped` with the value "true", and the planner sent that value to `rank_terms`.
 
@@ -203,7 +270,7 @@ The model proposes meaning; code decides everything that is a fact, an identifie
 | Provenance level | — | owns | From quote + vocabulary; the model has no field for it |
 | Hard vs soft | supplies evidence only | owns | From provenance + hard capability |
 | Product mention as text | supplies | — | — |
-| Reference semantics (kind, ordinal, name, dimension, value, direction) | proposes | validates, may reclassify or reject | e.g. a `name` matching no product is `not_found`; an ordinal beyond the set is `ambiguous` |
+| Reference semantics (kind, ordinal, name, dimension, value, direction) | proposes | validates, may reclassify or reject | e.g. a `name` matching no product is `not_found`; an ordinal beyond the set is `ambiguous`; (v6.0) on a one-product screen whose product belongs to the latest earlier set of ≥ 2, an ordinal counts that set |
 | Where a referenced object lives | — | owns (`ResolvedRef.source`) | The model has no field for it |
 | Product and variant ids | never | owns | Every candidate id, including parked and recent, is revalidated against the catalog |
 | Price, stock, product URL, product attributes | never | owns (catalog) | Re-read at resolution time |
@@ -361,6 +428,8 @@ Provenance is computed by code in four steps, in order. The model supplies only 
    - resolves to the proposed `(dimension, value)` → `explicit` candidate;
    - resolves to a **different** value (any dimension), and not to the proposed one → rejected, `semantic_mismatch`;
    - resolves to nothing → `implicit`.
+   - (v6.0) the quote spells, word by word and with the locale's inflection table (at least one
+     word exact), one of the proposed value's known names → `explicit`. Inflection only confirms.
 
    The limit is declared: when the quote resolves to nothing, code cannot tell a reasonable inference („se usucă” → dry) from a structural hallucination („se usucă” → redness). Both stay `implicit`, which means soft: a wrong one can reorder results but never exclude any. The replay metric on implicit changes is how that rate is watched.
 3. **Check polarity.** The marker tables are per locale, next to the existing stop-word and comparator tables in `query_terms`. They are function words, not domain words.
@@ -421,7 +490,7 @@ The contract requires two additive changes in the search tool, both written only
 
 „Weight capped below any facet match” is measured, not assumed (`tests/test_kernel_planner.py`): with today's fusion weights and the real fusion pool (50), a facet preference always beats the one-position lift a rank term gives between two adjacent products. The declared limit: a rank term is a secondary key, so inside a large tie group of the text rank (the `filters_only` rung, where hundreds of products rank zero) it can lift a product by several positions at once, and one preferred dimension (0.25) undoes a lift of at most 7 positions from the top of the pool; with several preferred dimensions the preference is their mean, so the bound is lower. Moving `rank_terms` into a fusion signal would lift that limit and is a contract change on measurement, not on principle.
 
-What the planner cannot express in `SearchArgs` (`budget_min`, exclusions, numeric facet bounds, a `soft` budget, a variant, a preference on a non-attribute dimension) goes into the plan's `gaps` (closed vocabulary), never into a hidden filter. An `avoid` on an `unmapped` word is an exclusion (the delta writes it on the universal `restriction` key, `soft`), never a rank term: a rank term can only lift the products that carry the word.
+What the planner cannot express in `SearchArgs` (`budget_min`, an exclusion that is not spoken or has no unique catalog value, numeric facet bounds, a `soft` budget, a variant, a preference on a non-attribute dimension) goes into the plan's `gaps` (closed vocabulary), never into a hidden filter. (v6.0) A spoken exclusion on a catalog value is the declared filter `SearchArgs.exclude`, and a price limit without a number the declared band `SearchArgs.price_band`. An `avoid` on an `unmapped` word is an exclusion (the delta writes it on the universal `restriction` key, `soft`), never a rank term: a rank term can only lift the products that carry the word.
 
 On the planned path the tool does not re-judge `price_max` on the recent text (the NX-319 guard judges the **model's** bound on today's path): the planner's `price_max` comes only from a hard `budget_max` of the reduced state, whose provenance the kernel already checked on the user's quote, and the budget is conversation-scoped, so its number can be far outside the text window. It is counted as `price_bound_provenance{source: state}`.
 

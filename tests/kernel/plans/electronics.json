@@ -1032,5 +1032,24 @@
       "primary": 0,
       "user_input": "Trimite-mi linkul la primul."
     }
+  ],
+  "r13-electronics-ordinal-after-detail": [
+    {
+      "disclosures": [
+        [
+          0,
+          "no_target"
+        ]
+      ],
+      "dropped_acts": 0,
+      "gaps": [],
+      "plans": [
+        {
+          "executor": "reply_only"
+        }
+      ],
+      "primary": 0,
+      "user_input": "Compară primul cu al treilea."
+    }
   ]
 }

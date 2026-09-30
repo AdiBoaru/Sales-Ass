@@ -74,6 +74,11 @@ MAX_ACTS = 3
 
 PRICE = PRICE_DIMENSION
 UNMAPPED = "unmapped"
+#: `kernel.v6.0` (NX-364): o limită de preț FĂRĂ număr și fără țintă («să nu fie foarte scump»,
+#: «ceva mai de calitate, nu contează prețul»). Valoarea e o BANDĂ față de prețurile a ce se
+#: potrivește cererii, nu o sumă: `lte` ⇒ jumătatea ieftină, `gte` ⇒ cea scumpă.
+PRICE_BAND_LOW = "band:low"
+PRICE_BAND_HIGH = "band:high"
 #: Cheile de nevoie care stau pe dimensiunea prețului.
 PRICE_KEYS: frozenset[str] = frozenset(PRICE_BOUNDS)
 
@@ -238,6 +243,23 @@ def _same_stem(a: str, b: str, suffixes: Collection[str]) -> bool:
             if b == stem + sb:
                 return True
     return False
+
+
+def _confirms(word: str, name_word: str, suffixes: Collection[str]) -> bool:
+    """`kernel.v6.0`: cuvântul clientului e o formă a cuvântului din NUMELE valorii. Ca
+    `_same_stem`, dar o tulpină de trei litere cere un sufix de cel puțin două pe cuvântul
+    clientului: «tenul» e „ten” + articol, «pare» nu e „par” (e verbul din «mi se pare»;
+    verificarea independentă v6.0). Tulpinile mai lungi se potrivesc ca la umbrelă."""
+    if word == name_word:
+        return True
+    if not _same_stem(word, name_word, suffixes):
+        return False
+    common = 0
+    for a, b in zip(word, name_word, strict=False):
+        if a != b:
+            break
+        common += 1
+    return common >= 4 or len(word) - common >= 2
 
 
 def _spells(words: Sequence[str], code: Sequence[str], suffixes: Collection[str]) -> bool:
@@ -466,6 +488,26 @@ class _Checker:
                 if flag is None:
                     return reject("semantic_mismatch")
                 return self._flag(change, dimension, facet, flag, evidence)
+            if (
+                dimension == PRICE
+                and relation in ("lte", "gte")
+                and not any(ch.isdigit() for ch in change.value)
+            ):
+                # kernel.v6.0 (NX-364): pe v5.1 valoarea («ft scump») nu se rezolva pe preț, cobora
+                # pe `unmapped` și devenea termen de ordonare, adică ordona după cuvântul „scump”.
+                # Sensul e în RELAȚIA scrisă de model (`lte`), nu într-o listă de cuvinte: devine
+                # o bandă, semnal al turului (`ranking`, nepersistat, ca un `inferred`, I23),
+                # fiindcă o dorință vagă nu e un buget. O valoare cu cifre («100») e o sumă
+                # scrisă fără `number` (recenzia): rămâne pe drumul de dinainte.
+                band = PRICE_BAND_LOW if relation == "lte" else PRICE_BAND_HIGH
+                return CheckedChange(
+                    change=change,
+                    dimension=PRICE,
+                    canonical_value=band,
+                    provenance=located,
+                    strength="ranking",
+                    rejected=None,
+                )
             dimension, canonical = self._canonical(dimension, change.value)
             level = located
             number_in_quote = False
@@ -591,6 +633,9 @@ class _Checker:
             on = self._resolve_on(phrase, dimension)
             if on is not None and on.key == canonical:
                 return "explicit", start, False, size
+        spelled = self._spelled_name(evidence.words, dimension, canonical)
+        if spelled is not None:
+            return "explicit", spelled[0], False, spelled[1]
         for _start, _size, phrase in self._ngrams(evidence.words):
             anywhere = self._resolve_anywhere(phrase)
             if anywhere is None:
@@ -602,6 +647,52 @@ class _Checker:
             if (anywhere.dimension, anywhere.key) != (dimension, canonical):
                 other = True
         return "implicit", -1, other, 0
+
+    def _spelled_name(
+        self, words: Sequence[str], dimension: str, canonical: str | float | None
+    ) -> tuple[int, int] | None:
+        """`kernel.v6.0` (NX-364): citatul numește valoarea PROPUSĂ printr-unul din numele ei
+        cunoscute (cheia și frazele overlay-ului care duc la ea), flexionat. (poziție, lungime).
+
+        Potrivirea tare a vocabularului e o căutare exactă de dicționar, deci «am tenul uscat» nu
+        confirma `skin_type=dry` („ten uscat” e fraza pachetului): pe setul real A, toate cele trei
+        `skin_type` coborâte la `implicit` aveau valoarea corectă, iar planul le trata ca simple
+        preferințe. Aici numele valorii se caută cuvânt cu cuvânt, în ordine, cu tulpina și sufixele
+        locale-i (`_spells`, aceeași regulă ca umbrela NX-350; tabelul e al locale-i, P11).
+
+        Confirmă DOAR valoarea propusă, cu un nume pe care pachetul i-l dă deja: nu adaugă nicio
+        frază și nu schimbă ce e contrazis (a doua trecere din `_resolve_quote` rămâne exactă).
+        Recenzia v6.0: o contradicție FLEXIONATĂ ar putea șterge o nevoie spusă («pielea mi se pare
+        uscată» ar fi numit „par uscat”), deci flexiunea doar confirmă, niciodată nu contrazice.
+        O descriere («mi se usucă pielea») nu conține niciun nume al valorii, deci rămâne
+        `implicit`: pe același set, `implicit` are precizie 46%, iar verificarea pe vocabular e
+        exact ce le separă."""
+        if not isinstance(canonical, str) or self.vocab is None or not words:
+            return None
+        vocab_dim = CATEGORY_DIMENSION if dimension == CATEGORY_DIMENSION else dimension
+        overlay = self.overlays.get(vocab_dim) or {}
+        names = {canonical, *(phrase for phrase, key in overlay.items() if key == canonical)}
+        suffixes = inflection_suffixes(self.locale)
+        best: tuple[int, int] | None = None
+        for name in names:
+            code = tuple(tokens(name))
+            size = len(code)
+            if not size or size > len(words):
+                continue
+            for i in range(len(words) - size + 1):
+                window = words[i : i + size]
+                if not all(_confirms(window[j], code[j], suffixes) for j in range(size)):
+                    continue
+                # Recenzia v6.0: o tulpină scurtă se potrivește și cu verbe («pare» = „par” + „e”),
+                # deci «mi se pare uscată» ar fi „numit” `par uscat`. Flexiunea e acceptată doar
+                # lângă un cuvânt IDENTIC al numelui («tenul USCAT»); un nume de un cuvânt rămâne
+                # pe potrivirea exactă, ca pe v5.1.
+                if not any(window[j] == code[j] for j in range(size)):
+                    continue
+                if best is None or size > best[1]:
+                    best = (i, size)
+                break
+        return best
 
     def _umbrella(self, evidence: _Evidence, canonical: str | float | None) -> tuple[str, ...]:
         """NX-350: UMBRELA unui tip spus vag: codurile de tip care poartă cuvântul-tip spus de

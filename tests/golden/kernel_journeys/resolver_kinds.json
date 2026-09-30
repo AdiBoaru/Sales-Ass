@@ -258,6 +258,31 @@
           }
         }
       ]
+    },
+    {
+      "journey_id": "r13-electronics-ordinal-after-detail",
+      "pack": "electronics",
+      "family": ["reference", "ordinal"],
+      "source": "kernel.v6.0 (NX-364), conversația 0e88752a: «compara prima cu a treia» după un detaliu",
+      "turns": [
+        {
+          "user_input": "Compară primul cu al treilea.",
+          "sources": {"shown_now": ["el-02"], "shown_earlier": [["el-01", "el-02", "el-03"]]},
+          "expect": {
+            "interpretation": {
+              "acts": [{"kind": "compare", "targets": ["r1", "r2"]}],
+              "references": [
+                {"id": "r1", "text": "primul", "kind": "ordinal", "ordinal": 1},
+                {"id": "r2", "text": "al treilea", "kind": "ordinal", "ordinal": 3}
+              ]
+            },
+            "resolver": [
+              {"ref_id": "r1", "kind": "ordinal", "outcome": "exact", "product_ids": ["el-01"], "source": "shown_earlier", "reason": "ordinal_in_zoomed_list"},
+              {"ref_id": "r2", "kind": "ordinal", "outcome": "exact", "product_ids": ["el-03"], "source": "shown_earlier", "reason": "ordinal_in_zoomed_list"}
+            ]
+          }
+        }
+      ]
     }
   ]
 }

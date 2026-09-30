@@ -726,7 +726,7 @@ def test_a_bare_price_with_eq_is_a_hard_ceiling():
     assert step.planned.gaps == ()
 
 
-def test_an_exclusion_is_a_gap():
+def test_a_spoken_exclusion_on_a_catalog_value_filters_it_out():
     step = fc.kernel_step(
         "fashion",
         ConversationStateV2(),
@@ -751,9 +751,14 @@ def test_an_exclusion_is_a_gap():
         ),
         "Vreau o rochie, să nu fie din poliester.",
     )
-    assert "exclusion" in step.planned.gaps
+    # kernel.v6.0 (NX-364): excluderea SPUSĂ, pe o valoare pe care catalogul o poartă, e filtru
+    # (`exclude`); pe v5.1 era golul `exclusion`. Cuvântul ocolit tot nu urcă nimic: nu e nici
+    # text, nici preferință, nici termen de ordonare.
+    assert "exclusion" not in step.planned.gaps
     args = _search(step.planned)
-    assert "poliester" not in str(args.model_dump())
+    assert args.exclude == {"material": ["poliester"]}
+    dumped = args.model_dump(exclude={"exclude"})
+    assert "poliester" not in str(dumped)
 
 
 def test_a_need_without_a_field_or_a_facet_is_a_gap():

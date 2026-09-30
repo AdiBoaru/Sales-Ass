@@ -99,6 +99,86 @@ def test_ordinal_not_found(ordinal, ids, reason):
     assert (r.outcome, r.reason, r.product_ids) == ("not_found", reason, [])
 
 
+# --- ordinal pe lista „în care s-a intrat” (kernel.v6.0, NX-364) ------------------------------
+
+
+def test_ordinal_after_a_detail_counts_the_list_the_customer_zoomed_into():
+    """Conversația `0e88752a`: șase produse, «spune-mi mai multe despre a doua» (ecranul devine un
+    singur card), apoi «compara prima cu a treia». Pe v5.1 «a treia» ieșea `ordinal_out_of_range`,
+    iar «prima» era produsul din detaliu, nu primul din listă."""
+    sources = screen(
+        "electronics",
+        "el-02",
+        shown_earlier=(fc.shown("electronics", "el-01", "el-02", "el-03"),),
+        zoom_ordinals=True,
+    )
+    first, third = run(
+        "electronics",
+        [ref("r1", "ordinal", ordinal=1), ref("r2", "ordinal", ordinal=3)],
+        sources,
+    )
+    assert (first.outcome, first.product_ids, first.source, first.reason) == (
+        "exact",
+        ["el-01"],
+        "shown_earlier",
+        "ordinal_in_zoomed_list",
+    )
+    assert (third.outcome, third.product_ids) == ("exact", ["el-03"])
+
+
+def test_the_v1_shortcut_sources_never_zoom():
+    """Recenzia v6.0: scurtăturile căii v1 (`deterministic._state_v2_sources`) își construiesc
+    sursele fără `zoom_ordinals`, deci «linkul la primul» pe un ecran de detaliu servește produsul
+    de pe ecran, ca pe v5.1 (I16), chiar cu starea v2 scrisă."""
+    sources = screen(
+        "electronics", "el-02", shown_earlier=(fc.shown("electronics", "el-01", "el-02", "el-03"),)
+    )
+    r = one("electronics", ref("r1", "ordinal", ordinal=1), sources)
+    assert (r.outcome, r.product_ids, r.source) == ("exact", ["el-02"], "shown_now")
+
+
+def test_single_result_of_a_new_search_keeps_the_ordinal_on_screen():
+    """Un produs unic care NU vine din lista de dinainte e un rezultat nou: ordinalul rămâne pe
+    ecran, ca pe v5.1."""
+    sources = screen(
+        "electronics",
+        "el-04",
+        shown_earlier=(fc.shown("electronics", "el-01", "el-02", "el-03"),),
+        zoom_ordinals=True,
+    )
+    r = one("electronics", ref("r1", "ordinal", ordinal=3), sources)
+    assert (r.outcome, r.source, r.reason) == ("ambiguous", "shown_now", "ordinal_out_of_range")
+
+
+def test_zoom_needs_a_real_list_and_does_not_apply_on_resume():
+    one_item_earlier = screen(
+        "electronics",
+        "el-02",
+        shown_earlier=(fc.shown("electronics", "el-02"),),
+        zoom_ordinals=True,
+    )
+    r = one("electronics", ref("r1", "ordinal", ordinal=2), one_item_earlier)
+    assert (r.source, r.reason) == ("shown_now", "ordinal_out_of_range")
+    two_on_screen = screen(
+        "electronics",
+        "el-01",
+        "el-02",
+        shown_earlier=(fc.shown("electronics", "el-01", "el-02", "el-03"),),
+        zoom_ordinals=True,
+    )
+    r = one("electronics", ref("r1", "ordinal", ordinal=3), two_on_screen)
+    assert (r.source, r.reason) == ("shown_now", "ordinal_out_of_range")
+    resumed = ReferenceSources(
+        shown_now=fc.shown("electronics", "el-02"),
+        shown_earlier=(fc.shown("electronics", "el-01", "el-02", "el-03"),),
+        parked=fc.shown("electronics", "el-05"),
+        thread="resume",
+        zoom_ordinals=True,
+    )
+    r = one("electronics", ref("r1", "ordinal", ordinal=2), resumed)
+    assert r.source == "parked"
+
+
 # --- deictic -------------------------------------------------------------------------------------
 
 
