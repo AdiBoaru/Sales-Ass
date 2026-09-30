@@ -1256,9 +1256,9 @@ găseau citind conversații de mână, deși fiecare lasă un semnal pe care îl
 16 detectori puri pe fereastră; fiecare întoarce `None` când nu se aplică, deci are propriul numitor,
 iar sub 20 de ture aplicabile rata nu se raportează. Ieșirea: severitate, ture lovite din câte, rată,
 conversații, exemple de tur (raportul complet local, `reports/nx363/`). Nu e poartă de CI (NX-272).
-Prima rulare (`sole-ro`, septembrie, 157 de ture): o valoare cerută `not_in_vocabulary` pe 37,7% din
-turele cu căutare, un produs epuizat pe 20,8% din turele cu carduri, motiv de card tăiat de scrub pe
-13,7%. Card: [`tasks/stage1/NX-363.md`](tasks/stage1/NX-363.md); probă:
+Prima rulare (`sole-ro`, septembrie, 157 de ture): o valoare de nevoie `not_in_vocabulary` pe 43,2%
+din turele care trimit una, un produs epuizat pe 20,8% din turele cu carduri, motiv de card tăiat de
+scrub pe 13,7%; detectorii kernelului sunt separați („dark”). Card: [`tasks/stage1/NX-363.md`](tasks/stage1/NX-363.md); probă:
 `pytest tests/test_nx363_turn_defects.py -q`.
 
 **NX-318 — câte cuvinte identifică un produs depinde de ce ALTCEVA e pe ecran.** Aceeași conversație

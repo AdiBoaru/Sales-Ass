@@ -83,22 +83,6 @@ def test_cards_are_read_from_plain_products_when_there_is_no_rich():
 # ── P1 ─────────────────────────────────────────────────────────────────────────────────────────
 
 
-def test_uttered_need_unknown_is_the_par_gras_turn():
-    """`8c578b1f`: «păr gras» → `concerns` `not_in_vocabulary`, filtrul n-a rulat."""
-    t = _turn(
-        events={
-            "vocabulary_resolved": [
-                {"dimension": "category", "status": "known"},
-                {"dimension": "concerns", "status": "unknown", "reason": "not_in_vocabulary"},
-            ]
-        }
-    )
-    assert td.uttered_need_unknown(t) is True
-    known = _turn(events={"vocabulary_resolved": [{"status": "known"}]})
-    assert td.uttered_need_unknown(known) is False
-    assert td.uttered_need_unknown(_turn()) is None
-
-
 def test_subject_lost_counts_only_cards_with_a_known_type():
     """`853e03bd`: șase creme de față, patru fără `product_type` derivat. `subject_match.share`
     zicea 0,33; pe cardurile cu tip cunoscut e 2/2, deci NU e subiect pierdut."""
@@ -119,39 +103,6 @@ def test_subject_lost_counts_only_cards_with_a_known_type():
         events={"subject_match": [{"subject_type_known": True, "type_matched": 0}]},
     )
     assert td.subject_lost(untyped) is None  # sub două carduri cu tip, nu judecăm
-
-
-def test_ordinal_out_of_range_after_a_detail_turn():
-    """`816c193d`: «compara prima cu a treia» după un detaliu, ecranul avea un singur produs."""
-    t = _turn(
-        diagnostics={
-            "kernel": {
-                "resolved_refs": [
-                    {"kind": "ordinal", "reason": "ordinal_in_set"},
-                    {"kind": "ordinal", "reason": "ordinal_out_of_range"},
-                ]
-            }
-        }
-    )
-    assert td.ordinal_out_of_range(t) is True
-    fine = _turn(events={"reference_v2": [{"kind": "ordinal", "reason": "ordinal_in_set"}]})
-    assert td.ordinal_out_of_range(fine) is False
-    assert td.ordinal_out_of_range(_turn()) is None
-
-
-def test_vague_qualifier_and_exclusion_on_the_kernel_trace():
-    """`8c578b1f` («nu ft scump») și `cae37e6a` («nu vreau cu acid hialuronic»)."""
-    vague = _turn(
-        diagnostics={"kernel": {"plans": [{"search_args": {"rank_terms": ["ft scump"]}}]}}
-    )
-    plain = _turn(diagnostics={"kernel": {"plans": [{"search_args": {"rank_terms": []}}]}})
-    detail = _turn(diagnostics={"kernel": {"plans": [{"search_args": None}]}})
-    assert td.vague_to_rank_terms(vague) is True
-    assert td.vague_to_rank_terms(plain) is False
-    assert td.vague_to_rank_terms(detail) is None
-    assert td.exclusion_unserved(_turn(diagnostics={"kernel": {"gaps": ["exclusion"]}})) is True
-    assert td.exclusion_unserved(_turn(diagnostics={"kernel": {"gaps": []}})) is False
-    assert td.exclusion_unserved(_turn()) is None
 
 
 def test_side_search_overwrote_session():
@@ -176,6 +127,110 @@ def test_mostly_rejected_set():
     )
     assert td.mostly_rejected_set(t) is True
     assert td.mostly_rejected_set(_turn(events={"product_search": [{"count": 3}]})) is None
+
+
+def test_need_value_unknown_is_the_par_gras_turn_and_ignores_the_shelf():
+    """`8c578b1f`: «păr gras» → `concerns` `not_in_vocabulary`, filtrul n-a rulat. Raftul ghicit
+    necunoscut e altă clasă și nu se numără (verificarea independentă)."""
+    t = _turn(
+        events={
+            "vocabulary_resolved": [
+                {"dimension": "category", "status": "known"},
+                {"dimension": "concerns", "status": "unknown", "reason": "not_in_vocabulary"},
+            ]
+        }
+    )
+    assert td.need_value_unknown(t) is True
+    shelf_only = _turn(
+        events={
+            "vocabulary_resolved": [
+                {"dimension": "category", "status": "unknown", "reason": "not_in_vocabulary"}
+            ]
+        }
+    )
+    assert td.need_value_unknown(shelf_only) is None
+    known = _turn(events={"vocabulary_resolved": [{"dimension": "concerns", "status": "known"}]})
+    assert td.need_value_unknown(known) is False
+    assert td.need_value_unknown(_turn()) is None
+
+
+def test_subject_lost_skips_an_intended_type_change():
+    t = _turn(
+        reply=_rich({"product_id": "p0"}, {"product_id": "p1"}),
+        product_types={"p0": "husa", "p1": "husa"},
+        events={
+            "subject_match": [
+                {"subject_type_known": True, "type_matched": 0, "type_change_expected": True}
+            ]
+        },
+    )
+    assert td.subject_lost(t) is None
+
+
+def test_ordinal_out_of_range_reads_the_live_v1_resolver():
+    """Calea care RĂSPUNDE e resolverul v1 (`web_reference_resolved`), nu kernelul dark."""
+    live = _turn(
+        events={"web_reference_resolved": [{"source": "ordinal", "reason": "ordinal_out_of_range"}]}
+    )
+    fine = _turn(
+        events={"web_reference_resolved": [{"source": "ordinal", "reason": "ordinal_in_list"}]}
+    )
+    other = _turn(events={"web_reference_resolved": [{"source": "page", "reason": "page_deictic"}]})
+    assert td.ordinal_out_of_range(live) is True
+    assert td.ordinal_out_of_range(fine) is False
+    assert td.ordinal_out_of_range(other) is None
+    v2 = _turn(events={"reference_v2": [{"kind": "earlier", "reason": "ordinal_out_of_range"}]})
+    assert td.ordinal_out_of_range(v2) is True
+
+
+def test_kernel_ordinal_is_a_separate_dark_detector():
+    """`816c193d`: «compara prima cu a treia» după un detaliu, pe traceul kernelului dark."""
+    t = _turn(
+        diagnostics={
+            "kernel": {
+                "resolved_refs": [
+                    {"kind": "ordinal", "reason": "ordinal_in_set"},
+                    {"kind": "ordinal", "reason": "ordinal_out_of_range"},
+                ]
+            }
+        }
+    )
+    assert td.kernel_ordinal_out_of_range(t) is True
+    assert td.ordinal_out_of_range(t) is None  # kernelul dark nu e calea care răspunde
+    assert td.kernel_ordinal_out_of_range(_turn()) is None
+
+
+def _kernel(changes, plans=(), gaps=()):
+    return {
+        "kernel": {
+            "interpretation": {"changes": list(changes)},
+            "plans": list(plans),
+            "gaps": list(gaps),
+        }
+    }
+
+
+def test_kernel_vague_price_applies_only_to_a_price_without_a_sum():
+    """`8c578b1f` («nu ft scump»): o limită de preț fără număr, fără bandă în plan."""
+    vague = {"dimension": "price", "relation": "lte", "number": None, "relative_to": None}
+    unserved = _turn(diagnostics=_kernel([vague], [{"search_args": {"rank_terms": ["ft scump"]}}]))
+    served = _turn(diagnostics=_kernel([vague], [{"search_args": {"price_band": "low"}}]))
+    with_sum = _turn(diagnostics=_kernel([{**vague, "number": 100.0}], [{"search_args": {}}]))
+    assert td.kernel_vague_price_unserved(unserved) is True
+    assert td.kernel_vague_price_unserved(served) is False
+    assert td.kernel_vague_price_unserved(with_sum) is None
+
+
+def test_kernel_exclusion_applies_only_to_turns_that_exclude():
+    """`cae37e6a` («nu vreau cu acid hialuronic»)."""
+    avoid = {"dimension": "key_ingredients", "relation": "avoid"}
+    gap = _turn(diagnostics=_kernel([avoid], gaps=["exclusion"]))
+    assert td.kernel_exclusion_unserved(gap) is True
+    assert td.kernel_exclusion_unserved(_turn(diagnostics=_kernel([avoid]))) is False
+    no_avoid = _turn(
+        diagnostics=_kernel([{"dimension": "concerns", "relation": "eq"}], gaps=["exclusion"])
+    )
+    assert td.kernel_exclusion_unserved(no_avoid) is None
 
 
 # ── P2 ─────────────────────────────────────────────────────────────────────────────────────────
@@ -244,6 +299,43 @@ def test_closing_missing_only_when_required():
     no_need = _turn(events={"answer_shape": [{"required": ["fit_line"], "missing": []}]})
     assert td.closing_missing(need) is True
     assert td.closing_missing(no_need) is None
+
+
+def test_slow_turn_and_the_falsy_cases():
+    """Verificarea independentă: câțiva detectori erau testați doar pe «da»."""
+    assert td.slow_turn(_turn(events={"turn_latency": [{"e2e_ms": 20_000}]})) is True
+    assert td.slow_turn(_turn(events={"turn_latency": [{"e2e_ms": 9_000}]})) is False
+    post = _turn(events={"turn_latency": [{"phase": "post_turn", "e2e_ms": 99_000}]})
+    assert td.slow_turn(post) is None
+    full = {"product_search": [{"count": 6}]}
+    four = _rich(*({"product_id": f"p{i}"} for i in range(4)))
+    assert td.mostly_rejected_set(_turn(reply=four, events=full)) is False
+    compare = {**full, "tool_call": [{"name": "compare_products"}]}
+    assert td.mostly_rejected_set(_turn(reply=_rich({"product_id": "a"}), events=compare)) is None
+    shape = {"answer_shape": [{"required": ["closing"], "missing": []}]}
+    assert td.closing_missing(_turn(events=shape)) is False
+    ok = _rich({"product_id": "a", "reason": "ok"})
+    assert td.card_without_reason(_turn(reply=ok)) is False
+
+
+def test_oos_counts_discontinued_too():
+    t = _turn(reply=_rich({"product_id": "a"}), availability={"a": "discontinued"})
+    assert td.oos_on_card(t) is True and td.oos_first(t) is True
+
+
+def test_same_name_compares_the_displayed_name_on_both_card_shapes():
+    """Cardurile bogate poartă numele scurt, cele simple numele întreg: se compară numele AFIȘAT."""
+    full = "BEAUTY OF JOSEON Dynasty - crema de fata formulata cu apa din tarate de orez"
+    t1 = _turn(
+        tid="t1", at="2026-09-30T10:00:00", reply={"products": [{"product_id": "x", "name": full}]}
+    )
+    t2 = _turn(
+        tid="t2",
+        at="2026-09-30T10:01:00",
+        reply=_rich({"product_id": "y", "name": "BEAUTY OF JOSEON Dynasty"}),
+    )
+    turns = {t.turn_id: t for t in td.with_conversation_context([t1, t2])}
+    assert td.same_name_other_product(turns["t2"]) is True
 
 
 # ── agregarea ──────────────────────────────────────────────────────────────────────────────────
@@ -327,19 +419,26 @@ class _Conn:
 
 
 async def test_load_builds_turns_from_traces_events_and_catalog():
-    conn = _Conn()
+    admin_c, tenant_c = _Conn(), _Conn()
 
     @asynccontextmanager
-    async def opener(*_):
-        yield conn
+    async def admin(*_):
+        yield admin_c
+
+    @asynccontextmanager
+    async def tenant(*_):
+        yield tenant_c
 
     turns = await td.load(
         "sole-ro",
         datetime(2026, 9, 29, tzinfo=UTC),
         datetime(2026, 10, 1, tzinfo=UTC),
-        admin=opener,
-        tenant=opener,
+        admin=admin,
+        tenant=tenant,
     )
+    # `analytics_events` e append-only pentru `bot_runtime`: se citește pe conexiunea de operator.
+    assert any("analytics_events" in q for q in admin_c.calls)
+    assert not any("analytics_events" in q for q in tenant_c.calls)
     assert len(turns) == 1
     t = turns[0]
     assert t.first("product_search") == {"count": 6}

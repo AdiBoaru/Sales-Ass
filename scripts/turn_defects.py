@@ -36,6 +36,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from src.catalog.render_text import display_name  # noqa: E402
+
 OUT_DIR = ROOT / "reports" / "nx363"
 EXAMPLES = 3
 
@@ -87,6 +89,12 @@ def shown_cards(reply: Mapping[str, Any]) -> list[Mapping[str, Any]]:
     return [p for p in (reply.get("products") or []) if isinstance(p, Mapping)]
 
 
+def card_name(card: Mapping[str, Any]) -> str | None:
+    """Numele AFIȘAT: cardurile bogate poartă deja numele scurt, cele simple numele întreg."""
+    name = card.get("name")
+    return display_name(str(name)) if name else None
+
+
 def card_id(card: Mapping[str, Any]) -> str | None:
     pid = card.get("product_id") or card.get("id")
     return str(pid) if pid else None
@@ -112,12 +120,17 @@ def refused_set_shown(t: Turn) -> Verdict:
     return model_prose is False
 
 
+_OOS = frozenset({"out_of_stock", "discontinued"})
+
+
 def oos_on_card(t: Turn) -> Verdict:
-    """Un produs marcat epuizat în catalog, arătat pe un card (fără nicio marcă pe card)."""
+    """Un produs epuizat, arătat pe un card. Disponibilitatea e cea din catalog LA RULAREA
+    raportului, nu la momentul turului (nu se păstrează istoric): după o resincronizare (NX-360),
+    turele vechi se rejudecă pe stocul nou (declarat)."""
     ids = [i for i in (card_id(c) for c in shown_cards(t.reply)) if i]
     if not ids:
         return None
-    return any(t.availability.get(i) == "out_of_stock" for i in ids)
+    return any(t.availability.get(i) in _OOS for i in ids)
 
 
 def oos_first(t: Turn) -> Verdict:
@@ -125,12 +138,15 @@ def oos_first(t: Turn) -> Verdict:
     ids = [i for i in (card_id(c) for c in shown_cards(t.reply)) if i]
     if not ids:
         return None
-    return t.availability.get(ids[0]) == "out_of_stock"
+    return t.availability.get(ids[0]) in _OOS
 
 
-def uttered_need_unknown(t: Turn) -> Verdict:
-    """O valoare cerută căutării a ieșit `not_in_vocabulary` (ex. «păr gras»): filtrul n-a rulat."""
-    rows = t.all("vocabulary_resolved")
+def need_value_unknown(t: Turn) -> Verdict:
+    """O valoare de NEVOIE trimisă căutării (de model, pe calea v1) a ieșit `not_in_vocabulary`
+    (ex. «păr gras»): filtrul n-a rulat. Raftul nu se numără (`category`, altă clasă), iar
+    evenimentul nu spune dacă valoarea a fost rostită de client sau inferată de model (verificarea
+    independentă NX-363): e „valoare de nevoie pierdută”, nu „nevoie spusă pierdută”."""
+    rows = [r for r in t.all("vocabulary_resolved") if r.get("dimension") != "category"]
     if not rows:
         return None
     return any(
@@ -145,7 +161,8 @@ def subject_lost(t: Turn) -> Verdict:
     (un sfert din catalog) arată ca un tip greșit: șase creme de față, patru fără tip, ieșeau 0,33.
     Numitorul e aici doar cardurile al căror tip îl știm."""
     m = t.first("subject_match")
-    if not m or not m.get("subject_type_known"):
+    if not m or not m.get("subject_type_known") or m.get("type_change_expected"):
+        # Cross-sell-ul și rutina servesc alt tip INTENȚIONAT (`subject.py`).
         return None
     ids = [i for i in (card_id(c) for c in shown_cards(t.reply)) if i]
     typed = sum(1 for i in ids if t.product_types.get(i))
@@ -160,9 +177,24 @@ def _resolved_refs(t: Turn) -> list[Mapping[str, Any]]:
 
 
 def ordinal_out_of_range(t: Turn) -> Verdict:
-    """Un ordinal («a treia») n-a mai găsit lista la care se referea (ex. după un detaliu)."""
-    refs = [r for r in _resolved_refs(t) if r.get("kind") == "ordinal"]
-    refs += [r for r in t.all("reference_v2") if r.get("kind") == "ordinal"]
+    """Un ordinal («a treia») n-a mai găsit lista la care se referea (ex. după un detaliu), pe
+    calea care RĂSPUNDE (resolverul v1, `web_reference_resolved`, și scurtăturile v2,
+    `reference_v2`). Kernelul dark are detectorul lui (`kernel_ordinal_out_of_range`)."""
+    live = [r for r in t.all("web_reference_resolved") if r.get("source") == "ordinal"]
+    live += [r for r in t.all("reference_v2") if r.get("kind") in ("ordinal", "earlier")]
+    live = [
+        r
+        for r in live
+        if r.get("reason") in ("ordinal_in_list", "ordinal_in_set", "ordinal_out_of_range")
+    ]
+    if not live:
+        return None
+    return any(r.get("reason") == "ordinal_out_of_range" for r in live)
+
+
+def kernel_ordinal_out_of_range(t: Turn) -> Verdict:
+    """Kernelul (dark: nu răspunde clientului) n-a găsit lista unui ordinal."""
+    refs = [r for r in _resolved_refs(t) if r.get("kind") in ("ordinal", "earlier")]
     if not refs:
         return None
     return any(r.get("reason") == "ordinal_out_of_range" for r in refs)
@@ -173,21 +205,36 @@ def _kernel_plans(t: Turn) -> list[Mapping[str, Any]]:
     return [p for p in (kernel.get("plans") or []) if isinstance(p, Mapping)]
 
 
-def vague_to_rank_terms(t: Turn) -> Verdict:
-    """Kernel: cuvinte fără cheie de catalog («nu ft scump», «mai calitativ») ajung termeni de
-    ordonare. Pe calea v1 aceleași cuvinte nu au niciun efect."""
+def _kernel_changes(t: Turn) -> list[Mapping[str, Any]]:
+    kernel = t.diagnostics.get("kernel") or {}
+    interp = kernel.get("interpretation") or {}
+    return [c for c in (interp.get("changes") or []) if isinstance(c, Mapping)]
+
+
+def kernel_vague_price_unserved(t: Turn) -> Verdict:
+    """Kernel (dark): clientul a cerut un preț fără sumă («să nu fie foarte scump»), iar planul
+    n-are bandă de preț (pe v5.1 cuvintele ajungeau `rank_terms`). Se aplică doar pe turele cu o
+    astfel de cerere, citită din interpretare (dimensiune, relație, număr: structură, nu text)."""
+    vague = [
+        c
+        for c in _kernel_changes(t)
+        if c.get("dimension") == "price"
+        and c.get("relation") in ("lte", "gte")
+        and c.get("number") is None
+        and c.get("relative_to") is None
+    ]
+    if not vague:
+        return None
     searches = [p for p in _kernel_plans(t) if p.get("search_args")]
-    if not searches:
-        return None
-    return any((p["search_args"] or {}).get("rank_terms") for p in searches)
+    return not any((p["search_args"] or {}).get("price_band") for p in searches)
 
 
-def exclusion_unserved(t: Turn) -> Verdict:
-    """Kernel: clientul a exclus ceva («nu vreau cu acid hialuronic»), iar căutarea n-o poate
-    executa (golul `exclusion`)."""
-    kernel = t.diagnostics.get("kernel")
-    if not kernel:
+def kernel_exclusion_unserved(t: Turn) -> Verdict:
+    """Kernel (dark): clientul a exclus ceva («nu vreau cu acid hialuronic»), iar planul n-o
+    execută (golul `exclusion`). Se aplică doar pe turele cu o excludere în interpretare."""
+    if not any(c.get("relation") == "avoid" for c in _kernel_changes(t)):
         return None
+    kernel = t.diagnostics.get("kernel") or {}
     return "exclusion" in (kernel.get("gaps") or [])
 
 
@@ -240,7 +287,7 @@ def same_name_other_product(t: Turn) -> Verdict:
     if not cards:
         return None
     for c in cards:
-        name, pid = c.get("name"), card_id(c)
+        name, pid = card_name(c), card_id(c)
         if name and pid and (t.earlier_names.get(str(name), frozenset()) - {pid}):
             return True
     return False
@@ -265,7 +312,7 @@ def many_model_calls(t: Turn) -> Verdict:
     if usage is None:
         return None
     per_call = usage.get("per_call") or []
-    total = int(usage.get("llm_calls") or len(per_call))
+    total = len(per_call) if per_call else int(usage.get("llm_calls") or 0)
     interpret = sum(1 for c in per_call if c.get("purpose") == "interpret")
     return total - interpret >= MANY_MODEL_CALLS
 
@@ -280,9 +327,11 @@ def slow_turn(t: Turn) -> Verdict:
 def mostly_rejected_set(t: Turn) -> Verdict:
     """Căutarea a adus o pagină întreagă, iar compunerea a păstrat ≤ 2: setul era în mare parte
     nepotrivit (semn că un filtru n-a rulat, ex. «păr gras»)."""
-    search = t.first("product_search")
-    if search is None or (search.get("count") or 0) < FULL_SEARCH:
+    counts = [int(s.get("count") or 0) for s in t.all("product_search")]
+    if not counts or max(counts) < FULL_SEARCH:
         return None
+    if {c.get("name") for c in t.all("tool_call")} & {"compare_products", "get_product_details"}:
+        return None  # o comparație sau un detaliu arată intenționat 1-2 carduri
     return 0 < len(shown_cards(t.reply)) <= FEW_CARDS
 
 
@@ -298,11 +347,18 @@ DETECTORS: tuple[Detector, ...] = (
     Detector("refused_set_shown", "P0", refused_set_shown, "set refuzat de model, afișat"),
     Detector("oos_on_card", "P0", oos_on_card, "produs epuizat pe card"),
     Detector("oos_first", "P0", oos_first, "primul card e epuizat"),
-    Detector("uttered_need_unknown", "P1", uttered_need_unknown, "valoare cerută necunoscută"),
+    Detector("need_value_unknown", "P1", need_value_unknown, "valoare de nevoie necunoscută"),
     Detector("subject_lost", "P1", subject_lost, "sub 1/2 din carduri de tipul cerut"),
     Detector("ordinal_out_of_range", "P1", ordinal_out_of_range, "ordinal fără listă"),
-    Detector("exclusion_unserved", "P1", exclusion_unserved, "excludere neexecutată (kernel)"),
-    Detector("vague_to_rank_terms", "P1", vague_to_rank_terms, "calificativ vag → rank_terms"),
+    Detector(
+        "kernel_exclusion_unserved", "P2", kernel_exclusion_unserved, "kernel dark: excludere"
+    ),
+    Detector(
+        "kernel_vague_price_unserved", "P2", kernel_vague_price_unserved, "kernel dark: preț vag"
+    ),
+    Detector(
+        "kernel_ordinal_out_of_range", "P2", kernel_ordinal_out_of_range, "kernel dark: ordinal"
+    ),
     Detector(
         "side_search_overwrote_session", "P1", side_search_overwrote_session, "sesiune suprascrisă"
     ),
@@ -342,7 +398,7 @@ def with_conversation_context(turns: Iterable[Turn]) -> list[Turn]:
             )
         )
         for c in shown_cards(t.reply):
-            name, pid = c.get("name"), card_id(c)
+            name, pid = card_name(c), card_id(c)
             if name and pid:
                 names[str(name)].add(pid)
     return out
@@ -452,7 +508,11 @@ async def load(
         # conexiunea de operator, cu `business_id` explicit (P7), ca la NX-316/NX-353.
         async with admin() as conn:
             for r in await conn.fetch(
-                EVENTS_SQL, business_id, since, until + timedelta(minutes=5), turn_ids
+                EVENTS_SQL,
+                business_id,
+                since - timedelta(minutes=5),
+                until + timedelta(minutes=5),
+                turn_ids,
             ):
                 events[r["turn_id"]][r["event_type"]].append(_json(r["properties"]))
     replies = {r["turn_id"]: _json(r["reply"]) for r in trace_rows}
