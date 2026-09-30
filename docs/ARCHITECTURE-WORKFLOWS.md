@@ -1931,6 +1931,7 @@ validator_stock_claims_enabled = false
 vision_enabled = true
 web_actions_enabled = false
 web_admission_enabled = true
+web_chat_aftercare_detached_enabled = true
 web_context_enabled = false
 web_context_prompt_enabled = false
 web_demo_access_enabled = false

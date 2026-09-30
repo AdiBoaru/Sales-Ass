@@ -1992,6 +1992,22 @@ class Settings(BaseSettings):
     aftercare_deadline_ms: int = Field(
         default=20_000, validation_alias="AFTERCARE_DEADLINE_MS", ge=0
     )
+    # NX-361: pe `/web/chat` aftercare-ul rula ÎNAINTEA răspunsului HTTP, deci clientul aștepta și
+    # extracția de profil (un apel de model, 3,3-4,5 s pe tur în conversația `1848eeba`), deși ea
+    # nu schimbă nimic din răspuns. Aprins: răspunsul pleacă întâi, aftercare-ul rulează în fundal
+    # (`BackgroundTasks`, serverul îl așteaptă la oprire). Costul pipeline-ului intră în plafonul
+    # vizitatorului înainte de răspuns, cel de aftercare din fundal. ON implicit (defect măsurat);
+    # OFF = aftercare inline, ca înainte.
+    web_chat_aftercare_detached_enabled: bool = Field(
+        default=True, validation_alias="WEB_CHAT_AFTERCARE_DETACHED_ENABLED"
+    )
+    # NX-361: câte aftercare-uri detașate rulează în paralel, per proces. Frâna turelor (admission)
+    # se eliberează înaintea aftercare-ului, deci fără plafonul ăsta un vârf de trafic ar porni
+    # oricâte apeluri de model de fundal. Peste plafon se așteaptă la coadă (fiecare are deadline-ul
+    # `aftercare_deadline_ms`, din momentul în care pornește).
+    web_aftercare_max_concurrent: int = Field(
+        default=8, validation_alias="WEB_AFTERCARE_MAX_CONCURRENT", ge=1
+    )
 
     # --- NX-246: observabilitate (traces + metrici) + markeri de release ---------
     # `observability_enabled` e master switch-ul și e ABSORBANT: stins, `record_*`/`span()` se

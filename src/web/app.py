@@ -34,7 +34,7 @@ from datetime import UTC, datetime, timedelta
 from time import monotonic, perf_counter
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Header, HTTPException, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 from redis.exceptions import RedisError
@@ -557,8 +557,46 @@ def _build_chat_response(result: TurnResult) -> dict:
     return render_web(result.reply, result.language or "ro")
 
 
+async def _add_visitor_cost(redis, business_id: str, visitor_id: str, amount_usd: float) -> None:
+    try:
+        await web_cost_add_visitor(redis, business_id, visitor_id, amount_usd)
+    except Exception:  # noqa: BLE001 - the reply is more important than telemetry
+        log.warning("web_cost_add_visitor failed after the reply was built")
+
+
+#: NX-361: plafonul aftercare-urilor detașate, per event loop (un `Semaphore` e legat de bucla în
+#: care e folosit prima dată, iar testele rulează mai multe bucle în același proces).
+_AFTERCARE_SLOTS: dict[int, asyncio.Semaphore] = {}
+
+
+def _aftercare_slots() -> asyncio.Semaphore:
+    loop_id = id(asyncio.get_running_loop())
+    slots = _AFTERCARE_SLOTS.get(loop_id)
+    if slots is None:
+        slots = asyncio.Semaphore(get_settings().web_aftercare_max_concurrent)
+        _AFTERCARE_SLOTS.clear()  # o singură buclă vie per proces în producție
+        _AFTERCARE_SLOTS[loop_id] = slots
+    return slots
+
+
+async def _detached_aftercare(db, redis, work, business_id: str, visitor_id: str) -> None:
+    """NX-361: aftercare-ul turului de pe `/web/chat`, DUPĂ ce răspunsul a plecat
+    (`BackgroundTasks`). Best-effort, ca inline: `run_aftercare` își prinde singur eșecurile, iar
+    nimic de aici nu mai poate atinge un răspuns deja trimis."""
+    try:
+        async with _aftercare_slots():
+            cost_usd = await run_aftercare(db, redis, work)
+        await _add_visitor_cost(redis, business_id, visitor_id, cost_usd)
+    except Exception:  # noqa: BLE001 - răspunsul e deja livrat
+        log.exception("aftercare detașat a eșuat (răspunsul era deja livrat)")
+
+
 @router.post("/chat")
-async def web_chat(req: WebChatIn, request: Request) -> dict:
+async def web_chat(
+    req: WebChatIn,
+    request: Request,
+    background: BackgroundTasks = None,  # type: ignore[assignment]  # apelurile directe din teste
+) -> dict:
     """Client → bot, SINCRON (NX-25b): verifică sesiunea + rate limit → rulează pipeline-ul
     IN-PROCESS pe o conexiune tenant-scoped (`deliver=False`: fără outbox/dispatcher) → întoarce
     `{content, products, suggestions}` în răspuns. Spre deosebire de /web/messages (ACK + SSE),
@@ -790,19 +828,26 @@ async def web_chat(req: WebChatIn, request: Request) -> dict:
         if result.aftercare is not None and result.aftercare.ctx.usage is not None
         else 0.0
     )
-    post_turn_cost_usd = 0.0
-    # Aftercare uses separate DB checkouts. Its real cost is added to the web visitor cap below.
-    if result.aftercare is not None:
-        post_turn_cost_usd = await run_aftercare(db, redis, result.aftercare)
-    try:
-        await web_cost_add_visitor(
-            redis,
-            session.business_id,
-            req.visitor_id,
-            pipeline_cost_usd + post_turn_cost_usd,
+    work = result.aftercare
+    if (
+        background is not None
+        and work is not None
+        and get_settings().web_chat_aftercare_detached_enabled
+    ):
+        # NX-361: răspunsul pleacă întâi. Costul pipeline-ului intră ACUM în plafon (acceptul
+        # următor îl vede), iar aftercare-ul cu costul lui rulează după trimiterea răspunsului.
+        await _add_visitor_cost(redis, session.business_id, req.visitor_id, pipeline_cost_usd)
+        background.add_task(
+            _detached_aftercare, db, redis, work, session.business_id, req.visitor_id
         )
-    except Exception:  # noqa: BLE001 - the reply is more important than telemetry
-        log.warning("web_cost_add_visitor failed after the reply was built")
+    else:
+        post_turn_cost_usd = 0.0
+        # Aftercare uses separate DB checkouts. Its real cost is added to the web visitor cap.
+        if work is not None:
+            post_turn_cost_usd = await run_aftercare(db, redis, work)
+        await _add_visitor_cost(
+            redis, session.business_id, req.visitor_id, pipeline_cost_usd + post_turn_cost_usd
+        )
     if ledger_epoch is not None:
         if "view" in persisted:
             # Exact ce s-a persistat în tranzacția de commit — replay-ul va fi byte-identic.
