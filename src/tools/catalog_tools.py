@@ -30,7 +30,7 @@ from src.catalog.need_menu import (
     split_args,
     split_needs,
 )
-from src.catalog.query_terms import content_terms
+from src.catalog.query_terms import content_terms, stopwords
 from src.catalog.render_text import cut_at_sentence, display_name
 from src.catalog.vocabulary import (
     CATEGORY_DIMENSION,
@@ -76,6 +76,7 @@ from src.domain.constraints import (
     extract_constraints,
     merge_constraints,
     monetary_mentions,
+    strip_price_mentions,
 )
 from src.domain.normalize import normalize
 from src.models import MAX_SEARCH_POOL, Relevance
@@ -907,6 +908,44 @@ def _is_relative_price_request(text: str) -> bool:
     return _CHEAPER_RE.search(text or "") is not None
 
 
+def _price_as_filter_only(ctx: TurnContext, a: SearchArgs, *, planned: bool) -> None:
+    """NX-354: prețul e deja filtru (`price_max`), deci nu se mai cere o dată ca text și nu mai
+    decide ordinea. Doar pe calea v1: pe cea planificată textul și sortarea sunt ale plannerului
+    (NX-333), deci nu se ating. Scrie DOAR `a.query` și `a.sort_mode`, înaintea amprentei de
+    sesiune, ca «mai arată-mi» să pagineze exact căutarea care a rulat.
+
+    Textul: fără numărul care e chiar plafonul, unitatea de bani și comparația lui
+    (`strip_price_mentions`). Dacă din cerere nu rămâne niciun cuvânt purtător de sens («sub 100 de
+    lei», «ceva sub 100 lei»), textul rămâne cum era: `content_terms` nu întoarce niciodată gol
+    (cade pe tokenii bruți), deci un `query` redus la «de» ar fi potrivit aproape orice produs.
+
+    Ordinea: `price_asc` ales de MODEL rămâne doar dacă mesajul curent chiar cere «mai ieftin»
+    (același detector ca garda NX-319 și ramura deterministă)."""
+    if planned:
+        return
+    units = getattr(getattr(ctx.business, "domain_pack", None), "units", None)
+    if units is not None and a.query and a.price_max is not None:
+        stripped = strip_price_mentions(
+            a.query, units=units, locale=ctx.language, price_max=float(a.price_max)
+        )
+        if stripped != a.query:
+            stop = stopwords(ctx.language)
+            meaningful = [t for t in content_terms(stripped, ctx.language) if t not in stop]
+            if meaningful:
+                removed = len(content_terms(a.query, ctx.language)) - len(meaningful)
+                a.query = stripped
+                ctx.emit("query_price_words", outcome="stripped", removed=removed)
+            else:
+                ctx.emit("query_price_words", outcome="kept_nothing_left", removed=0)
+    if a.sort_mode != "price_asc":
+        return
+    texts = client_texts(ctx)
+    if texts and _is_relative_price_request(texts[0]):
+        return
+    a.sort_mode = "relevance"
+    ctx.emit("price_sort_dropped", reason="budget_is_not_cheapest")
+
+
 def _relax_ladder(
     *,
     price_max: float | None,
@@ -1713,6 +1752,8 @@ async def _search(
         )
         if source is None:
             a.price_max = None
+    if a.price_max is not None and get_settings().search_price_as_filter_only_enabled:
+        _price_as_filter_only(ctx, a, planned=planned)
 
     # === REZOLVARE ÎNAINTE DE CONSTRÂNGERE =====================================================
     # Un filtru SQL nu e o comparație, e o execuție: `WHERE slug = 'ten'` nu întreabă dacă «ten»

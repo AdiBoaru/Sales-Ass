@@ -77,6 +77,7 @@ _SCHEMAS: dict[str, dict[str, Any]] = {
                         "description": (
                             "Cum sortezi: 'price_asc' pentru «cel mai ieftin / mai ieftin», "
                             "'rating_desc' pentru «cel mai bun / cel mai bine cotat», altfel "
+                            "'relevance'. Un buget («sub 100 lei») se pune în price_max, cu "
                             "'relevance'."
                         ),
                     },

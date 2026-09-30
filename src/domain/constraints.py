@@ -36,12 +36,18 @@ from __future__ import annotations
 
 import logging
 import re
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
-from src.catalog.query_terms import comparators, fold
+from src.catalog.query_terms import (
+    comparators,
+    fold,
+    price_range_words,
+    relative_comparators,
+    stopwords,
+)
 from src.domain.facets import FacetSource, FacetType, TypedFacet
 
 log = logging.getLogger(__name__)
@@ -459,6 +465,152 @@ def monetary_mentions(message: str, *, units: UnitRegistry) -> set[float]:
             except ValueError:
                 continue
     return out
+
+
+#: NX-354: un număr ca token ÎNTREG („q10”, „b5”, „24h”, „20%” nu sunt numere de preț).
+_STANDALONE_NUMBER_RE = re.compile(r"(?<![a-z0-9])\d+(?:[.,]\d+)?(?![a-z0-9%])")
+
+
+def strip_price_mentions(
+    text: str, *, units: UnitRegistry, locale: str | None, price_max: float
+) -> str:
+    """Textul unei căutări FĂRĂ prețul care e deja filtru (`price_max`), NX-354. PURĂ.
+
+    Cererea «cremă pentru ten uscat, sub 100 de lei» pleca în SQL de DOUĂ ori: o dată ca
+    `price_max=100`, o dată ca termenii `100` și `lei`, legați cu ȘI pe treapta strictă. Niciun
+    produs nu poartă „lei” în descriere, deci strictul dădea zero, căutarea cobora pe `relaxed`
+    (orice pereche de cuvinte), iar `hidratare + ten` aducea 54 de măști din 96 (conversația
+    `1748f988`). E clasa NX-298: o condiție cerută a doua oară, ca TEXT, peste propriul filtru.
+
+    Se scoate DOAR ce e sigur prețul filtrului (prima variantă scotea orice număr fără unitate și
+    tăia cifrele din „q10”, „nuanța 21”, „spf minim 50”; recenzia adversarială):
+    • un număr ca token întreg, lipit de o unitate de BANI a tenantului, sau fără unitate dar egal
+      cu `price_max` (în oricare lectură a separatorului; ±0,01 pentru marginea relativă);
+    • cuvântul de comparație (`comparators`) imediat dinaintea unui astfel de număr;
+    • unitățile de bani ale tenantului și comparatorii relativi («mai ieftin»), oriunde, dar doar
+      dacă s-a scos măcar un număr: atunci textul chiar vorbește despre preț.
+    Un număr lipit de unitatea ALTEI dimensiuni («100 ml», «spf 50») rămâne.
+
+    Întoarce textul PLIAT (ce oricum se caută: `content_terms` pliază). Fără unități declarate, sau
+    fără niciun număr de preț, textul rămâne neatins."""
+    if not text or not units.specs or units.specs.get(MONEY_UNIT_FACET) is None:
+        return text
+    folded = fold(text)
+    phrases = [p for p, _op in comparators(locale)]
+    stop = stopwords(locale)
+    drop: list[tuple[int, int]] = []
+    prices: list[tuple[int, int]] = []
+    # «100lei»: suma lipită de unitatea de bani, fără spațiu
+    for glued in _GLUED_AMOUNT_RE.finditer(folded):
+        if units.facet_for_unit(glued.group(2)) == MONEY_UNIT_FACET:
+            prices.append(glued.span())
+    numbers = list(_STANDALONE_NUMBER_RE.finditer(folded))
+    for match in numbers:
+        alias, _ambiguous = _unit_near(folded, match.start(), match.end(), match.start(), units)
+        facet = units.facet_for_unit(alias) if alias else None
+        if facet is not None and facet != MONEY_UNIT_FACET:
+            continue
+        if facet is None and not _equals_bound(match.group(0), price_max):
+            continue
+        prices.append(match.span())
+    for start, end in prices:
+        drop.append((start, end))
+        drop.extend(_comparator_around(folded, start, end, phrases, stop, units))
+    if not drop:
+        return text
+    # Capătul de jos al unui interval («între 50 și 100 lei», «100-150 lei»): un număr fără unitate
+    # legat de un preț scos printr-o legătură a limbii iese și el, cu deschiderea lui («între»).
+    ranges = price_range_words(locale)
+    joins = {p for p, kind in ranges if kind == "join"}
+    opens = [p for p, kind in ranges if kind == "open"]
+    for match in numbers:
+        if any(a <= match.start() < b for a, b in drop):
+            continue
+        alias, _ambiguous = _unit_near(folded, match.start(), match.end(), match.start(), units)
+        if alias:
+            continue
+        nxt = min((a for a, _b in prices if a >= match.end()), default=None)
+        if nxt is None or folded[match.end() : nxt].strip() not in joins:
+            continue
+        drop.append((match.start(), nxt))
+        drop.extend(_phrase_before(folded, match.start(), opens))
+    for word in _WORD_RE.finditer(folded):
+        if units.facet_for_unit(word.group(0)) == MONEY_UNIT_FACET:
+            drop.append((word.start(), word.end()))
+    for phrase, _op in relative_comparators(locale):
+        for hit in re.finditer(rf"(?<![a-z0-9]){re.escape(phrase)}(?![a-z0-9])", folded):
+            drop.append((hit.start(), hit.end()))
+    kept, cursor = [], 0
+    for start, end in sorted(drop):
+        if start >= cursor:
+            kept.append(folded[cursor:start])
+            cursor = end
+        else:
+            cursor = max(cursor, end)
+    kept.append(folded[cursor:])
+    return re.sub(r"\s+", " ", " ".join(kept)).strip(" ,.;-")
+
+
+#: NX-354: o sumă lipită de unitatea ei («100lei»), ca token întreg.
+_GLUED_AMOUNT_RE = re.compile(r"(?<![a-z0-9])(\d+(?:[.,]\d+)?)([a-z]+)(?![a-z0-9])")
+
+
+def _phrase_before(folded: str, start: int, phrases: Sequence[str]) -> list[tuple[int, int]]:
+    """Fraza din `phrases` care se termină imediat înaintea lui `start` (cu graniță de cuvânt)."""
+    head = folded[:start].rstrip()
+    for phrase in phrases:
+        if head.endswith(phrase) and (
+            len(head) == len(phrase) or not head[-len(phrase) - 1].isalnum()
+        ):
+            return [(len(head) - len(phrase), len(head))]
+    return []
+
+
+def _comparator_around(
+    folded: str,
+    start: int,
+    end: int,
+    phrases: Sequence[str],
+    stop: Collection[str],
+    units: UnitRegistry,
+) -> list[tuple[int, int]]:
+    """Comparatorul unui preț scos: imediat înainte («sub 100»), înainte peste un cuvânt gol
+    («maxim de 150», se scoate și „de”) sau după suma cu unitatea ei («100 lei maxim»)."""
+    spans = _phrase_before(folded, start, phrases)
+    if not spans:
+        gap = _LAST_WORD_RE.search(folded[:start])
+        if gap is not None and gap.group(1) in stop:
+            spans = _phrase_before(folded, gap.start(1), phrases)
+            if spans:
+                spans.append(gap.span(1))
+    pos = end
+    unit = _NEXT_WORD_RE.match(folded, pos)
+    if unit is not None and units.facet_for_unit(unit.group(1)) == MONEY_UNIT_FACET:
+        pos = unit.end()
+    pos = _SPACES_RE.match(folded, pos).end()
+    for phrase in phrases:
+        after = pos + len(phrase)
+        if folded.startswith(phrase, pos) and (after == len(folded) or not folded[after].isalnum()):
+            spans.append((pos, after))
+            break
+    return spans
+
+
+_LAST_WORD_RE = re.compile(r"([a-z]+)\s*$")
+_NEXT_WORD_RE = re.compile(r"\s*([a-z]+)")
+_SPACES_RE = re.compile(r"\s*")
+
+
+def _equals_bound(raw: str, price_max: float) -> bool:
+    """Numărul scris e chiar plafonul? Ambele lecturi ale separatorului, ca `monetary_mentions`;
+    ±0,01 fiindcă «mai ieftin decât 70» ajunge ca `price_max=69.99`."""
+    for candidate in (raw.replace(",", "."), raw.replace(",", "").replace(".", "")):
+        try:
+            if abs(float(candidate) - float(price_max)) <= 0.011:
+                return True
+        except ValueError:
+            continue
+    return False
 
 
 def constraint_from_value(

@@ -46,7 +46,9 @@ _TOOLS_BLOCK = """Ai unelte ca să răspunzi GROUNDED pe catalogul real:
   `brand` doar dacă l-a cerut explicit. `product_name` = numele EXACT al unui produs ANUME pe care
   clientul îl cere (ex. „aveți Hidra Boost Ultra?"), DOAR atunci, nu pentru o nevoie/categorie.
   `sort_mode='price_asc'` când cere „cel mai ieftin / mai ieftin / mai accesibil", `'rating_desc'`
-  la „cel mai bun", altfel `'relevance'`. Filtrarea pe nevoie dă recomandări relevante, nu doar
+  la „cel mai bun", altfel `'relevance'`. Un buget („sub 100 lei") merge în `price_max` și lasă
+  sortarea pe `'relevance'`: clientul cere cele mai potrivite produse până la suma aceea, nu cele
+  mai ieftine. Suma nu o repeta în `query`. Filtrarea pe nevoie dă recomandări relevante, nu doar
   potrivire de nume.
 - get_product_details(product_id): preț, rating, ce laudă clienții (recenzii) pentru un produs.
 - compare_products(product_ids): compară 2-3 produse.

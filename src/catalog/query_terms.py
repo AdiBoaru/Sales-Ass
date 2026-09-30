@@ -52,6 +52,7 @@ from src.catalog.folding import fold as _fold
 # proastă, niciodată un răspuns mai scurt.
 _RO_STOPWORDS = """
     a al ale cu de din dintre in intr intre la pe pentru peste pana prin spre sub si sau dar ori ca
+    decat
     un o una unui unei niste cel cea cei cele acest aceasta acesta aceste acestea
     eu tu el ea noi voi ei imi iti isi mi ti ma te se ne va le lui mea meu mei tau ta
     am ai are as ar au fi fie este sunt esti era fost vreau vrei vrea caut cauti doresc trebuie
@@ -87,6 +88,15 @@ _RO_COMPARATORS = """
 """
 
 _COMPARATORS: dict[str, tuple[tuple[str, str], ...]] = {}
+
+# NX-354: cum leagă limba două capete ale unui INTERVAL de preț («între 50 și 100 lei»,
+# «100-150 lei», «de la 50 până la 100»). `open` deschide intervalul, `join` leagă capetele.
+# Doar ca să poată ieși din textul căutării și capătul care nu e plafonul; nu produce constrângeri.
+_RO_PRICE_RANGES = """
+    open: intre, de la
+    join: -, si, pana la
+"""
+_PRICE_RANGES: dict[str, tuple[tuple[str, str], ...]] = {}
 
 
 def _parse_comparators(table: str) -> tuple[tuple[str, str], ...]:
@@ -255,6 +265,12 @@ def _table(
         table = tables.get(key)
         cache[key] = _parse_comparators(table) if table else ()
     return cache[key]
+
+
+def price_range_words(locale: str | None) -> tuple[tuple[str, str], ...]:
+    """`(frază, fel)` pentru intervalele de preț ale locale-i: `open` («între») și `join`
+    («și», «-»), cele mai lungi întâi. Locale necunoscută → `()` (P11)."""
+    return _table(_PRICE_RANGES, {"ro": _RO_PRICE_RANGES}, locale)
 
 
 def reference_markers(locale: str | None) -> tuple[tuple[str, str], ...]:
