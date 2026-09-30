@@ -48,7 +48,20 @@ from src.catalog.vocabulary_cache import get_vocabulary
 from src.commerce.project import delivery_for
 from src.config import card_slots, get_settings
 from src.config import max_per_type as cfg_max_per_type
-from src.conversation.needs import MAX_UNMAPPED_PER_TOPIC, corroborated_by
+from src.conversation.needs import (
+    MAX_UNMAPPED_PER_TOPIC,
+    NeedVocabulary,
+    corroborated_by,
+    normalize_need,
+    positive_facet_keys,
+    rehome_list_value,
+)
+from src.conversation.subject import (
+    SUBJECT_KEY,
+    ConversationSubject,
+    dimensions_named,
+    type_fits_query,
+)
 from src.db.queries.catalog import (
     get_products_by_ids,
     get_substitutes,
@@ -864,6 +877,91 @@ def _merge_prefer(
             merged = out.setdefault(key, [])
             merged.extend(v for v in values if v and v not in merged)
     return {k: v for k, v in out.items() if v} or None
+
+
+#: NX-355: câte nevoi poartă o căutare după ce stiva și-a adăugat-o pe a ei.
+_MAX_CARRIED_CONCERNS = 6
+
+
+def _carry_retained(ctx: TurnContext, a: SearchArgs, catalog: CatalogVocabulary | None) -> bool:
+    """NX-355: fațetele pe care clientul le-a spus (ex. tipul de ten) rămân în căutare, chiar dacă
+    modelul le omite. Scrie DOAR `a.concerns`, înaintea rezoluției (termenii trec prin aceeași
+    confruntare cu catalogul ca ai modelului).
+
+    Se cară doar fațetele POZITIVE cu valori închise (`positive_facet_keys`): stiva v1 pierde
+    operatorul, deci o excludere ar fi plecat ca cerere. Lista `concerns` NU se cară: în SQL
+    valorile unei dimensiuni se leagă cu SAU, deci o nevoie veche («acnee») ar LĂRGI o căutare nouă
+    («pete»); moștenirea din sesiune o cară deja când modelul nu trimite nicio nevoie. Doar pe
+    ACELAȘI raft, confirmat (raftul căutării = raftul stivei). O fațetă pe care modelul o trimite
+    cu altă valoare («ten gras» după «ten uscat») nu se cară: clientul s-a răzgândit.
+
+    Întoarce `True` când TOATE nevoile căutării (după cărare) sunt ale stivei, inclusiv una
+    retrimisă de model sub alt nume («dry», «ten uscat»): atunci sunt ale stării, nu ghicite, și
+    nu le mai judecă garda NX-313 pe textul clientului (ca pe calea planificată)."""
+    stack = ctx.state.search_constraints if isinstance(ctx.state.search_constraints, dict) else {}
+    stack_shelf = stack.get("category_key")
+    if not stack or not stack_shelf or a.category != stack_shelf:
+        return False
+    pack = getattr(ctx.business, "domain_pack", None)
+    vocab = NeedVocabulary.from_pack(pack)
+    positive = positive_facet_keys(vocab)
+    sent = [c for c in (a.concerns or []) if isinstance(c, str)]
+    # O fațetă pe care clientul o numește ACUM (a doua recenzie: «ten foarte gras», «tenul gras»
+    # nu sunt în harta tenantului) sau pe care modelul o trimite sub orice formă nu se cară:
+    # valoarea veche ar bate corecția clientului.
+    overlays = facet_overlays(pack, catalog.facet_names) if catalog is not None else None
+    spoken = dimensions_named(
+        catalog, ctx.message.body or "", positive, overlays=overlays, locale=ctx.language
+    )
+    sent_facets = {moved[0] for c in sent if (moved := rehome_list_value("concerns", c, vocab))}
+    for c in sent:
+        sent_facets |= dimensions_named(
+            catalog, c, positive, overlays=overlays, locale=ctx.language
+        )
+    retained = {k: v for k, v in stack.items() if k in positive and isinstance(v, str) and v}
+    missing = [
+        v
+        for k, v in retained.items()
+        if k not in sent_facets
+        and k not in spoken
+        and v.strip().lower() not in {c.strip().lower() for c in sent}
+    ]
+    if missing:
+        a.concerns = [*sent, *missing][:_MAX_CARRIED_CONCERNS]
+        added = len(a.concerns) - len(sent)
+        if added > 0:
+            ctx.emit("search_needs_carried", n=added)
+    known = {c.strip().lower() for c in stack.get("concerns") or [] if isinstance(c, str)}
+    known |= {v.strip().lower() for v in retained.values()}
+
+    def _from_stack(c: str) -> bool:
+        if c.strip().lower() in known:
+            return True
+        listed = normalize_need("concerns", c, vocab)  # «hidratare» → «hydration»
+        moved = rehome_list_value("concerns", c, vocab)  # «ten uscat» → «dry»
+        return (listed is not None and listed.value in known) or (
+            moved is not None and moved[1] in known
+        )
+
+    final = [c for c in (a.concerns or []) if isinstance(c, str)]
+    return bool(final) and all(_from_stack(c) for c in final)
+
+
+def _prefer_subject_type(ctx: TurnContext, a: SearchArgs, catalog: CatalogVocabulary) -> None:
+    """NX-355: tipul subiectului ORDONEAZĂ (`prefer`) căutarea care îl cere, fără să filtreze
+    (`product_type` e `enforce_ready: false`), deci măștile nu dispar, doar coboară sub creme.
+
+    Se aplică doar când căutarea numește capul tipului și NU numește un tip mai specific cu același
+    cap din catalog: «crema contur ochi» după «crema de fata» nu primește preferința pentru crema
+    de față (recenzia NX-355)."""
+    stack = ctx.state.search_constraints if isinstance(ctx.state.search_constraints, dict) else {}
+    subject = ConversationSubject.from_dict(stack.get(SUBJECT_KEY))
+    if subject is None or not subject.product_type:
+        return
+    types = [e.key for e in catalog.entries("product_type")]
+    if type_fits_query([a.query], subject.product_type, types, stopwords(ctx.language)):
+        a.prefer = _merge_prefer(a.prefer, {"product_type": [subject.product_type]}) or {}
+        ctx.emit("subject_type_preferred")
 
 
 def price_units(ctx: TurnContext) -> UnitRegistry | None:
@@ -1765,6 +1863,14 @@ async def _search(
     # cerere de cremă, deci măștile cu textură cremoasă nu mai câștigă pe text), `UNKNOWN` (nu
     # ajunge NICIODATĂ în WHERE; se raportează și i se spune modelului că filtrul n-a rulat).
     vocab = await get_vocabulary(deps, ctx.business.id)
+    if not planned and get_settings().needs_retained_enabled:
+        # NX-355: după vocabular (cărarea citește ce NUMEȘTE clientul acum), înaintea rezoluției.
+        # Nevoile cărate sunt ale STĂRII (`user_explicit`, coroborate când au fost învățate) și
+        # poartă codul canonic («dry»), nerostit literal: ca pe calea planificată, nu se mai
+        # re-judecă pe text, altfel garda NX-313 le scotea ca ghicite și servea căutarea fără ele.
+        if not need_args and _carry_retained(ctx, a, vocab):
+            inherited.append("concerns")
+        _prefer_subject_type(ctx, a, vocab)
     resolutions = _resolve_search_terms(ctx, a, vocab)
     category_keys = resolutions.category_keys
     facet_filters = resolutions.facet_filters

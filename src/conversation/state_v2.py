@@ -36,6 +36,7 @@ from src.conversation.needs import (
     NeedVocabulary,
     norm_key,
     normalize_need,
+    rehome_list_value,
 )
 from src.conversation.subject import MAX_SUBJECT_NEEDS, SUBJECT_KEY, ConversationSubject
 
@@ -659,7 +660,7 @@ def is_v2(raw: object) -> bool:
 
 
 def hydrate_state_v2(
-    raw: object, vocab: NeedVocabulary, *, revision: int = 0
+    raw: object, vocab: NeedVocabulary, *, revision: int = 0, rehome: bool = False
 ) -> ConversationStateV2:
     """`conversations.state` (orice versiune) → `ConversationStateV2`. NU ridică niciodată.
 
@@ -670,7 +671,11 @@ def hydrate_state_v2(
     al doilea contor care ar putea rămâne în urmă. Parametrul `revision` e doar un PLAFON MINIM,
     util pentru rândurile v1 care n-au încă document."""
     try:
-        state = ConversationStateV2.from_jsonb(raw) if is_v2(raw) else adapt_v1(raw, vocab)
+        state = (
+            ConversationStateV2.from_jsonb(raw)
+            if is_v2(raw)
+            else adapt_v1(raw, vocab, rehome=rehome)
+        )
     except Exception:  # noqa: BLE001 — memorie coruptă ⇒ pornim curat, nu rupem turul (P6)
         log.warning(
             # domain-leak: ok — „hidratare" = rehidratarea STĂRII, nu a pielii
@@ -680,7 +685,7 @@ def hydrate_state_v2(
     return replace(state, revision=max(state.revision, revision))
 
 
-def adapt_v1(raw: object, vocab: NeedVocabulary) -> ConversationStateV2:
+def adapt_v1(raw: object, vocab: NeedVocabulary, *, rehome: bool = False) -> ConversationStateV2:
     """Adapter CONSERVATOR v1 → v2.
 
     Regula (pasul 3 din card): numai ce se normalizează curat devine `active`; restul devine
@@ -696,6 +701,12 @@ def adapt_v1(raw: object, vocab: NeedVocabulary) -> ConversationStateV2:
 
     def _add(key: object, value: object, *, source: str) -> None:
         normalized = normalize_need(key, value, vocab)
+        if rehome and normalized is not None and normalized.value is None:
+            # NX-355 (`rehome`, flagul `NEEDS_RETAINED_ENABLED`): «ten uscat» scris ca `concerns` e
+            # `skin_type=dry`; fără mutare, nevoia ieșea `unknown` și se pierdea la turul următor.
+            moved = rehome_list_value(key, value, vocab)
+            if moved is not None:
+                normalized = normalize_need(*moved, vocab)
         if normalized is None or normalized.key in seen:
             return
         seen.add(normalized.key)
@@ -724,7 +735,18 @@ def adapt_v1(raw: object, vocab: NeedVocabulary) -> ConversationStateV2:
             continue
         if isinstance(value, list):
             for item in value[:MAX_NEEDS]:
-                _add_list_item(needs, seen, key, item, vocab, source="user_explicit")
+                # NX-355: doar ce NU se normalizează în propria listă se mută (vezi `_add`); pe un
+                # tenant cu `concerns` deschis, o valoare validă a listei rămâne a ei.
+                listed = normalize_need(key, item, vocab)
+                moved = (
+                    rehome_list_value(key, item, vocab)
+                    if rehome and listed is not None and listed.value is None
+                    else None
+                )
+                if moved is not None:
+                    _add(*moved, source="user_explicit")
+                else:
+                    _add_list_item(needs, seen, key, item, vocab, source="user_explicit")
         else:
             _add(key, value, source="user_explicit")
 

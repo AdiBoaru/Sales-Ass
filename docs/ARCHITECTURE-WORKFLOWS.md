@@ -1841,6 +1841,7 @@ moderation_enabled = true
 named_shortcut_targets_enabled = true
 narrowing_question_enabled = false
 need_menu_enabled = false
+needs_retained_enabled = true
 no_result_alternatives_enabled = true
 observability_enabled = false
 observability_metrics_enabled = true

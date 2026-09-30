@@ -40,10 +40,12 @@ from __future__ import annotations
 
 import json
 from collections import Counter
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from itertools import product
 from typing import Any
 
+from src.catalog.query_terms import content_terms, inflection_suffixes
 from src.catalog.vocabulary import (
     CATEGORY_DIMENSION,
     CatalogVocabulary,
@@ -51,6 +53,7 @@ from src.catalog.vocabulary import (
     resolve,
     resolve_any,
 )
+from src.conversation.needs import corroborated_by
 
 #: Cheia din `search_constraints` (v1) sub care stă subiectul. Una singură, citită de toți.
 SUBJECT_KEY = "subject"
@@ -148,6 +151,97 @@ def product_type_of(product: Mapping[str, Any]) -> str | None:
         return None
     value = attrs.get("product_type")
     return value if isinstance(value, str) and value else None
+
+
+def search_named_type(queries: Iterable[object], product_type: str | None) -> bool:
+    """A cerut căutarea turului, în cuvinte, tipul `product_type`? PURĂ (NX-355).
+
+    Se uită la CAPUL tipului («crema» din «crema de fata»), cu aceeași potrivire ca proveniența
+    (`corroborated_by`, pe prefix, deci și «cremă»). Nu spune ce tip a cerut căutarea, doar dacă l-a
+    cerut pe ăsta: e direcția sigură. Un plural neregulat («măști» față de «mască») dă fals, iar
+    atunci apelantul se comportă ca înainte de NX-355."""
+    if not product_type:
+        return False
+    head = product_type.split()[0] if product_type.split() else ""
+    if not head:
+        return False
+    return any(isinstance(q, str) and q and corroborated_by(q, head) for q in queries)
+
+
+def type_fits_query(
+    queries: Iterable[object],
+    product_type: str,
+    catalog_types: Iterable[str],
+    stop: Collection[str] = frozenset(),
+) -> bool:
+    """Cere căutarea chiar tipul `product_type`, și nu unul mai SPECIFIC cu același cap? PURĂ
+    (NX-355, recenzia: pe SOLE capul „crema” poartă 8 tipuri).
+
+    Da când capul e numit (`search_named_type`) și niciun alt tip din catalog cu același cap nu are
+    toate cuvintele lui în plus (fără cuvinte goale) numite în căutare: «cremă de hidratare pentru
+    ten uscat» se potrivește cu «crema de fata», «crema contur ochi» nu."""
+    if not search_named_type(queries, product_type):
+        return False
+    texts = [q for q in queries if isinstance(q, str) and q]
+    own = [w for w in product_type.split() if w not in stop]
+    head = product_type.split()[0]
+    for other in catalog_types:
+        words = other.split()
+        if other == product_type or not words or words[0] != head:
+            continue
+        extra = [w for w in words if w not in stop and w not in own]
+        if extra and all(any(corroborated_by(t, w) for t in texts) for w in extra):
+            return False
+    return True
+
+
+def type_fully_named(queries: Iterable[object], product_type: str, stop: Collection[str]) -> bool:
+    """Numește căutarea TOATE cuvintele tipului (fără cuvintele goale)? PURĂ (NX-355, a doua
+    recenzie): «crema contur ochi» numește `crema contur ochi`, «cremă de hidratare» nu numește
+    `crema de corp`, deși capul e același."""
+    texts = [q for q in queries if isinstance(q, str) and q]
+    words = [w for w in product_type.split() if w not in stop]
+    return bool(words) and all(any(corroborated_by(t, w) for t in texts) for w in words)
+
+
+def dimensions_named(
+    vocab: CatalogVocabulary | None,
+    text: str,
+    dimensions: Iterable[str],
+    *,
+    overlays: Mapping[str, Mapping[str, str]] | None = None,
+    locale: str | None = None,
+) -> frozenset[str]:
+    """Care dintre `dimensions` le NUMEȘTE textul (clientului), prin vocabularul catalogului și
+    harta de limbă a tenantului. PURĂ (NX-355, a doua recenzie).
+
+    Se încearcă grupuri de 3, 2 și 1 termeni de conținut consecutivi, ca «ten foarte gras» să
+    ajungă la «ten gras» (cuvântul gol „foarte” iese la `content_terms`), cu flexiunea locale-i
+    («tenul» → «ten»). Doar `KNOWN`/`AMBIGUOUS` contează.
+    Vocabular absent ⇒ nimic numit (apelantul se poartă ca înainte de NX-355)."""
+    if vocab is None or vocab.is_empty() or not text:
+        return frozenset()
+    suffixes = inflection_suffixes(locale)
+
+    def variants(term: str) -> list[str]:
+        # «tenul» → «ten»: tulpina + un sufix de flexiune al locale-i, tulpina de minimum 3 litere
+        stems = [term[: -len(x)] for x in suffixes if term.endswith(x) and len(term) - len(x) >= 3]
+        return [term, *dict.fromkeys(stems)]
+
+    terms = [variants(t) for t in content_terms(text, locale)]
+    grams: list[str] = []
+    for n in (3, 2, 1):
+        for i in range(len(terms) - n + 1):
+            grams.extend(" ".join(combo) for combo in product(*terms[i : i + n]))
+    named: set[str] = set()
+    for dim in dimensions:
+        overlay = (overlays or {}).get(dim)
+        for gram in grams:
+            status = resolve(vocab, gram, dim, overlay=overlay).status
+            if status in (ResolutionStatus.KNOWN, ResolutionStatus.AMBIGUOUS):
+                named.add(dim)
+                break
+    return frozenset(named)
 
 
 def resolve_shelf(vocab: CatalogVocabulary | None, raw: str | None) -> str | None:

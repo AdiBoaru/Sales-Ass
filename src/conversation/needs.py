@@ -399,6 +399,52 @@ def _canonical_token(
     return text, "ok"
 
 
+def positive_facet_keys(vocab: NeedVocabulary) -> frozenset[str]:
+    """Cheile care, în stiva v1, înseamnă o cerință POZITIVĂ pe o valoare închisă (ex. tipul de
+    ten). PUR (NX-355).
+
+    Stiva v1 pierde operatorul: o EXCLUDERE arată la fel ca o cerere. Doar fațetele scalare cu
+    vocabular ÎNCHIS sunt sigur „vreau valoarea asta”; restul (excluderi, limite numerice,
+    booleeni, valori deschise) nu se cară în căutare și nu se afișează ca cerere."""
+    return frozenset(
+        spec.key for spec in vocab.specs.values() if spec.kind is NeedKind.SCALAR and spec.values
+    )
+
+
+def rehome_list_value(key: object, value: object, vocab: NeedVocabulary) -> tuple[str, str] | None:
+    """O valoare de listă care aparține ALTEI fațete → `(cheia ei, valoarea canonică)`. PUR.
+
+    NX-355: pe calea v1 modelul pune tot ce descrie clientul în argumentul `concerns` (unealta n-are
+    un câmp per fațetă), iar căutarea îl rezolvă corect peste TOATE dimensiunile: «ten uscat» ajunge
+    `skin_type=dry`. Memoria însă îl normaliza doar în interiorul lui `concerns`: `concern_map`-ul
+    tenantului îl traduce în `dry`, `dry` nu e o valoare de `concerns`, deci nevoia ieșea
+    `out_of_vocabulary` și dispărea la turul următor (conversația `1748f988`, 2026-09-29). Pe
+    `sole-ro`, 24 din cele 87 de fraze ale hărții țintesc `skin_type`.
+
+    Se mută doar ce are UN singur proprietar: valoarea (după harta tenantului) nu e a lui `concerns`
+    și e în vocabularul ÎNCHIS al exact unei alte fațete. Zero sau mai mulți proprietari ⇒ `None`,
+    iar apelantul păstrează comportamentul de dinainte (nicio ghicire)."""
+    list_spec = vocab.spec_for(key)
+    if list_spec is None or list_spec.kind is not NeedKind.LIST:
+        return None
+    text = norm_text(value)
+    if not text:
+        return None
+    text = list_spec.aliases.get(text, text)
+    mapped = vocab.concern_map.get(text, text) if list_spec.key == "concerns" else text
+    if list_spec.values and mapped in list_spec.values:
+        return None
+    owners = [
+        spec.key
+        for spec in vocab.specs.values()
+        if spec.key != list_spec.key
+        and spec.kind is NeedKind.SCALAR
+        and spec.values
+        and mapped in spec.values
+    ]
+    return (owners[0], mapped) if len(owners) == 1 else None
+
+
 def normalize_need(key: object, value: object, vocab: NeedVocabulary) -> NormalizedNeed | None:
     """Cheie + valoare brută → nevoie canonică, sau `None` dacă cheia nu e în vocabular.
 

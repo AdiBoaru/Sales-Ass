@@ -821,6 +821,15 @@ class Settings(BaseSettings):
     conversation_subject_enabled: bool = Field(
         default=True, validation_alias="CONVERSATION_SUBJECT_ENABLED"
     )
+    # NX-355: ce a spus clientul rămâne în căutare de la un tur la altul, pe calea v1. (1) O valoare
+    # scrisă ca `concerns` dar care e a altei fațete («ten uscat» = `skin_type=dry`) se mută la
+    # încărcare în fațeta ei (`rehome_list_value`), iar stiva o cară generic; înainte ieșea
+    # `unknown` și dispărea la turul următor (conversația `1748f988`). (2) Nevoile stivei intră în
+    # fiecare căutare pe ACELAȘI raft, chiar dacă modelul le omite. (3) Un set de alt tip decât cel
+    # CERUT în căutare nu mută subiectul (e o ratare, nu o schimbare), iar tipul subiectului
+    # ordonează căutarea care îl numește. (4) Promptul vede subiectul și fațetele. ON implicit
+    # (defect măsurat); OFF = byte-identic.
+    needs_retained_enabled: bool = Field(default=True, validation_alias="NEEDS_RETAINED_ENABLED")
     # IZI-parity (Tier 1, G2): intenție de COMPARAȚIE pe un set deja afișat („compară primele două",
     # „ce diferență e între ele") → tabel structurat DETERMINIST pe produsele afișate (re-fetch +
     # build_comparison), ca link/show_more/cheaper — fără să depindem de modelul care cheamă
