@@ -1389,10 +1389,10 @@ def diversify_pool(
       veche era o singură trecere care sărea tot ce cădea într-o terță acoperită și continua de
       unde rămăsese, deci după ultima terță lua produsele de DUPĂ ea (măștile de pe locurile 8-10)
       înaintea cremelor sărite de pe locurile 3-6.
-    - `subject_types`: tipurile pe care clientul le-a CERUT (`SearchArgs.prefer["product_type"]`,
-      scris de planner sau de NX-355, niciodată de model) nu intră în cota pe tip. Cota e pentru
-      cererile care numesc doar o nevoie («scap de cosuri»); la «vreau o cremă» ar trimite exact
-      tipul cerut pe pagina a doua.
+    - `subject_types`: tipurile pe care clientul le-a CERUT (tipul subiectului, pus de NX-355 în
+      `SearchArgs.prefer["product_type"]`) nu intră în cota pe tip. Cota e pentru cererile care
+      numesc doar o nevoie («scap de cosuri»); la «vreau o cremă» ar trimite exact tipul cerut pe
+      pagina a doua.
     """
     if max_per_type == _QUOTA_FROM_OWNER:  # NX-303: cifra vine de la proprietarul ei
         max_per_type = cfg_max_per_type()
@@ -2443,10 +2443,15 @@ async def _search(
         and a.product_name is None
         and len(ranked_final) > a.limit
     ):
-        # NX-358: tipurile CERUTE vin din `a.prefer`, pe care modelul nu-l poate scrie
-        # (`PLANNER_ONLY_FIELDS`): plannerul kernelului (umbrela) sau NX-355 (tipul subiectului).
+        # NX-358: tipul CERUT, scutit de cota pe tip. Doar pe calea v1, unde `a.prefer` are un
+        # singur autor: NX-355 (`_prefer_subject_type`, tipul subiectului din stare), fiindcă
+        # modelul nu-l poate trimite (`PLANNER_ONLY_FIELDS`). Pe calea planificată `prefer` amestecă
+        # tipurile subiectului cu semnalele `inferred` ale interpretării (recenzia NX-358): un tip
+        # ghicit de model ar fi scăpat de cotă. Separarea lor e un câmp nou în contract, nu aici.
         subject_aware = get_settings().search_diversify_subject_aware_enabled
-        requested = (a.prefer or {}).get("product_type") or () if subject_aware else ()
+        requested = (
+            (a.prefer or {}).get("product_type") or () if subject_aware and not planned else ()
+        )
         ranked_final = diversify_pool(
             ranked_final,
             a.limit,

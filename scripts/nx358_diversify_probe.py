@@ -1,10 +1,10 @@
 """NX-358 — sonda diversificării pe catalogul real: flag stins vs aprins. Read-only, zero model.
 
-Rulează căutarea planificată (`run_planned_search`: fuziune, retrogradarea epuizatelor,
+Rulează căutarea de pe calea v1 (unealta `search_products`: fuziune, retrogradarea epuizatelor,
 diversificare) pe două feluri de cereri:
 
-- cu TIP cerut (`prefer.product_type`, cum îl pun plannerul și NX-355): pagina trebuie să fie din
-  tipul cerut, fiindcă asta a cerut clientul (conversația `1848eeba`: trei măști la o cremă);
+- cu TIP cerut (tipul subiectului din stare, pe care NX-355 îl pune în `prefer.product_type`):
+  pagina trebuie să fie din tipul cerut (conversația `1848eeba`: trei măști la o cremă);
 - DOAR cu nevoie (fără tip): paleta de tipuri (NX-298) trebuie să rămână.
 
     PYTHONPATH=. python scripts/nx358_diversify_probe.py [--business-id <uuid>]
@@ -35,16 +35,19 @@ from src.worker.runner import PipelineDeps  # noqa: E402
 SOLE_BIZ = "99fe1292-f9ed-469e-8183-f994ea5b59c0"
 SHELF = "ten-ingrijirea-tenului"
 
-#: (eticheta, argumentele căutării). Primul caz e turul real din `1848eeba`.
+#: (eticheta, argumentele căutării). Primul caz e turul real din `1848eeba`, cu stiva salvată și
+#: mesajul clientului (`_stack`, `_body`): așa reproduce EXACT pagina servită atunci.
 TYPED: list[tuple[str, dict[str, Any]]] = [
     (
         "1848eeba t3: cremă, ten uscat, sub 100",
         {
             "query": "cremă de față pentru hidratare, ten uscat",
             "category": SHELF,
-            "concerns": ["hydration", "dry"],
+            "concerns": ["hydration"],
             "price_max": 100,
             "prefer": {"product_type": ["crema de fata"]},
+            "_stack": {"skin_type": "dry", "concerns": ["hydration"], "category_key": SHELF},
+            "_body": "ceva sub 100 lei",
         },
     ),
     (
@@ -129,17 +132,28 @@ def _type(p: dict[str, Any]) -> str:
 
 
 async def _page(deps: PipelineDeps, biz: Any, args: dict[str, Any]) -> list[dict[str, Any]]:
-    from src.tools.catalog_tools import SearchArgs, run_planned_search
+    """Calea v1 reală: unealta modelului, cu tipul cerut ca SUBIECT în stare. `prefer` nu se
+    trimite (modelul nu-l poate trimite); îl pune NX-355 când căutarea numește tipul subiectului."""
+    from src.conversation.subject import SUBJECT_KEY, ConversationSubject
+    from src.tools.base import TOOL_REGISTRY
 
+    args = dict(args)
+    wanted = (args.pop("prefer", None) or {}).get("product_type")
+    stack = dict(args.pop("_stack", None) or {})
+    body = args.pop("_body", None) or args["query"]
     ctx = TurnContext(
         turn_id="nx358-probe",
         business=biz,
         contact=Contact(id="probe-contact", business_id=biz.id),
-        message=InboundMessage(provider_msg_id="nx358", body=args["query"], channel_kind="webchat"),
+        message=InboundMessage(provider_msg_id="nx358", body=body, channel_kind="webchat"),
         conversation_id="probe-conv",
         language=biz.default_locale or "ro",
     )
-    res = await run_planned_search(ctx, deps, SearchArgs(limit=6, **args))
+    if wanted:
+        subject = ConversationSubject(shelf_key=args.get("category"), product_type=wanted[0])
+        stack[SUBJECT_KEY] = subject.to_dict()
+    ctx.state.search_constraints = stack
+    res = await TOOL_REGISTRY["search_products"](ctx, deps, {"limit": 6, **args})
     return list(res.products or [])
 
 

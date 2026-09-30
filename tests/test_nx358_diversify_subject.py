@@ -133,6 +133,104 @@ def test_need_only_request_keeps_spreading_types() -> None:
     assert page[0]["id"] == "s0" and types["ser"] <= 2 and len(types) == 3
 
 
+def _legacy_diversify(candidates, limit, *, max_per_brand=2, max_per_type=2):
+    """Oracolul: `diversify_pool` de dinainte de NX-358, copiat din `c380dd9^` (fără comentarii).
+    Flagul stins trebuie să dea EXACT rezultatul lui (recenzia NX-358)."""
+    n = len(candidates)
+    if limit <= 0 or n <= limit:
+        return list(candidates)
+    prices = [p["price"] for p in candidates if p.get("price") is not None]
+    lo, hi = (min(prices), max(prices)) if prices else (0.0, 0.0)
+    tert = [
+        None if p.get("price") is None else ct._price_tertile(float(p["price"]), lo, hi)
+        for p in candidates
+    ]
+    present = {t for t in tert if t is not None}
+    selected = [0]
+    brand_count: dict = {}
+    type_count: dict = {}
+    covered: set = set()
+    if candidates[0].get("brand"):
+        brand_count[candidates[0]["brand"]] = 1
+    if first_type := ct._product_type(candidates[0]):
+        type_count[first_type] = 1
+    if tert[0] is not None:
+        covered.add(tert[0])
+    for i in range(1, n):
+        if len(selected) >= limit:
+            break
+        brand = candidates[i].get("brand")
+        if brand and brand_count.get(brand, 0) >= max_per_brand:
+            continue
+        ptype = ct._product_type(candidates[i])
+        if ptype and max_per_type is not None and type_count.get(ptype, 0) >= max_per_type:
+            continue
+        if tert[i] is None or tert[i] not in covered or present <= covered:
+            selected.append(i)
+            if brand:
+                brand_count[brand] = brand_count.get(brand, 0) + 1
+            if ptype:
+                type_count[ptype] = type_count.get(ptype, 0) + 1
+            if tert[i] is not None:
+                covered.add(tert[i])
+    if len(selected) < limit:
+        chosen = set(selected)
+        allow_brand = max_per_brand
+        allow_type = max_per_type if max_per_type is not None else n
+        for _ in range(n + 1):
+            if len(selected) >= limit:
+                break
+            progressed = False
+            for i in range(1, n):
+                if len(selected) >= limit:
+                    break
+                if i in chosen:
+                    continue
+                brand = candidates[i].get("brand")
+                if brand and brand_count.get(brand, 0) >= allow_brand:
+                    continue
+                ptype = ct._product_type(candidates[i])
+                if ptype and type_count.get(ptype, 0) >= allow_type:
+                    continue
+                selected.append(i)
+                chosen.add(i)
+                progressed = True
+                if brand:
+                    brand_count[brand] = brand_count.get(brand, 0) + 1
+                if ptype:
+                    type_count[ptype] = type_count.get(ptype, 0) + 1
+            if not progressed:
+                allow_brand += 1
+                allow_type += 1
+    chosen_set = set(selected)
+    front = [candidates[i] for i in sorted(chosen_set)]
+    return front + [candidates[i] for i in range(n) if i not in chosen_set]
+
+
+def test_flag_off_output_is_the_legacy_output() -> None:
+    import random
+
+    rng = random.Random(358)
+    brands = [None, "", "A", "B", "C", "D"]
+    types = [None, "", CREAM, MASK, "ser de fata"]
+    for _ in range(3000):
+        n = rng.randint(0, 14)
+        pool = [
+            _p(
+                f"p{i}",
+                rng.choice(brands),
+                rng.choice([None, 0.0, 10.0, 25.0, 50.0, 99.0, float(rng.randint(1, 200))]),
+                rng.choice(types),
+            )
+            for i in range(n)
+        ]
+        limit = rng.randint(-1, 8)
+        mpt = rng.choice([None, 1, 2, 3])
+        mpb = rng.choice([1, 2])
+        got = ct.diversify_pool(pool, limit, max_per_brand=mpb, max_per_type=mpt)
+        assert got == _legacy_diversify(pool, limit, max_per_brand=mpb, max_per_type=mpt)
+
+
 def test_the_whole_pool_is_kept_for_pagination() -> None:
     out = ct.diversify_pool(
         POOL_1848, 6, subject_types=frozenset({CREAM}), tertile_representatives=True
@@ -180,10 +278,34 @@ def spied(monkeypatch):
     return calls
 
 
-def test_planned_search_passes_the_requested_type(spied) -> None:
-    args = ct.SearchArgs(query="crema de fata", prefer={"product_type": [CREAM]})
-    res = asyncio.run(ct.run_planned_search(_ctx(), _deps(), args))
-    assert spied[-1] == {"subject_types": frozenset({CREAM}), "tertile_representatives": True}
+def test_planned_search_gets_no_exemption(spied) -> None:
+    """Recenzia NX-358: pe calea planificată `prefer.product_type` amestecă tipurile subiectului cu
+    semnalele `inferred` ale interpretării (un tip ghicit de model). Scutirea ar fi fost a
+    modelului."""
+    args = ct.SearchArgs(query="ceva pentru cosuri", prefer={"product_type": ["ser de fata"]})
+    asyncio.run(ct.run_planned_search(_ctx(), _deps(), args))
+    assert spied[-1] == {"subject_types": frozenset(), "tertile_representatives": True}
+
+
+def test_v1_search_exempts_the_subject_type(spied, monkeypatch) -> None:
+    """Pe calea v1 singurul autor al lui `prefer` e NX-355, cu tipul subiectului din stare."""
+    from src.catalog.vocabulary import CatalogVocabulary, VocabEntry
+    from src.conversation.subject import SUBJECT_KEY, ConversationSubject
+
+    async def vocab(deps, business_id):
+        types = (CREAM, MASK)
+        return CatalogVocabulary(
+            business_id=business_id,
+            dimensions={"product_type": tuple(VocabEntry(key=t, label=t, count=9) for t in types)},
+        )
+
+    monkeypatch.setattr(ct, "get_vocabulary", vocab)
+    ctx = _ctx()
+    ctx.state.search_constraints = {
+        SUBJECT_KEY: ConversationSubject(shelf_key="ten", product_type=CREAM).to_dict()
+    }
+    res = asyncio.run(run_tool(ctx, _deps(), "search_products", {"query": "crema hidratanta"}))
+    assert spied[-1]["subject_types"] == frozenset({CREAM})
     assert not {p["id"] for p in res.products} & MASKS
 
 
