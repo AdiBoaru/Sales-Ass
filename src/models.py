@@ -123,6 +123,11 @@ class Message:
     # NX-160: id-ul DB al mesajului (dacă a fost citit din `messages`) → trasabilitatea sursei
     # unui fact (source_message_id). None pentru mesaje sintetice (teste / istoric fără id).
     id: str | None = None
+    # NX-255: `messages.payload` (jsonb) al rândului. Interesează `shown` — ref-urile produselor
+    # AFIȘATE în acel tur (P8: id + nume + preț, nu obiecte). Fără el, istoricul păstra doar proza
+    # botului, iar ce a arătat efectiv nu exista nicăieri: „al doilea pe care mi l-ai arătat" nu
+    # avea ancoră dincolo de ultimul tur (`state.displayed_products` se suprascrie per tur).
+    payload: dict[str, Any] | None = None
 
 
 # ---------------------------------------------------------------------------

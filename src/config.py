@@ -462,6 +462,20 @@ class Settings(BaseSettings):
     # Buget de caractere al blocului de rezumat injectat în prompt (P4).
     summary_max_chars: int = Field(default=600, validation_alias="SUMMARY_MAX_CHARS")
 
+    # --- Istoric structurat (NX-255) ---
+    # OFF → `conversation_transcript` e byte-identic cu comportamentul de dinainte (tăiere oarbă
+    # `[-1200:]`). ON → nicio tăiere de caractere: mesajele clientului verbatim, proza botului
+    # integrală, PLUS ref-urile produselor arătate atunci (`messages.payload.shown`). ON implicit,
+    # ca NX-311: nu e o capabilitate de câștigat pe golden, e un defect măsurat (conversația
+    # `1748f988`, 2026-09-29: la turul 3 modelul nu vedea niciun mesaj al clientului).
+    structured_history_enabled: bool = Field(
+        default=True, validation_alias="STRUCTURED_HISTORY_ENABLED"
+    )
+    # Câte ref-uri de produs se persistă pe un tur de bot și se reinjectează din istoric.
+    history_shown_max_products: int = Field(
+        default=6, validation_alias="HISTORY_SHOWN_MAX_PRODUCTS"
+    )
+
     # --- Mini-scheduler joburi de mentenanță (NX-83) ---
     # Orchestrează funcțiile run() existente la intervale fixe (rollup nocturn,
     # purjă dedupe, embed incremental). Embed gated suplimentar pe prezența cheii OpenAI.

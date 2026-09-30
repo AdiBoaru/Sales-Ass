@@ -644,8 +644,28 @@ unde se știe că turul a fost o intenție de preț. Din rollup n-ai cum să dis
 nimic" de „n-am găsit nimic mai ieftin" — de aceea faptul se scrie la sursă, nu se inferă.
 
 Memoria (istoric / profil / state / rezumat) intră în prompturi prin `conversation_transcript` +
-`context_blocks` ([src/worker/context.py:23](../src/worker/context.py)). System-promptul agentului e
+`context_blocks` ([src/worker/context.py:28](../src/worker/context.py)). System-promptul agentului e
 GENERAT din DB ([src/agent/prompt_builder.py](../src/agent/prompt_builder.py), principiul 9).
+
+**NX-255 — istoricul nu se mai taie, iar turul botului poartă și ce a ARĂTAT** (ON implicit;
+`STRUCTURED_HISTORY_ENABLED=false` ⇒ tăierea veche, byte-identic). Vechiul `[-1200:]` se aplica pe
+stringul deja unit: nu știa de rol, de granițe de mesaj sau de cuvânt. Măsurat pe `webchat` real
+(2026-08-24, 409 inbound / 408 outbound): clientul scrie **28** de caractere în medie, botul **750**
+(p90 1391) — deci tăierea de coadă arunca exact întrebările, ieftine și esențiale, ca să păstreze
+proza, scumpă și redundantă, iar transcriptul putea începe cu un fragment fără cap
+(`"aza sistemul). Spune-mi te rog…"`). În plus, ce a arătat botul nu se persista **nicăieri**:
+payload-ul bogat mergea în `outbox` (canale async) sau nu se construia deloc (web sincron), deci
+`messages.payload` avea exact `{turn_id, fragment_index}` pe toate rândurile reale. Singura urmă
+rămânea `state.displayed_products`, care se suprascrie per tur și se randează cu max 3 intrări.
+
+Cu flagul aprins: mesajul clientului e **verbatim, netăiat**; turul botului păstrează proza
+**integrală** (few-shot din propria voce, întărește `VOICE_RULES` cu exemple reale) plus un bloc
+`[a aratat]` cu ref-uri `{id, nume, preț}` din `messages.payload.shown` și vechimea în ture.
+Separarea e regula care face păstrarea prozei sigură: **proza spune CUM vorbești, blocul de produse
+spune CE e adevărat**, iar cifrele se reconfirmă prin tool. Nu există plafon de caractere:
+singura margine e fereastra încărcată, `HISTORY_LIMIT` (mesajul clientului e plafonat la intrare, 2.000 de
+caractere). Un plafon pe caractere se atingea pe fiecare conversație cu răspunsuri de 1.200-1.600
+de caractere, adică defectul reparat, mutat mai încolo.
 
 ---
 
@@ -1889,6 +1909,7 @@ single_brain_enabled = false
 skin_type_anti_fit_enabled = false
 spec_digits_grounded_enabled = true
 speculative_retrieval_enabled = false
+structured_history_enabled = true
 summary_enabled = true
 tool_field_errors_enabled = true
 tool_loop_skip_prose_enabled = true

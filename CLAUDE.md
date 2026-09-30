@@ -1318,7 +1318,7 @@ asta"), iar căderea pe model ar risca regresia NX-131 — preț asumat și pinu
 `pytest tests/test_context_journeys.py tests/test_context_orchestration.py -q`.
 
 **NX-255 — istoricul minte: întrebarea clientului se tăia, iar ce a arătat botul nu se persista
-(DARK, flag OFF).** `conversation_transcript` aplica `[-1200:]` pe stringul deja UNIT: tăiere oarbă,
+(LIVE, flag ON implicit; codul a stat pe o ramură până pe 2026-09-29, deși nota era aici).** `conversation_transcript` aplica `[-1200:]` pe stringul deja UNIT: tăiere oarbă,
 fără noțiune de rol, de graniță de mesaj sau de cuvânt. Măsurat pe `webchat` real (409 inbound / 408
 outbound, 2026-08-24): clientul scrie **28** de caractere în medie (p90 46, max 134), botul **750**
 (p50 814, p90 1391, max 1822) — o fereastră de 6 mesaje cere ~2334 de caractere, deci se arunca
@@ -1334,9 +1334,13 @@ vizibilă, ci **degradare plătită la fiecare follow-up**). Cu `STRUCTURED_HIST
 e **verbatim**, turul botului păstrează proza **integrală** (few-shot din propria voce) PLUS un bloc
 `[a aratat]` cu ref-uri `{id, nume, preț}` și vechimea în ture. Regula care face păstrarea prozei
 sigură: **proza spune CUM vorbești, blocul spune CE e adevărat** — cifrele se reconfirmă prin tool.
-Degradarea e deterministă: proza celor mai vechi ture cedează prima (la graniță de propoziție,
-păstrându-le faptele), apoi se elimină intrări întregi; un mesaj de client poate dispărea, dar nu
-poate fi mutilat. Card: [`tasks/stage1/NX-255.md`](tasks/stage1/NX-255.md); probă:
+**Nicio limită de caractere** (decis de Adi, 2026-09-29): varianta cu buget pe rol (3.500)
+tăia tot proza turelor vechi, fiindcă pe `sole-ro` un răspuns are 1.200-1.600 de caractere. Singura
+margine e fereastra ÎNCĂRCATĂ (`HISTORY_LIMIT`, 8 mesaje cu cel curent; cu 6, un tur nu apărea nici în
+istoric, nici în rezumat); mesajul clientului e plafonat la intrare (2.000, `web/app.py`).
+Declanșatorul: conversația `1748f988`, unde la turul 3 tăierea veche lăsa modelului doar coada
+listei de la turul 2, fără niciun mesaj al clientului. ON implicit, ca NX-311 (defect măsurat);
+`STRUCTURED_HISTORY_ENABLED=false` = tăierea veche, byte-identic. Card: [`tasks/stage1/NX-255.md`](tasks/stage1/NX-255.md); probă:
 `pytest tests/test_structured_history.py -q`.
 
 **NX-289 — WhatsApp și Telegram nu mai există în proiect (cod + schemă).**
