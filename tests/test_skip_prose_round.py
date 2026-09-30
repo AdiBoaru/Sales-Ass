@@ -120,7 +120,7 @@ async def test_raising_predicate_does_not_lose_the_turn():
         (dict(is_order=True, profile="recommend", called=["search_products"], has_products=True),
          (False, "order")),
         (dict(is_order=False, profile="compare", called=["search_products"], has_products=True),
-         (False, "not_recommend")),
+         (False, "profile_needs_round")),
         (dict(is_order=False, profile="recommend",
               called=["search_products", "get_product_details"], has_products=True),
          (False, "other_tool")),

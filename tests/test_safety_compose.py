@@ -154,6 +154,19 @@ def test_enforce_puts_sentence_in_rich_intro_too():
     assert "medicul sau farmacistul" in ctx.reply.text
 
 
+@pytest.mark.parametrize("intro", [None, ""])
+def test_enforce_fills_an_empty_rich_intro(intro):
+    """NX-359: runda de proză sărită + compunerea bogată picată + nicio încadrare ⇒ `intro` gol.
+    Condiția veche (`intro is not None`) lăsa fraza doar în `text`, pe care widgetul nu-l arată pe
+    calea bogată: clientul nu vedea trimiterea la medic deloc."""
+    rich = _rich()
+    rich.intro = intro
+    ctx = _Ctx(Reply(text="text aplatizat", rich=rich), _blocked_decision())
+    enforce(ctx)
+    assert "medicul sau farmacistul" in (ctx.reply.rich.intro or "")
+    assert ctx.reply.rich.intro.count("farmacist") == 1
+
+
 def test_enforce_scrubs_blocked_card_that_slipped_through():
     """Plasa finală: un id blocat ajuns în carduri (cale nouă care a uitat gate-ul) → scos."""
     ctx = _Ctx(

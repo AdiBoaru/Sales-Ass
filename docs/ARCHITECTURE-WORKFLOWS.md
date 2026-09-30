@@ -1917,6 +1917,7 @@ structured_history_enabled = true
 summary_enabled = true
 tool_field_errors_enabled = true
 tool_loop_skip_prose_enabled = true
+tool_loop_skip_prose_exact_enabled = true
 topic_switch_reset_enabled = true
 turn_budget_alerts_enabled = true
 turn_budget_enforced = false

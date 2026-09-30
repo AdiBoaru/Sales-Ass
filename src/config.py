@@ -1506,6 +1506,14 @@ class Settings(BaseSettings):
     tool_loop_skip_prose_enabled: bool = Field(
         default=True, validation_alias="TOOL_LOOP_SKIP_PROSE_ENABLED"
     )
+    # NX-359: runda de proză se sare și pe profilul `exact`, nu doar pe `recommend`. Rafinările
+    # unei recomandări («am tenul uscat», «ceva sub 100 lei») ies `answer` ⇒ `exact`, iar compunerea
+    # bogată rulează pe orice tur cu produse, deci textul rundei era aruncat. Pe 30 de zile, 0 din
+    # 40 de ture `exact` cu o căutare reușită au chemat a doua unealtă; runda costa p50 3,2 s. ON
+    # implicit (risipă măsurată); OFF = doar `recommend`, ca înainte.
+    tool_loop_skip_prose_exact_enabled: bool = Field(
+        default=True, validation_alias="TOOL_LOOP_SKIP_PROSE_EXACT_ENABLED"
+    )
     # NX-312 felia 4: apelul de compunere bogată nu mai cere ce aruncă. `suggestions` iese când
     # mutările de chip le suprascriu oricum (`CHIP_MOVES_V1_ENABLED`), `pick` când linia nu se
     # arată nicăieri (`RICH_PICK_WEB_ENABLED=false`), iar lista de rafturi din system-ul rich
