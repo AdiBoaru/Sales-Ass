@@ -152,6 +152,10 @@
       "reason": "sondă de MĂSURARE, ca nx298_recall_probe: rulează argumentele EXACTE ale turului real 42744330 din `conversation_traces` (NX-299), ca să arate ce servea scara înainte și după ordinea pe proveniență. Frazele sunt datele măsurătorii, nu comportament."
     },
     {
+      "path": "scripts/nx358_diversify_probe.py",
+      "reason": "sondă de MĂSURARE, ca nx298_recall_probe: rulează pe catalogul pilot turul real 1848eeba și cereri de client cu și fără tip, ca să compare pagina cu flagul stins și aprins. Frazele și clasificarea pe nume sunt datele și metrica sondei, nu comportament de producție."
+    },
+    {
       "path": "scripts/nx298_recall_probe.py",
       "reason": "sondă de MĂSURARE: rulează pe tenantul pilot exact frazele reale de client din `conversation_traces` (NX-298). Frazele sunt datele măsurătorii, nu comportament; fără ele proba n-ar putea reproduce turul care a expus defectul."
     },
