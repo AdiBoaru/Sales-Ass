@@ -229,3 +229,28 @@ def test_multi_variant_product_gets_availability_but_no_price():
 def test_gone_and_unknown_rows_are_never_written():
     gone = sr.diff_row(CURRENT, sl.decide("p1", sl.parse_page("<html></html>")))
     assert sr.apply_params("b", gone) is None
+
+
+# ── recenzia finală: întăriri ────────────────────────────────────────────────────────────────────
+
+
+def test_a_voucher_whose_code_is_not_recognised_never_becomes_a_general_sale():
+    html = IN_STOCK.replace("<b>WELCOME15</b>", "<b>w15</b>")
+    facts = sl.parse_page(html).price_facts()
+    assert facts is not None
+    assert facts.price == Decimal("120.00")
+    assert facts.sale_price is None and facts.coupon_price is None
+    assert "voucher_without_code" in facts.anomalies
+
+
+def test_non_breaking_space_as_thousands_separator():
+    assert sl.parse_amount("1\xa0900 lei") == Decimal("1900.00")
+    assert sl.parse_amount("1\u202f299,90 lei") == Decimal("1299.90")
+
+
+def test_a_redirect_to_another_product_is_not_the_same_product():
+    base = "https://sole.ro/ten/creme/round-lab-birch-f77765.html"
+    assert sl.same_product_url(base, "https://sole.ro/ten/creme/round-lab-birch-f77765")
+    assert sl.same_product_url(base, "https://sole.ro/ten/creme/round-lab-birch-f77765/?utm=x")
+    assert not sl.same_product_url(base, "https://sole.ro/ten/creme/alt-produs-f11111")
+    assert not sl.same_product_url(base, "https://sole.ro/ten/creme")

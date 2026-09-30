@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import Decimal
 from html.parser import HTMLParser
 
@@ -66,6 +66,14 @@ class LivePage:
         (pagina epuizată) ⇒ `None`: prețul de listă nu se poate afla, deci nu se scrie."""
         if self.price_regular is None:
             return None
+        if self.price_promo is not None and self.promo_code is None:
+            # Blocul „welcome price” e MEREU un voucher. Fără cod recunoscut, `parse_price` l-ar
+            # scrie ca reducere pentru oricine (`sale_price`); îl lăsăm deoparte și îl semnalăm
+            # (recenzia finală NX-360).
+            facts = parse_price(self.price_regular, None, None)
+            if facts is None:
+                return None
+            return replace(facts, anomalies=(*facts.anomalies, "voucher_without_code"))
         return parse_price(self.price_regular, self.price_promo, self.promo_code)
 
 
@@ -76,7 +84,8 @@ def parse_amount(text: str | None) -> Decimal | None:
     exact 3 cifre) e separator de mii. Recenzia NX-360: o primă variantă tăia «1900» la «190»."""
     if not text:
         return None
-    m = _AMOUNT.search(text.replace(" ", ""))
+    # Orice spațiu, inclusiv cel neîntrerupt (`\xa0`, `\u202f`) ca separator de mii.
+    m = _AMOUNT.search(re.sub(r"\s+", "", text))
     if not m:
         return None
     token = m.group(0).rstrip(".,")
@@ -202,6 +211,19 @@ class Refresh:
     status: str
     #: Produsul rămâne (sau devine) epuizat, iar prețul lui de listă nu se poate afla.
     price_unverified: bool
+
+
+def same_product_url(requested: str, final: str) -> bool:
+    """Redirecționarea a rămas pe ACELAȘI produs. sole.ro redirecționează `.../x.html` spre `.../x`
+    (301), ceea ce e normal; un produs retras poate însă redirecționa spre alt produs, iar prețul
+    acela nu e al nostru. Se compară ultimul segment al căii, fără `.html` și fără `/`. PUR."""
+
+    def slug(url: str) -> str:
+        path = url.split("?", 1)[0].split("#", 1)[0].rstrip("/")
+        last = path.rsplit("/", 1)[-1]
+        return last[:-5] if last.endswith(".html") else last
+
+    return slug(requested) == slug(final)
 
 
 def decide(product_id: str, page: LivePage) -> Refresh:

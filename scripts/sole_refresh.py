@@ -38,7 +38,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from src.catalog.sole_live import Refresh, decide, parse_page  # noqa: E402
+from src.catalog.sole_live import Refresh, decide, parse_page, same_product_url  # noqa: E402
 
 OUT_DIR = ROOT / "reports" / "nx360"
 USER_AGENT = "Mozilla/5.0 (compatible; NativxCatalogSync/1.0; +https://nativxtech.com)"
@@ -154,6 +154,9 @@ def fetch(args: argparse.Namespace) -> int:
             elif resp.status_code != 200:
                 errors[f"http_{resp.status_code}"] += 1
                 continue
+            elif not same_product_url(p["product_url"], str(resp.url)):
+                # Redirecționat spre ALT produs: prețul lui nu e al nostru, deci pagina lipsește.
+                page_html = ""
             else:
                 page_html = resp.text
             rows.append(diff_row(p, decide(p["id"], parse_page(page_html))))
