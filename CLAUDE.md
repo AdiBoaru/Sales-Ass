@@ -1206,6 +1206,15 @@ alt tip decât cel cerut nu mai mută subiectul. Pe catalogul real, turul 3: 6 d
 uscat, cremele primele. Flag `NEEDS_RETAINED_ENABLED` (ON). Card:
 [`tasks/stage1/NX-355.md`](tasks/stage1/NX-355.md); probă: `pytest tests/test_nx355_needs_retained.py -q`.
 
+**NX-359 — runda de proză se sare și pe rafinări (profilul `exact`).** Conversația `1848eeba`:
+«am tenul uscat» și «ceva sub 100 lei» ies `answer` ⇒ `exact`, iar NX-312 sărea runda doar pe
+`recommend`, deși compunerea bogată rulează pe orice tur cu produse (proza nu era citită). Pe 30 de
+zile, 0 din 40 de ture `exact` cu o căutare reușită au chemat altă unealtă; runda costa p50 3,2 s.
+Profilul declară acum `search_ends_turn` (`exact`, `recommend`), iar motivul `not_recommend` devine
+`profile_needs_round`. Flag `TOOL_LOOP_SKIP_PROSE_EXACT_ENABLED` (ON). Card:
+[`tasks/stage1/NX-359.md`](tasks/stage1/NX-359.md); probă: `pytest
+tests/test_nx359_prose_round_exact.py tests/test_skip_prose_round.py -q`.
+
 **NX-318 — câte cuvinte identifică un produs depinde de ce ALTCEVA e pe ecran.** Aceeași conversație
 (`f4e1431e`). Codul decidea cu o constantă (minimum 2 cuvinte): `_mention_index` rata „EUBOS” scris
 singur, iar `_fit_anchor` tăia «IT'S SKIN The Fresh Blueberries» la «IT'S SKIN The Fresh», prefixul a

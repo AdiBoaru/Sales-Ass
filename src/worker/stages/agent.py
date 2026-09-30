@@ -671,12 +671,20 @@ def _apply_turn_profile(
 #: NX-312: motivele deciziei despre runda de proză. Vocabular ÎNCHIS: fără el nu se poate număra
 #: nici acoperirea (câte ture economisesc un apel), nici regresia (câte cad pe rezerva NX-299).
 PROSE_ROUND_REASONS = frozenset(
-    {"search_only", "order", "not_recommend", "other_tool", "no_products", "no_tools"}
+    {"search_only", "order", "profile_needs_round", "other_tool", "no_products", "no_tools"}
 )
+
+#: NX-312: profilele încheiate de o căutare, înainte de NX-359 (flagul stins).
+_SEARCH_ENDS_LEGACY = frozenset({"recommend"})
 
 
 def _prose_round_redundant(
-    *, is_order: bool, profile: str, called: list[str], has_products: bool
+    *,
+    is_order: bool,
+    profile: str,
+    called: list[str],
+    has_products: bool,
+    search_ends: frozenset[str] = _SEARCH_ENDS_LEGACY,
 ) -> tuple[bool, str]:
     """NX-312: runda de proză a buclei (apelul 2) mai aduce ceva? PURĂ.
 
@@ -685,8 +693,10 @@ def _prose_round_redundant(
     doar acolo unde modelul chiar poate vrea o a doua unealtă, și acolo rămâne:
 
     - ORDER: statusul comenzii se scrie din `order_views`, nu din carduri;
-    - alt profil decât `recommend` (compare/howto/routine/mutation/exact): a doua unealtă e
-      plauzibilă;
+    - un profil care nu declară `search_ends_turn` (compare/howto/routine/mutation): a doua unealtă
+      e plauzibilă. NX-359: `exact` îl declară, fiindcă rafinările («am tenul uscat», «ceva sub
+      100 lei») ies `answer` ⇒ `exact`, iar pe 30 de zile 0 din 40 de ture `exact` cu o căutare
+      reușită au chemat altceva, deși plăteau runda (p50 3,2 s);
     - altă unealtă decât `search_products` în rundă (detalii, coș, comparație);
     - căutarea n-a adus nimic: modelul poate corecta (turul `21319dec`).
 
@@ -695,8 +705,8 @@ def _prose_round_redundant(
     """
     if is_order:
         return False, "order"
-    if profile != "recommend":
-        return False, "not_recommend"
+    if profile not in search_ends:
+        return False, "profile_needs_round"
     if not called or set(called) != {"search_products"}:
         return False, "other_tool"
     if not has_products:
@@ -728,6 +738,11 @@ class _ProseRoundGate:
             profile=self._profile,
             called=list(called),
             has_products=bool(self._run.retrieved),
+            search_ends=(
+                turn_profile.search_ends_turn_names()
+                if get_settings().tool_loop_skip_prose_exact_enabled
+                else _SEARCH_ENDS_LEGACY
+            ),
         )
         return self.skipped
 
