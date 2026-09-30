@@ -1206,6 +1206,20 @@ alt tip decât cel cerut nu mai mută subiectul. Pe catalogul real, turul 3: 6 d
 uscat, cremele primele. Flag `NEEDS_RETAINED_ENABLED` (ON). Card:
 [`tasks/stage1/NX-355.md`](tasks/stage1/NX-355.md); probă: `pytest tests/test_nx355_needs_retained.py -q`.
 
+**NX-358 — diversificarea paginii se face ÎN INTERIORUL cererii.** Conversația `1848eeba`
+(2026-09-30): la «ceva sub 100 lei» după o cremă, relevanța avea creme pe locurile 1-7, iar pagina
+a ieșit cu trei măști. `diversify_pool` avea două mecanisme care tăiau aceleași creme (fiecare
+reparat singur lăsa tot trei măști, măsurat pe pool-ul real): faza pe preț era o singură trecere
+care, după ultima terță găsită, lua produsele de DUPĂ ea în locul celor sărite, iar cota „max 2 pe
+tip" plafona chiar tipul cerut. Acum faza pe preț ia cel mai relevant reprezentant al fiecărei
+terțe lipsă, iar pe calea v1 tipul subiectului (NX-355, în `SearchArgs.prefer["product_type"]`)
+e scutit de cotă; cota rămâne pentru cererile doar cu nevoie (NX-298). Pe calea kernelului `prefer`
+amestecă tipul subiectului cu semnale `inferred`, deci scutirea așteaptă un câmp de planner (card
+separat). Pe catalogul real: turul din `1848eeba` trece de la 3/6 la 6/6 creme, paleta cererilor
+doar cu nevoie rămâne. Flag `SEARCH_DIVERSIFY_SUBJECT_AWARE_ENABLED` (ON). Card:
+[`tasks/stage1/NX-358.md`](tasks/stage1/NX-358.md); probă: `pytest
+tests/test_nx358_diversify_subject.py -q` + `PYTHONPATH=. python scripts/nx358_diversify_probe.py`.
+
 **NX-318 — câte cuvinte identifică un produs depinde de ce ALTCEVA e pe ecran.** Aceeași conversație
 (`f4e1431e`). Codul decidea cu o constantă (minimum 2 cuvinte): `_mention_index` rata „EUBOS” scris
 singur, iar `_fit_anchor` tăia «IT'S SKIN The Fresh Blueberries» la «IT'S SKIN The Fresh», prefixul a

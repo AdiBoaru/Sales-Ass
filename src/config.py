@@ -1012,6 +1012,14 @@ class Settings(BaseSettings):
     search_diversify_enabled: bool = Field(
         default=True, validation_alias="SEARCH_DIVERSIFY_ENABLED"
     )
+    # NX-358: diversificarea se face ÎN INTERIORUL cererii. (1) Faza pe preț ia cel mai relevant
+    # reprezentant al fiecărei terțe lipsă, nu sare tot ce cade într-o terță acoperită; (2) tipul
+    # CERUT (`SearchArgs.prefer["product_type"]`, planner/NX-355) nu intră în cota pe tip.
+    # Conversația `1848eeba`: «ceva sub 100 lei» după o cremă, cu creme pe locurile 1-7 ale
+    # relevanței, a servit trei măști din cinci. ON implicit (defect măsurat); OFF = byte-identic.
+    search_diversify_subject_aware_enabled: bool = Field(
+        default=True, validation_alias="SEARCH_DIVERSIFY_SUBJECT_AWARE_ENABLED"
+    )
     # NX-167 (A): filtrul de categorie prinde produsul dacă ORICARE din categoriile lui (primary
     # SAU product_category_map) e categoria cerută SAU un DESCENDENT al ei (materialized path
     # `categories.path`). Repară „cerere pe părinte (machiaj) ratează copiii (fond-de-ten)". OFF
