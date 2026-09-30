@@ -95,7 +95,8 @@ class _LLM:
         }
 
 
-def _ctx(*, relaxed: bool, category_dropped: bool = False) -> TurnContext:
+def _ctx(*, relaxed: bool, category_dropped: bool = False, fresh: bool = True) -> TurnContext:
+    """`fresh=False` = set DETERMINIST («mai ieftin», paginare, re-hidratare): `relevance` gol."""
     ctx = TurnContext(
         turn_id="t",
         business=BusinessConfig(id="b", slug="d", name="D"),
@@ -107,7 +108,9 @@ def _ctx(*, relaxed: bool, category_dropped: bool = False) -> TurnContext:
     ctx.language = "ro"
     ctx.retrieval = RetrievalResult(
         products=list(BRUSHES),
-        relevance=Relevance(relaxed=relaxed, category_dropped=category_dropped),
+        relevance=(
+            Relevance(relaxed=relaxed, category_dropped=category_dropped) if fresh else None
+        ),
     )
     return ctx
 
@@ -200,15 +203,15 @@ async def test_refused_relaxed_set_is_not_cacheable_and_offers_a_way_out():
     assert recommended and recommended[0].properties["n"] == 0
 
 
-async def test_refused_but_exact_set_is_still_shown():
+async def test_refused_deterministic_set_is_still_shown():
     """Contra-exemplul care ține poarta îngustă.
 
     `no-items-selected` singur NU ajunge. Pe follow-up-ul „ceva mai ieftin", setul e ales
     DETERMINIST de `cheaper_intent` și `relevance` rămâne nesetat (fail-open, vezi `Relevance`):
-    acolo serverul știe mai bine decât modelul ce a cerut clientul. Un set găsit STRICT și refuzat
-    rămâne pe ecran.
+    acolo serverul știe mai bine decât modelul ce a cerut clientul. NX-365: criteriul e „set din
+    căutare nouă", nu „set relaxat" (vezi `test_refused_strict_search_set_is_withheld`).
     """
-    ctx = _ctx(relaxed=False)
+    ctx = _ctx(relaxed=False, fresh=False)
     await render(ctx, PipelineDeps(conn=object(), redis=None, llm=_LLM()), _plan())
 
     assert ctx.reply is not None
@@ -303,9 +306,27 @@ async def test_invalid_prose_refusal_does_not_approve_the_set():
     assert ctx.reply.text == HA_REFUSAL
 
 
-async def test_skipped_prose_refusal_on_a_strict_set_keeps_nx306_contract():
-    """Contra-exemplul NX-306 rămâne: un set găsit STRICT și refuzat se arată."""
+async def test_refused_strict_search_set_is_withheld():
+    """NX-365, turul real `86725ca1` (2026-09-30): «tu ce mi ai recomanda?» după «nu vreau cu acid
+    hialuronic». Filtrele au rămas STRICTE (excluderea nu ajunsese deloc în căutare), modelul a
+    refuzat setul pe bună dreptate, iar poarta pe `relaxed` l-a servit sub textul nostru. Acum
+    orice set din căutare nouă, refuzat, pleacă, iar clientul primește refuzul modelului."""
     ctx = _ctx(relaxed=False)
+    llm = _LLM(prose="", intro=HA_REFUSAL)
+    await render(
+        ctx, PipelineDeps(conn=object(), redis=None, llm=llm), _plan(final="", prose_skipped=True)
+    )
+
+    assert ctx.reply is not None
+    assert ctx.reply.products == [], ctx.reply.products
+    assert ctx.reply.rich is None
+    assert ctx.reply.text == HA_REFUSAL
+    assert [e for e in ctx.events if e.type == "refused_set_withheld"]
+
+
+async def test_skipped_prose_refusal_on_a_deterministic_set_keeps_nx306_contract():
+    """Contra-exemplul NX-306 rămâne: un set DETERMINIST („mai ieftin”) refuzat se arată."""
+    ctx = _ctx(relaxed=False, fresh=False)
     llm = _LLM(prose="", intro=HA_REFUSAL)
     await render(
         ctx, PipelineDeps(conn=object(), redis=None, llm=llm), _plan(final="", prose_skipped=True)

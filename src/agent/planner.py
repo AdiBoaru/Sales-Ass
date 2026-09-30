@@ -842,7 +842,10 @@ async def build_plan(
     # izi-parity hardening: relevanța off-category NUMAI pe calea de căutare PROASPĂTĂ. „Mai ieftin"
     # (set determinist), paginarea și re-hidratarea din state (produse deja arătate, on-topic) NU
     # setează semnalul → compose tratează ca potrivire exactă (fail-open, fără suprimare falsă).
-    relevance = None if (cheaper_intent or rehydrated or chosen) else run.search_relevance
+    # NX-365: și superlativul pe setul afișat (`attr_query`) e un set ales de server, nu o căutare.
+    relevance = (
+        None if (cheaper_intent or rehydrated or chosen or attr_query) else run.search_relevance
+    )
     # NX-173 (P0) — ENFORCEMENT FINAL: orice ar fi produs căile de mai sus (inclusiv una viitoare
     # care uită gate-ul), aici e ultimul punct înainte ca `ctx.retrieval` să alimenteze validatorul,
     # cardurile și `displayed_products`. Idempotent: pe un set deja gate-uit nu taie nimic.
