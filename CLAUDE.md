@@ -1229,6 +1229,15 @@ Profilul declară acum `search_ends_turn` (`exact`, `recommend`), iar motivul `n
 [`tasks/stage1/NX-359.md`](tasks/stage1/NX-359.md); probă: `pytest
 tests/test_nx359_prose_round_exact.py tests/test_skip_prose_round.py -q`.
 
+**NX-361 — pe `/web/chat` răspunsul nu mai așteaptă aftercare-ul.** Ruta de producție făcea
+`await run_aftercare` înainte de `return`, deci clientul aștepta și extracția de profil (un apel de
+model, 3,3-5 s pe tur în `1848eeba`), pe care `turn_latency` n-o numără. Acum aftercare-ul rulează
+în `BackgroundTasks`, după trimiterea răspunsului, sub un plafon per proces
+(`WEB_AFTERCARE_MAX_CONCURRENT`, 8); costul pipeline-ului intră în plafonul vizitatorului înainte de
+răspuns. Faptele extrase ajung cu câteva secunde mai târziu (declarat). Flag
+`WEB_CHAT_AFTERCARE_DETACHED_ENABLED` (ON). Card: [`tasks/stage1/NX-361.md`](tasks/stage1/NX-361.md);
+probă: `pytest tests/test_nx361_aftercare_detached.py -q`.
+
 **NX-318 — câte cuvinte identifică un produs depinde de ce ALTCEVA e pe ecran.** Aceeași conversație
 (`f4e1431e`). Codul decidea cu o constantă (minimum 2 cuvinte): `_mention_index` rata „EUBOS” scris
 singur, iar `_fit_anchor` tăia «IT'S SKIN The Fresh Blueberries» la «IT'S SKIN The Fresh», prefixul a
