@@ -1832,6 +1832,7 @@ lifecycle_job_enabled = true
 link_intent_enabled = true
 llm_call_budget_by_role_enabled = true
 llm_sampling_enabled = true
+llm_wait_bounded_enabled = true
 match_gate_shadow_enabled = false
 memory_canonicalize_enabled = true
 memory_open_capture_enabled = true

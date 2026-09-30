@@ -69,6 +69,36 @@ def _retry_cause(exc: Exception) -> str:
     return _RETRY_CAUSE_STATUS
 
 
+#: NX-357 — de ce n-a răspuns furnizorul, pentru apelanții care degradează (vocabular ÎNCHIS). Pe
+#: aceeași ordine ca `_retry_cause`; în plus `error` pentru ce nu vine din SDK.
+FAILURE_CAUSES = ("timeout", "connection", "status", "error")
+
+
+def failure_cause(exc: BaseException) -> str:
+    """Excepția ridicată de adaptor → cauza, din `FAILURE_CAUSES`. PURĂ."""
+    if isinstance(exc, openai.APITimeoutError | TimeoutError):
+        return "timeout"
+    if isinstance(exc, openai.APIConnectionError):
+        return "connection"
+    if isinstance(exc, openai.APIStatusError):
+        return "status"
+    return "error"
+
+
+def _failure_detail(exc: Exception) -> str:
+    """Ce a răspuns furnizorul, pentru LOG (niciodată pentru analytics): codul HTTP, id-ul cererii
+    (cu el OpenAI poate căuta cererea la ei) și `Retry-After` brut. Pe 2026-09-29 logul avea doar
+    tipul excepției, iar `InternalServerError` acoperă orice cod ≥ 500."""
+    resp = getattr(exc, "response", None)
+    headers = getattr(resp, "headers", None) or {}
+    parts = [
+        f"status={getattr(exc, 'status_code', None)}",
+        f"request_id={getattr(exc, 'request_id', None) or headers.get('x-request-id')}",
+        f"retry_after={headers.get('retry-after')}",
+    ]
+    return " ".join(parts)
+
+
 class Sampling(NamedTuple):
     """Ce pleacă pe sârmă + bitul pe baza căruia s-a decis. NX-311 îl scoate afară fiindcă `_chat`
     are nevoie de el pentru ceas, iar a-l recalcula separat ar însemna două derivări ale aceleiași
@@ -134,6 +164,27 @@ def call_budget(settings: Any, *, reasoning_on: bool) -> CallBudget:
 # rapide prin natura lor: un moderation care durează 8s nu mai are pentru cine să modereze, iar
 # gate-ul degradează fail-open oricum. Efectiv rămâne `min(cap, buget rămas − rezervă)`.
 MODERATION_CAP_MS = 2_000
+
+
+def _wait_bounded() -> bool:
+    """NX-357 — kill-switch-ul plafoanelor de așteptare (tavanul `Retry-After`, bugetul moderării,
+    plafonul total pe Vision/embedding)."""
+    return bool(getattr(get_settings(), "llm_wait_bounded_enabled", False))
+
+
+def _retry_after_cap_s() -> float | None:
+    """Tavanul unui `Retry-After`, sau `None` cu kill-switch-ul stins (comportamentul vechi)."""
+    if not _wait_bounded():
+        return None
+    return float(getattr(get_settings(), "llm_retry_after_max_s", 10.0))
+
+
+def _extraction_total_cap_s() -> float | None:
+    """NX-357 — plafonul total NX-311 pentru apelurile de extracție (Vision, embedding), care nu
+    trec prin `_guarded` și nu-l primeau. `None` cu kill-switch-ul stins."""
+    if not _wait_bounded():
+        return None
+    return float(getattr(get_settings(), "llm_call_total_cap_s", 90.0))
 
 
 def _retry_after_seconds(exc: Exception) -> float | None:
@@ -230,6 +281,20 @@ async def _with_retry(
         if attempt >= max_retries:
             break
         sleep_s = (wait if wait is not None else delay) + random.uniform(0.0, 0.25)
+        # NX-357 — `Retry-After` e o cerere a furnizorului, nu un buget al nostru. Peste tavan nu
+        # dormim: un furnizor care cere două minute nu e sănătos după trei secunde de backoff, iar
+        # clientul nu are cum să aștepte. Eșecul merge la apelant, care degradează (P6).
+        wait_cap_s = _retry_after_cap_s()
+        if wait is not None and wait_cap_s is not None and wait > wait_cap_s:
+            log.warning(
+                "llm_api_failure: %s — retry abandonat, Retry-After %.0fs peste tavanul %.0fs (%s)",
+                type(last).__name__,
+                wait,
+                wait_cap_s,
+                _failure_detail(last),
+            )
+            turn_latency.degrade("llm_retry_after_over_cap")
+            break
         if d is not None and not d.fits(sleep_s * 1000.0, minimum_ms=min_useful):
             # 429 cu `Retry-After` peste ce a mai rămas: NU așteptăm. Degradăm terminal (P6).
             log.warning(
@@ -254,19 +319,23 @@ async def _with_retry(
             turn_latency.degrade("llm_retry_no_budget")
             break
         log.warning(
-            "llm_api_failure: %s tranzitoriu (%s) — retry %d/%d în %.2fs",
+            "llm_api_failure: %s tranzitoriu (%s) — retry %d/%d în %.2fs (%s)",
             type(last).__name__,
             _retry_cause(last),
             attempt + 1,
             max_retries,
             sleep_s,
+            _failure_detail(last),
         )
         turn_latency.degrade("llm_retry")
         turn_latency.degrade(_retry_cause(last))
         await asyncio.sleep(sleep_s)
         delay *= 2
     log.warning(
-        "llm_api_failure: %s — epuizat după %d reîncercări", type(last).__name__, max_retries
+        "llm_api_failure: %s — epuizat după %d reîncercări (%s)",
+        type(last).__name__,
+        max_retries,
+        _failure_detail(last),
     )
     raise last
 
@@ -1138,18 +1207,33 @@ class LLMClient:
     async def moderate(self, text: str, *, model: str | None = None) -> ModerationResult:
         """Clasifică un mesaj cu endpointul de moderation OpenAI (gratuit, NU generare —
         principiul 2, ca embed). Folosit de Gates (NX-15) ÎNAINTE de triaj. Ridică la
-        eroare de API — caller-ul (gate) prinde și degradează fail-open."""
-        resp = await _with_retry(
-            # NX-311: `_t` ignorat DELIBERAT. Bugetul pe rol e al apelurilor de GENERARE, a căror
-            # durată depinde de cât gândește modelul. Moderation/embed/vision sunt extracții cu
-            # durată ~fixă, își au deja plafonul lor (`MODERATION_CAP_MS`, `embed_timeout_ms`), iar
-            # `timeout` din constructor le rămâne anti-hang. Nu sunt membri ai clasei reparate aici.
-            lambda _t: self._client.moderations.create(
-                model=model or self.model_moderation, input=text
-            ),
-            max_retries=get_settings().llm_retry_max,
-            cap_ms=MODERATION_CAP_MS,
-        )
+        eroare de API — caller-ul (gate) prinde și degradează fail-open.
+
+        NX-357: cu `llm_wait_bounded_enabled`, moderarea are UN buget total (`moderation_timeout_s`,
+        retry inclus), și cu deadline-ul de tur stins. Ceasul e pe cerere (`timeout=`), iar
+        `asyncio.timeout` e zidul peste tot: timeouturile httpx sunt pe fază (conectare, citire),
+        deci o cerere lentă pe fiecare fază ar putea trece de buget. Expirat ⇒ `TimeoutError`,
+        prins de poartă ca orice eșec. Stins ⇒ calea de dinainte, byte-identic."""
+        mdl = model or self.model_moderation
+        if _wait_bounded():
+            cap_s = float(get_settings().moderation_timeout_s)
+            async with asyncio.timeout(cap_s):
+                resp = await _with_retry(
+                    lambda t: self._client.moderations.create(model=mdl, input=text, timeout=t),
+                    max_retries=get_settings().llm_retry_max,
+                    cap_ms=int(cap_s * 1000),
+                    attempt_timeout_s=cap_s,
+                    total_cap_s=cap_s,
+                )
+        else:
+            resp = await _with_retry(
+                # NX-311: `_t` ignorat DELIBERAT pe calea veche. Plafonul `MODERATION_CAP_MS` se
+                # aplică doar cu deadline-ul de tur aprins; fără el rămâne `timeout` din constructor
+                # și retry-ul, cu `Retry-After` fără tavan (NX-357).
+                lambda _t: self._client.moderations.create(model=mdl, input=text),
+                max_retries=get_settings().llm_retry_max,
+                cap_ms=MODERATION_CAP_MS,
+            )
         r = resp.results[0]
         data = r.categories.model_dump()
         flagged = [k for k, v in data.items() if v]
@@ -1190,6 +1274,7 @@ class LLMClient:
             ),
             max_retries=get_settings().llm_retry_max,
             cap_ms=getattr(get_settings(), "llm_call_cap_ms", 8_000),
+            total_cap_s=_extraction_total_cap_s(),  # NX-357
         )
         usage.record_chat(resp, mdl)
         return (resp.choices[0].message.content or "").strip()
@@ -1208,6 +1293,7 @@ class LLMClient:
             # `embed_timeout_ms` (NX-225) rămâne plafonul embedului; deadline-ul turului îl poate
             # doar STRÂNGE, niciodată lărgi. 0 = fără plafon propriu → doar bugetul turului.
             cap_ms=s.embed_timeout_ms or None,
+            total_cap_s=_extraction_total_cap_s(),  # NX-357
         )
         usage.record_embeddings(resp, mdl)
         return [d.embedding for d in resp.data]

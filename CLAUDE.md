@@ -926,6 +926,17 @@ D15) și nu aprinde `TURN_DEADLINE_ENABLED`. Card: [`tasks/stage1/NX-311.md`](ta
 probe: `pytest tests/test_llm_call_budget.py -q` +
 `PYTHONPATH=. python scripts/llm_call_budget_probe.py --business sole-ro`.
 
+**NX-357 — moderarea a dormit 120 s fiindcă așa i-a cerut furnizorul.** Conversația `1748f988`
+(2026-09-29): două ture de 136 s în poarta de moderare. Logul: un 5xx de la OpenAI cu
+`Retry-After: 120`, iar `_with_retry` a dormit exact atât, pentru un verdict fail-open.
+`MODERATION_CAP_MS` se aplica doar cu deadline-ul de tur aprins, `Retry-After` n-avea tavan, iar
+moderarea/Vision/embeddingul nu primeau plafonul total NX-311. Acum (`LLM_WAIT_BOUNDED_ENABLED`, ON):
+tavan pe `Retry-After` pentru toate apelurile (`LLM_RETRY_AFTER_MAX_S` = 10 s, peste ⇒ eșec imediat),
+moderarea are bugetul ei cu tot cu retry (`MODERATION_TIMEOUT_S` = 3 s; 2 s ar fi sărit 11% din ture),
+Vision și embeddingul primesc plafonul total, poarta emite `moderation_unavailable{cause}`, iar logul
+poartă `status`/`request_id`/`retry_after`. Card: [`tasks/stage1/NX-357.md`](tasks/stage1/NX-357.md);
+probă: `pytest tests/test_nx357_wait_bounded.py -q`.
+
 **NX-312 — turul de recomandare: trei apeluri de model → două (felia 1 măsurare, felia 2 tăiere).**
 Pe v1, recomandarea avea două straturi puse unul peste altul: bucla de tool-calling (apelul 1
 caută, apelul 2 scrie proză) și compunerea bogată (apelul 3 rescrie totul ca JSON). Pe calea bogată
