@@ -1238,6 +1238,16 @@ răspuns. Faptele extrase ajung cu câteva secunde mai târziu (declarat). Flag
 `WEB_CHAT_AFTERCARE_DETACHED_ENABLED` (ON). Card: [`tasks/stage1/NX-361.md`](tasks/stage1/NX-361.md);
 probă: `pytest tests/test_nx361_aftercare_detached.py -q`.
 
+**NX-362 — setul refuzat de model ajungea pe ecran prin lista NOASTRĂ.** Conversația `625ab925`
+(2026-09-30, «tu ce mi ai recomanda?» după «nu vreau cu acid hialuronic»): compunerea a refuzat
+setul relaxat, poarta NX-306 a păstrat ce „numește proza”, dar runda de proză fusese sărită
+(NX-312/359), deci proza era `_deterministic_reply`, lista cu numele tuturor produselor: `named: 4`,
+iar clientul a primit patru carduri, unul cu „Acid Hialuronic” în nume. Acum doar proza MODELULUI,
+validată (`result.ok`), poate numi produse; altfel setul e gol, iar textul servit e refuzul modelului
+(`intro`-ul compunerii bogate, prin `_valid(…, [])`) sau mesajul de no-result. Setul strict refuzat
+rămâne pe ecran (NX-306). Fără kill-switch. Card: [`tasks/stage1/NX-362.md`](tasks/stage1/NX-362.md);
+probă: `pytest tests/test_refused_set_withheld.py -q`.
+
 **NX-318 — câte cuvinte identifică un produs depinde de ce ALTCEVA e pe ecran.** Aceeași conversație
 (`f4e1431e`). Codul decidea cu o constantă (minimum 2 cuvinte): `_mention_index` rata „EUBOS” scris
 singur, iar `_fit_anchor` tăia «IT'S SKIN The Fresh Blueberries» la «IT'S SKIN The Fresh», prefixul a

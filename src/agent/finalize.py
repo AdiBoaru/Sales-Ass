@@ -1103,6 +1103,9 @@ async def render(
         # `_finalize` (NX-302) — o variabilă definită într-o ramură și citită în alta e exact
         # felul de legătură care se rupe tăcut la următoarea refactorizare.
         downgrade_reason: str | None = None
+        # NX-362: refuzul modelului, scris de EL pe calea bogată (`intro`, scrubuit de compose).
+        # Singurul text al modelului care există când runda de proză a fost sărită (NX-312/359).
+        refusal_intro: str | None = None
         # Calea BOGATĂ (model iZi): recomandare structurată → compose. Doar pe SALES.
         # Orice eșec (apel structurat, zero items după membership) → fallback pe proză.
         if not is_order:
@@ -1151,6 +1154,7 @@ async def render(
                 reason = "all-items-dropped-by-membership"
             else:
                 reason = "no-items-selected"
+                refusal_intro = rich.intro
             downgrade_reason = reason
             ctx.emit("rich_downgraded", reason=reason)
             if getattr(ctx, "trace", None) is not None:
@@ -1211,11 +1215,37 @@ async def render(
         # din catalog, deci fără poarta asta refuzul ar fi ieșit AGRAVAT: aceleași pensule, dar acum
         # cu badge, rating și un motiv de sub card, adică un ecran care arată exact ca o recomandare
         # convinsă, sub un text care o neagă.
+        #
+        # NX-362: „ce NUMEȘTE proza" are sens doar pentru proza MODELULUI. Când `_finalize` n-a
+        # putut servi text de model (`result.ok` fals: runda de proză sărită de NX-312/359, sau
+        # proza picată la validare), `reply` e `_deterministic_reply`, adică lista NOASTRĂ cu
+        # numele tuturor produselor, deci numea tot setul prin construcție și îl aproba înapoi.
+        # Turul real `0a9c3590` (`sole-ro`, 2026-09-30, «tu ce mi ai recomanda?» după «nu vreau cu
+        # acid hialuronic»): modelul a refuzat setul, iar clientul a primit patru carduri, unul cu
+        # „Acid Hialuronic" în nume. Pe refuz, lista noastră nu e nici aprobare, nici text de
+        # servit: rămâne refuzul modelului (`intro`, trecut prin aceeași poartă ca orice text fără
+        # produse), altfel mesajul de no-result.
         servable = products
         _relevance = getattr(getattr(ctx, "retrieval", None), "relevance", None)
         if downgrade_reason == "no-items-selected" and getattr(_relevance, "relaxed", False):
-            servable = compose.named_products(reply, products)
-            ctx.emit("refused_set_withheld", retrieved=len(products), named=len(servable))
+            servable = compose.named_products(reply, products) if result.ok else []
+            ctx.emit(
+                "refused_set_withheld",
+                retrieved=len(products),
+                named=len(servable),
+                model_prose=result.ok,
+            )
+            if not result.ok:
+                if refusal_intro and _valid(
+                    refusal_intro,
+                    [],
+                    plan.generated_links,
+                    plan.grounded_prices,
+                    grounded_sources=_sources(plan),
+                ):
+                    reply, result = refusal_intro, ValidationResult(ok=True, reasons=[])
+                else:
+                    reply = _no_result_msg(is_order=False)
         # NX-302: degradarea e PARȚIALĂ, nu totală. Modelul rich lipsește, FAPTELE nu — deci
         # cardurile se construiesc din catalog (motiv din `best_for`, rating, badge, preț de listă,
         # variante, gramaj) și clientul primește contractul bogat, minus proza narată.
