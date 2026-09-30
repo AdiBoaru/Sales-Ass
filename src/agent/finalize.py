@@ -689,6 +689,10 @@ class _RichOutcome:
 
     reply: RichReply | None
     model_items: int = 0
+    #: NX-362: `intro`-ul SCRIS DE MODEL (scrubuit de compose), sau None când compose l-a
+    #: înlocuit cu textul nostru (redirectul off-category) ori modelul n-a scris niciunul. Pe un
+    #: refuz, doar ăsta poate fi servit drept răspuns: textul nostru ar vorbi în locul modelului.
+    model_intro: str | None = None
 
 
 def _drop_dead_moves(
@@ -978,7 +982,9 @@ async def _finalize_rich(
         # Doar pe un răspuns care chiar pleacă: pe refuz (zero carduri) turul coboară pe proză, iar
         # a raporta acolo un „cum alegi" lipsă ar număra un eșec care nu i-a fost arătat nimănui.
         _apply_turn_shape(ctx, rich, j, shape)
-    return _RichOutcome(reply=rich, model_items=len(emitted))
+    relevance = getattr(getattr(ctx, "retrieval", None), "relevance", None)
+    model_intro = rich.intro if j.get("intro") and not compose._off_category(relevance) else None
+    return _RichOutcome(reply=rich, model_items=len(emitted), model_intro=model_intro)
 
 
 def _resolve_handles(j: dict[str, Any], handles: dict[str, str]) -> dict[str, Any]:
@@ -1154,7 +1160,7 @@ async def render(
                 reason = "all-items-dropped-by-membership"
             else:
                 reason = "no-items-selected"
-                refusal_intro = rich.intro
+                refusal_intro = outcome.model_intro
             downgrade_reason = reason
             ctx.emit("rich_downgraded", reason=reason)
             if getattr(ctx, "trace", None) is not None:
@@ -1216,26 +1222,30 @@ async def render(
         # cu badge, rating și un motiv de sub card, adică un ecran care arată exact ca o recomandare
         # convinsă, sub un text care o neagă.
         #
-        # NX-362: „ce NUMEȘTE proza" are sens doar pentru proza MODELULUI. Când `_finalize` n-a
-        # putut servi text de model (`result.ok` fals: runda de proză sărită de NX-312/359, sau
-        # proza picată la validare), `reply` e `_deterministic_reply`, adică lista NOASTRĂ cu
-        # numele tuturor produselor, deci numea tot setul prin construcție și îl aproba înapoi.
+        # NX-362: „ce NUMEȘTE proza" are sens doar pentru proza MODELULUI, adică textul turului
+        # (`final`) care a trecut validarea din PRIMA. Pe orice altă ieșire din `_finalize`, `reply`
+        # e un text cerut sau scris de NOI: `_deterministic_reply` (runda de proză sărită de
+        # NX-312/359, sau proza picată la validare), adică lista cu numele tuturor produselor; ori
+        # retry-ul de recompunere, căruia îi dăm toate produsele cu „folosește exact aceste prețuri"
+        # și care nu știe de refuz. Ambele numesc setul prin construcție și îl aprobau înapoi.
         # Turul real `0a9c3590` (`sole-ro`, 2026-09-30, «tu ce mi ai recomanda?» după «nu vreau cu
         # acid hialuronic»): modelul a refuzat setul, iar clientul a primit patru carduri, unul cu
-        # „Acid Hialuronic" în nume. Pe refuz, lista noastră nu e nici aprobare, nici text de
-        # servit: rămâne refuzul modelului (`intro`, trecut prin aceeași poartă ca orice text fără
-        # produse), altfel mesajul de no-result.
+        # „Acid Hialuronic" în nume. Pe refuz, textul nostru nu e nici aprobare, nici text de
+        # servit: rămâne refuzul modelului (`model_intro`, trecut prin aceeași poartă ca orice text
+        # de vânzare fără produse), altfel mesajul de no-result. `result` rămâne cel al validării,
+        # ca `agent_prompt` să raporteze în continuare de ce a picat proza.
         servable = products
         _relevance = getattr(getattr(ctx, "retrieval", None), "relevance", None)
         if downgrade_reason == "no-items-selected" and getattr(_relevance, "relaxed", False):
-            servable = compose.named_products(reply, products) if result.ok else []
+            model_prose = result.ok and bool(final) and reply == final
+            servable = compose.named_products(reply, products) if model_prose else []
             ctx.emit(
                 "refused_set_withheld",
                 retrieved=len(products),
                 named=len(servable),
-                model_prose=result.ok,
+                model_prose=model_prose,
             )
-            if not result.ok:
+            if not model_prose:
                 if refusal_intro and _valid(
                     refusal_intro,
                     [],
@@ -1243,7 +1253,7 @@ async def render(
                     plan.grounded_prices,
                     grounded_sources=_sources(plan),
                 ):
-                    reply, result = refusal_intro, ValidationResult(ok=True, reasons=[])
+                    reply = refusal_intro
                 else:
                     reply = _no_result_msg(is_order=False)
         # NX-302: degradarea e PARȚIALĂ, nu totală. Modelul rich lipsește, FAPTELE nu — deci

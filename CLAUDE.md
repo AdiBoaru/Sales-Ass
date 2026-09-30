@@ -1242,10 +1242,12 @@ probă: `pytest tests/test_nx361_aftercare_detached.py -q`.
 (2026-09-30, «tu ce mi ai recomanda?» după «nu vreau cu acid hialuronic»): compunerea a refuzat
 setul relaxat, poarta NX-306 a păstrat ce „numește proza”, dar runda de proză fusese sărită
 (NX-312/359), deci proza era `_deterministic_reply`, lista cu numele tuturor produselor: `named: 4`,
-iar clientul a primit patru carduri, unul cu „Acid Hialuronic” în nume. Acum doar proza MODELULUI,
-validată (`result.ok`), poate numi produse; altfel setul e gol, iar textul servit e refuzul modelului
-(`intro`-ul compunerii bogate, prin `_valid(…, [])`) sau mesajul de no-result. Setul strict refuzat
-rămâne pe ecran (NX-306). Fără kill-switch. Card: [`tasks/stage1/NX-362.md`](tasks/stage1/NX-362.md);
+iar clientul a primit patru carduri, unul cu „Acid Hialuronic” în nume. Acum doar proza MODELULUI
+(textul turului, valid din prima; nici lista noastră, nici retry-ul de recompunere) poate numi
+produse; altfel setul e gol, iar textul servit e refuzul modelului (`_RichOutcome.model_intro`, None
+pe redirectul nostru off-category, prin `_valid(…, [])`) sau mesajul de no-result. Setul strict
+refuzat rămâne pe ecran (NX-306). Deschis, declarat: `active_search` păstrează pool-ul refuzat. Fără
+kill-switch. Card: [`tasks/stage1/NX-362.md`](tasks/stage1/NX-362.md);
 probă: `pytest tests/test_refused_set_withheld.py -q`.
 
 **NX-318 — câte cuvinte identifică un produs depinde de ce ALTCEVA e pe ecran.** Aceeași conversație

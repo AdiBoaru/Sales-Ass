@@ -95,7 +95,7 @@ class _LLM:
         }
 
 
-def _ctx(*, relaxed: bool) -> TurnContext:
+def _ctx(*, relaxed: bool, category_dropped: bool = False) -> TurnContext:
     ctx = TurnContext(
         turn_id="t",
         business=BusinessConfig(id="b", slug="d", name="D"),
@@ -107,7 +107,7 @@ def _ctx(*, relaxed: bool) -> TurnContext:
     ctx.language = "ro"
     ctx.retrieval = RetrievalResult(
         products=list(BRUSHES),
-        relevance=Relevance(relaxed=relaxed),
+        relevance=Relevance(relaxed=relaxed, category_dropped=category_dropped),
     )
     return ctx
 
@@ -317,3 +317,72 @@ async def test_skipped_prose_refusal_on_a_strict_set_keeps_nx306_contract():
     ]
     assert shown, "setul strict nu are voie să dispară"
     assert not [e for e in ctx.events if e.type == "refused_set_withheld"]
+
+
+async def test_successful_retry_does_not_approve_the_refused_set():
+    """Recenzia NX-362: proza turului pică validarea, iar RETRY-ul (cerut de noi cu toate produsele
+    și „folosește exact aceste prețuri") reușește și numește setul. Retry-ul nu știe de refuz, deci
+    nu e aprobarea modelului: setul rămâne reținut, iar clientul primește refuzul."""
+    bad = "Îți recomand ROYAL AND LANGNICKEL Omnia Pro la 5 lei."  # preț inventat ⇒ invalid
+    retry = (
+        "Îți pot arăta ROYAL AND LANGNICKEL Omnia Pro Gold Ferrule și "
+        "SKIN1004 1004Day Signature Mirror Keyring."
+    )
+    ctx = _ctx(relaxed=True)
+    llm = _LLM(prose=retry, intro=HA_REFUSAL)
+    await render(ctx, PipelineDeps(conn=object(), redis=None, llm=llm), _plan(final=bad))
+
+    assert ctx.reply is not None
+    assert ctx.reply.products == [], ctx.reply.products
+    assert ctx.reply.rich is None
+    assert ctx.reply.text == HA_REFUSAL
+    withheld = [e for e in ctx.events if e.type == "refused_set_withheld"]
+    assert withheld and withheld[0].properties["model_prose"] is False
+
+
+async def test_refusal_intro_that_fails_validation_falls_back_to_no_result():
+    """Refuzul modelului trece prin aceeași poartă ca orice text fără produse."""
+    ctx = _ctx(relaxed=True)
+    llm = _LLM(prose="", intro="Îți recomand ROYAL AND LANGNICKEL Omnia Pro, e cel mai bun.")
+    await render(
+        ctx, PipelineDeps(conn=object(), redis=None, llm=llm), _plan(final="", prose_skipped=True)
+    )
+
+    assert ctx.reply is not None
+    assert ctx.reply.products == []
+    assert not _names_any_product(ctx.reply.text)
+    assert "n-am găsit" in ctx.reply.text.lower()
+
+
+async def test_model_intro_is_only_the_models_own_words():
+    """Pe un set off-category, compose înlocuiește `intro` cu redirectul NOSTRU. `model_intro` e
+    atunci None, ca refuzul servit să nu poată fi niciodată un text scris de noi. (Azi redirectul
+    ar pica oricum `_valid`, dar asta e o coincidență de formulare, nu o garanție.)"""
+    from src.agent.finalize import _finalize_rich
+
+    for dropped, expected in ((False, HA_REFUSAL), (True, None)):
+        ctx = _ctx(relaxed=True, category_dropped=dropped)
+        outcome = await _finalize_rich(
+            _LLM(prose="", intro=HA_REFUSAL), "sys", "q", [dict(p) for p in BRUSHES], ctx, ""
+        )
+        assert outcome.reply is not None and not outcome.reply.items
+        assert outcome.model_intro == expected, (dropped, outcome.model_intro)
+        if dropped:
+            assert outcome.reply.intro and outcome.reply.intro != HA_REFUSAL  # textul nostru
+    silent = await _finalize_rich(
+        _LLM(prose="", intro=None), "sys", "q", [dict(p) for p in BRUSHES], _ctx(relaxed=True), ""
+    )
+    assert silent.model_intro is None
+
+
+async def test_withheld_turn_keeps_the_real_validation_result_for_telemetry():
+    """`agent_prompt` (Turn Replay) citește rezultatul validării: pe un tur cu proza sărită, el
+    rămâne „nevalidat”, chiar dacă servim refuzul modelului."""
+    ctx = _ctx(relaxed=True)
+    llm = _LLM(prose="", intro=HA_REFUSAL)
+    result = await render(
+        ctx, PipelineDeps(conn=object(), redis=None, llm=llm), _plan(final="", prose_skipped=True)
+    )
+
+    assert ctx.reply is not None and ctx.reply.text == HA_REFUSAL
+    assert result is not None and result.ok is False
