@@ -87,6 +87,8 @@ reports/nx335/
 # NX-351: raportul sondei pe catalogul real (id-uri de tur și de produs) rămâne LOCAL.
 reports/nx351/
 reports/nx353/
+# NX-363: raportul detectorilor de defecte (id-uri de tur) rămâne LOCAL.
+reports/nx363/
 .env.new
 
 # Spațiu local de lucru (hărți, note, rapoarte personale) — niciodată în git

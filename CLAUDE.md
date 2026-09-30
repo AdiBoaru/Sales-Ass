@@ -1250,6 +1250,17 @@ refuzat rămâne pe ecran (NX-306). Deschis, declarat: `active_search` păstreaz
 kill-switch. Card: [`tasks/stage1/NX-362.md`](tasks/stage1/NX-362.md);
 probă: `pytest tests/test_refused_set_withheld.py -q`.
 
+**NX-363 — detectorii de defecte: ce mecanism a lovit câte ture, pe tot traficul.** Defectele se
+găseau citind conversații de mână, deși fiecare lasă un semnal pe care îl scriem deja (evenimente,
+`conversation_traces`, catalog). `scripts/turn_defects.py --business <slug>` (read-only, 0 $) rulează
+16 detectori puri pe fereastră; fiecare întoarce `None` când nu se aplică, deci are propriul numitor,
+iar sub 20 de ture aplicabile rata nu se raportează. Ieșirea: severitate, ture lovite din câte, rată,
+conversații, exemple de tur (raportul complet local, `reports/nx363/`). Nu e poartă de CI (NX-272).
+Prima rulare (`sole-ro`, septembrie, 157 de ture): o valoare cerută `not_in_vocabulary` pe 37,7% din
+turele cu căutare, un produs epuizat pe 20,8% din turele cu carduri, motiv de card tăiat de scrub pe
+13,7%. Card: [`tasks/stage1/NX-363.md`](tasks/stage1/NX-363.md); probă:
+`pytest tests/test_nx363_turn_defects.py -q`.
+
 **NX-318 — câte cuvinte identifică un produs depinde de ce ALTCEVA e pe ecran.** Aceeași conversație
 (`f4e1431e`). Codul decidea cu o constantă (minimum 2 cuvinte): `_mention_index` rata „EUBOS” scris
 singur, iar `_fit_anchor` tăia «IT'S SKIN The Fresh Blueberries» la «IT'S SKIN The Fresh», prefixul a
