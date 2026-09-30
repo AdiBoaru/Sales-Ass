@@ -540,6 +540,24 @@ class _Gate:
             if check.act_index not in mutating:
                 continue
             ref = self.resolved.get(check.target)
+            zoomed = self._zoomed_other(ref)
+            if zoomed:
+                # kernel.v6.0 (recenzia): un ordinal numărat pe lista „în care s-a intrat” e `exact`
+                # pentru o citire, dar ecranul arată ALT produs. «Adaugă-l pe primul» pe un ecran de
+                # detaliu poate numi cardul de pe ecran sau primul din listă: pe coș nu ghicim.
+                return self._ask(
+                    _Ask(
+                        kind="reference",
+                        key=target_question_key(zoomed),
+                        labels=self._names(zoomed),
+                        reason="mutation_not_exact",
+                        candidate_reason="disambiguation",
+                        partition=(1,) * len(zoomed),
+                        total=len(zoomed),
+                        klass="blocking",
+                    ),
+                    on_decline=self._declined("blocking", "mutation_not_exact"),
+                )
             if check.verdict == "not_exact":
                 ids = [
                     pid for pid in (ref.product_ids if ref else []) if pid in self.facts.products
@@ -567,6 +585,15 @@ class _Gate:
                 # între UN produs; coșul nu se execută, iar răspunsul spune că e epuizat.
                 return self._decide("must_ask", "mutation_unavailable")
         return None
+
+    def _zoomed_other(self, ref: ResolvedRef | None) -> list[str]:
+        """Candidații unei mutații pe un ordinal numărat pe listă (`ordinal_in_zoomed_list`):
+        ținta din listă și produsul de pe ecran, când diferă. Gol = nimic de întrebat."""
+        if ref is None or ref.reason != "ordinal_in_zoomed_list":
+            return []
+        screen = [f.product_id for f in self._screen()]
+        ids = [*ref.product_ids, *(pid for pid in screen if pid not in ref.product_ids)]
+        return ids[:MAX_OPTIONS] if len(ids) > 1 else []
 
     def _conflict(self) -> GateOutcome | None:
         """Regula 2: două limite `hard_conflict` în ACELAȘI tur („sub 100, minim 150"). Opțiunile

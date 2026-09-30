@@ -719,8 +719,10 @@ def test_the_validator_computes_the_umbrella_from_the_customers_words():
     prov, umb = umbrella("vreau o crema de hidratare", "o crema de hidratare")
     assert prov == "implicit" and umb[0] == "crema de fata"
     assert set(umb) == {"crema de fata", "crema de corp", "crema de maini"}
+    # kernel.v6.0 (NX-364): pluralul numește codul întreg, cuvânt cu cuvânt, cu flexiunea
+    # locale-i, deci e tipul SPUS, nu o umbrelă (pe v5.1: `implicit`, umbrela „crema de fata").
     prov, umb = umbrella("vreau creme de fata", "creme de fata")
-    assert prov == "implicit" and umb == ("crema de fata",)
+    assert prov == "explicit" and umb == ()
     prov, umb = umbrella("vreau o crema de fata", "crema de fata")
     assert prov == "explicit" and umb == ()
     # Recenzia NX-350, constatarea 1: doar CAPUL unui cod deschide o umbrelă. «ten» e coada lui

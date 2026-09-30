@@ -637,7 +637,9 @@ def observed_parts(
             value = format_value(value)
         relation = c.change.relation or "eq"
         changes.append([c.change.op, c.dimension, value, relation])
-        provenance.append(c.provenance)
+        # kernel.v6.0 (NX-364): o schimbare cu tărie `ranking` (banda de preț) nu se persistă,
+        # exact ca un `inferred` (I23), deci pentru F1 e o ipoteză neutră, nu un fapt fals.
+        provenance.append("inferred" if c.strength == "ranking" else c.provenance)
         active.append(
             not subject_moves
             and _OP_CLASS.get(c.change.op) == "assert"

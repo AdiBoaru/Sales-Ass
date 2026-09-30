@@ -69,7 +69,15 @@ from src.tools.catalog_tools import SearchArgs
 #: valorile `true`/`false` fără intrare de vocabular (catalogul nu indexează booleeni), judecate pe
 #: frazele pachetului care o numesc; înainte orice astfel de schimbare ajungea `unmapped` („true"
 #: ca termen de ordonare). Citatul ei nu dă text de căutare. Schema scrisă de model neschimbată.
-KERNEL_CONTRACT_VERSION = "kernel.v5.1"
+#: `kernel.v6.0` (NX-364, MAJOR, cerut de Adi pe 2026-09-30 după patru conversații reale): (1) un
+#: ordinal după un DETALIU numără lista din care s-a intrat (produsul unic de pe ecran e membru al
+#: ultimei liste de ≥ 2), nu ecranul de un card; (2) proveniența confirmă și un nume FLEXIONAT al
+#: valorii propuse («tenul uscat» = „ten uscat”, tabelul de flexiune al locale-i) și, simetric,
+#: prinde contradicția flexionată; o descriere rămâne `implicit`; (3) o excludere SPUSĂ pe o
+#: valoare de catalog (o singură fațetă) e filtru (`SearchArgs.exclude`), nu doar gol; (4) o limită
+#: de preț fără număr e o BANDĂ a turului (`price_band`), nu `unmapped`. Poarta de replay e
+#: DEROGATĂ, ca la v2.0-v5.0: niciun tur interpretat servit. Schema scrisă de model neschimbată.
+KERNEL_CONTRACT_VERSION = "kernel.v6.0"
 
 # --- scrise de model ----------------------------------------------------------------------------
 

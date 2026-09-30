@@ -65,7 +65,7 @@ from src.conversation.needs import (
     NeedVocabulary,
     norm_text,
 )
-from src.conversation.provenance import hard_capable
+from src.conversation.provenance import PRICE_BAND_LOW, hard_capable
 from src.conversation.references import (
     BRAND_DIMENSION,
     MUTATING_ACTS,
@@ -460,6 +460,43 @@ class _Planner:
         source = getattr(getattr(facet, "source", None), "value", None)
         return facet is not None and source == "attribute"
 
+    def _exclusion_target(
+        self, key: str, dimension: str, value: object, need: Need
+    ) -> tuple[str, str] | None:
+        """`kernel.v6.0` (NX-364): excluderea care devine FILTRU: (cheia de atribut, valoarea din
+        catalog), sau None ⇒ rămâne golul `exclusion`, ca pe v5.1.
+
+        Filtrează doar o excludere SPUSĂ de client (`user_explicit`), pe o fațetă de atribut, cu o
+        valoare pe care catalogul o poartă exact. Pe cheia universală de restricție (valoarea și-a
+        pierdut dimensiunea în delta), fațeta se regăsește prin vocabular și trebuie să fie UNA
+        singură: o valoare purtată de două fațete nu spune pe care a exclus-o clientul. Un cuvânt
+        fără cheie de catalog («nu pentru gaming») rămâne gol: un text nu se poate exclude fără să
+        scoată și produsele care doar îl pomenesc."""
+        if not isinstance(value, str) or not value or need.source != "user_explicit":
+            return None
+        if dimension in self.facets and self._on_attributes(dimension):
+            source = self._source_key(dimension)
+            if self._carries(source, value):
+                return source, self._catalog_value(source, value)
+            return None
+        hits = [
+            self._source_key(dim)
+            for dim in self.facets
+            if self._on_attributes(dim) and self._carries(self._source_key(dim), value)
+        ]
+        hits = list(dict.fromkeys(hits))
+        if len(hits) != 1:
+            return None
+        return hits[0], self._catalog_value(hits[0], value)
+
+    def _carries(self, source: str, value: str) -> bool:
+        """Catalogul are exact valoarea asta pe atributul `source` (vocabularul)."""
+        wanted = norm_text(value)
+        return any(
+            norm_text(e.key) == wanted
+            for e in (self.vocab.entries(source) if self.vocab is not None else ())
+        )
+
     def _catalog_value(self, source: str, value: str) -> str:
         """Valoarea din stare (normalizată: lower, fără diacritice) → cheia EXACTĂ din catalog,
         cum o poartă `attributes`. Fuziunea compară preferința cu atributul literal
@@ -600,6 +637,12 @@ class _Planner:
             self._gap("routine_budget")
         if args.rank_terms or args.sort_mode != "relevance":
             self._gap("routine_field")
+        if args.exclude:
+            # kernel.v6.0 (recenzia): unealta rutinei n-are încă excluderi (`RoutineArgs`), deci
+            # excluderea spusă rămâne golul declarat, nu dispare în tăcere.
+            self._gap("exclusion")
+        if args.price_band:
+            self._gap("soft_budget")
         return TurnPlan(
             executor="bundle",
             product_ids=list(dict.fromkeys(ids))[:1],
@@ -740,6 +783,8 @@ class _Planner:
         concerns: list[str] = []
         features: list[str] = []
         prefer: dict[str, list[str]] = {}
+        exclude: dict[str, list[str]] = {}
+        price_band: str | None = None
         rank: list[str] = []
 
         def _prefer(dimension: str, value: str) -> None:
@@ -765,7 +810,13 @@ class _Planner:
             elif self.needs.bounds_for(dimension) is not None:
                 self._gap("numeric_facet")
             elif spec is not None and spec.kind is NeedKind.EXCLUSION:
-                self._gap("exclusion")
+                target = self._exclusion_target(key, dimension, value, need)
+                if target is None:
+                    self._gap("exclusion")
+                else:
+                    bucket = exclude.setdefault(target[0], [])
+                    if target[1] not in bucket:
+                        bucket.append(target[1])
             elif key == UNMAPPED_KEY:
                 if isinstance(value, str) and value and value not in rank:
                     rank.append(value)
@@ -812,6 +863,9 @@ class _Planner:
             elif signal.dimension == UNMAPPED_KEY:
                 if isinstance(value, str) and value and value not in rank:
                     rank.append(value)
+            elif signal.dimension == PRICE_DIMENSION and signal.value == PRICE_BAND_LOW:
+                # kernel.v6.0 (NX-364): «să nu fie foarte scump» ⇒ jumătatea ieftină a cererii.
+                price_band = "low"
             elif signal.dimension == PRICE_DIMENSION:
                 self._gap("soft_budget")
             elif self.needs.bounds_for(signal.dimension) is not None:
@@ -844,6 +898,8 @@ class _Planner:
             product_name=product_name,
             rank_terms=rank[:MAX_UNMAPPED_PER_TOPIC],
             prefer=prefer,
+            exclude=exclude,
+            price_band=price_band,
         )
 
     def _sort_mode(self, act: Act) -> str:

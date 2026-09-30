@@ -240,6 +240,8 @@ def sources_of(name: str, raw: dict[str, Any]) -> ReferenceSources:
         page=shown(name, page)[0] if page else None,
         focus=raw.get("focus"),
         thread=raw.get("thread", "continue"),
+        # Journey-urile sunt calea KERNELULUI (sursele ei vin din `sources_from_state`).
+        zoom_ordinals=True,
     )
 
 

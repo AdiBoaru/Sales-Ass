@@ -63,7 +63,7 @@ gate-ul NX-210**. Direcția aprobată către care migrăm:
 
 **Înghețate până la GO-ul de la NX-210:** enforcement-ul QuerySpec/Match Gate (NX-188, NX-189).
 
-**Kernelul conversațional — contractul `kernel.v1.0` (înghețat 2026-09-25, NORMATIV; azi `kernel.v5.1`: MAJOR la v2.0, NX-336 PR B, sensul lui I5; minor la v2.1, NX-336 D3, `TurnPlan.family`; MAJOR la v3.0, NX-348, sensul unei schimbări de subiect; MAJOR la v4.0, NX-350, un tip spus vag devine umbrelă, nu tipul subiectului; MAJOR la v5.0, NX-352, nevoia spusă e filtru relaxabil, căutarea se compune din ce a validat kernelul, «mai ieftin» ambiguu = mediana; minor la v5.1, NX-349, fațetele da/nu; porțile de replay derogate de Adi).**
+**Kernelul conversațional — contractul `kernel.v1.0` (înghețat 2026-09-25, NORMATIV; azi `kernel.v6.0`: MAJOR la v2.0, NX-336 PR B, sensul lui I5; minor la v2.1, NX-336 D3, `TurnPlan.family`; MAJOR la v3.0, NX-348, sensul unei schimbări de subiect; MAJOR la v4.0, NX-350, un tip spus vag devine umbrelă, nu tipul subiectului; MAJOR la v5.0, NX-352, nevoia spusă e filtru relaxabil, căutarea se compune din ce a validat kernelul, «mai ieftin» ambiguu = mediana; minor la v5.1, NX-349, fațetele da/nu; MAJOR la v6.0, NX-364, ordinalul după detaliu, flexiunea în proveniență, excluderea și banda de preț; porțile de replay derogate de Adi).**
 Sursa: [`docs/KERNEL-CONTRACT-v1.md`](docs/KERNEL-CONTRACT-v1.md); designul din care vine, ca
 referință: [`docs/KERNEL-DESIGN.md`](docs/KERNEL-DESIGN.md). Modelul scrie O interpretare a turului
 (`TurnInterpretation`: acte, schimbări de stare adresate prin handle, referințe, ambiguități); codul
@@ -557,6 +557,25 @@ atribut boolean (2.758/2.758 fără `fragrance_free`), deci nevoia ajunge în st
 dezvăluie `unsupported_need` (filtrul boolean în SQL rămâne declarat, fără date). Citatul unei fațete
 da/nu nu dă text de căutare, nici în rezerva cererii întregi: «fără parfum» ar fi căutat «parfum». Card:
 [`tasks/stage1/NX-349.md`](tasks/stage1/NX-349.md); probă: `pytest tests/test_nx349_bool_facets.py -q`.
+
+**NX-364 — `kernel.v6.0` (MAJOR, cerut de Adi pe 2026-09-30): patru reguli care greșeau pe
+conversațiile reale.** (1) Un ordinal după un DETALIU numără lista din care s-a intrat: un singur produs
+pe ecran, membru al celei mai recente liste de ≥ 2 (`recent_sets`), ⇒ `ordinal_in_zoomed_list` pe
+listă («compara prima cu a treia» după «mai multe despre a doua» ieșea `ordinal_out_of_range`);
+criteriul e apartenența, nu textul. (2) Proveniența confirmă și un nume FLEXIONAT al valorii propuse
+(cheia și frazele overlay-ului, cu tabelul de flexiune al locale-i și măcar un cuvânt identic,
+`_spelled_name`): «am tenul uscat» e `explicit`; flexiunea doar confirmă, nu contrazice. Măsurat pe setul
+A: `implicit` e corect în 46% din cazuri (descrieri), `explicit` în 82%, deci verificarea pe vocabular
+rămâne; rularea offline pe 127 de interpretări stocate a mutat două schimbări. (3) O excludere SPUSĂ pe
+o valoare de catalog (o singură fațetă) e filtru, `SearchArgs.exclude` (doar al plannerului), aplicat
+după fuziune și pe coada pool-ului; pe o fațetă `partitioning` scoate doar produsele NUMAI pentru
+valoarea exclusă; fără atribut, produsul rămâne (D7). Zoom-ul ordinalului e doar al surselor kernelului
+(`zoom_ordinals`), iar coșul pe un ordinal numărat pe listă întreabă (I10). (4) O limită de preț fără număr e o BANDĂ a turului
+(`band:low`, `ranking`, nepersistată), `SearchArgs.price_band="low"` = produsele până la mediana
+pool-ului cererii; pe v5.1 cobora pe `unmapped` și ordona după „ft scump”. Câmpurile noi sunt goale
+implicit (I16). Declarat: «par gras» n-are frază în pachet (date), calea v1 rămâne cu transcrierea în
+`concerns` (reparația ei e meniul NX-322). Card: [`tasks/stage1/NX-364.md`](tasks/stage1/NX-364.md);
+probă: `pytest tests/test_nx364_kernel_v6.py tests/test_kernel_references.py tests/test_kernel_planner.py -q`.
 
 **NX-238 — retrievalul trece printr-un PORT, iar candidatul e inert (verdict `NOT-READY`).**
 `src/retrieval/` e contractul stabil pe care îl consumă NX-239: `RetrievalPort` + `RetrievalBundle`
