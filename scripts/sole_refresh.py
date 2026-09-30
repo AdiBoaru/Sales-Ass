@@ -109,7 +109,7 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "price_changed": price_changed,
         "price_unverified": sum(1 for r in rows if r["price_unverified"]),
         "multi_variant_price_skipped": sum(
-            1 for r in rows if r["price"]["new"] is not None and r["n_variants"] > 1
+            1 for r in rows if r["price"]["new"] is not None and r["n_variants"] != 1
         ),
         "anomalies": dict(Counter(a for r in rows for a in r["anomalies"])),
     }
@@ -199,7 +199,9 @@ def apply_params(business_id: str, row: dict[str, Any]) -> tuple[tuple, tuple | 
     """Parametrii de scriere pentru un rând de raport; None = nu se scrie nimic. PUR."""
     if row["status"] != "ok" or row["availability"]["new"] is None:
         return None
-    new = row["price"]["new"]
+    # Un produs cu mai multe variante primește doar disponibilitatea: prețul afișat vine de pe
+    # variantă, iar pagina arată unul singur (recenzia NX-360).
+    new = row["price"]["new"] if row["n_variants"] == 1 else None
     dec = lambda v: Decimal(v) if v is not None else None  # noqa: E731
     product = (
         business_id,
@@ -211,9 +213,7 @@ def apply_params(business_id: str, row: dict[str, Any]) -> tuple[tuple, tuple | 
         dec(new["coupon_price"]) if new else None,
     )
     variant = (
-        (business_id, row["product_id"], dec(new["price"]), dec(new["sale_price"]))
-        if new and row["n_variants"] == 1
-        else None
+        (business_id, row["product_id"], dec(new["price"]), dec(new["sale_price"])) if new else None
     )
     return product, variant
 
@@ -238,8 +238,23 @@ async def _apply(report: dict[str, Any], write: bool) -> dict[str, int]:
     return counts
 
 
+#: Un raport mai vechi de atât nu se aplică: catalogul s-a putut schimba între timp.
+MAX_REPORT_AGE_H = 24
+
+
+def report_too_old(taken_at: str, now: datetime | None = None) -> bool:
+    """Raportul a fost luat de peste `MAX_REPORT_AGE_H` ore. PUR."""
+    taken = datetime.fromisoformat(taken_at)
+    return ((now or datetime.now(UTC)) - taken).total_seconds() > MAX_REPORT_AGE_H * 3600
+
+
 def apply(args: argparse.Namespace) -> int:
     report = json.loads(Path(args.report).read_text(encoding="utf-8"))
+    if report_too_old(report["taken_at"]) and not args.allow_old:
+        raise SystemExit(
+            f"raportul e din {report['taken_at']}, peste {MAX_REPORT_AGE_H} h: rulează din nou "
+            "`fetch` (sau `--allow-old` dacă știi ce faci)"
+        )
     counts = asyncio.run(_apply(report, args.apply))
     verb = "scrise" if args.apply else "de scris (dry-run, adaugă --apply)"
     print(f"produse {verb}: {counts['products']}, variante: {counts['variants']}")
@@ -259,6 +274,7 @@ def main(argv: list[str] | None = None) -> int:
     a = sub.add_parser("apply", help="aplică un raport (dry-run fără --apply)")
     a.add_argument("--report", required=True)
     a.add_argument("--apply", action="store_true")
+    a.add_argument("--allow-old", action="store_true", help="aplică și un raport mai vechi de 24 h")
     args = parser.parse_args(argv)
     return fetch(args) if args.cmd == "fetch" else apply(args)
 

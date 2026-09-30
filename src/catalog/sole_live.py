@@ -41,8 +41,10 @@ PRICE_ROW_CLASS = "product-price-row__value"
 PROMO_CLASS = "product-welcome-price__value"
 PROMO_CODE_CLASS = "product-welcome-price__code"
 
-#: O sumă scrisă în pagină: „1.299,90 lei”, „120 lei”, „51 lei”. Separatorul de mii e punctul.
-_AMOUNT = re.compile(r"(\d{1,3}(?:\.\d{3})*|\d+)(?:,(\d{1,2}))?")
+#: Primul număr scris în pagină, cu separatorii lui («1900», «76.50», «1.299,90»). Formatul real
+#: SOLE, verificat pe pagini (recenzia NX-360): prețul de listă FĂRĂ separator de mii («1900 lei»),
+#: iar bănuții voucherului într-un tag separat (`76<small>.50</small>`, lipit fără spațiu).
+_AMOUNT = re.compile(r"\d[\d.,]*")
 #: Codul voucherului: un singur token alfanumeric (WELCOME15).
 _CODE = re.compile(r"\b([A-Z][A-Z0-9]{3,})\b")
 
@@ -68,14 +70,24 @@ class LivePage:
 
 
 def parse_amount(text: str | None) -> Decimal | None:
-    """„1.299,90 lei” → 1299.90. PUR; fără sumă ⇒ None."""
+    """«1900 lei» → 1900, «76.50 lei» → 76.50, «1.299,90 lei» → 1299.90. PUR; fără sumă ⇒ None.
+
+    Separatorul zecimal e cel care are după el 1-2 cifre la final; celălalt (sau același, urmat de
+    exact 3 cifre) e separator de mii. Recenzia NX-360: o primă variantă tăia «1900» la «190»."""
     if not text:
         return None
-    m = _AMOUNT.search(text)
+    m = _AMOUNT.search(text.replace(" ", ""))
     if not m:
         return None
-    whole = m.group(1).replace(".", "")
-    cents = m.group(2) or "0"
+    token = m.group(0).rstrip(".,")
+    last = max(token.rfind("."), token.rfind(","))
+    if last >= 0 and 1 <= len(token) - last - 1 <= 2:
+        whole, cents = token[:last], token[last + 1 :]
+    else:
+        whole, cents = token, "0"
+    whole = whole.replace(".", "").replace(",", "")
+    if not whole.isdigit() or not cents.isdigit():
+        return None
     return _money(Decimal(f"{whole}.{cents.ljust(2, '0')}"))
 
 
@@ -151,12 +163,16 @@ def parse_page(html: str) -> LivePage:
     parser.feed(html or "")
     offer, is_product = _product_offer(parser.ld_blocks)
 
-    def text(cls: str) -> str | None:
+    def text(cls: str, sep: str = "") -> str | None:
         parts = parser.texts.get(cls)
-        joined = " ".join(" ".join(parts).split()) if parts else ""
-        return joined or None
+        # Prețurile se lipesc FĂRĂ spațiu, ca `get_text(strip=True)` din scraperul original:
+        # `76<small>.50` trebuie să rămână «76.50», nu «76 .50» (recenzia NX-360). Textul codului
+        # se lipește CU spațiu: «cu codul <b>WELCOME15</b>» lipit ar fi «cucodulWELCOME15», codul
+        # n-ar mai fi găsit, iar voucherul s-ar scrie ca reducere pentru oricine (`sale_price`).
+        joined = sep.join(p.strip() for p in parts) if parts else ""
+        return joined.strip() or None
 
-    code_text = text(PROMO_CODE_CLASS)
+    code_text = text(PROMO_CODE_CLASS, sep=" ")
     code = _CODE.search(code_text) if code_text else None
     ld_price = None
     if offer is not None and offer.get("price") is not None:
@@ -181,7 +197,8 @@ class Refresh:
     product_id: str
     availability: str | None
     price: PriceFacts | None
-    #: Vocabular închis: `ok` | `gone` (nu mai e pagină de produs) | `unknown_availability`.
+    #: Vocabular închis: `ok` | `gone` (nu mai e pagină de produs) | `unknown_availability` |
+    #: `in_stock_without_price` (pagina zice în stoc, dar nu arată prețul: nu se scrie nimic).
     status: str
     #: Produsul rămâne (sau devine) epuizat, iar prețul lui de listă nu se poate afla.
     price_unverified: bool
@@ -194,6 +211,10 @@ def decide(product_id: str, page: LivePage) -> Refresh:
     if page.availability is None:
         return Refresh(product_id, None, None, "unknown_availability", price_unverified=False)
     facts = page.price_facts()
+    if page.availability == "in_stock" and facts is None:
+        # Recenzia NX-360: trecut în stoc cu prețul vechi (al voucherului, pe cele 391 epuizate),
+        # produsul ar deveni vandabil exact la prețul pe care cardul îl repară.
+        return Refresh(product_id, None, None, "in_stock_without_price", price_unverified=True)
     return Refresh(
         product_id,
         page.availability,

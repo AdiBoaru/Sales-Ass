@@ -10,6 +10,8 @@ from __future__ import annotations
 import json
 from decimal import Decimal
 
+import pytest
+
 from scripts import sole_refresh as sr
 from src.catalog import sole_live as sl
 
@@ -98,6 +100,75 @@ def test_amounts_with_thousands_and_cents():
     assert sl.availability_from_schema("SoldOut") == "out_of_stock"
 
 
+# ── markup-ul REAL al paginilor SOLE (recenzia NX-360) ──────────────────────────────────────────
+#
+# Copiate din paginile descărcate pe 2026-09-30: prețul de listă FĂRĂ separator de mii, bănuții
+# voucherului într-un `<small>` lipit. Prima variantă a parserului dădea 190 în loc de 1900 și 76
+# în loc de 76,50, iar `apply` le-ar fi scris în catalog.
+
+REAL_EXPENSIVE = (
+    "<html><head>"
+    + _ld("http://schema.org/InStock", 1615.0)
+    + '</head><body><span class="product-price-row__value">1900 lei</span>'
+    '<span data-price="1900,00008" class="product-welcome-price__value">1615 lei</span> '
+    '<span class="product-welcome-price__code-wrap">folosind codul '
+    '<b class="product-welcome-price__code">WELCOME15</b></span></body></html>'
+)
+REAL_CENTS = (
+    "<html><head>"
+    + _ld("http://schema.org/InStock", 76.5)
+    + '</head><body><span class="product-price-row__value">90 lei</span>'
+    '<span data-price="89,9998" class="product-welcome-price__value">'
+    '<span class="price-sub">76<small>.50</small></span> lei</span> '
+    '<span class="product-welcome-price__code-wrap">folosind codul '
+    '<b class="product-welcome-price__code">WELCOME15</b></span></body></html>'
+)
+
+
+def test_real_price_without_thousands_separator():
+    page = sl.parse_page(REAL_EXPENSIVE)
+    assert (page.price_regular, page.price_promo) == (Decimal("1900.00"), Decimal("1615.00"))
+
+
+def test_real_voucher_cents_in_a_small_tag():
+    page = sl.parse_page(REAL_CENTS)
+    assert (page.price_regular, page.price_promo) == (Decimal("90.00"), Decimal("76.50"))
+
+
+@pytest.mark.parametrize(
+    ("text", "amount"),
+    [
+        ("1900 lei", "1900.00"),
+        ("76.50 lei", "76.50"),
+        ("1.299,90 lei", "1299.90"),
+        ("1299,90", "1299.90"),
+        ("1 299,90 lei", "1299.90"),
+        ("1.299 lei", "1299.00"),
+        ("99.9 lei", "99.90"),
+    ],
+)
+def test_amount_formats(text, amount):
+    assert sl.parse_amount(text) == Decimal(amount)
+
+
+def test_in_stock_without_a_price_row_is_not_written():
+    """Recenzia: trecut în stoc cu prețul vechi (al voucherului), produsul devenea vandabil exact la
+    prețul greșit. Fără preț pe pagină, nu se atinge nimic."""
+    page = sl.parse_page(_ld("http://schema.org/InStock", 33.9))
+    refresh = sl.decide("p", page)
+    assert refresh.status == "in_stock_without_price"
+    row = sr.diff_row(CURRENT, refresh)
+    assert sr.apply_params("b", row) is None
+
+
+def test_an_old_report_is_refused():
+    from datetime import UTC, datetime, timedelta
+
+    now = datetime(2026, 10, 1, 12, tzinfo=UTC)
+    assert sr.report_too_old((now - timedelta(hours=25)).isoformat(), now)
+    assert not sr.report_too_old((now - timedelta(hours=2)).isoformat(), now)
+
+
 # ── raportul și scrierea (pure) ─────────────────────────────────────────────────────────────────
 
 CURRENT = {
@@ -150,6 +221,7 @@ def test_multi_variant_product_gets_availability_but_no_price():
     row = sr.diff_row({**CURRENT, "n_variants": 2}, sl.decide("p1", sl.parse_page(IN_STOCK)))
     product, variant = sr.apply_params("b", row)
     assert product[2] == "in_stock"
+    assert product[3:] == (None, None, None, None)  # nici prețul produsului (recenzia)
     assert variant is None
     assert sr.summarize([row])["multi_variant_price_skipped"] == 1
 
