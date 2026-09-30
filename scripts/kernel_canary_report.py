@@ -1,6 +1,7 @@
 """NX-353 — raportul kernelului pe trafic real (dark, apoi canary) și regula GO dark → canary.
 
     PYTHONPATH=. python scripts/kernel_canary_report.py --business sole-ro --since 2026-10-01
+    [--prompt-version interpret.v4.1]
 
 READ-ONLY, zero apeluri de model. Citește, pe fereastră și pe tenant (`business_id = $1`):
 `analytics_events` (`kernel_turn`, `turn_interpretation`, `kernel_dark`, `llm_usage`,
@@ -211,6 +212,30 @@ def sample_turns(turn_ids: Iterable[str], k: int = MANUAL_SAMPLE, seed: int = SE
     return sorted(random.Random(seed).sample(pool, min(k, len(pool))))
 
 
+def prompt_versions(events: Iterable[Event]) -> dict[str, int]:
+    """NX-356: câte ture per `prompt_version` (din `turn_interpretation`). PUR. Vizibil în fiecare
+    raport, ca o fereastră care amestecă două versiuni să se vadă și fără filtru."""
+    firsts = _first_per_turn(e for e in events if e.type == "turn_interpretation")
+    return dict(Counter(str(e.properties.get("prompt_version")) for e in firsts))
+
+
+def only_prompt_version(
+    events: Sequence[Event], dark_turns: Sequence[DarkTurn], version: str
+) -> tuple[list[Event], list[DarkTurn]]:
+    """NX-356: doar turele interpretate cu `version`. PUR. Vederea interpretării s-a schimbat la
+    `interpret.v4.1` (replica botului netăiată), iar o fereastră care cuprinde deploy-ul ar amesteca
+    două măsurători în G1-G5."""
+    keep = {
+        e.turn_id
+        for e in events
+        if e.type == "turn_interpretation" and e.properties.get("prompt_version") == version
+    }
+    return (
+        [e for e in events if e.turn_id in keep],
+        [t for t in dark_turns if t.turn_id in keep],
+    )
+
+
 def summarize(
     events: Sequence[Event],
     dark_turns: Sequence[DarkTurn],
@@ -415,6 +440,7 @@ def render_console(report: Mapping[str, Any]) -> str:
         f"nemăsurate: {report['unmeasured'] or '-'})",
         f"volum: {json.dumps(report['volume'], ensure_ascii=False)}",
         f"interpretare: {json.dumps(report['interpretation_outcomes'], ensure_ascii=False)}",
+        f"versiuni de prompt: {json.dumps(report.get('prompt_versions', {}), ensure_ascii=False)}",
         f"umbra stării: {json.dumps(report['state_shadow'], ensure_ascii=False)}",
     ]
     for name, gate in report["gates"].items():
@@ -424,7 +450,9 @@ def render_console(report: Mapping[str, Any]) -> str:
     return "\n".join(lines)
 
 
-async def _main(business: str, since: datetime, until: datetime) -> dict[str, Any]:
+async def _main(
+    business: str, since: datetime, until: datetime, prompt_version: str | None = None
+) -> dict[str, Any]:
     from src.db.connection import admin_conn, close_pool, get_pool, tenant_conn  # noqa: PLC0415
 
     try:
@@ -434,11 +462,16 @@ async def _main(business: str, since: datetime, until: datetime) -> dict[str, An
         )
     finally:
         await close_pool()
+    versions = prompt_versions(events)
+    if prompt_version:
+        events, dark_turns = only_prompt_version(events, dark_turns, prompt_version)
     report = summarize(events, dark_turns, cards)
+    report["prompt_versions"] = versions
     report["window"] = {
         "business": business,
         "since": since.isoformat(),
         "until": until.isoformat(),
+        "prompt_version": prompt_version,
     }
     return report
 
@@ -455,10 +488,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--business", required=True, help="slug-ul sau id-ul tenantului")
     parser.add_argument("--since", type=_date, help="început (ISO), implicit acum − 7 zile")
     parser.add_argument("--until", type=_date, help="sfârșit (ISO), implicit acum")
+    parser.add_argument(
+        "--prompt-version",
+        help="doar turele interpretate cu versiunea asta (ex. interpret.v4.1, NX-356)",
+    )
     args = parser.parse_args(argv)
     until = args.until or datetime.now(UTC)
     since = args.since or until - timedelta(days=7)
-    report = asyncio.run(_main(args.business, since, until))
+    report = asyncio.run(_main(args.business, since, until, args.prompt_version))
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     path = OUT_DIR / f"report-{stamp}.json"

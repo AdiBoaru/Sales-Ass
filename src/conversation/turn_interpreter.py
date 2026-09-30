@@ -35,7 +35,7 @@ from typing import Any, Literal
 from src.agent.llm import prompt_cache_scope
 from src.agent.prompt_builder import shelf_size
 from src.catalog.folding import fold_text
-from src.catalog.render_text import cut_at_sentence, display_name
+from src.catalog.render_text import display_name
 from src.catalog.vocabulary import CatalogVocabulary, VocabEntry
 from src.config import INTERPRET_EFFORTS, get_settings
 from src.conversation.interpretation import (
@@ -63,9 +63,10 @@ SCHEMA_NAME = "turn_interpretation"
 #: Fereastra de istoric (mesaje, ambele roluri), ca a stagiului de context (max 8). Din ACEEAȘI
 #: fereastră se derivă `UserWords`: un citat pe care modelul l-a văzut e găsit de validator.
 MAX_HISTORY_MESSAGES = 8
-#: Replica botului, tăiată la graniță de propoziție (P4): în medie 750 de caractere, iar pentru
-#: interpretare contează ce a întrebat sau a oferit, nu tot textul (NX-255).
-MAX_BOT_CHARS = 400
+#: NX-356: replica botului intră ÎNTREAGĂ, ca pe calea care răspunde (NX-255, decis de Adi pe
+#: 2026-09-29: nicio limită de caractere pe istoric). Tăierea la 400 lăsa modelului doar începutul
+#: unui răspuns de 1.200-1.600 de caractere, adică intro-ul, fără produsele și întrebarea de la
+#: coadă. Fereastra de mesaje (`MAX_HISTORY_MESSAGES`) rămâne singura margine.
 #: Valorile unei dimensiuni în meniul din prompt. O dimensiune venită din catalog poate avea sute
 #: de valori; fără plafon costul și prefixul n-ar mai avea margine. Codul re-rezolvă oricum orice
 #: valoare prin vocabularul complet (`check_changes`), deci plafonul limitează doar sugestia.
@@ -203,11 +204,7 @@ def render_view(inp: InterpretInput) -> str:
         for i, items in enumerate(refs.recent_sets, 1)
     ]
     pending = inp.state.pending_clarification
-    history = [
-        f"{role}: "
-        + (_one_line(text) if role == "user" else _one_line(cut_at_sentence(text, MAX_BOT_CHARS)))
-        for role, text in window(inp)
-    ]
+    history = [f"{role}: " + _one_line(text) for role, text in window(inp)]
     blocks = [
         ["CONSTRAINTS", *_constraints(inp)],
         ["SUBJECT", *_subject(inp)],
@@ -458,7 +455,6 @@ def _internal_error(error: Exception, effort: str, snapshot: str) -> Interpreted
 __all__ = [
     "DIMENSIONS_HEADER",
     "INTERPRET_PROMPT_VERSION",
-    "MAX_BOT_CHARS",
     "MAX_HISTORY_MESSAGES",
     "MAX_MENU_VALUES",
     "SCHEMA_NAME",
