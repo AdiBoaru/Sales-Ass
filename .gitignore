@@ -89,6 +89,8 @@ reports/nx351/
 reports/nx353/
 # NX-363: raportul detectorilor de defecte (id-uri de tur) rămâne LOCAL.
 reports/nx363/
+# NX-360: rapoartele de resincronizare SOLE (id-uri, prețuri) rămân LOCALE.
+reports/nx360/
 .env.new
 
 # Spațiu local de lucru (hărți, note, rapoarte personale) — niciodată în git
