@@ -1283,6 +1283,19 @@ din turele care trimit una, un produs epuizat pe 20,8% din turele cu carduri, mo
 scrub pe 13,7%; detectorii kernelului sunt separați („dark”). Card: [`tasks/stage1/NX-363.md`](tasks/stage1/NX-363.md); probă:
 `pytest tests/test_nx363_turn_defects.py -q`.
 
+**NX-360 — stocul și prețurile SOLE se resincronizează din paginile live.** Catalogul era o fotografie
+din 2026-08-28: cele 391 de produse `out_of_stock` aveau prețul voucherului WELCOME15 drept preț de
+listă (scraperul cădea pe `offers.price` din JSON-LD când pagina epuizată nu arăta rândul de preț), iar
+o parte erau de fapt în stoc (ROUND LAB Birch Juice: epuizat la 101,91 la noi, în stoc la 120 lei).
+`src/catalog/sole_live.py` (pur, doar biblioteca standard): disponibilitatea din JSON-LD cu vocabular
+închis, prețul de listă DOAR din rândul de preț, prin aceeași `parse_price` ca importul (voucherul în
+`coupon_*`, nu în `sale_price`); fără rând, prețul e necunoscut și nu se atinge (`price_unverified`).
+`scripts/sole_refresh.py fetch` (read-only, raport local `reports/nx360/`) apoi `apply --apply` (îl
+rulează Adi pe `TARGET_DB_URL`, o tranzacție): disponibilitate, preț, `synced_at`, varianta unică.
+Smoke pe 12 epuizate: 1 era în stoc (ANUA PDRN, 114,67 → 135 lei). Afișarea produselor rămase epuizate
+(prețul lor rămâne neverificabil) e decizia de după rulare. Card:
+[`tasks/stage1/NX-360.md`](tasks/stage1/NX-360.md); probă: `pytest tests/test_nx360_sole_live.py -q`.
+
 **NX-318 — câte cuvinte identifică un produs depinde de ce ALTCEVA e pe ecran.** Aceeași conversație
 (`f4e1431e`). Codul decidea cu o constantă (minimum 2 cuvinte): `_mention_index` rata „EUBOS” scris
 singur, iar `_fit_anchor` tăia «IT'S SKIN The Fresh Blueberries» la «IT'S SKIN The Fresh», prefixul a
