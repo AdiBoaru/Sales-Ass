@@ -72,8 +72,8 @@ from src.tools.catalog_tools import SearchArgs
 #: `kernel.v6.0` (NX-364, MAJOR, cerut de Adi pe 2026-09-30 după patru conversații reale): (1) un
 #: ordinal după un DETALIU numără lista din care s-a intrat (produsul unic de pe ecran e membru al
 #: ultimei liste de ≥ 2), nu ecranul de un card; (2) proveniența confirmă și un nume FLEXIONAT al
-#: valorii propuse («tenul uscat» = „ten uscat”, tabelul de flexiune al locale-i) și, simetric,
-#: prinde contradicția flexionată; o descriere rămâne `implicit`; (3) o excludere SPUSĂ pe o
+#: valorii propuse («tenul uscat» = „ten uscat”, tabelul de flexiune al locale-i), doar ca
+#: CONFIRMARE (niciodată contradicție); o descriere rămâne `implicit`; (3) o excludere SPUSĂ pe o
 #: valoare de catalog (o singură fațetă) e filtru (`SearchArgs.exclude`), nu doar gol; (4) o limită
 #: de preț fără număr e o BANDĂ a turului (`price_band`), nu `unmapped`. Poarta de replay e
 #: DEROGATĂ, ca la v2.0-v5.0: niciun tur interpretat servit. Schema scrisă de model neschimbată.

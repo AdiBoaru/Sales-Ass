@@ -31,7 +31,11 @@ code decides on structure.
 
 - **An ordinal after a detail counts the list the customer zoomed into.** When the screen holds one
   product and that product is a member of the most recent earlier set of at least two, an ordinal
-  resolves on that set (`source: shown_earlier`, reason `ordinal_in_zoomed_list`). On v5.1, «compară
+  resolves on that set (`source: shown_earlier`, reason `ordinal_in_zoomed_list`). „The most
+  recent earlier set of at least two”, not the immediately previous one: two details in a row leave
+  a one-product set on top of the list. The rule is one pure function (`references.zoomed_list`);
+  when the kernel serves, the exact v1 shortcuts step aside on an ordinal over such a screen
+  (`shortcut_deferred_to_kernel`), so link, detail and reviews follow it too. On v5.1, «compară
   prima cu a treia» after «spune-mi mai multe despre a doua» came out `ordinal_out_of_range`, and
   «prima» was the product of the detail. The criterion is membership, not text: a single product
   from a new search is not in the earlier set, so the ordinal stays on screen. Not on `resume`
@@ -44,7 +48,9 @@ code decides on structure.
   when it spells, word by word and in order, one of the proposed value's known names (its key and
   the overlay phrases that map to it), with the locale's inflection table (the rule the NX-350
   umbrella already uses, stem of at least three letters), provided at least one of the name's words
-  is spelled exactly: «am tenul uscat» is `explicit` for `skin_type=dry`. Inflection only confirms,
+  is spelled exactly, and a three-letter stem only takes a suffix of two letters or more
+  («tenul» is „ten” plus the article, «pare» in «mi se pare» is not „par”): «am tenul uscat» is
+  `explicit` for `skin_type=dry`. Inflection only confirms,
   it never contradicts: a short stem also matches verbs («mi se pare uscată» spells „par uscat”),
   so an inflected contradiction could drop a need the customer stated. Nothing else moves: a
   description still names no value and stays `implicit`. Measured on the labelled set A before the change: `implicit` facet changes are
@@ -55,11 +61,19 @@ code decides on structure.
   `rank_terms`/`prefer`): an exclusion need from `user_explicit`, on an attribute facet, whose value
   the catalog carries exactly, removes the products carrying it after fusion (the NX-322b anti-fit
   net). On the universal `restriction` key the facet is found back through the vocabulary and must
-  be unique. On a `partitioning` facet (who the product is for) only the products marked for the
+  be unique. On an additive facet a product goes when one of its values CONTAINS the excluded
+  phrase word by word (the article form of a word counts): «acid hialuronic» appears in 51 forms on
+  the SOLE catalog («complex de 8 tipuri de acid hialuronic»), and an exact match caught 590 of 726;
+  for an exclusion, removing too much is the safe error. A chemical synonym («hialuronat de sodiu»)
+  is not caught (pack data). On a `partitioning` facet (who the product is for) only the products
+  marked for the
   excluded values alone go: «nu pentru ten gras» keeps a cream declared for every skin type. A
   product without the attribute stays (UNKNOWN ≠ MISMATCH, D7). The NX-303 pool tail goes through
   the same exclusion. A routine (`bundle`) cannot exclude yet and discloses the `exclusion` gap.
-  Anything else stays the `exclusion` gap, as before. On the real turn «nu vreau cu acid hialuronic», all four products
+  Anything else stays the `exclusion` gap, as before. When the turn has no words to search and no
+  subject («nu vreau cu acid hialuronic» after «ceva de hidratare»), the search text is the locale
+  label of the first need filter carried from the state (the pack's `value_labels`), not `no_query`:
+  on v5.1 such a turn never searched, so the exclusion never ran. On the real turn «nu vreau cu acid hialuronic», all four products
   v1 showed carried the ingredient.
 - **A price limit without a number is a band.** `lte`/`gte` on price with no number and no
   `relative_to` no longer falls to `unmapped` (which made the words a rank term, «ft scump»). It is

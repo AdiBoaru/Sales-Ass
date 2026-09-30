@@ -435,27 +435,9 @@ class _Resolver:
         return _Raw("ordinal", "exact", (items[n - 1].product_id,), src, found)
 
     def _zoomed_list(self, items: tuple[ShownItem, ...]) -> tuple[ShownItem, ...] | None:
-        """`kernel.v6.0` (NX-364): un singur produs pe ecran, care face parte din cea mai recentă
-        listă de cel puțin două, înseamnă că clientul a intrat în DETALIUL unui produs din listă.
-        Ordinalele de după («compară prima cu a treia») numără lista, nu ecranul de un card: pe
-        conversația `0e88752a` ecranul detaliului făcea din «a treia» `ordinal_out_of_range`.
-
-        Criteriul e structural (apartenența la listă), nu textual. Un produs unic venit dintr-o
-        căutare nouă nu e în lista de dinainte, deci ordinalul rămâne pe ecran, ca înainte. Pe
-        `resume` focusul e setul parcat, cu propria listă, deci nu se aplică."""
-        if (
-            not self.sources.zoom_ordinals
-            or len(items) != 1
-            or self.sources.thread == "resume"
-            or not self.sources.shown_earlier
-        ):
+        if not self.sources.zoom_ordinals or self.sources.thread == "resume":
             return None
-        newest = self.sources.shown_earlier[0]
-        if len(newest) < 2:
-            return None
-        if items[0].product_id not in {it.product_id for it in newest}:
-            return None
-        return newest
+        return zoomed_list(items, self.sources.shown_earlier)
 
     def deictic(self, ref: Reference) -> _Raw:
         s = self.sources
@@ -861,6 +843,29 @@ def plan_lookup(
     )
 
 
+def zoomed_list(
+    screen: Sequence[ShownItem], earlier: Sequence[Sequence[ShownItem]]
+) -> tuple[ShownItem, ...] | None:
+    """`kernel.v6.0` (NX-364): lista „în care a intrat” clientul, sau None. PUR.
+
+    Un singur produs pe ecran, membru al celei mai recente liste ANTERIOARE de cel puțin două
+    produse, înseamnă că clientul a intrat în DETALIUL unui produs din listă. Ordinalele de după
+    («compară prima cu a treia») numără lista, nu ecranul de un card: pe conversația `0e88752a`
+    ecranul detaliului făcea din «a treia» `ordinal_out_of_range`.
+
+    „Cea mai recentă listă de cel puțin două”, nu setul imediat anterior: două detalii la rând
+    lasă în `recent_sets` un set de un produs (detaliul de dinainte) peste listă (verificarea
+    independentă v6.0). Criteriul e structural (apartenența la listă), nu textual: un produs unic
+    dintr-o căutare nouă nu e în listă, deci ordinalul rămâne pe ecran. O singură regulă, citită de
+    resolver și de scurtăturile care renunță în fața ei (`deterministic`)."""
+    if len(screen) != 1:
+        return None
+    lst = next((tuple(s) for s in earlier if len(s) >= 2), None)
+    if lst is None or screen[0].product_id not in {it.product_id for it in lst}:
+        return None
+    return lst
+
+
 def sources_from_state(state: ConversationStateV2, thread: str) -> ReferenceSources:
     """Sursele resolverului din starea REDUSĂ (NX-335, promovat din helperul de test NX-331):
     ecranul (`displayed_products`), seturile de mai devreme (`recent_sets`), setul parcat și
@@ -968,4 +973,5 @@ __all__ = [
     "plan_lookup",
     "resolve_references",
     "sources_from_state",
+    "zoomed_list",
 ]

@@ -39,6 +39,7 @@ from src.agent.reference_resolver import (
     NamedTargets,
     ReferenceRequest,
     ReferenceResolution,
+    expresses_ordinal,
     named_targets,
     normalize_for_match,
     page_anchor_from_snapshot,
@@ -59,6 +60,7 @@ from src.conversation.references import (
     gate_act_targets,
     plan_lookup,
     resolve_references,
+    zoomed_list,
 )
 from src.conversation.state_reducer import StateUpdateProposal
 from src.conversation.state_v2 import ConversationStateV2
@@ -1099,6 +1101,13 @@ async def _pre_intents(ctx: TurnContext, deps: PipelineDeps, *, exact_only: bool
     query = (ctx.message.body or "").strip()
     if not query:
         return False
+    if exact_only and expresses_ordinal(query) and _zoom_screen(ctx):
+        # kernel.v6.0 (verificarea independentă): pe un ecran de detaliu intrat dintr-o listă,
+        # ordinalul numără LISTA (`references.zoomed_list`). Scurtăturile ar fi numărat ecranul de
+        # un card, deci turul e al kernelului, care aplică regula. Calea v1 (fără `exact_only`)
+        # rămâne neatinsă (I16).
+        ctx.emit("shortcut_deferred_to_kernel", reason="zoomed_ordinal")
+        return False
 
     # NX-316: un chip RECUNOSCUT (`ctx.chip_move`, scris de agent_stage) e o comandă declarată, nu
     # o intenție de dedus: produsele vin din `move_id`, deci „Compară A cu B" compară A și B, iar
@@ -1365,6 +1374,19 @@ def page_source(ctx: TurnContext) -> ShownItem | None:
     ancorei (`ProductRef.price == 0.0`) rămâne necunoscut, nu zero."""
     page = _page_anchor_ref(ctx)
     return ShownItem(page.product_id, page.name, page.price or None) if page else None
+
+
+def _zoom_screen(ctx: TurnContext) -> bool:
+    """Ecranul e un detaliu intrat dintr-o listă (regula `references.zoomed_list`, starea v2)."""
+    state = ctx.state_v2
+    if not isinstance(state, ConversationStateV2):
+        return False
+    screen = [ShownItem(d.product_id, d.name, d.price) for d in ctx.state.displayed_products]
+    earlier = [
+        tuple(ShownItem(d.product_id, d.name, d.price) for d in s)
+        for s in state.references.recent_sets
+    ]
+    return zoomed_list(screen, earlier) is not None
 
 
 def _state_v2_sources(ctx: TurnContext) -> dict[str, Any]:

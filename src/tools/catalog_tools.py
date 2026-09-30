@@ -1752,9 +1752,29 @@ def excluded_hit(
         if key in only:
             if have and have <= wanted:
                 return True
-        elif have & wanted:
+        elif any(_names_phrase(value, phrase) for value in have for phrase in wanted):
             return True
     return False if known else None
+
+
+def _names_phrase(value: str, phrase: str) -> bool:
+    """Valoarea de catalog CONȚINE fraza exclusă, cuvânt cu cuvânt și în ordine; un cuvânt al
+    valorii poate fi forma articulată a celui exclus («acidul» pentru „acid”, prefix de cel puțin 4
+    litere). Pe catalogul SOLE „acid hialuronic” apare în 51 de forme («complex de 8 tipuri de acid
+    hialuronic», «acidul hialuronic»), iar potrivirea exactă prindea doar 590 din 726 de apariții
+    (verificarea pe catalogul real, v6.0). La o EXCLUDERE, greșeala sigură e să scoți în plus."""
+    words = re.findall(r"[0-9a-z]+", value)
+    target = re.findall(r"[0-9a-z]+", phrase)
+    if not target or len(target) > len(words):
+        return False
+
+    def same(w: str, t: str) -> bool:
+        return w == t or (len(t) >= 4 and w.startswith(t))
+
+    return any(
+        all(same(words[i + j], target[j]) for j in range(len(target)))
+        for i in range(len(words) - len(target) + 1)
+    )
 
 
 def _partitioning_keys(ctx: TurnContext) -> frozenset[str]:
@@ -2531,10 +2551,14 @@ async def _search(
     # kernel.v6.0 (NX-364): banda de preț vagă, pe pool-ul DEJA filtrat (după excluderi), ca
     # mediana să fie a ce se potrivește cererii, nu a raftului întreg.
     band_cap: float | None = None
-    if a.price_band == "low" and ranked_final and a.product_name is None:
+    if a.price_band == "low" and (ranked_final or pool_tail) and a.product_name is None:
         # Recenzia v6.0: nu pe un produs NUMIT (un produs scump ar dispărea din propria căutare).
         before = len(ranked_final)
+        # Sub două prețuri pe pagina filtrată (verificarea independentă v6.0), plafonul se ia pe
+        # pagină + coadă, altfel coada ar intra fără bandă.
         band_cap = price_band_cap(ranked_final)
+        if band_cap is None:
+            band_cap = price_band_cap([*ranked_final, *pool_tail])
         ranked_final = [p for p in ranked_final if within_band(p, band_cap)]
         ctx.emit("price_band_applied", band="low", pool=before, kept=len(ranked_final))
 

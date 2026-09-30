@@ -245,6 +245,23 @@ def _same_stem(a: str, b: str, suffixes: Collection[str]) -> bool:
     return False
 
 
+def _confirms(word: str, name_word: str, suffixes: Collection[str]) -> bool:
+    """`kernel.v6.0`: cuvântul clientului e o formă a cuvântului din NUMELE valorii. Ca
+    `_same_stem`, dar o tulpină de trei litere cere un sufix de cel puțin două pe cuvântul
+    clientului: «tenul» e „ten” + articol, «pare» nu e „par” (e verbul din «mi se pare»;
+    verificarea independentă v6.0). Tulpinile mai lungi se potrivesc ca la umbrelă."""
+    if word == name_word:
+        return True
+    if not _same_stem(word, name_word, suffixes):
+        return False
+    common = 0
+    for a, b in zip(word, name_word, strict=False):
+        if a != b:
+            break
+        common += 1
+    return common >= 4 or len(word) - common >= 2
+
+
 def _spells(words: Sequence[str], code: Sequence[str], suffixes: Collection[str]) -> bool:
     """NX-350: citatul conține codul ÎNTREG, cuvânt cu cuvânt și în ordine (cu flexiune)."""
     size = len(code)
@@ -664,7 +681,7 @@ class _Checker:
                 continue
             for i in range(len(words) - size + 1):
                 window = words[i : i + size]
-                if not all(_same_stem(window[j], code[j], suffixes) for j in range(size)):
+                if not all(_confirms(window[j], code[j], suffixes) for j in range(size)):
                     continue
                 # Recenzia v6.0: o tulpină scurtă se potrivește și cu verbe («pare» = „par” + „e”),
                 # deci «mi se pare uscată» ar fi „numit” `par uscat`. Flexiunea e acceptată doar

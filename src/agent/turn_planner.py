@@ -750,10 +750,37 @@ class _Planner:
         else:
             phrase = text or whole or product_name
         if not phrase:
+            # kernel.v6.0 (verificarea pe conversația reală `625ab925`): «nu vreau cu acid
+            # hialuronic» după «ceva de hidratare» n-avea nici subiect, nici cuvinte de căutat, deci
+            # turul nu căuta deloc, iar excluderea nu se aplica. Nevoile din STARE sunt deja filtre
+            # validate: eticheta locale-i a primului filtru e textul (o poartă pe care filtrul o
+            # poartă oricum; treapta `filters_only` o ridică dacă nu potrivește nimic).
+            phrase = self._filter_label(args)
+        if not phrase:
             self.gaps[:] = before  # fără căutare, golurile argumentelor nu spun nimic
             self._gap("no_query")
             return self._plan("reply_only")
         return self._plan("search", (), args.model_copy(update={"query": phrase}))
+
+    def _filter_label(self, args: SearchArgs) -> str | None:
+        """Eticheta locale-i a primului filtru de nevoie din argumente (`value_labels` ale
+        pachetului, un singur proprietar al etichetelor), altfel valoarea ca atare."""
+        values = [*(args.concerns or ()), *(args.features or ())]
+        values = [v for v in values if isinstance(v, str) and v]
+        if not values:
+            return None
+        labels: dict[str, str] = {}
+        facets = (
+            getattr(self.pack, "facet_labels", ())
+            or getattr(self.pack, "comparison_facets", ())
+            or ()
+        )
+        for facet in facets:
+            for code, per_locale in (getattr(facet, "value_labels", None) or {}).items():
+                text = per_locale.get(self.locale) or per_locale.get(self.locale.split("-")[0])
+                if text:
+                    labels.setdefault(norm_text(code), text)
+        return labels.get(norm_text(values[0]), values[0])
 
     def _missing_name(self, act: Act) -> str | None:
         """O referință `name` negăsită printre țintele actului: căutarea e plasa

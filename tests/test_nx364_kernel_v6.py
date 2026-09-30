@@ -495,3 +495,189 @@ def test_a_routine_discloses_the_band_it_cannot_apply():
     plan = planned.plans[planned.primary]
     assert plan.executor == "bundle" and plan.search_args.price_band == "low"
     assert "soft_budget" in planned.gaps
+
+
+# ── verificarea independentă v6.0: două detalii la rând + scurtăturile exacte ──────────────────
+
+
+def test_the_zoom_survives_two_details_in_a_row():
+    """Lista → detaliul lui #2 → «și a treia?»: `recent_sets` = (detaliul de dinainte, lista).
+    Regula caută cea mai recentă listă de ≥ 2, nu doar setul imediat anterior."""
+    from src.conversation.references import ShownItem, zoomed_list
+
+    lst = tuple(ShownItem(f"p{i}", f"p{i}", None) for i in range(1, 6))
+    assert zoomed_list((ShownItem("p3", "p3", None),), ((ShownItem("p2", "p2", None),), lst)) == lst
+    assert zoomed_list((ShownItem("x", "x", None),), ((ShownItem("p2", "p2", None),), lst)) is None
+    assert zoomed_list(lst[:2], (lst,)) is None  # două pe ecran: nu e un detaliu
+
+
+def _shortcut_ctx(body: str, *, zoom: bool):
+    from src.conversation.state_v2 import DisplayedRef, References
+    from src.models import (
+        BusinessConfig,
+        Contact,
+        ConversationState,
+        InboundMessage,
+        Route,
+        RouteDecision,
+        TurnContext,
+    )
+
+    ctx = TurnContext(
+        turn_id="t",
+        business=BusinessConfig(id="b", slug="d", name="D"),
+        contact=Contact(id="c", business_id="b"),
+        message=InboundMessage(provider_msg_id="m", body=body),
+        conversation_id="conv",
+        state=ConversationState(),
+    )
+    ctx.language = "ro"
+    ctx.route = RouteDecision(route=Route.SALES)
+    ctx.state.displayed_products = [
+        type("R", (), {"product_id": "p2", "name": "P2", "price": 10.0})()
+    ]
+    earlier = (tuple(DisplayedRef(f"p{i}", f"P{i}", None) for i in range(1, 4)),) if zoom else ()
+    ctx.state_v2 = ConversationStateV2(
+        revision=2,
+        references=References(
+            displayed_products=(DisplayedRef("p2", "P2", None),), recent_sets=earlier
+        ),
+    )
+    return ctx
+
+
+async def test_exact_shortcuts_defer_an_ordinal_on_a_zoomed_screen_to_the_kernel():
+    """Verificarea independentă: cu kernelul servind, scurtăturile EXACTE rulau întâi și numărau
+    ecranul de un card («linkul la primul» → produsul din detaliu). Acum renunță, iar kernelul
+    aplică regula listei."""
+    from src.agent import deterministic as det
+
+    ctx = _shortcut_ctx("trimite-mi linkul la primul", zoom=True)
+    assert await det._pre_intents(ctx, object(), exact_only=True) is False
+    assert [
+        e.properties.get("reason") for e in ctx.events if e.type == "shortcut_deferred_to_kernel"
+    ] == ["zoomed_ordinal"]
+
+
+async def test_no_deferral_without_a_list_behind_the_screen():
+    from src.agent import deterministic as det
+
+    ctx = _shortcut_ctx("trimite-mi linkul la primul", zoom=False)
+    assert det._zoom_screen(ctx) is False
+    zoomed = _shortcut_ctx("trimite-mi linkul la primul", zoom=True)
+    assert det._zoom_screen(zoomed) is True
+
+
+# ── verificarea pe conversația reală `625ab925` și pe catalogul real ─────────────────────────
+
+
+@pytest.mark.parametrize(
+    ("value", "hit"),
+    [
+        ("acid hialuronic", True),
+        ("complex de 8 tipuri de acid hialuronic", True),  # 51 de forme pe SOLE
+        ("acidul hialuronic", True),  # forma articulată
+        ("acid salicilic", False),
+        ("hialuronat de sodiu", False),  # sinonim chimic: declarat, nu prins
+    ],
+)
+def test_an_additive_exclusion_matches_the_phrase_inside_catalog_values(value, hit):
+    """Pe catalogul real, potrivirea exactă prindea 590 din 726 de apariții; la o EXCLUDERE,
+    greșeala sigură e să scoți în plus."""
+    exclude = {"key_ingredients": ["acid hialuronic"]}
+    assert ct.excluded_hit({"key_ingredients": ["ceramide", value]}, exclude) is hit
+
+
+def test_an_exclusion_turn_without_a_subject_still_searches():
+    """`cae37e6a`: «nu vreau cu acid hialuronic» după «ceva de hidratare», fără raft și fără tip.
+    Pe v5.1/v6.0 inițial planul era `reply_only` + `no_query`, deci excluderea nu rula niciodată.
+    Textul devine eticheta locale-i a filtrului din stare."""
+    from dataclasses import replace
+
+    from src.domain.pack import FacetSpec
+
+    pack = fc.pack("fashion")
+    labelled = replace(
+        pack,
+        comparison_facets=(
+            *tuple(pack.comparison_facets or ()),
+            FacetSpec(key="material", value_labels={"bumbac": {"ro": "bumbac organic"}}),
+        ),
+    )
+    interp = TurnInterpretation(
+        thread="continue",
+        acts=[Act(kind="find", targets=[], query=None)],
+        changes=[],
+        references=[],
+        ambiguities=[],
+        corrects_previous_turn=False,
+    )
+    state = ConversationStateV2(
+        revision=1,
+        needs=(
+            Need(
+                key="material",
+                operator="eq",
+                normalized_value="bumbac",
+                strength="hard",
+                status="active",
+                source="user_explicit",
+            ),
+            _need("restriction", "poliester"),
+        ),
+    )
+    gate = GateOutcome(AmbiguityDecision(verdict="act", reason="clear", question=None))
+    planned = plan_turn(
+        interp,
+        state,
+        (),
+        (),
+        gate,
+        changed=True,
+        pack=labelled,
+        vocab=fc.vocabulary("fashion"),
+        locale="ro",
+    )
+    plan = planned.plans[planned.primary]
+    assert plan.executor == "search", planned
+    assert plan.search_args.query == "bumbac organic"
+    assert plan.search_args.exclude == {"material": ["poliester"]}
+    assert "no_query" not in planned.gaps
+
+
+@pytest.mark.parametrize(
+    ("said", "value", "expected"),
+    [
+        ("mi se pare uscat", "dry", "implicit"),  # «pare» e verbul, nu „par” + „e”
+        ("am tenul uscat", "dry", "explicit"),  # «tenul» = „ten” + articolul „ul”
+    ],
+)
+def test_a_three_letter_stem_needs_a_real_suffix(said, value, expected):
+    pack_vocab = CatalogVocabulary(
+        business_id="b",
+        dimensions={"skin_type": (VocabEntry(key="dry", label="dry", count=1),)},
+    )
+    change = StateChange(
+        op="set",
+        target=None,
+        dimension="skin_type",
+        relation="eq",
+        value=value,
+        number=None,
+        unit=None,
+        relative_to=None,
+        quote=said,
+    )
+    interp = TurnInterpretation(
+        thread="continue",
+        acts=[Act(kind="find", targets=[], query=None)],
+        changes=[change],
+        references=[],
+        ambiguities=[],
+        corrects_previous_turn=False,
+    )
+    from dataclasses import replace
+
+    pack = replace(fc.pack("sole-ro"), concern_map={"par uscat": "dry", "ten uscat": "dry"})
+    [c] = check_changes(interp, words=UserWords(said, ()), vocab=pack_vocab, pack=pack, locale="ro")
+    assert c.provenance == expected
