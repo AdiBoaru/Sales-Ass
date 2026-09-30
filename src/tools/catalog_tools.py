@@ -1357,6 +1357,8 @@ def diversify_pool(
     *,
     max_per_brand: int = _MAX_PER_BRAND,
     max_per_type: int | None = _QUOTA_FROM_OWNER,
+    subject_types: frozenset[str] = frozenset(),
+    tertile_representatives: bool = False,
 ) -> list[dict[str, Any]]:
     """Reordonează candidații (DEJA ordonați pe relevanță) ca PRIMELE `limit` să fie DIVERSE — scară
     de preț (terțe) + max `max_per_brand` per brand + max `max_per_type` per TIP de produs —
@@ -1378,6 +1380,19 @@ def diversify_pool(
     false` (acoperire 75,7%) — n-are dreptul să arunce candidați, dar are dreptul să-i așeze.
     Tipul LIPSĂ nu formează o clasă: produsele fără tip nu se numără între ele (vezi
     `_product_type`), altfel un sfert din catalog ar fi plafonat ca și cum ar fi un singur lucru.
+
+    NX-358 — diversitatea se face ÎN INTERIORUL cererii, nu peste ea. Conversația `1848eeba`, «ceva
+    sub 100 lei» după o cremă pentru ten uscat: relevanța punea creme pe locurile 1-7, iar pagina a
+    ieșit cu trei măști. Două mecanisme tăiau aceleași creme, deci repararea unuia singur nu schimba
+    nimic (măsurat pe pool-ul real):
+    - `tertile_representatives`: faza 1 ia CEL MAI RELEVANT produs din fiecare terță lipsă. Varianta
+      veche era o singură trecere care sărea tot ce cădea într-o terță acoperită și continua de
+      unde rămăsese, deci după ultima terță lua produsele de DUPĂ ea (măștile de pe locurile 8-10)
+      înaintea cremelor sărite de pe locurile 3-6.
+    - `subject_types`: tipurile pe care clientul le-a CERUT (`SearchArgs.prefer["product_type"]`,
+      scris de planner sau de NX-355, niciodată de model) nu intră în cota pe tip. Cota e pentru
+      cererile care numesc doar o nevoie («scap de cosuri»); la «vreau o cremă» ar trimite exact
+      tipul cerut pe pagina a doua.
     """
     if max_per_type == _QUOTA_FROM_OWNER:  # NX-303: cifra vine de la proprietarul ei
         max_per_type = cfg_max_per_type()
@@ -1404,25 +1419,51 @@ def diversify_pool(
     if tert[0] is not None:
         covered.add(tert[0])
 
-    # Fază 1: greedy pe acoperirea terțelor de preț, sub cotele de brand și de tip.
-    for i in range(1, n):
-        if len(selected) >= limit:
-            break
-        brand = candidates[i].get("brand")
-        if brand and brand_count.get(brand, 0) >= max_per_brand:
-            continue
-        ptype = _product_type(candidates[i])
-        if ptype and max_per_type is not None and type_count.get(ptype, 0) >= max_per_type:
-            continue
-        all_covered = present <= covered  # toate terțele prezente deja acoperite
-        if tert[i] is None or tert[i] not in covered or all_covered:
-            selected.append(i)
-            if brand:
-                brand_count[brand] = brand_count.get(brand, 0) + 1
-            if ptype:
-                type_count[ptype] = type_count.get(ptype, 0) + 1
-            if tert[i] is not None:
-                covered.add(tert[i])
+    def _type_full(ptype: str | None, allow: int | None) -> bool:
+        """Tipul și-a atins cota. Tipul lipsă nu e o clasă (NX-298), iar tipul CERUT nu are cotă
+        (NX-358)."""
+        if not ptype or ptype in subject_types or allow is None:
+            return False
+        return type_count.get(ptype, 0) >= allow
+
+    def _take(i: int) -> None:
+        selected.append(i)
+        if brand := candidates[i].get("brand"):
+            brand_count[brand] = brand_count.get(brand, 0) + 1
+        if ptype := _product_type(candidates[i]):
+            type_count[ptype] = type_count.get(ptype, 0) + 1
+        if tert[i] is not None:
+            covered.add(tert[i])
+
+    if tertile_representatives:
+        # Fază 1 (NX-358): câte UN reprezentant, cel mai relevant, pentru fiecare terță lipsă, în
+        # ordinea în care terțele apar pe relevanță. Restul terței rămâne candidat pentru faza 2.
+        for want in dict.fromkeys(t for t in tert[1:] if t is not None and t not in covered):
+            if len(selected) >= limit:
+                break
+            for i in range(1, n):
+                if tert[i] != want or i in selected:
+                    continue
+                brand = candidates[i].get("brand")
+                if brand and brand_count.get(brand, 0) >= max_per_brand:
+                    continue
+                if _type_full(_product_type(candidates[i]), max_per_type):
+                    continue
+                _take(i)
+                break
+    else:
+        # Fază 1: greedy pe acoperirea terțelor de preț, sub cotele de brand și de tip.
+        for i in range(1, n):
+            if len(selected) >= limit:
+                break
+            brand = candidates[i].get("brand")
+            if brand and brand_count.get(brand, 0) >= max_per_brand:
+                continue
+            if _type_full(_product_type(candidates[i]), max_per_type):
+                continue
+            all_covered = present <= covered  # toate terțele prezente deja acoperite
+            if tert[i] is None or tert[i] not in covered or all_covered:
+                _take(i)
 
     # Fază 2: umple pe relevanță → niciodată < limit când există candidați. Cotele se relaxează
     # PAS CU PAS, nu dintr-odată: fiecare rundă mărește plafonul cu unu și reia lista în ordinea
@@ -1445,16 +1486,11 @@ def diversify_pool(
                 brand = candidates[i].get("brand")
                 if brand and brand_count.get(brand, 0) >= allow_brand:
                     continue
-                ptype = _product_type(candidates[i])
-                if ptype and type_count.get(ptype, 0) >= allow_type:
+                if _type_full(_product_type(candidates[i]), allow_type):
                     continue
-                selected.append(i)
+                _take(i)
                 chosen.add(i)
                 progressed = True
-                if brand:
-                    brand_count[brand] = brand_count.get(brand, 0) + 1
-                if ptype:
-                    type_count[ptype] = type_count.get(ptype, 0) + 1
             if not progressed:
                 allow_brand += 1
                 allow_type += 1
@@ -2407,7 +2443,16 @@ async def _search(
         and a.product_name is None
         and len(ranked_final) > a.limit
     ):
-        ranked_final = diversify_pool(ranked_final, a.limit)
+        # NX-358: tipurile CERUTE vin din `a.prefer`, pe care modelul nu-l poate scrie
+        # (`PLANNER_ONLY_FIELDS`): plannerul kernelului (umbrela) sau NX-355 (tipul subiectului).
+        subject_aware = get_settings().search_diversify_subject_aware_enabled
+        requested = (a.prefer or {}).get("product_type") or () if subject_aware else ()
+        ranked_final = diversify_pool(
+            ranked_final,
+            a.limit,
+            subject_types=frozenset(requested),
+            tertile_representatives=subject_aware,
+        )
         diversified = True
 
     # NX-313: un card per FAMILIE pe pagină. Clientul vede numele SCURT (`display_name`, NX-301),
