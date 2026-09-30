@@ -43,6 +43,7 @@ __all__ = [
     "enabled_names",
     "gate",
     "name_for_turn",
+    "search_ends_turn_names",
     "select",
 ]
 
@@ -59,6 +60,11 @@ class TurnProfile:
     extra_tools: tuple[str, ...]
     suffix: str
     speculative_retrieval: bool = False
+    #: NX-359: o căutare reușită (doar `search_products`, cu produse) îi încheie bucla de unelte.
+    #: Adevărat doar unde nicio a doua unealtă nu e plauzibilă: compunerea bogată scrie din produse,
+    #: deci runda de proză ar fi un apel întreg pentru un text aruncat. Pe 30 de zile, 0 din 40 de
+    #: ture `exact` și 0 din 37 `recommend` (în afara căutărilor paralele) au chemat altceva.
+    search_ends_turn: bool = False
 
     @property
     def version(self) -> str:
@@ -119,9 +125,13 @@ _MUTATION_SUFFIX = (
 
 # ── Registrul ───────────────────────────────────────────────────────────────────────────────────
 
-_EXACT = TurnProfile(name="exact", extra_tools=(), suffix=_EXACT_SUFFIX)
+_EXACT = TurnProfile(name="exact", extra_tools=(), suffix=_EXACT_SUFFIX, search_ends_turn=True)
 _RECOMMEND = TurnProfile(
-    name="recommend", extra_tools=(), suffix=_RECOMMEND_SUFFIX, speculative_retrieval=True
+    name="recommend",
+    extra_tools=(),
+    suffix=_RECOMMEND_SUFFIX,
+    speculative_retrieval=True,
+    search_ends_turn=True,
 )
 # `compare_products` e deja în toolsetul de bază azi, deci declararea lui aici e un no-op
 # (adăugarea face dedupe pe nume). E declarat oricum fiindcă profilul spune de ce are NEVOIE, iar
@@ -175,6 +185,11 @@ def enabled_names(settings: object) -> frozenset[str]:
     return frozenset(
         name for name, flag in PER_PROFILE_FLAGS.items() if bool(getattr(settings, flag, False))
     )
+
+
+def search_ends_turn_names() -> frozenset[str]:
+    """NX-359: profilele pe care o căutare reușită le încheie (`TurnProfile.search_ends_turn`)."""
+    return frozenset(name for name, profile in PROFILES.items() if profile.search_ends_turn)
 
 
 def select(

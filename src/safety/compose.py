@@ -95,9 +95,14 @@ def enforce(ctx: Any) -> None:
     # cache-poisoning deja știută pe „mai ieftin"/fallback).
     reply.cacheable = False
     rich = getattr(reply, "rich", None)
-    if rich is not None and getattr(rich, "intro", None) is not None:
+    if rich is not None and hasattr(rich, "intro"):
         # Intro-ul rich e ce vede clientul sus pe canalele bogate; `text` e aplatizarea. Punem
         # fraza în AMBELE, o dată, ca să nu apară doar pe canalul sărac.
+        #
+        # NX-359: și când intro-ul e GOL. Condiția de dinainte (`intro is not None`) sărea exact
+        # turul fără nicio frază de model: runda de proză sărită (NX-312), compunerea bogată picată
+        # și nicio încadrare din catalog ⇒ `rich.intro = None`. Widgetul randează `rich`, deci
+        # clientul nu vedea trimiterea la medic deloc, deși `reply.text` o avea.
         if not already_has_sentence(rich.intro):
             rich.intro = f"{sentence}\n\n{rich.intro}".strip() if rich.intro else sentence
     ctx.emit(

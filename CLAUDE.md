@@ -1206,6 +1206,29 @@ alt tip decât cel cerut nu mai mută subiectul. Pe catalogul real, turul 3: 6 d
 uscat, cremele primele. Flag `NEEDS_RETAINED_ENABLED` (ON). Card:
 [`tasks/stage1/NX-355.md`](tasks/stage1/NX-355.md); probă: `pytest tests/test_nx355_needs_retained.py -q`.
 
+**NX-358 — diversificarea paginii se face ÎN INTERIORUL cererii.** Conversația `1848eeba`
+(2026-09-30): la «ceva sub 100 lei» după o cremă, relevanța avea creme pe locurile 1-7, iar pagina
+a ieșit cu trei măști. `diversify_pool` avea două mecanisme care tăiau aceleași creme (fiecare
+reparat singur lăsa tot trei măști, măsurat pe pool-ul real): faza pe preț era o singură trecere
+care, după ultima terță găsită, lua produsele de DUPĂ ea în locul celor sărite, iar cota „max 2 pe
+tip" plafona chiar tipul cerut. Acum faza pe preț ia cel mai relevant reprezentant al fiecărei
+terțe lipsă, iar pe calea v1 tipul subiectului (NX-355, în `SearchArgs.prefer["product_type"]`)
+e scutit de cotă; cota rămâne pentru cererile doar cu nevoie (NX-298). Pe calea kernelului `prefer`
+amestecă tipul subiectului cu semnale `inferred`, deci scutirea așteaptă un câmp de planner (card
+separat). Pe catalogul real: turul din `1848eeba` trece de la 3/6 la 6/6 creme, paleta cererilor
+doar cu nevoie rămâne. Flag `SEARCH_DIVERSIFY_SUBJECT_AWARE_ENABLED` (ON). Card:
+[`tasks/stage1/NX-358.md`](tasks/stage1/NX-358.md); probă: `pytest
+tests/test_nx358_diversify_subject.py -q` + `PYTHONPATH=. python scripts/nx358_diversify_probe.py`.
+
+**NX-359 — runda de proză se sare și pe rafinări (profilul `exact`).** Conversația `1848eeba`:
+«am tenul uscat» și «ceva sub 100 lei» ies `answer` ⇒ `exact`, iar NX-312 sărea runda doar pe
+`recommend`, deși compunerea bogată rulează pe orice tur cu produse (proza nu era citită). Pe 30 de
+zile, 0 din 40 de ture `exact` cu o căutare reușită au chemat altă unealtă; runda costa p50 3,2 s.
+Profilul declară acum `search_ends_turn` (`exact`, `recommend`), iar motivul `not_recommend` devine
+`profile_needs_round`. Flag `TOOL_LOOP_SKIP_PROSE_EXACT_ENABLED` (ON). Card:
+[`tasks/stage1/NX-359.md`](tasks/stage1/NX-359.md); probă: `pytest
+tests/test_nx359_prose_round_exact.py tests/test_skip_prose_round.py -q`.
+
 **NX-361 — pe `/web/chat` răspunsul nu mai așteaptă aftercare-ul.** Ruta de producție făcea
 `await run_aftercare` înainte de `return`, deci clientul aștepta și extracția de profil (un apel de
 model, 3,3-5 s pe tur în `1848eeba`), pe care `turn_latency` n-o numără. Acum aftercare-ul rulează
