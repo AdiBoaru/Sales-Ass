@@ -24,7 +24,7 @@ import re
 from base64 import b64encode
 from typing import TYPE_CHECKING
 
-from src.agent.llm import VISION_NOT_PRODUCT
+from src.agent.llm import VISION_NOT_PRODUCT, failure_cause
 from src.catalog.folding import fold_text
 from src.config import INBOUND_BODY_MAX, get_settings
 from src.db.queries.contacts import block_contact
@@ -326,6 +326,10 @@ async def _moderation_blocked(ctx: TurnContext, deps: PipelineDeps) -> bool:
         res = await deps.llm.moderate(body)
     except Exception as e:  # noqa: BLE001 — fail-open
         log.warning("moderation: apel eșuat (%s) → fail-open", type(e).__name__)
+        if getattr(settings, "llm_wait_bounded_enabled", False):
+            # NX-357: episodul din 2026-09-29 (două ture de 136 s) nu exista în analytics, doar
+            # în logul containerului. Cauza din vocabularul închis `llm.FAILURE_CAUSES`.
+            ctx.emit("moderation_unavailable", cause=failure_cause(e))
         return False
     if not res.flagged:
         return False

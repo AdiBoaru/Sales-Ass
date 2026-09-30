@@ -241,7 +241,7 @@ class _FakeModResp:
 
 
 class _FakeModerations:
-    async def create(self, *, model, input):
+    async def create(self, *, model, input, **kw):  # NX-357: `timeout=` pe calea mărginită
         return _FakeModResp()
 
 

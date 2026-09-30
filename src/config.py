@@ -1467,6 +1467,29 @@ class Settings(BaseSettings):
     llm_call_budget_by_role_enabled: bool = Field(
         default=True, validation_alias="LLM_CALL_BUDGET_BY_ROLE_ENABLED"
     )
+    # NX-357 — cât așteptăm la cererea FURNIZORULUI. Pe 2026-09-29 moderarea a primit un 5xx cu
+    # `Retry-After: 120`, iar `_with_retry` a dormit exact 120 s, cu clientul așteptând un verdict
+    # care oricum îl lăsa să treacă (poarta e fail-open): două ture de 136 s. Trei goluri:
+    # `MODERATION_CAP_MS` se aplica doar cu deadline-ul de tur aprins (stins în producție),
+    # `Retry-After` nu avea tavan, iar moderarea, Vision și embeddingul nu primeau plafonul total
+    # NX-311. Aprins: un `Retry-After` peste `llm_retry_after_max_s` înseamnă eșec imediat
+    # (apelantul degradează ca la orice eroare), moderarea are bugetul ei (`moderation_timeout_s`,
+    # retry inclus) și cu deadline-ul stins, Vision și embeddingul primesc `llm_call_total_cap_s`,
+    # iar poarta emite `moderation_unavailable{cause}`. Implicit ON, ca NX-311: defect măsurat.
+    # Stins → byte-identic.
+    llm_wait_bounded_enabled: bool = Field(
+        default=True, validation_alias="LLM_WAIT_BOUNDED_ENABLED"
+    )
+    # Tavanul unui `Retry-After`. Un client care așteaptă un răspuns nu are cum să aștepte mai mult,
+    # iar un furnizor care cere două minute nu va fi sănătos peste trei secunde de backoff.
+    llm_retry_after_max_s: float = Field(
+        default=10.0, validation_alias="LLM_RETRY_AFTER_MAX_S", gt=0
+    )
+    # Bugetul TOTAL al moderării, retry inclus. Măsurat pe 30 de zile (162 de ture, toți
+    # tenanții): poarta durează p50 0,88 s, p90 2,0 s, p97 2,6 s. La 2 s (vechiul
+    # `MODERATION_CAP_MS`) s-ar sări moderarea pe 11% din ture; la 3 s, pe ~1% în afara
+    # episoadelor de furnizor.
+    moderation_timeout_s: float = Field(default=3.0, validation_alias="MODERATION_TIMEOUT_S", gt=0)
     # NX-312 felia 2: pe un tur de recomandare care a chemat DOAR `search_products` și are produse,
     # runda de proză a buclei (apelul 2) se sare. Textul ei nu era citit pe calea bogată reușită,
     # iar pe cea picată rezerva NX-302 + NX-299 construiește cardurile și fraza din catalog.
