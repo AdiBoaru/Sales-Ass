@@ -167,6 +167,25 @@ def test_subject_lost_skips_an_intended_type_change():
     assert td.subject_lost(t) is None
 
 
+def test_subject_lost_skips_a_routine_turn():
+    """Recenzia finală: rutina nu emite `product_search`, deci `subject_match` n-o marchează
+    `type_change_expected`, iar pașii ei (toner, ser) ieșeau „subiect pierdut”."""
+    events = {
+        "subject_match": [{"subject_type_known": True, "type_matched": 1}],
+        "tool_call": [{"name": "routine_plan"}],
+    }
+    types = {f"p{i}": t for i, t in enumerate(("demachiant", "toner", "ser", "crema de fata"))}
+    cards = _rich(*({"product_id": pid} for pid in types))
+    assert td.subject_lost(_turn(reply=cards, product_types=types, events=events)) is None
+    events["tool_call"] = [{"name": "search_products"}]
+    assert td.subject_lost(_turn(reply=cards, product_types=types, events=events)) is True
+
+
+def test_ordinal_in_a_zoomed_list_is_a_success():
+    t = _turn(events={"reference_v2": [{"kind": "ordinal", "reason": "ordinal_in_zoomed_list"}]})
+    assert td.ordinal_out_of_range(t) is False
+
+
 def test_ordinal_out_of_range_reads_the_live_v1_resolver():
     """Calea care RĂSPUNDE e resolverul v1 (`web_reference_resolved`), nu kernelul dark."""
     live = _turn(

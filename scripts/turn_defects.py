@@ -162,7 +162,11 @@ def subject_lost(t: Turn) -> Verdict:
     Numitorul e aici doar cardurile al căror tip îl știm."""
     m = t.first("subject_match")
     if not m or not m.get("subject_type_known") or m.get("type_change_expected"):
-        # Cross-sell-ul și rutina servesc alt tip INTENȚIONAT (`subject.py`).
+        # Cross-sell-ul servește alt tip INTENȚIONAT (`subject.TYPE_CHANGING_PATHS`).
+        return None
+    if any(c.get("name") == "routine_plan" for c in t.all("tool_call")):
+        # Rutina servește pașii ei (demachiant, toner, ser, cremă) sub subiectul „cremă”, dar nu
+        # emite `product_search`, deci `subject_match` o vede ca `rehydrate` (recenzia finală).
         return None
     ids = [i for i in (card_id(c) for c in shown_cards(t.reply)) if i]
     typed = sum(1 for i in ids if t.product_types.get(i))
@@ -179,13 +183,19 @@ def _resolved_refs(t: Turn) -> list[Mapping[str, Any]]:
 def ordinal_out_of_range(t: Turn) -> Verdict:
     """Un ordinal («a treia») n-a mai găsit lista la care se referea (ex. după un detaliu), pe
     calea care RĂSPUNDE (resolverul v1, `web_reference_resolved`, și scurtăturile v2,
-    `reference_v2`). Kernelul dark are detectorul lui (`kernel_ordinal_out_of_range`)."""
+    `reference_v2`). Kernelul dark are detectorul lui (`kernel_ordinal_out_of_range`).
+
+    Limită declarată: cu `REFERENCE_PRECEDENCE_V2_ENABLED` stins (implicit), resolverul v1 nu dă
+    motiv (`reason=""`), iar pe un ecran de un card servește acel card oricărui ordinal (`single`),
+    deci acolo evenimentul nu spune că ordinalul a ratat lista. Pe acel profil se văd doar
+    scurtăturile v2. `ordinal_in_zoomed_list` (kernel.v6.0) e un succes."""
     live = [r for r in t.all("web_reference_resolved") if r.get("source") == "ordinal"]
     live += [r for r in t.all("reference_v2") if r.get("kind") in ("ordinal", "earlier")]
     live = [
         r
         for r in live
-        if r.get("reason") in ("ordinal_in_list", "ordinal_in_set", "ordinal_out_of_range")
+        if r.get("reason")
+        in ("ordinal_in_list", "ordinal_in_set", "ordinal_in_zoomed_list", "ordinal_out_of_range")
     ]
     if not live:
         return None
@@ -214,7 +224,10 @@ def _kernel_changes(t: Turn) -> list[Mapping[str, Any]]:
 def kernel_vague_price_unserved(t: Turn) -> Verdict:
     """Kernel (dark): clientul a cerut un preț fără sumă («să nu fie foarte scump»), iar planul
     n-are bandă de preț (pe v5.1 cuvintele ajungeau `rank_terms`). Se aplică doar pe turele cu o
-    astfel de cerere, citită din interpretare (dimensiune, relație, număr: structură, nu text)."""
+    astfel de cerere, citită din interpretare (dimensiune, relație, număr: structură, nu text).
+
+    Cere kernel.v6.0 (NX-364, `SearchArgs.price_band`): pe traceurile de dinainte rata e 100% prin
+    construcție. Un plan fără căutare (o întrebare) contează ca neservit."""
     vague = [
         c
         for c in _kernel_changes(t)

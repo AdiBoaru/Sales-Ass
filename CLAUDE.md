@@ -1253,7 +1253,7 @@ probă: `pytest tests/test_refused_set_withheld.py -q`.
 **NX-363 — detectorii de defecte: ce mecanism a lovit câte ture, pe tot traficul.** Defectele se
 găseau citind conversații de mână, deși fiecare lasă un semnal pe care îl scriem deja (evenimente,
 `conversation_traces`, catalog). `scripts/turn_defects.py --business <slug>` (read-only, 0 $) rulează
-16 detectori puri pe fereastră; fiecare întoarce `None` când nu se aplică, deci are propriul numitor,
+17 detectori puri pe fereastră; fiecare întoarce `None` când nu se aplică, deci are propriul numitor,
 iar sub 20 de ture aplicabile rata nu se raportează. Ieșirea: severitate, ture lovite din câte, rată,
 conversații, exemple de tur (raportul complet local, `reports/nx363/`). Nu e poartă de CI (NX-272).
 Prima rulare (`sole-ro`, septembrie, 157 de ture): o valoare de nevoie `not_in_vocabulary` pe 43,2%
