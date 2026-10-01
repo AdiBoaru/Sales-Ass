@@ -15,7 +15,7 @@ import re
 import statistics
 import time
 from collections.abc import Collection, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, Field
@@ -1260,6 +1260,103 @@ async def _subject_filter_tail(
     for r in rows:
         r["lexical_step"] = "filters_only"  # eticheta treptei NX-293, ca în `catalog.py`
     return rows
+
+
+def _merge_pool_tail(
+    ctx: TurnContext,
+    a: SearchArgs,
+    ranked_final: list[dict[str, Any]],
+    pool_tail: list[dict[str, Any]],
+    *,
+    step_bounds: Sequence[BoundConstraint],
+    band_cap: float | None,
+    hard_needs: Mapping[str, Any] | None,
+    search_safety: Any,
+    safety_hint: str,
+) -> tuple[list[dict[str, Any]], str]:
+    """Cozile pool-ului (NX-303 setul filtrelor, NX-377 necunoscutele, NX-378 restul completării
+    NX-298) intră în `ranked_final` DUPĂ ce pagina a fost aleasă. Întoarce `(ranked_final, hint)`.
+
+    O coadă nu e „doar paginare": un rând scos de pe pagină (siguranță, excludere, bandă) lasă un
+    loc pe care coada urcă, deci pe calea reluării (k1 T4, `seen_extra`) ea ESTE prima pagină.
+    Fiecare rând trece deci prin ACELEAȘI porți ca pagina, înainte de îmbinare (recenzia NX-378):
+
+      • excluderile spuse, banda de preț și (cu flagul NX-378) anti-potrivirea;
+      • constrângerile numerice ale treptei câștigătoare (`apply_constraints`);
+      • poarta de siguranță NX-173, prin `SafetyPolicy.gate` (punctul UNIC de decizie), FĂRĂ flag:
+        siguranța nu e opțională. Se evaluează doar rândurile care încap în pool
+        (`MAX_SEARCH_POOL`), deci decizia turului (NX-367: `kept` = uniunea evaluărilor,
+        `blocked` = ce s-a scos) numără exact ce ar fi intrat, iar nota pentru model spune
+        toate excluderile.
+
+    Înainte, coada se baza pe poarta finală (`ToolRun._absorb_planned`, „unfiltered_path"), dar
+    `llm_view`, linkurile, prețurile și pool-ul sesiunii se construiau din pagina neverificată.
+    Marcajul intern `_tail` nu iese din funcție."""
+    s = get_settings()
+    fix = s.search_pool_from_filter_fill_enabled
+    have = {str(p.get("id")) for p in ranked_final}
+    page_n = len(have)
+    anti = (
+        anti_fit_for(getattr(ctx.business.domain_pack, "facets", ()), hard_needs)
+        if fix and hard_needs and s.skin_type_anti_fit_enabled
+        else None
+    )
+    candidates: list[dict[str, Any]] = []
+    source_of: dict[str, str] = {}
+    for p in pool_tail:
+        pid = str(p.get("id"))
+        if pid in have:
+            continue
+        # kernel.v6.0 (recenzia): coada intră în pool-ul paginat, deci trece prin ACELEAȘI
+        # excluderi și ACELAȘI plafon de bandă ca pagina; altfel «mai arată-mi» servea exact
+        # produsele scoase. NX-378: și prin anti-potrivire (NX-322b).
+        if a.exclude and excluded_hit(
+            p.get("attributes"), a.exclude, _partitioning_keys(ctx), _phrase_keys(ctx)
+        ):
+            continue
+        if not within_band(p, band_cap):
+            continue
+        if anti and anti_fit_hit(p.get("attributes"), anti):
+            continue
+        have.add(pid)  # NX-378: cozile se pot suprapune (aceeași interogare)
+        source_of[pid] = str(p.get("_tail") or "subject_filter")
+        candidates.append({k: v for k, v in p.items() if k != "_tail"})
+    if step_bounds and candidates:
+        candidates, _ = apply_constraints(candidates, step_bounds)
+    policy = SafetyPolicy.for_turn(ctx)
+    blocked: list[Any] = []
+    merged: list[dict[str, Any]] = []
+    rest = candidates
+    while rest and len(ranked_final) + len(merged) < MAX_SEARCH_POOL:
+        room = MAX_SEARCH_POOL - len(ranked_final) - len(merged)
+        chunk, rest = rest[:room], rest[room:]
+        kept, decision = policy.gate(ctx, chunk, purpose="search_pool")
+        blocked += list(decision.blocked)
+        merged += kept
+    added: dict[str, int] = {}
+    for p in merged:
+        source = source_of.get(str(p.get("id")), "subject_filter")
+        added[source] = added.get(source, 0) + 1
+    ranked_final = [*ranked_final, *merged]
+    # NX-303 își numără doar coada lui; celelalte surse (NX-377/378) au evenimentul lor
+    ctx.emit("pool_extended_from_filter", page=page_n, added=added.get("subject_filter", 0))
+    if set(added) - {"subject_filter"}:
+        ctx.emit(
+            "pool_extended",
+            unknown_fill=added.get("unknown_fill", 0),
+            filter_fill=added.get("filter_fill", 0),
+        )
+    if blocked and getattr(search_safety, "contexts", ()):
+        # nota pentru model numără TOATE excluderile căutării, nu doar pe cele de pe pagină
+        safety_hint = safety_model_hint(
+            replace(search_safety, blocked=[*search_safety.blocked, *blocked])
+        )
+    # NX-378 (recenzia): coada poate urca pe prima pagină (rândurile scoase mai sus lasă loc),
+    # deci regula „un card pe familie" se reaplică după ea. Sub flag: stins, pagina e cea de pe
+    # `main` (recenzia: altfel kill-switch-ul NX-378 nu mai întorcea comportamentul de dinainte).
+    if fix and s.search_one_card_per_family_enabled and a.product_name is None:
+        ranked_final = one_per_family(ranked_final)
+    return ranked_final, safety_hint
 
 
 def _text_gate_is_redundant(
@@ -2601,8 +2698,9 @@ async def _search(
         # (cele 5 potriviri stricte), iar după ele NX-298 punea pe pagină și în pool un cushion și
         # creme cu SPF; «mai arată-mi alte seruri» după reluare cere serurile pentru pete cu tip de
         # ten necunoscut. Potrivirile rămân primele; necunoscutele vin după, pe pagină până la
-        # `limit`, cel mult o pagină în plus în coada pool-ului (paginarea).
+        # `limit`, restul în coada pool-ului (paginarea, plafonul pool-ului).
         unknown_tail: list[dict[str, Any]] = []
+        unknown_page_n = 0  # câte sloturi din pagină le-au umplut necunoscutele
         if (
             get_settings().search_unknown_fill_enabled
             and winning_step is not None
@@ -2662,20 +2760,15 @@ async def _search(
                     if len(ranked_final) < a.limit:
                         ranked_final.append(tagged)
                         page_n += 1
-                    elif tail_n < a.limit:  # o pagină în plus pe fațetă, pentru paginare
+                    elif tail_n < MAX_SEARCH_POOL:
+                        # Recenzia NX-378: tot restul, nu doar o pagină, ca o sesiune reluată să
+                        # nu se termine după o pagină; plafonul real e al pool-ului (la îmbinare)
                         unknown_tail.append(tagged)
                         tail_n += 1
+            unknown_page_n = page_n
             if unknown_keys:
-                # Coada NU trece prin `_safety_gate` aici (recenzia: ar număra ca blocate sau
-                # păstrate rânduri care nu se servesc niciodată și ar schimba decizia turului,
-                # NX-367). Pagina servită trece prin gate-ul final (`retrieval_final`), iar
-                # paginarea prin al ei (`continue_search_session`).
-                if hard_needs and get_settings().skin_type_anti_fit_enabled:
-                    anti = anti_fit_for(getattr(ctx.business.domain_pack, "facets", ()), hard_needs)
-                    if anti:
-                        unknown_tail = [
-                            r for r in unknown_tail if not anti_fit_hit(r.get("attributes"), anti)
-                        ]
+                # Coada trece prin poarta de siguranță (NX-173) și prin constrângeri la ÎMBINARE,
+                # cu restul cozilor (mai jos, `_merge_pool_tail`): acolo se știe ce intră în pool.
                 ctx.emit(
                     "search_unknown_fill",
                     facets=unknown_keys,
@@ -2709,10 +2802,14 @@ async def _search(
         fill_n = 0
         pool_tail: list[dict[str, Any]] = []
         fill_rest: list[dict[str, Any]] = []
+        # Recenzia NX-378: pagina umplută de necunoscutele NX-377 nu e una umplută de potriviri.
+        # Fără ele, NX-298 ar fi rulat; cu ele, restul setului filtrelor lipsea din pool, iar o
+        # sesiune reluată se termina după o pagină. Rândurile merg doar în coadă (pagina e plină).
+        pool_wants_rest = unknown_page_n > 0 and get_settings().search_pool_from_filter_fill_enabled
         if (
             get_settings().search_fill_from_subject_filter_enabled
             and winning_step is not None
-            and len(ranked_final) < a.limit
+            and (len(ranked_final) < a.limit or pool_wants_rest)
         ):
             # Cu `search_filters_only_fallback_enabled` stins, treapta nu există, deci lista vine
             # goală și completarea e un no-op: kill-switch-urile se compun, nu se contrazic.
@@ -2751,7 +2848,7 @@ async def _search(
             # paginării rămânea cât pagina (k1: 6 din cele 42 ale setului filtrelor), iar «mai
             # arată-mi altele» după o reluare n-avea ce arăta. Intră în COADA pool-ului (ca NX-303:
             # pagina rămâne byte-identică), ordonate pe preferințele turului (tipul subiectului
-            # întâi), după gate-ul de siguranță (NX-173). Fără query în plus.
+            # întâi). Fără query în plus. Poarta de siguranță și constrângerile: la îmbinare.
             if rest and get_settings().search_pool_from_filter_fill_enabled:
                 rest = fuse_candidates(
                     rest,
@@ -2761,7 +2858,7 @@ async def _search(
                     weights=rank_weights,
                     prefer=need_prefer,
                 )
-                fill_rest = rest  # gate-ul: pe pagina servită și la paginare (ca NX-377)
+                fill_rest = rest
 
         # NX-303 — coada de POOL. Textul a umplut pagina, dar ca POARTĂ nu spunea nimic peste
         # filtre, deci „mai arată-mi" ar fi avut 6 rânduri dintr-un set de 518. Rândurile se
@@ -2788,7 +2885,10 @@ async def _search(
     # supraviețuiește turului → un produs filtrat mai târziu (ex. la `annotate_reasons`, după pool)
     # ar rămâne în `active_search.pool` și ar reapărea la „arată-mi altele". Filtrat aici, dispare
     # din pool, pagină, `llm_view`, `ctx.retrieval`, carduri și `displayed_products` deodată.
-    ranked_final, safety_hint = _safety_gate(ctx, ranked_final, purpose="search")
+    ranked_final, search_safety = SafetyPolicy.for_turn(ctx).gate(
+        ctx, ranked_final, purpose="search"
+    )
+    safety_hint = safety_model_hint(search_safety)
 
     # NX-266: plasa de DUPĂ fuziune/rerankare, în ACELAȘI loc cu gate-ul de siguranță și din
     # același motiv: pool-ul sesiunii se seamănă mai jos din `ranked_final` și supraviețuiește
@@ -2911,46 +3011,17 @@ async def _search(
     # NX-303: coada intră ABIA acum, după ce pagina a fost aleasă. `pool_ids` (mai jos) e tot ce
     # va avea paginarea; pagina însăși rămâne cea de dinainte de card, byte-identic.
     if pool_tail:
-        have = {str(p.get("id")) for p in ranked_final}
-        page_n = len(have)
-        added: dict[str, int] = {}
-        anti = (
-            anti_fit_for(getattr(ctx.business.domain_pack, "facets", ()), hard_needs)
-            if hard_needs and get_settings().skin_type_anti_fit_enabled
-            else None
+        ranked_final, safety_hint = _merge_pool_tail(
+            ctx,
+            a,
+            ranked_final,
+            pool_tail,
+            step_bounds=step_bounds,
+            band_cap=band_cap,
+            hard_needs=hard_needs,
+            search_safety=search_safety,
+            safety_hint=safety_hint,
         )
-        for p in pool_tail:
-            if len(ranked_final) >= MAX_SEARCH_POOL:
-                break
-            if str(p.get("id")) in have:
-                continue
-            # kernel.v6.0 (recenzia): coada intră în pool-ul paginat, deci trece prin ACELEAȘI
-            # excluderi și ACELAȘI plafon de bandă ca pagina; altfel «mai arată-mi» servea exact
-            # produsele scoase. NX-378: și prin anti-potrivire (NX-322b).
-            if a.exclude and excluded_hit(
-                p.get("attributes"), a.exclude, _partitioning_keys(ctx), _phrase_keys(ctx)
-            ):
-                continue
-            if not within_band(p, band_cap):
-                continue
-            if anti and anti_fit_hit(p.get("attributes"), anti):
-                continue
-            have.add(str(p.get("id")))  # NX-378: cozile se pot suprapune (aceeași interogare)
-            ranked_final.append(p)
-            source = str(p.get("_tail") or "subject_filter")
-            added[source] = added.get(source, 0) + 1
-        # NX-303 își numără doar coada lui; celelalte surse (NX-377/378) au evenimentul lor
-        ctx.emit("pool_extended_from_filter", page=page_n, added=added.get("subject_filter", 0))
-        if set(added) - {"subject_filter"}:
-            ctx.emit(
-                "pool_extended",
-                unknown_fill=added.get("unknown_fill", 0),
-                filter_fill=added.get("filter_fill", 0),
-            )
-        # NX-378 (recenzia): coada poate urca pe prima pagină (rândurile scoase mai sus lasă loc),
-        # deci regula „un card pe familie" se reaplică după ea
-        if get_settings().search_one_card_per_family_enabled and a.product_name is None:
-            ranked_final = one_per_family(ranked_final)
 
     # Pool-ul sesiunii = ordinea fuzionată COMPLETĂ (top MAX_SEARCH_POOL), NU dedup-uită: dacă l-am
     # semăna din setul minus-displayed, produsele deja afișate ar fi excluse PERMANENT din sesiune +

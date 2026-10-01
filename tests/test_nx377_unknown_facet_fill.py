@@ -21,7 +21,7 @@ import pytest
 from src.catalog.vocabulary import CatalogVocabulary, VocabEntry
 from src.config import get_settings
 from src.domain.loader import load_domain_pack
-from src.models import BusinessConfig, Contact, InboundMessage, TurnContext
+from src.models import MAX_SEARCH_POOL, BusinessConfig, Contact, InboundMessage, TurnContext
 from src.tools import catalog_tools as ct
 from src.tools.base import run_tool
 from src.worker.runner import PipelineDeps
@@ -201,11 +201,19 @@ async def test_a_filled_row_is_tagged_and_the_model_is_told(lexical):
     assert "nu știm" not in _rich_bundle(matched)
 
 
-async def test_the_paging_tail_is_one_page_per_facet(lexical):
+async def test_the_paging_tail_keeps_the_rest_up_to_the_pool_cap(lexical, monkeypatch):
+    """Recenzia NX-378: plafonul de o pagină pe fațetă termina o sesiune reluată după o pagină.
+    Restul necunoscutelor intră în coadă; plafonul e al pool-ului."""
+    monkeypatch.setattr(get_settings(), "search_pool_from_filter_fill_enabled", False)
     ctx = _ctx(_sole_pack())
     await _search(ctx)
     event = next(e for e in ctx.events if e.type == "search_unknown_fill")
-    assert event.properties["tail"] <= 6
+    assert event.properties["tail"] == len(UNKNOWN) - 3  # toate, nu o pagină
+    many = [_row(f"u{i}", f"Ser Pete {i}") for i in range(3 * MAX_SEARCH_POOL)]
+    monkeypatch.setitem(globals(), "UNKNOWN", many)
+    ctx = _ctx(_sole_pack())
+    await _search(ctx)
+    assert len(ctx.state_patch["active_search"]["pool"]) == MAX_SEARCH_POOL
 
 
 async def test_an_unknown_already_on_the_page_is_not_repeated(lexical):

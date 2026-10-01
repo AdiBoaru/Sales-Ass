@@ -1415,8 +1415,12 @@ puținele potriviri, NX-298 punea produse fără textul cererii, deși existau s
 de ten necunoscut: NX-377 (D7: o fațetă `partitioning` neauditată nu exclude un produs fără atribut)
 completează ÎNAINTEA lui NX-298, doar cu potriviri STRICTE de text, marcate `facet_unknown` pentru
 model. Pe replay: 5 seruri noi pentru pete în loc de 0 carduri; pe toate turele din 2026-10-01
-completarea aduce produse doar pe k1. Flaguri `SEARCH_UNKNOWN_FILL_ENABLED`,
-`SEARCH_POOL_FROM_FILTER_FILL_ENABLED` (ON). Carduri: [`tasks/stage1/NX-378.md`](tasks/stage1/NX-378.md),
+completarea aduce produse doar pe k1. Cozile pool-ului (NX-303, necunoscutele, restul NX-298) urcă pe
+prima pagină când un rând al ei e scos, deci trec la îmbinare prin aceleași porți ca pagina
+(`_merge_pool_tail`): poarta de siguranță NX-173 FĂRĂ flag (recenzia a găsit un retinoid din coadă
+servit în sarcină, iar gaura exista pe `main` pe coada NX-303), constrângerile numerice, excluderile
+și banda; decizia turului (NX-367) numără și excluderile cozii. Flaguri `SEARCH_UNKNOWN_FILL_ENABLED`,
+`SEARCH_POOL_FROM_FILTER_FILL_ENABLED` (ON; stinse amândouă, pagina e cea de pe `main`). Carduri: [`tasks/stage1/NX-378.md`](tasks/stage1/NX-378.md),
 [`tasks/stage1/NX-377.md`](tasks/stage1/NX-377.md); probă: `pytest tests/test_nx377_unknown_facet_fill.py
 tests/test_nx378_resume_and_pool.py -q`.
 
