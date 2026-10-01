@@ -180,9 +180,19 @@ class Settings(BaseSettings):
     # --- Moderation gate (NX-15) ---
     # Poartă în Gates înaintea triajului: mesaj flagged → răspuns neutru (gratuit la OpenAI).
     moderation_enabled: bool = Field(default=True, validation_alias="MODERATION_ENABLED")
-    # Câte flag-uri într-o fereastră de 24h trec contactul pe abuse blocklist.
+    # Câte flag-uri într-o fereastră de 24h trec contactul pe abuse blocklist (doar cu
+    # `MODERATION_FLAG_TELEMETRY_ENABLED=false`, calea de dinainte de NX-368).
     moderation_block_threshold: int = Field(
         default=3, validation_alias="MODERATION_BLOCK_THRESHOLD"
+    )
+    # NX-368: acțiunea unui flag de moderare depinde de categorie: auto-vătămarea primește un mesaj
+    # de sprijin, conținutul sexual cu minori un refuz, abuzul spre bot răspunsul neutru, iar restul
+    # (violență, ilicit, sexual) e TELEMETRIE și turul îl răspunde agentul. Nimeni nu mai e blocat
+    # automat de un clasificator. Măsurat: singurul flag din istoricul `sole-ro` a fost un fals
+    # pozitiv („se descuamează și mă mănâncă" = violență). Implicit ON, ca NX-311 (defect măsurat);
+    # OFF = răspuns neutru pe orice flag + blocare după prag, byte-identic cu înainte.
+    moderation_flag_telemetry_enabled: bool = Field(
+        default=True, validation_alias="MODERATION_FLAG_TELEMETRY_ENABLED"
     )
 
     # --- Redis ---
