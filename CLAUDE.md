@@ -583,10 +583,14 @@ probă: `pytest tests/test_nx364_kernel_v6.py tests/test_kernel_references.py te
 **NX-374 — `kernel.v6.1` (minor): o cerință spusă pe care catalogul nu o poate verifica se spune
 clientului.** Setul `kernel-live-2026-10-01` (clasa D1): «să fie și fără parfum» ajungea în stare,
 plannerul scria golul `unsupported_need`, iar clientul primea șase creme fără să afle că cerința n-a
-contat. Golurile nu devin text; acum o nevoie SPUSĂ chiar în tur (o schimbare acceptată `explicit`)
-care cade în `unsupported_need` aduce și dezvăluirea `need_unverifiable`, o dată, cu fraza
-pachetului, înaintea răspunsului. O nevoie din ture anterioare, una descrisă (`implicit`) sau
-inferată rămâne doar gol; o căutare abandonată (`no_query`) își scoate și dezvăluirea. Card:
+contat. Golurile nu devin text; acum o nevoie SPUSĂ de client (sursa `user_explicit`) care cade în
+`unsupported_need` aduce și dezvăluirea `need_unverifiable`, cu fraza pachetului, înaintea
+răspunsului, pe PRIMA căutare care o poartă (spusă pe un tur fără căutare, se spune la următoarea),
+o singură dată pe conversație: memoria e `note_asked unverifiable:<cheie>` în `asked_questions`,
+scrisă de orchestrator doar dacă fraza a ajuns în răspuns. Golul apare doar unde `SearchArgs` n-are
+câmp pentru nevoie (fanion da/nu, fațetă fără atribut), deci fraza e adevărată prin construcție. O
+nevoie descrisă (`implicit`) sau inferată rămâne doar gol; o căutare abandonată (`no_query`) își
+scoate și dezvăluirea. Card:
 [`tasks/stage1/NX-374.md`](tasks/stage1/NX-374.md); probă: `pytest tests/test_nx374_need_unverifiable.py -q`.
 
 **NX-238 — retrievalul trece printr-un PORT, iar candidatul e inert (verdict `NOT-READY`).**

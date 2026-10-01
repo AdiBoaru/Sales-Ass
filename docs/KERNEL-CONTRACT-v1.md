@@ -24,16 +24,26 @@ Versioning: the contract is `kernel.v1.0`. **Minor** (`v1.1`): additive schema f
 No invariant, ownership row or state rule changes in v1.2, so no replay gate is required. The open questions step 6 raised on I5 (the safety prune on `aside`), I20 (the cart on `cart_ref`) and I15a/I12 (`grounding_guard` does not run on the v1 composition) are decided in the PRs that need them (B and C), under the minor/major rule.
 
 **Current version: `kernel.v6.1` (minor, NX-374, 2026-10-01).** One additive value in a closed
-vocabulary the planner writes: the disclosure `need_unverifiable`. A need the customer SPOKE in the
-turn (an accepted `explicit` change) that falls into the gap `unsupported_need` (no field and no
-attribute facet can check it, e.g. `fragrance_free` on a catalog that carries no such attribute) is
-now told to the customer once, with the pack sentence `kernel_sentences.need_unverifiable`, before
-the answer. Gaps still never become text; this is a disclosure, like `not_exact_match`. A need from an
-earlier turn, a described (`implicit`) or an `inferred` one stays a gap only, and a search the
-planner abandons (`no_query`) drops the disclosure together with its gaps. Found by the production
-run `kernel-live-2026-10-01` (k2 T3, «să fie și fără parfum»). `TurnInterpretation` is unchanged; the
-schema snapshot differs only in its version stamp. No meaning, invariant, ownership row or state rule
-changes, so no replay gate is required.
+vocabulary the planner writes: the disclosure `need_unverifiable`. A need the customer SPOKE (source
+`user_explicit`, which the delta writes only from an accepted `explicit` change) that falls into the
+gap `unsupported_need` is told to the customer once per conversation, with the pack sentence
+`kernel_sentences.need_unverifiable`, before the answer, on the FIRST plan that searches with it: a
+requirement spoken on a turn that did not search (an aside, a gate question, a search with no words)
+is told on the next search that carries it. The gap `unsupported_need` is written only where
+`SearchArgs` has no field that can carry the need (a non-text value such as a yes/no facet, since
+no boolean filter exists in SQL; a facet that is not a product attribute; a key without a facet),
+so "I can't check it" is true by construction, not a reading of the data. The memory is the
+conversation's anti-loop memory: the orchestrator proposes `note_asked` with the key
+`unverifiable:<need key>` (in the commit's fixed second pass, like the gate's question memory) only
+when the sentence is actually in the reply, so a plan that did not serve leaves it to be told later;
+the prefix keeps it apart from the gate's question keys. Gaps still never become text; this is a
+disclosure, like `not_exact_match`. A described (`user_implicit`) or an `inferred` need stays a gap
+only, and a search the planner abandons (`no_query`) drops the disclosure together with its gaps.
+Found by the production run `kernel-live-2026-10-01` (k2 T3, «să fie și fără parfum»).
+`TurnInterpretation` is unchanged; the schema snapshot differs only in its version stamp. Additive
+only (a disclosure code, `PlannedTurn.disclosed_needs`, a new key namespace in `asked_questions`
+that no existing reader interprets); no meaning, invariant, ownership row or state rule changes, so
+no replay gate is required.
 
 **Previous version: `kernel.v6.0` (MAJOR, NX-364, asked for by Adi on 2026-09-30).**
 

@@ -18,7 +18,7 @@ from dataclasses import dataclass, replace
 from functools import lru_cache
 from typing import Any
 
-from src.agent.turn_planner import PlannedTurn, plan_turn
+from src.agent.turn_planner import PlannedTurn, disclosure_memory, plan_turn
 from src.catalog.folding import fold_text
 from src.catalog.vocabulary import CATEGORY_DIMENSION, CatalogVocabulary, VocabEntry
 from src.conversation.ambiguity_gate import (
@@ -558,6 +558,11 @@ def kernel_step(
         # fixată pe cea a turului (fără bump; plafoanele se aplică), nu `reduce` pe o propunere. O
         # respingere lasă starea neatinsă, ca înainte.
         after = reduce_all(after, (memory,), reducer_policy, revision=after.revision).state
+    told = disclosure_memory(planned, turn_id)
+    if told:
+        # NX-374 (recenzia A2): fixture-ul n-are executor, deci modelează turul SERVIT: dezvăluirea
+        # `need_unverifiable` a ajuns la client, iar memoria ei intră în a doua trecere.
+        after = reduce_all(after, told, reducer_policy, revision=after.revision).state
     return KernelStep(
         interpretation=interpretation,
         checked=tuple(checked),

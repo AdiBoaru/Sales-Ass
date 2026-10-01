@@ -142,6 +142,13 @@
       "fate": "stays"
     },
     {
+      "file": "src/agent/turn_planner.py",
+      "function": "disclosure_memory",
+      "field": "clarification",
+      "why": "NX-374 (recenzia A2): memoria dezvaluirii `need_unverifiable` (`note_asked unverifiable:<cheie>`), ca dezvaluirea sa se spuna o singura data, pe prima cautare care poarta nevoia. Propunere spre reducer; orchestratorul o trimite doar daca fraza e in raspuns, iar commit-ul o aplica in a doua trecere (MEMORY_OPS), ca memoria intrebarii.",
+      "fate": "stays"
+    },
+    {
       "file": "src/conversation/ambiguity_gate.py",
       "function": "question_answered",
       "field": "clarification",

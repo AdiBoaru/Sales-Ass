@@ -17,15 +17,29 @@ from types import SimpleNamespace as NS
 import pytest
 
 from src.agent import kernel_executors as kx
-from src.agent.turn_planner import DISCLOSURES
-from src.conversation.interpretation import KERNEL_CONTRACT_VERSION
-from src.conversation.state_v2 import ConversationStateV2, Topic
+from src.agent.interpreted_turn import _disclosure_memory
+from src.agent.turn_planner import DISCLOSURES, disclosed_need_key, disclosure_memory
+from src.conversation.ambiguity_gate import GateOutcome
+from src.conversation.interpretation import KERNEL_CONTRACT_VERSION, AmbiguityDecision
+from src.conversation.needs import NeedVocabulary
+from src.conversation.state_reducer import ReducerPolicy, reduce_all
+from src.conversation.state_v2 import AskedQuestion, ConversationStateV2, Topic
 from src.domain.pack import KERNEL_SENTENCE_CODES
+from src.worker.kernel_commit import MEMORY_OPS
 from tests.kernel import fixture_catalog as fc
 from tests.test_kernel_planner import _interp, _need, _plan, _search, _state
+from tests.test_kernel_provenance import ch
 from tests.test_nx349_bool_facets import FLAG, _step, flag
 
 CODE = "need_unverifiable"
+
+
+def _gate_ask() -> GateOutcome:
+    return GateOutcome(
+        AmbiguityDecision(verdict="must_ask", reason="no_subject", question="Ce cauți?"),
+        asked_key="category",
+        asked_kind="pending",
+    )
 
 
 def _now(key: str, value: object):
@@ -92,14 +106,17 @@ def test_on_another_domain_the_rule_is_the_same():
     assert planned.gaps == ("unsupported_need",) and _codes(planned) == [(0, CODE)]
 
 
-def test_the_same_need_only_in_state_is_not_disclosed():
+def test_a_spoken_need_only_in_state_is_disclosed_until_told():
+    """Recenzia A2: o nevoie spusă de client (`user_explicit`) pe un tur care n-a căutat se spune pe
+    PRIMA căutare care o poartă, nu doar pe turul în care a fost scrisă."""
     planned = _plan(
         "electronics",
         _interp(acts=[{"kind": "find"}]),
         _state("telefoane", needs=(_need("use_case", "birou"),)),
     )
     _search(planned)
-    assert planned.gaps == ("unsupported_need",) and not _codes(planned)
+    assert planned.gaps == ("unsupported_need",) and _codes(planned) == [(0, CODE)]
+    assert planned.disclosed_needs == ("use_case",)
 
 
 @pytest.mark.parametrize("name", ["sole-ro", "electronics", "fashion"])
@@ -172,25 +189,27 @@ def test_the_disclosure_belongs_to_the_search_plan_not_to_the_turn():
     assert served and not skipped
 
 
-def test_a_removal_is_not_a_requirement_to_disclose():
+def test_a_retracted_need_is_not_a_requirement_to_disclose():
+    """O nevoie retrasă (reducerul a scris `revoked`) nu mai e activă: nu se dezvăluie."""
+    retracted = dataclasses.replace(_now("use_case", "birou"), status="revoked")
     planned = _plan(
         "electronics",
         _interp(acts=[{"kind": "find"}], changes=[_use_case("remove", None)]),
-        _state("telefoane", needs=(_now("use_case", "birou"),)),
+        _state("telefoane", needs=(retracted,)),
     )
     assert not _codes(planned)
 
 
-def test_a_need_updated_in_an_earlier_revision_is_not_disclosed():
-    """Schimbarea turului e pe aceeași dimensiune, dar nevoia activă e din altă revizie (reducerul
-    n-a aplicat-o acum): nu se re-dezvăluie."""
-    old = dataclasses.replace(_need("use_case", "birou"), updated_revision=0)
-    planned = _plan(
-        "electronics",
-        _interp(acts=[{"kind": "find"}], changes=[_use_case()]),
-        _state("telefoane", needs=(old,)),
+def test_a_need_already_disclosed_is_not_disclosed_again():
+    """Memoria dezvăluirii (`asked_questions`, cheia `unverifiable:<nevoie>`) oprește repetarea,
+    chiar dacă modelul re-emite schimbarea și reducerul re-scrie nevoia în tur (idempotent)."""
+    told = AskedQuestion(disclosed_need_key("use_case"), revision=1)
+    state = dataclasses.replace(
+        _state("telefoane", needs=(_now("use_case", "birou"),)), asked_questions=(told,)
     )
-    assert not _codes(planned)
+    planned = _plan("electronics", _interp(acts=[{"kind": "find"}], changes=[_use_case()]), state)
+    assert planned.gaps == ("unsupported_need",) and not _codes(planned)
+    assert planned.disclosed_needs == ()
 
 
 def test_a_flag_relaxed_to_false_is_not_disclosed():
@@ -216,3 +235,95 @@ def test_a_flag_relaxed_to_false_is_not_disclosed():
         state,
     )
     assert not _codes(planned)
+
+
+# --- recenzia adversarială a PR-ului (A2, A7) ---------------------------------------------------
+
+
+def _type(value: str = "crema de fata"):
+    return ch("set", dimension="product_type", relation="eq", value=value, quote=value)
+
+
+def test_a2_a_need_spoken_on_a_turn_without_search_is_disclosed_on_the_first_search():
+    """Recenzia A2, reprodusă: T1 «vreau ceva fara parfum» pe stare goală ⇒ `reply_only`
+    (`no_query`), nevoia ajunge în stare; T2 «o crema de fata» caută cu nevoia nesusținută. Pe codul
+    vechi T2 avea golul, dar nu și dezvăluirea. T3 nu o mai repetă (memoria scrisă la T2)."""
+    first = _step("vreau ceva fara parfum", flag(quote="fara parfum"))
+    assert first.planned.gaps == ("no_query",) and not _codes(first.planned)
+    assert any(n.key == FLAG for n in first.state_after.active_needs())
+    second = _step("o crema de fata", _type(), state=first.state_after)
+    assert second.planned.plans[second.planned.primary].executor == "search"
+    assert _codes(second.planned) == [(second.planned.primary, CODE)]
+    assert second.planned.disclosed_needs == (FLAG,)
+    assert second.state_after.asked(disclosed_need_key(FLAG)) is not None
+    third = _step("si ceva hidratant", state=second.state_after)
+    assert "unsupported_need" in third.planned.gaps and not _codes(third.planned)
+
+
+def test_a2_after_a_gate_question_the_first_search_discloses():
+    """Recenzia A2, a doua formă: poarta a întrebat raftul (`must_ask`, planul `ask`), deci nimic
+    nu s-a ales; turul următor, care caută, spune cerința."""
+    state = ConversationStateV2(
+        revision=1, needs=(dataclasses.replace(_need(FLAG, True), updated_revision=1),)
+    )
+    asking = _plan("sole-ro", _interp(acts=[{"kind": "find"}]), state, gate=_gate_ask())
+    assert [p.executor for p in asking.plans] == ["ask"] and not _codes(asking)
+    later = dataclasses.replace(state, revision=2, topic=Topic(product_type="crema de fata"))
+    searching = _plan("sole-ro", _interp(acts=[{"kind": "find", "query": "crema"}]), later)
+    _search(searching)
+    assert _codes(searching) == [(0, CODE)]
+
+
+def test_a2_a_described_need_is_never_disclosed_on_later_turns():
+    """Doar ce a SPUS clientul (`user_explicit`): o nevoie descrisă (`user_implicit`) rămâne gol."""
+    described = dataclasses.replace(_need(FLAG, True, source="user_implicit"), updated_revision=1)
+    state = ConversationStateV2(
+        revision=2, topic=Topic(product_type="crema de fata"), needs=(described,)
+    )
+    planned = _plan("sole-ro", _interp(acts=[{"kind": "find", "query": "crema"}]), state)
+    assert "unsupported_need" in planned.gaps and not _codes(planned)
+
+
+def test_a2_the_memory_is_written_only_when_the_sentence_reached_the_client():
+    """Orchestratorul scrie memoria (`note_asked unverifiable:<nevoie>`) doar dacă fraza e chiar în
+    răspuns; un plan care n-a servit (fraza sărită) lasă nevoia de spus pe următoarea căutare."""
+    pack = fc.pack("sole-ro")
+    sentence = kx.kernel_sentence(pack, "ro", CODE)
+    planned = NS(disclosures=((0, CODE),), disclosed_needs=(FLAG,))
+
+    def ctx(text: str) -> NS:
+        reply = NS(text=text, rich=None)
+        return NS(business=NS(domain_pack=pack), language="ro", reply=reply, turn_id="t9")
+
+    told = _disclosure_memory(ctx(f"{sentence}\n\nȚi-am ales cremă de față."), planned)
+    assert [(p.op, p.key, p.source) for p in told] == [
+        ("note_asked", disclosed_need_key(FLAG), "policy")
+    ]
+    assert _disclosure_memory(ctx("Ți-am ales cremă de față."), planned) == ()
+
+
+def test_a2_the_memory_passes_the_fixed_second_pass_of_the_commit():
+    """`note_asked` e în `MEMORY_OPS`: a doua trecere a commit-ului îl aplică, fără cheie nouă de
+    stare, iar cheia cu prefix nu atinge întrebările porții (`asked(fragrance_free)` rămâne gol)."""
+    proposals = disclosure_memory(NS(disclosed_needs=(FLAG,)), "t1")
+    assert {p.op for p in proposals} <= MEMORY_OPS
+    policy = ReducerPolicy(vocabulary=NeedVocabulary.from_pack(fc.pack("sole-ro")))
+    after = reduce_all(ConversationStateV2(revision=3), proposals, policy, revision=3).state
+    assert after.asked(disclosed_need_key(FLAG)) is not None and after.asked(FLAG) is None
+    assert after.revision == 3
+
+
+def test_a7_a_flag_need_never_reaches_search_args_so_the_disclosure_is_true():
+    """Recenzia A7: o fațetă da/nu ajunge MEREU în `unsupported_need`, fără să privească datele.
+    Dezvăluirea spune „nu o pot verifica", iar asta e adevărat prin construcție doar cât timp
+    `SearchArgs` n-are niciun câmp care să filtreze sau să ordoneze pe un atribut boolean. Testul
+    fixează presupunerea: nevoia nu apare în niciun câmp al căutării. Un filtru boolean adăugat în
+    SQL trebuie să mute ramura (și să schimbe acest test)."""
+    step = _step("sa fie si fara parfum", flag(quote="fara parfum"), state=CREAMS)
+    args = step.planned.plans[step.planned.primary].search_args
+    assert args is not None and _codes(step.planned)
+    dumped = args.model_dump()
+    for field in ("concerns", "features", "rank_terms"):
+        assert FLAG not in (dumped.get(field) or []) and "true" not in (dumped.get(field) or [])
+    for field in ("prefer", "exclude"):
+        assert FLAG not in (dumped.get(field) or {})
