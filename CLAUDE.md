@@ -179,6 +179,11 @@ tombstone-ul cu valoarea din PROPUNERE (a delta-ei), nu a nevoii parcate — la 
 nevoii + scoatere din parcat; negăsit pe o cheie scalară ⇒ tombstone fără amprentă. Prins de
 proprietatea Hypothesis a lui I6, pinuit cu `@example` ca să ruleze la fiecare CI, nu doar când
 shrinking-ul îl regăsește.
+**NX-379 — retragerea clientului e a unei NEVOI, nu a unei chei.** Contraexemplul I6 salvat local era
+al oracolului (pe cheie, contrazicea NX-331/337). Oracolul pe nevoie a găsit cinci defecte reale cu o
+cauză: un tombstone pe cheie, șters de parcare, de altă valoare sau de `clear all`, iar retragerea din
+turul unui schimb lovea nevoia reluată. Acum retragerile se țin pe valoare, poarta `revoked_key` e și
+pe valoare, ținta e valoarea handle-ului. Card: [`tasks/stage1/NX-379.md`](tasks/stage1/NX-379.md).
 **NX-334 — direcția unei limite numerice ajunge neschimbată în stare.** Pe pașii 3a/3b «minim 256
 GB» se persista `storage lte 256`: delta păstra relația doar pe preț, iar orice fațetă numerică era
 plafon. Acum o dimensiune numerică are DOUĂ chei, ca bugetul (`<fațetă>_min` / `<fațetă>_max`,
