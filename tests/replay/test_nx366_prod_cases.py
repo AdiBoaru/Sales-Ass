@@ -149,13 +149,13 @@ async def test_safety_exclusion_is_disclosed():
 _MOISTURE_BURST = "bcdfd78b-d5f4-4eea-9b52-fb3632962a5a"
 
 
-@pytest.mark.xfail(
-    strict=True, reason="căutarea nouă exclude produsele afișate; features nevalidat"
-)
 async def test_refinement_keeps_the_on_screen_match():
+    """Reparat de NX-370 (era xfail). Invariantul ține de ce OFERĂ căutarea modelului (pagina), nu
+    de alegerea lui: reparația schimbă lista, deci alegerea înregistrată („P6") se joacă peste altă
+    listă (`inputs_changed`), iar cardul final nu mai spune nimic despre mecanism."""
     res = await _replay(_load("c8_par_cret/fea953f3-1.json"))
-    ids = [str(p.get("product_id") or p.get("id")) for p in (res.reply or {}).get("products") or []]
-    assert _MOISTURE_BURST in ids
+    pages = [e.get("top_product_ids") or [] for e in _events(res, "product_search")]
+    assert any(_MOISTURE_BURST in page for page in pages)
 
 
 # --- „mai ieftin" pe pasul numit ------------------------------------------------------------------

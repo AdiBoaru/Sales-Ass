@@ -1064,6 +1064,7 @@ def _relax_ladder(
     constraints: Sequence[BoundConstraint] = (),
     category_uttered: bool = True,
     facets_uttered: bool = True,
+    features_uttered: bool = True,
 ) -> list[dict[str, Any]]:
     """Trepte de filtre dure, relaxate CUMULATIV ca să iasă ceva relevant înainte de listă goală
     (P6). Brand-ul NU se relaxează niciodată.
@@ -1117,6 +1118,13 @@ def _relax_ladder(
     # deci la proveniență egală rămâne ordinea istorică (fațete, apoi categorie) și nimic nu se
     # mișcă pe turele în care clientul a numit ambele.
     soft: list[tuple[bool, str]] = []
+    # NX-370: un `features` pe care clientul nu l-a rostit e o ipoteză a modelului, de obicei un cod
+    # inventat („sulfate_free"), pe care catalogul nu-l poartă: ca filtru dur întoarce zero, iar
+    # fiind relaxat ULTIMUL, scara arunca întâi nevoile REALE ale clientului (c8: păr uscat, raftul
+    # păr) și servea o căutare fără niciun filtru. Nerostit, intră primul în ordinea de relaxare.
+    features_first = bool(features) and by_provenance and not features_uttered
+    if features_first:
+        soft.append((False, "features"))
     if facet_filters:
         soft.append((facets_uttered if by_provenance else True, "facet_filters"))
     if category_relaxable:
@@ -1137,7 +1145,7 @@ def _relax_ladder(
     # cu `search_sort_mode_enabled`: prețul + stocul rămân fixate; relaxăm doar softul
     for _, field in soft:
         steps.append({**steps[-1], field: None})
-    if features:  # feature relaxat DUPĂ category (păstrat cât mai mult; P6 la epuizare)
+    if features and not features_first:  # rostit: relaxat DUPĂ category (P6 la epuizare)
         steps.append({**steps[-1], "features": None})
     return steps
 
@@ -1814,6 +1822,25 @@ def _fp(filters: dict[str, Any]) -> str:
     return hashlib.sha1(canon.encode()).hexdigest()[:16]
 
 
+def _first_page_excludes(ctx: TurnContext, seen: set[str], planned: bool) -> set[str]:
+    """NX-370: ce exclude prima pagină a unei căutări NOI. Doar când clientul a cerut ALTELE
+    („mai arată-mi", „nu ai altele?", `deterministic.show_more_phrase`, același detector ca
+    paginarea): atunci ce e deja pe ecran nu mai are ce căuta pe pagină.
+
+    Înainte excluderea era necondiționată, deci o RAFINARE pierdea exact produsul de pe ecran care
+    o împlinea (c8: «fără sulfați» după un șampon fără sulfați afișat: căutarea îl găsea primul și
+    pagina îl scotea), iar o întrebare despre produsul afișat («cât costă și e în stoc?», c10)
+    primea o pagină goală. Pe calea planificată (kernel) excluderea e a actului de paginare, nu a
+    căutării. Cu flagul stins, comportamentul de dinainte."""
+    if not get_settings().search_first_page_keeps_shown_enabled:
+        return seen
+    if planned:
+        return set()
+    from src.agent.deterministic import show_more_phrase  # noqa: PLC0415 — ciclu unelte ↔ agent
+
+    return seen if show_more_phrase(ctx.message.body or "") else set()
+
+
 def _next_page(pool: list[str], cursor: int, seen: set[str], limit: int) -> tuple[list[str], int]:
     """Următoarea pagină de ≤`limit` id-uri NEVĂZUTE din `pool[cursor:]` → (ids, cursor_nou);
     cursor_nou trece peste tot ce s-a consumat (inclusiv id-urile sărite ca deja-văzute)."""
@@ -2153,6 +2180,8 @@ async def _search(
         constraints=tc.bounds,
         category_uttered=category_uttered,
         facets_uttered=facets_uttered,
+        # NX-370: pe calea planificată `features` vin din fațetele dure ale stării (ca fațetele).
+        features_uttered=planned or uttered_by_client(ctx, *(a.features or [])),
     )
     if category_keys and not category_uttered:
         # Raftul e o IPOTEZĂ a modelului, nu o cerere. Se emite indiferent dacă treapta apucă să
@@ -2656,7 +2685,7 @@ async def _search(
     # (unseen-dedup vs displayed, P8) → cursorul reflectă poziția în pool, paritate cu paginarea.
     pool_ids = [str(p["id"]) for p in ranked_final][:MAX_SEARCH_POOL]
     by_id = {str(p["id"]): p for p in ranked_final}
-    page_ids, cursor = _next_page(pool_ids, 0, seen, a.limit)
+    page_ids, cursor = _next_page(pool_ids, 0, _first_page_excludes(ctx, seen, planned), a.limit)
     products = [by_id[i] for i in page_ids]
     # NX-135: search filtrat pe variant_label → TOATE rezultatele au varianta cerută (construcție).
     # Marcăm fiecare produs → `_brief` îl semnalează → modelul scrie fit grounded, nu inventat.
@@ -2674,7 +2703,10 @@ async def _search(
     mode = "semantic" if vector_contributed else "lexical"
     # NX-163: produs NUMIT cerut dar absent din setul întors — precomputat aici (o dată) fiindcă e
     # și semnalul de unmet «named_not_found» (mai jos) și condiția de disclosure (nota de mai jos).
-    named_miss = bool(a.product_name) and not _named_product_found(a.product_name, products)
+    # NX-370: judecat pe POOL, nu pe pagină: o pagină care exclude ce e pe ecran (c10: „cât costă
+    # și e în stoc?" după ce produsul fusese arătat) ieșea goală, iar modelul primea „produsul nu
+    # există ca atare în catalog" despre exact produsul afișat.
+    named_miss = bool(a.product_name) and not _named_product_found(a.product_name, ranked_final)
     # Treapta de TEXT care a servit pagina, calculată o dată: o citesc și evenimentul de căutare, și
     # captura de cerere neîmplinită de mai jos (NX-293 — un set servit din filtre înseamnă că
     # formularea n-a găsit nimic, chiar dacă raftul a găsit).

@@ -286,6 +286,8 @@ async def test_search_dedups_displayed_products(monkeypatch):
     monkeypatch.setattr(ct, "has_embeddings", _has_emb_false)
     monkeypatch.setattr(ct, "search_products_lexical", fake_lex)
     ctx = _ctx()
+    # NX-370: excluderea afișatelor e a cererii de ALTELE (pe o rafinare, ele rămân în joc).
+    ctx.message.body = "mai arată-mi altele"
     ctx.state.displayed_products = [ProductRef("p1", "Crema A", 82.99)]  # p1 deja arătat
     res = await run_tool(ctx, _deps(_LLM()), "search_products", {"query": "x"})
     assert [p["id"] for p in res.products] == ["p2"]  # p1 exclus (deja afișat)
@@ -304,6 +306,8 @@ async def test_search_dedup_before_truncate(monkeypatch):
     monkeypatch.setattr(ct, "has_embeddings", _has_emb_false)
     monkeypatch.setattr(ct, "search_products_lexical", fake_lex)
     ctx = _ctx()
+    # NX-370: excluderea afișatelor e a cererii de ALTELE (pe o rafinare, ele rămân în joc).
+    ctx.message.body = "mai arată-mi altele"
     ctx.state.displayed_products = [ProductRef("q0", "P0", 10.0)]  # rank-1 deja afișat
     res = await run_tool(ctx, _deps(_LLM()), "search_products", {"query": "x"})
     ids = [p["id"] for p in res.products]
@@ -321,6 +325,8 @@ async def test_search_all_displayed_is_graceful_empty(monkeypatch):
     monkeypatch.setattr(ct, "has_embeddings", _has_emb_false)
     monkeypatch.setattr(ct, "search_products_lexical", fake_lex)
     ctx = _ctx()
+    # NX-370: excluderea afișatelor e a cererii de ALTELE (pe o rafinare, ele rămân în joc).
+    ctx.message.body = "mai arată-mi altele"
     ctx.state.displayed_products = [
         ProductRef("p1", "Crema A", 82.99),
         ProductRef("p2", "Ser B", 1.0),
@@ -364,6 +370,8 @@ async def test_search_brand_present_all_displayed_no_false_denial(monkeypatch):
     monkeypatch.setattr(ct, "has_embeddings", _has_emb_false)
     monkeypatch.setattr(ct, "search_products_lexical", fake_lex)
     ctx = _ctx()
+    # NX-370: excluderea afișatelor e a cererii de ALTELE (pe o rafinare, ele rămân în joc).
+    ctx.message.body = "mai arată-mi altele"
     ctx.state.displayed_products = [ProductRef("p1", "Crema A", 82.99)]
     res = await run_tool(ctx, _deps(_LLM()), "search_products", {"query": "x", "brand": "BrandA"})
     assert res.ok and res.products == []
@@ -469,6 +477,8 @@ async def test_search_mode_lexical_when_all_vector_deduped(monkeypatch):
     monkeypatch.setattr(ct, "search_products_semantic", fake_sem)
     monkeypatch.setattr(ct, "search_products_lexical", fake_lex)
     ctx = _ctx()
+    # NX-370: excluderea afișatelor e a cererii de ALTELE (pe o rafinare, ele rămân în joc).
+    ctx.message.body = "mai arată-mi altele"
     ctx.state.displayed_products = [ProductRef("p1", "Crema A", 82.99)]  # ... dar p1 e deja afișat
     res = await run_tool(ctx, _deps(_LLM()), "search_products", {"query": "x"})
     assert [p["id"] for p in res.products] == ["p2"]  # doar lexical supraviețuiește
@@ -1349,3 +1359,23 @@ async def test_completarea_respecta_kill_switch(monkeypatch):
         _ctx(), _deps_no_llm(), "search_products", {"query": "x", "concerns": ["acne"], "limit": 6}
     )
     assert [p["id"] for p in res.products] == ["text1"]
+
+
+async def test_named_product_on_screen_is_not_declared_missing(monkeypatch):
+    """NX-370 (c10): „produsul numit lipsește" se judecă pe POOL, nu pe pagina din care s-au scos
+    produsele afișate. Altfel modelul primea „nu există ca atare în catalog" despre cel afișat."""
+    from src.models import ProductRef
+
+    async def fake_lex(conn, business_id, **k):
+        return [PRODUCTS[0]]  # p1 „Crema A", singurul rezultat, deja pe ecran
+
+    monkeypatch.setattr(ct, "has_embeddings", _has_emb_false)
+    monkeypatch.setattr(ct, "search_products_lexical", fake_lex)
+    ctx = _ctx()
+    ctx.message.body = "mai arată-mi altele"  # pagina exclude ce e pe ecran
+    ctx.state.displayed_products = [ProductRef("p1", "Crema A", 82.99)]
+    res = await run_tool(
+        ctx, _deps(_LLM()), "search_products", {"query": "x", "product_name": "Crema A"}
+    )
+    assert res.products == []
+    assert "nu există ca atare" not in res.llm_view

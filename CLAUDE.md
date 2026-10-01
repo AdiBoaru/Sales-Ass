@@ -1336,6 +1336,17 @@ la analiză și ÎNGHEȚAT pe SHA-256 până la verdictul final); `scripts/sim/p
 le rulează pe API ca widgetul (credite, îl pornește Adi). Card:
 [`tasks/stage1/NX-366.md`](tasks/stage1/NX-366.md); probă: `pytest tests/test_nx366_*.py -q`.
 
+**NX-370 — o rafinare nu mai pierde produsul de pe ecran care o împlinește.** Pe c8 («fără
+sulfați» după un șampon fără sulfați afișat) modelul a cerut `features=["sulfate_free"]` (cod inventat,
+0 produse); relaxat ULTIMUL, el ținea pagina goală până ce scara arunca nevoia reală și raftul, iar
+prima pagină a oricărei căutări noi excludea ce era pe ecran, deci șamponul potrivit, primul în pool,
+nu ajungea pe pagină. Acum un `features` nerostit se relaxează primul (proveniență, NX-299), prima
+pagină exclude afișatele doar când mesajul cere altele (`show_more_phrase`, același detector ca
+paginarea; pe calea planificată excluderea e a actului de paginare), iar „produsul numit lipsește" se
+judecă pe pool (c10 primea „nu există" despre produsul afișat). Flag
+`SEARCH_FIRST_PAGE_KEEPS_SHOWN_ENABLED` (ON). Card: [`tasks/stage1/NX-370.md`](tasks/stage1/NX-370.md);
+probă: `pytest tests/test_nx370_refinement_keeps_shown.py -q`.
+
 **NX-360 — stocul și prețurile SOLE se resincronizează din paginile live.** Catalogul era o fotografie
 din 2026-08-28: cele 391 de produse `out_of_stock` aveau prețul voucherului WELCOME15 drept preț de
 listă (scraperul cădea pe `offers.price` din JSON-LD când pagina epuizată nu arăta rândul de preț), iar
