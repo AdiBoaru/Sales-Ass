@@ -612,11 +612,14 @@ class Settings(BaseSettings):
     # găsit produse potrivite" (11 din 20 de FAQ-uri SOLE). ON implicit: defect măsurat, iar fără
     # surse comportamentul e byte-identic.
     faq_grounding_enabled: bool = Field(default=True, validation_alias="FAQ_GROUNDING_ENABLED")
-    # NX-372 — un tur care a citit DOAR regulile magazinului (nicio unealtă de catalog, cel puțin
-    # una din afara lui) și n-a putut răspunde din ele primește fraza pachetului
-    # `store_info_unknown`, nu „Momentan n-am găsit produse potrivite": nu a căutat niciun produs.
-    # Rularea pe producție din 2026-10-01: «livrați și în Republica Moldova?» și «cât fac toate în
-    # coș?». ON (defect măsurat); OFF = mesajul de produse, byte-identic.
+    # NX-372 — un tur care a chemat DOAR unelte de reguli ale magazinului (`STORE_READ_TOOLS`, azi
+    # `faq_lookup`; nicio unealtă de catalog) și n-a putut răspunde din ele nu mai primește
+    # „Momentan n-am găsit produse potrivite": nu a căutat niciun produs. Primește o frază a
+    # pachetului (`kernel_sentences.store_info_*`) care spune ce s-a citit de fapt: nicio regulă,
+    # reguli care nu s-au putut servi, sau o citire picată; după reguli servite parțial, fraza
+    # pentru rest, fără mesajul de produse. Rularea pe producție din 2026-10-01: «livrați și în
+    # Republica Moldova?» și «cât fac toate în coș?». ON (defect măsurat); OFF = mesajul de
+    # produse, byte-identic.
     store_info_fallback_enabled: bool = Field(
         default=True, validation_alias="STORE_INFO_FALLBACK_ENABLED"
     )

@@ -6,10 +6,13 @@ validatorul a respins fraza (afirmație despre livrare, nu citat al unei reguli)
 primit „Momentan n-am găsit produse potrivite". La «cât fac toate în coș?» la fel, după un total
 scris din istoric. Turul nu căutase niciun produs: rezerva comună era falsă pentru el.
 
-Regula e STRUCTURALĂ (ce unelte a chemat turul: `RetrievalResult.catalog_read` și
-`read_beyond_catalog`), nu citește mesajul, deci ține pe orice pachet și în orice limbă cu fraza
-`kernel_sentences.store_info_unknown`. Testele rulează pe pachetul SOLE (forma din fixture-uri) și
-pe două pachete de alt domeniu.
+Regula e STRUCTURALĂ (ce unelte a chemat turul: `RetrievalResult.catalog_read` fals și
+`RetrievalResult.store_only`, adică doar unelte din `tools.base.STORE_READ_TOOLS`), nu citește
+mesajul, deci ține pe orice pachet și în orice limbă cu frazele `kernel_sentences.store_info_*`.
+Fraza spune ce s-a citit de fapt (recenzia PR-ului): reguli citite ⇒ `store_info_unconfirmed`
+(nu afirmă că lipsește), citire reușită fără nicio regulă ⇒ `store_info_unknown`, citire picată ⇒
+`store_info_unavailable`, iar după reguli servite parțial ⇒ `store_info_rest_unconfirmed`. Testele
+rulează pe pachetul SOLE (forma din fixture-uri) și pe două pachete de alt domeniu.
 """
 
 from __future__ import annotations
@@ -86,9 +89,21 @@ def _ctx(
     return ctx
 
 
-#: Turul a citit doar regulile: `faq_lookup` (nu e o unealtă de catalog) și a adus surse.
+#: Turul a citit doar regulile: `faq_lookup` (nu e o unealtă de catalog), iar citirea a mers.
 STORE_TURN = RetrievalResult(
-    products=[], source="tools", catalog_read=False, read_beyond_catalog=True, store_only=True
+    products=[],
+    source="tools",
+    catalog_read=False,
+    read_beyond_catalog=True,
+    store_only=True,
+    store_read_ok=True,
+)
+#: Cele patru fraze ale turului de magazin (recenzia PR-ului: fraza spune ce s-a citit de fapt).
+STORE_CODES = (
+    "store_info_unknown",
+    "store_info_unconfirmed",
+    "store_info_unavailable",
+    "store_info_rest_unconfirmed",
 )
 #: Turul a chemat o unealtă din afara catalogului care NU citește regulile (`clarify_options`, o
 #: comandă, o mutație picată): recenzia NX-372, fraza de magazin ar fi falsă pentru el.
@@ -147,25 +162,27 @@ def pack(request):
 async def test_a_store_question_with_a_rejected_answer_gets_the_store_sentence(pack):
     ctx = _ctx(MOLDOVA_CLIENT, pack, retrieval=STORE_TURN)
     await render(ctx, _deps(), _plan(MOLDOVA_MODEL, MOLDOVA_CLIENT))
-    assert ctx.reply.text == kernel_sentence(pack, "ro", "store_info_unknown")
+    # Regulile de livrare au fost citite: fraza nu afirmă că informația lipsește din ele.
+    assert ctx.reply.text == kernel_sentence(pack, "ro", "store_info_unconfirmed")
     assert PRODUCTS_NO_RESULT not in ctx.reply.text
     assert not ctx.reply.suggestions  # fără chips de produse sub o întrebare de livrare
     assert ctx.reply.cacheable is False
     [event] = _events(ctx, "store_info_unanswered")
     assert event.properties["reason"] == "prose_rejected" and event.properties["sentence"] is True
+    assert event.properties["code"] == "store_info_unconfirmed"
 
 
 async def test_a_cart_total_written_from_history_gets_the_store_sentence(pack):
     """Clasa e aceeași: turul a citit doar `faq_lookup`. Cititul coșului e cardul următor (D4)."""
     ctx = _ctx(CART_CLIENT, pack, retrieval=STORE_TURN)
     await render(ctx, _deps(), _plan(CART_MODEL, CART_CLIENT))
-    assert ctx.reply.text == kernel_sentence(pack, "ro", "store_info_unknown")
+    assert ctx.reply.text == kernel_sentence(pack, "ro", "store_info_unconfirmed")
 
 
 async def test_a_store_turn_without_any_text_gets_the_store_sentence(pack):
     ctx = _ctx(MOLDOVA_CLIENT, pack, retrieval=STORE_TURN)
     await render(ctx, _deps(), _plan("", MOLDOVA_CLIENT))
-    assert ctx.reply.text == kernel_sentence(pack, "ro", "store_info_unknown")
+    assert ctx.reply.text == kernel_sentence(pack, "ro", "store_info_unconfirmed")
     [event] = _events(ctx, "store_info_unanswered")
     assert event.properties["reason"] == "no_text"
 
@@ -212,8 +229,8 @@ async def test_the_sentence_follows_the_turn_language():
     pack = fixture_catalog.pack("electronics")
     ctx = _ctx("do you ship abroad?", pack, language="en", retrieval=STORE_TURN)
     await render(ctx, _deps(), _plan("", "do you ship abroad?"))
-    assert ctx.reply.text == kernel_sentence(pack, "en", "store_info_unknown")
-    assert ctx.reply.text != kernel_sentence(pack, "ro", "store_info_unknown")
+    assert ctx.reply.text == kernel_sentence(pack, "en", "store_info_unconfirmed")
+    assert ctx.reply.text != kernel_sentence(pack, "ro", "store_info_unconfirmed")
 
 
 async def test_an_order_turn_is_not_touched(pack):
@@ -224,19 +241,21 @@ async def test_an_order_turn_is_not_touched(pack):
     assert not _events(ctx, "store_info_unanswered")
 
 
-def test_the_code_is_in_the_closed_vocabulary_and_the_loader_keeps_it():
-    assert "store_info_unknown" in KERNEL_SENTENCE_CODES
-    kept = _norm_kernel_sentences({"ro": {"store_info_unknown": "Nu am informația asta."}})
-    assert kept == {"ro": {"store_info_unknown": "Nu am informația asta."}}
+@pytest.mark.parametrize("code", STORE_CODES)
+def test_the_code_is_in_the_closed_vocabulary_and_the_loader_keeps_it(code):
+    assert code in KERNEL_SENTENCE_CODES
+    kept = _norm_kernel_sentences({"ro": {code: "Nu am informația asta."}})
+    assert kept == {"ro": {code: "Nu am informația asta."}}
 
 
 def test_the_default_sentences_respect_the_voice_rules():
     """P13: fără liniuță de pauză și fără punct și virgulă în textul către client."""
     pack = fixture_catalog.pack("electronics")
     for locale in ("ro", "en"):
-        phrase = kernel_sentence(pack, locale, "store_info_unknown")
-        assert phrase and ";" not in phrase
-        assert " — " not in phrase and " – " not in phrase and " - " not in phrase
+        for code in STORE_CODES:
+            phrase = kernel_sentence(pack, locale, code)
+            assert phrase and ";" not in phrase
+            assert " — " not in phrase and " – " not in phrase and " - " not in phrase
 
 
 async def test_a_non_store_tool_keeps_the_product_message_and_its_chips(pack):
@@ -255,11 +274,13 @@ async def test_a_non_store_tool_keeps_the_product_message_and_its_chips(pack):
 async def _through_build_plan(pack, called, *, sources, final, body):
     from src.agent.planner import build_plan
     from src.agent.tool_executor import ToolRun
+    from src.tools.base import STORE_READ_TOOLS
 
     ctx = _ctx(body, pack, retrieval=None)
     deps = _deps()
     run = ToolRun(ctx, deps)
     run.called = list(called)
+    run.store_reads_ok = sum(name in STORE_READ_TOOLS for name in called)
     run.grounded_sources = list(sources)
     run.grounded_questions = {k: v for k, v in DELIVERY_QUESTIONS.items() if k in sources}
     plan = await build_plan(
@@ -286,7 +307,7 @@ async def test_the_real_plan_marks_a_faq_only_turn_as_a_store_turn(pack):
         pack, ["faq_lookup"], sources=DELIVERY_RULES, final=MOLDOVA_MODEL, body=MOLDOVA_CLIENT
     )
     assert ctx.retrieval.store_only is True and ctx.retrieval.catalog_read is False
-    assert ctx.reply.text == kernel_sentence(pack, "ro", "store_info_unknown")
+    assert ctx.reply.text == kernel_sentence(pack, "ro", "store_info_unconfirmed")
 
 
 async def test_the_real_plan_with_faq_called_three_times_is_still_a_store_turn(pack):
@@ -294,7 +315,7 @@ async def test_the_real_plan_with_faq_called_three_times_is_still_a_store_turn(p
     ctx = await _through_build_plan(
         pack, ["faq_lookup"] * 3, sources=DELIVERY_RULES, final=CART_MODEL, body=CART_CLIENT
     )
-    assert ctx.reply.text == kernel_sentence(pack, "ro", "store_info_unknown")
+    assert ctx.reply.text == kernel_sentence(pack, "ro", "store_info_unconfirmed")
 
 
 @pytest.mark.parametrize(
@@ -315,3 +336,154 @@ def test_store_read_tools_are_registered_tools_and_not_catalog_reads():
 
     assert STORE_READ_TOOLS <= set(TOOL_NAMES)
     assert not STORE_READ_TOOLS & CATALOG_READ_TOOLS
+
+
+# --- recenzia adversarială a PR-ului (#534) ------------------------------------------------------
+
+#: k9 cu proza care redă și o regulă: regula de livrare + propoziția despre Moldova (parțial).
+MOLDOVA_PARTIAL_MODEL = (
+    "Taxa de livrare e între 19,9 și 24,90 lei în România. "
+    "Pentru Republica Moldova nu am informații confirmate despre livrare."
+)
+#: Regula de livrare a fost citită și e chiar răspunsul, dar clientul n-a folosit cuvântul
+#: întrebării FAQ-ului („livrarea"), deci `store_rules` nu o poate servi (NX-369, recenzia).
+COURIER_CLIENT = "platesc ceva pentru curier?"
+COURIER_MODEL = "Curierul te costă între 19,9 și 24,90 lei, cu TVA inclus."
+
+
+async def test_review_partial_store_turn_has_no_product_half(pack):
+    """Finding 1: pe un tur doar de magazin, ramura parțială NX-369 punea după regulă mesajul de
+    produse și chips de produse. Acum: regula, apoi fraza pentru rest, fără chips."""
+    ctx = _ctx(MOLDOVA_CLIENT, pack, retrieval=STORE_TURN)
+    await render(ctx, _deps(), _plan(MOLDOVA_PARTIAL_MODEL, MOLDOVA_CLIENT))
+    assert PRODUCTS_NO_RESULT not in ctx.reply.text
+    assert not ctx.reply.suggestions
+    assert ctx.reply.text.startswith(DELIVERY_RULES[0])
+    assert ctx.reply.text.endswith(kernel_sentence(pack, "ro", "store_info_rest_unconfirmed"))
+    assert ctx.reply.cacheable is False
+    [event] = _events(ctx, "store_info_unanswered")
+    assert event.properties["reason"] == "partial"
+
+
+async def test_review_partial_on_a_catalog_turn_keeps_the_product_half(pack):
+    """O întrebare MIXTĂ (turul a căutat și produse): jumătatea de produs rămâne, ca la NX-369."""
+    ctx = _ctx(MOLDOVA_CLIENT, pack, retrieval=CATALOG_TURN)
+    await render(ctx, _deps(), _plan(MOLDOVA_PARTIAL_MODEL, MOLDOVA_CLIENT))
+    assert ctx.reply.text.startswith(DELIVERY_RULES[0])
+    assert PRODUCTS_NO_RESULT in ctx.reply.text
+
+
+async def test_review_partial_without_the_rest_sentence_serves_the_rules_alone():
+    bare = fixture_catalog.pack("electronics")
+    sentences = {
+        lang: {k: v for k, v in table.items() if k != "store_info_rest_unconfirmed"}
+        for lang, table in bare.kernel_sentences.items()
+    }
+    bare = dataclasses.replace(bare, kernel_sentences=sentences)
+    ctx = _ctx(MOLDOVA_CLIENT, bare, retrieval=STORE_TURN)
+    await render(ctx, _deps(), _plan(MOLDOVA_PARTIAL_MODEL, MOLDOVA_CLIENT))
+    assert ctx.reply.text == DELIVERY_RULES[0]
+    [event] = _events(ctx, "store_info_unanswered")
+    assert event.properties["sentence"] is False
+
+
+async def test_review_rules_were_read_so_the_reply_never_claims_they_lack_it(pack):
+    """Finding 2: `faq_lookup` a adus regula potrivită, dar cuvintele clientului nu se leagă de
+    întrebarea ei. „Nu am informația asta în regulile magazinului" ar fi fals: fraza neutră."""
+    ctx = _ctx(COURIER_CLIENT, pack, retrieval=STORE_TURN)
+    await render(ctx, _deps(), _plan(COURIER_MODEL, COURIER_CLIENT))
+    assert ctx.reply.text != kernel_sentence(pack, "ro", "store_info_unknown")
+    assert ctx.reply.text == kernel_sentence(pack, "ro", "store_info_unconfirmed")
+    assert PRODUCTS_NO_RESULT not in ctx.reply.text
+
+
+async def test_review_no_rules_at_all_is_the_only_case_that_claims_absence(pack):
+    """`faq_lookup` a mers și n-a adus nicio regulă (tenant fără FAQ pe limba turului)."""
+    ctx = _ctx(MOLDOVA_CLIENT, pack, retrieval=STORE_TURN)
+    await render(ctx, _deps(), _plan(MOLDOVA_MODEL, MOLDOVA_CLIENT, sources=[]))
+    assert ctx.reply.text == kernel_sentence(pack, "ro", "store_info_unknown")
+
+
+async def _through_real_tool_run(pack, monkeypatch, results, *, final, body, sources=()):
+    """`ToolRun.execute` pe unealta reală a turului (rezultatul ei e dat), apoi `build_plan` +
+    `render`: `store_only`/`store_read_ok` vin din ce a întors fiecare apel."""
+    from src.agent import tool_executor
+    from src.agent.planner import build_plan
+    from src.agent.tool_executor import ToolRun
+    from src.tools.base import ToolResult
+
+    queue = list(results)
+
+    async def fake_run_tool(ctx, deps, name, args):
+        if not queue.pop(0):
+            return ToolResult(ok=False, error="ConnectionError")
+        return ToolResult(
+            ok=True,
+            llm_view="reguli",
+            sources=list(sources),
+            source_questions={k: v for k, v in DELIVERY_QUESTIONS.items() if k in sources},
+        )
+
+    monkeypatch.setattr(tool_executor, "run_tool", fake_run_tool)
+    ctx = _ctx(body, pack, retrieval=None)
+    deps = _deps()
+    run = ToolRun(ctx, deps)
+    for _ in results:
+        await run.execute("faq_lookup", {"query": "livrare"})
+    plan = await build_plan(
+        ctx,
+        deps,
+        run,
+        PromptInputs.build("D", "ecommerce", "ro", ["Ten"], []),
+        final=final,
+        retrieved=[],
+        is_order=False,
+        show_more=False,
+        query=body,
+        history="",
+        tool_names=["faq_lookup"],
+        kernel=True,
+    )
+    await render(ctx, deps, plan)
+    return ctx, run
+
+
+async def test_review_a_failed_faq_lookup_does_not_claim_the_rules_lack_it(pack, monkeypatch):
+    """Finding 3: `faq_lookup` a picat, deci nimic n-a fost citit. Nici „n-am găsit produse"
+    (nu s-a căutat nimic), nici „nu am informația în regulile magazinului": fraza indisponibilă."""
+    ctx, run = await _through_real_tool_run(
+        pack, monkeypatch, [False], final=MOLDOVA_MODEL, body=MOLDOVA_CLIENT
+    )
+    assert run.read_store_only is True
+    assert ctx.reply.text != kernel_sentence(pack, "ro", "store_info_unknown")
+    assert ctx.reply.text == kernel_sentence(pack, "ro", "store_info_unavailable")
+    assert PRODUCTS_NO_RESULT not in ctx.reply.text
+    assert run.store_read_ok is False and ctx.retrieval.store_read_ok is False
+
+
+async def test_review_a_retry_that_succeeds_counts_as_a_read(pack, monkeypatch):
+    ctx, run = await _through_real_tool_run(
+        pack,
+        monkeypatch,
+        [False, True],
+        final=MOLDOVA_MODEL,
+        body=MOLDOVA_CLIENT,
+        sources=DELIVERY_RULES,
+    )
+    assert ctx.reply.text == kernel_sentence(pack, "ro", "store_info_unconfirmed")
+    assert run.store_read_ok is True
+
+
+async def test_review_a_read_without_rules_on_the_real_path_claims_absence(pack, monkeypatch):
+    ctx, _ = await _through_real_tool_run(
+        pack, monkeypatch, [True], final=MOLDOVA_MODEL, body=MOLDOVA_CLIENT
+    )
+    assert ctx.reply.text == kernel_sentence(pack, "ro", "store_info_unknown")
+
+
+async def test_review_a_valid_answer_on_a_store_turn_is_untouched(pack):
+    client = "cat costa livrarea?"
+    ctx = _ctx(client, pack, retrieval=STORE_TURN)
+    await render(ctx, _deps(), _plan(DELIVERY_RULES[0], client))
+    assert ctx.reply.text == DELIVERY_RULES[0]
+    assert not _events(ctx, "store_info_unanswered")

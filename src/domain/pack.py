@@ -30,9 +30,14 @@ DEFAULT_REFERENCE_DIMENSIONS: tuple[str, ...] = ("brand", "product_type")
 #: (`verdict_unknown`, cu eticheta dimensiunii, și `verdict_unknown_any`, fără ea: NX-336 C2,
 #: I12), plus mutația coșului (D2): `cart_added`, `cart_failed` și refuzul porții fără întrebare
 #: (`mutation_unavailable`, `mutation_not_exact`). Domeniul nu importă kernelul, deci lista se
-#: repetă aici, iar testul ține cele două liste de acord. NX-372: `store_info_unknown` e răspunsul
-#: unui tur care a citit doar regulile magazinului și n-a putut răspunde din ele; îl folosește și
-#: calea v1 (`finalize.render`), fiindcă executorii `faq`/`delegate` compun prin ea.
+#: repetă aici, iar testul ține cele două liste de acord. NX-372: răspunsul unui tur care a citit
+#: doar regulile magazinului și n-a putut răspunde din ele, folosit și de calea v1
+#: (`finalize.render`), fiindcă executorii `faq`/`delegate` compun prin ea. Patru fraze, după ce
+#: s-a citit de fapt: `store_info_unknown` (citirea a mers și n-a adus nicio regulă, singurul caz
+#: în care „nu am informația în reguli" e adevărat), `store_info_unconfirmed` (s-au citit reguli,
+#: dar niciuna nu s-a putut servi ca răspuns, deci fraza nu afirmă că lipsește),
+#: `store_info_unavailable` (toate citirile au picat) și `store_info_rest_unconfirmed` (după
+#: regulile servite, pentru restul întrebării).
 KERNEL_SENTENCE_CODES: frozenset[str] = frozenset(
     {
         "not_exact_match",
@@ -47,6 +52,9 @@ KERNEL_SENTENCE_CODES: frozenset[str] = frozenset(
         "mutation_unavailable",
         "mutation_not_exact",
         "store_info_unknown",
+        "store_info_unconfirmed",
+        "store_info_unavailable",
+        "store_info_rest_unconfirmed",
     }
 )
 #: Singurele coduri cu un marcator, fiecare exact o dată (loaderul respinge orice alt marcator):

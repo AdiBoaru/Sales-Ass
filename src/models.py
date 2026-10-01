@@ -346,8 +346,11 @@ class RetrievalResult:
     # siguranță NU face răspunsul al codului (`safety.compose.enforce`): proza poartă și acel fapt.
     read_beyond_catalog: bool = False
     # NX-372: turul a chemat DOAR unelte care citesc regulile magazinului (`STORE_READ_TOOLS`).
-    # Fără răspuns din ele, `finalize.render` spune că nu are informația, nu că n-a găsit produse.
+    # Fără răspuns din ele, `finalize.render` nu spune că n-a găsit produse (n-a căutat niciunul).
     store_only: bool = False
+    # NX-372 (recenzia): măcar una dintre citirile acelea a reușit. Fals = regulile n-au fost citite
+    # (unealta a picat), deci răspunsul spune că nu le poate citi acum, nu că informația lipsește.
+    store_read_ok: bool = False
 
 
 # ---------------------------------------------------------------------------

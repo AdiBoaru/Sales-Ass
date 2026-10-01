@@ -1411,9 +1411,13 @@ cheia bate eticheta; între etichete regula rămâne. Pe vocabularul real se sch
 «livrați și în Republica Moldova?» și «cât fac toate în coș?» modelul a răspuns onest, validatorul a
 respins corect fraza, iar rezerva comună a vânzării fără produse („Momentan n-am găsit produse
 potrivite…") vorbea despre o căutare care nu avusese loc. Regula e structurală: un tur care n-a citit
-catalogul (`catalog_read`, NX-326) și a citit altceva (`read_beyond_catalog`, NX-367) primește fraza
-pachetului `kernel_sentences.store_info_unknown`, fără chips de produse, pe ambele căi (executorii
-`faq`/`delegate` compun prin `finalize.render`). `kernel_sentence` locuiește acum în
+catalogul (`catalog_read`, NX-326) și a chemat DOAR unelte de reguli (`tools.base.STORE_READ_TOOLS`,
+azi `faq_lookup`; `RetrievalResult.store_only`) primește o frază a pachetului care spune ce s-a citit
+de fapt: `store_info_unconfirmed` când s-au citit reguli (fără să afirme că informația lipsește din
+ele), `store_info_unknown` când citirea n-a adus nicio regulă, `store_info_unavailable` când toate
+citirile au picat (`store_read_ok`); după reguli servite parțial (NX-369), regulile plus
+`store_info_rest_unconfirmed`, fără mesajul de produse. Fără chips de produse, pe ambele căi
+(executorii `faq`/`delegate` compun prin `finalize.render`). `kernel_sentence` locuiește acum în
 `src/domain/pack.py`. Flag `STORE_INFO_FALLBACK_ENABLED` (ON). Card:
 [`tasks/stage1/NX-372.md`](tasks/stage1/NX-372.md); probă: `pytest tests/test_nx372_store_info_fallback.py -q`.
 
