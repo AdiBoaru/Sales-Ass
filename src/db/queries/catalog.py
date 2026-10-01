@@ -1597,6 +1597,26 @@ async def product_category_roots(
     return {r["id"]: r["root"] for r in rows if r["root"]}
 
 
+async def product_types_by_ids(
+    conn: asyncpg.Connection, business_id: str, product_ids: list[str]
+) -> dict[str, str | None]:
+    """NX-371: `attributes.product_type` pentru produsele date, ca „mai ieftin" să-și găsească
+    ancora în produsul NUMIT de client („tonerul"), nu în cel mai ieftin card de pe ecran.
+    `business_id = $1` (izolare; RLS plasa). Un id necunoscut lipsește din rezultat."""
+    if not product_ids:
+        return {}
+    rows = await conn.fetch(
+        """
+        select p.id::text as id, p.attributes ->> 'product_type' as product_type
+          from products p
+         where p.business_id = $1::uuid and p.id = any($2::uuid[])
+        """,
+        business_id,
+        product_ids,
+    )
+    return {r["id"]: r["product_type"] for r in rows}
+
+
 async def search_cheaper_than(
     conn: asyncpg.Connection,
     business_id: str,

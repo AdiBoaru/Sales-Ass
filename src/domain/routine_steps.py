@@ -182,6 +182,24 @@ class RoutineSpec:
         text = by_locale.get((locale or "").split("-")[0]) or by_locale.get("ro") or ""
         return text or step.replace("_", " ").strip().capitalize()
 
+    def moment_key(self, value: str | None) -> str | None:
+        """NX-371: cheia de moment (`am`/`pm`) pentru o valoare scrisă de model: cheia însăși sau
+        unul dintre cuvintele ei declarate în `time_markers` („seara" → `pm`), pe text pliat.
+        `None` = moment necunoscut (rutina de zi întreagă, ca înainte). Pe c9 din 2026-10-01
+        modelul a trimis `moment="seara"`, iar handlerul accepta doar cheia, deci rutina de seară
+        venea cu protecția solară de dimineață."""
+        if not value:
+            return None
+        if value in self.time_markers:
+            return value
+        from src.catalog.folding import fold_text  # noqa: PLC0415 — domeniul nu cere catalogul
+
+        folded = fold_text(value).strip()
+        for key, terms in self.time_markers.items():
+            if folded == fold_text(key) or folded in {fold_text(t).strip() for t in terms}:
+                return key
+        return None
+
     def canonical_values(self) -> tuple[str, ...]:
         """Toate valorile `familie:pas` posibile, în ordinea de parcurs. Astea intră ca `values`
         în declarația fațetei — deci vocabularul fațetei nu se întreține separat de hartă."""

@@ -1336,6 +1336,16 @@ la analiză și ÎNGHEȚAT pe SHA-256 până la verdictul final); `scripts/sim/p
 le rulează pe API ca widgetul (credite, îl pornește Adi). Card:
 [`tasks/stage1/NX-366.md`](tasks/stage1/NX-366.md); probă: `pytest tests/test_nx366_*.py -q`.
 
+**NX-371 — «mai ieftin» pe produsul numit.** Pe c9 «pot să înlocuiesc tonerul cu ceva mai ieftin?»
+primea o bandă de nas de 3 lei: pragul era cel mai ieftin card de pe ecranul curent (30 lei), iar
+tonerul numit (110 lei) era pe ecranul de dinainte. Acum ancora e produsul al cărui TIP îl numește
+clientul („tonerul" → „toner de fata", cu sufixele de flexiune ale locale-i, nu prefix liber), căutat
+pe ecranul curent și pe cele anterioare (`payload.shown`); tipul se citește din catalog
+(`product_types_by_ids`). Un tip ⇒ prag, categorie și ordonare de la el; niciunul/mai multe sau DB
+picat ⇒ ancora ecranului. Pe drum: `RoutineSpec.moment_key` rezolvă „seara" → `pm` (rutina de seară
+nu mai cere SPF). Flag `CHEAPER_NAMED_ANCHOR_ENABLED` (ON). Card:
+[`tasks/stage1/NX-371.md`](tasks/stage1/NX-371.md); probă: `pytest tests/test_nx371_cheaper_named_item.py -q`.
+
 **NX-360 — stocul și prețurile SOLE se resincronizează din paginile live.** Catalogul era o fotografie
 din 2026-08-28: cele 391 de produse `out_of_stock` aveau prețul voucherului WELCOME15 drept preț de
 listă (scraperul cădea pe `offers.price` din JSON-LD când pagina epuizată nu arăta rândul de preț), iar

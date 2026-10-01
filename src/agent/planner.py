@@ -36,6 +36,8 @@ from src.agent.query_rewrite import build_query_spec
 from src.agent.relevance_gate import apply_mask
 from src.agent.validator import _valid
 from src.analytics.demand import clean_ids
+from src.catalog.folding import fold_text
+from src.catalog.query_terms import content_terms, inflection_suffixes
 from src.catalog.relation_chain import walk_chain
 from src.config import get_settings
 from src.conversation.state_v2 import active_needs
@@ -43,6 +45,7 @@ from src.conversation.subject import SUBJECT_KEY, ConversationSubject
 from src.db.queries.catalog import (
     get_complementary_products,
     get_products_by_ids,
+    product_types_by_ids,
     related_in_stock,
     search_cheaper_than,
     traverse_relation_chain,
@@ -297,6 +300,59 @@ def cheaper_followup_detected(ctx: TurnContext, query: str) -> bool:
     )
 
 
+def _shown_refs(ctx: TurnContext) -> list[tuple[str, float]]:
+    """`(product_id, preț)` pentru tot ce a VĂZUT clientul recent: ecranul curent și ecranele
+    turelor anterioare din istoric (`payload.shown`, NX-255), fără dubluri, cel mai recent întâi."""
+    out: dict[str, float] = {}
+    for p in ctx.state.displayed_products:
+        out.setdefault(str(p.product_id), float(p.price))
+    for m in reversed(ctx.history or []):
+        for ref in (getattr(m, "payload", None) or {}).get("shown") or []:
+            pid, price = ref.get("product_id") or ref.get("id"), ref.get("price")
+            if pid and isinstance(price, (int, float)):
+                out.setdefault(str(pid), float(price))
+    return list(out.items())
+
+
+def type_named(tokens: list[str], type_key: str | None, suffixes: tuple[str, ...]) -> bool:
+    """Clientul numește TIPUL `type_key` („tonerul" pentru „toner de fata")? Pe cuvântul de bază al
+    tipului, cu flexiunea locale-i (sufixele din `query_terms`, aceleași ca resolverul NX-329),
+    niciodată pe un prefix liber. PUR."""
+    head = fold_text(type_key or "").split(" ", 1)[0]
+    if len(head) < 3:
+        return False
+    return any(t == head or (t.startswith(head) and t[len(head) :] in suffixes) for t in tokens)
+
+
+async def _named_anchor(
+    ctx: TurnContext, deps: PipelineDeps
+) -> tuple[list[tuple[str, float]], str] | None:
+    """NX-371: produsul (sau produsele) la care se referă «mai ieftin», când clientul numește un TIP
+    văzut recent. Conversația c9 din 2026-10-01: «pot să înlocuiesc tonerul cu ceva mai ieftin?»
+    după o rutină; tonerul (110 lei) era pe ecranul de DINAINTE, pragul era cel mai ieftin card
+    de pe ecranul curent (un ser de 30 de lei), iar clientul a primit o bandă de nas de 3 lei.
+
+    `None` când mesajul nu numește niciun tip văzut sau numește mai multe (atunci rămâne ancora de
+    azi, ecranul). Un singur query, cu `business_id`."""
+    tokens = content_terms(ctx.message.body or "", ctx.language)
+    refs = _shown_refs(ctx)
+    if not tokens or not refs:
+        return None
+    try:
+        async with deps.db("cheaper_anchor") as conn:
+            types = await product_types_by_ids(conn, ctx.business.id, [pid for pid, _ in refs])
+    except Exception as e:  # noqa: BLE001 — ancora e o îmbunătățire: fără ea, ecranul (P6)
+        log.warning("cheaper: ancora numită indisponibilă (%s)", type(e).__name__)
+        ctx.emit("cheaper_anchor_unavailable", cause=type(e).__name__)
+        return None
+    suffixes = inflection_suffixes(ctx.language)
+    named = {t for t in set(types.values()) if t and type_named(tokens, t, suffixes)}
+    if len(named) != 1:
+        return None
+    ptype = named.pop()
+    return [(pid, price) for pid, price in refs if types.get(pid) == ptype], ptype
+
+
 async def resolve_cheaper_followup(
     ctx: TurnContext, deps: PipelineDeps, *, policy: SafetyPolicy
 ) -> CheaperOutcome:
@@ -312,6 +368,11 @@ async def resolve_cheaper_followup(
     minimul a ceea ce clientul a VĂZUT, nu ceva ce se poate deduce din text."""
     baseline = min(p.price for p in ctx.state.displayed_products)
     ref_ids = [p.product_id for p in ctx.state.displayed_products]
+    anchor = (
+        await _named_anchor(ctx, deps)
+        if getattr(get_settings(), "cheaper_named_anchor_enabled", False)
+        else None
+    )
     # NX-314: subiectul conversației (tipul dominant al setului arătat + nevoile rostite), scris de
     # `_learn_constraints`. Fără el, singurul lucru păstrat era categoria grosieră a produselor
     # afișate, iar `preț asc` aducea în față cel mai ieftin lucru din ea: o bandă de nas de 3 lei
@@ -321,6 +382,13 @@ async def resolve_cheaper_followup(
         if getattr(get_settings(), "conversation_subject_enabled", False)
         else None
     )
+    if anchor is not None:
+        # NX-371: ancora e produsul numit (pe ecranul curent sau pe unul anterior): pragul e
+        # prețul lui, categoria e a lui, iar tipul lui ordonează rezultatele (NX-314).
+        named_refs, named_type = anchor
+        baseline = min(price for _, price in named_refs)
+        ref_ids = [pid for pid, _ in named_refs]
+        subject = ConversationSubject(product_type=named_type)
     # `subject` pleacă doar când există: apelul fără el e EXACT cel de dinainte.
     extra = {"subject": subject} if subject is not None else {}
     async with deps.db("search_cheaper_than") as conn:
@@ -336,6 +404,7 @@ async def resolve_cheaper_followup(
             found=len(cheaper),
             subject_type_known=bool(subject and subject.product_type),
             type_matched=sum(1 for p in cheaper if p.get("subject_match") is True),
+            anchor="named" if anchor is not None else "screen",
         )
     else:
         ctx.emit("cheaper_followup", baseline=round(baseline, 2), found=len(cheaper))

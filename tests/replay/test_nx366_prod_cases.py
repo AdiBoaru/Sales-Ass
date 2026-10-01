@@ -164,17 +164,17 @@ _TONER_PRICE = 110.0  # ANUA Heartleaf 77% Soothing, tonerul din rutina turului 
 _TONER_TYPE = "toner de fata"  # cheia `attributes.product_type` din catalogul SOLE
 
 
-@pytest.mark.xfail(
-    strict=True, reason="«mai ieftin» ancorat pe cel mai ieftin card, nu pe tonerul numit"
-)
 async def test_cheaper_than_the_named_step():
+    """Reparat de NX-371 (era xfail): «mai ieftin» se ancorează în tonerul NUMIT (110 lei, de pe
+    ecranul de dinainte), nu în cel mai ieftin card de pe ecranul curent. Invariantul ține de setul
+    pe care codul îl dă modelului (`agent_prompt.retrieval_ids`): alegerea înregistrată a modelului
+    se joacă peste o listă schimbată (`inputs_changed`), deci cardul final nu spune nimic."""
     from src.db.connection import tenant_conn  # noqa: PLC0415
 
     row = _load("c9_rutina/4ac20c2b-2.json")
     res = await _replay(row)
-    cards = (res.reply or {}).get("products") or []
-    ids = [str(p.get("product_id") or p.get("id")) for p in cards]
-    assert ids, "niciun card"
+    ids = [i for e in _events(res, "agent_prompt") for i in e.get("retrieval_ids") or []]
+    assert ids, "niciun produs dat modelului"
     async with tenant_conn(row["business_id"]) as conn:
         rows = await conn.fetch(
             """select id::text, price, attributes ->> 'product_type' as product_type

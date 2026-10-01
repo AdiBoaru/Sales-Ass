@@ -678,7 +678,8 @@ async def _routine(
 
     # Momentul necunoscut se ignoră: ordinea de zi întreagă e răspunsul corect pentru un client
     # care n-a spus când, iar un 422 pe un rafinament ar pierde turul.
-    moment = a.moment if a.moment in (spec.time_markers or {}) else None
+    # NX-371: cheia SAU un cuvânt declarat al ei („seara" → `pm`), nu doar cheia.
+    moment = spec.moment_key(a.moment)
 
     # Pasul care nu se aplică în momentul cerut nu e un gol, e o neaplicabilitate: o rutină de
     # seară nu „ratează" protecția solară. Iese din secvență ÎNAINTE de compunere, ca să nu ocupe

@@ -282,6 +282,13 @@ class Settings(BaseSettings):
     # (`scripts/trace_replay.py`). Efectiv DOAR cu `CONVERSATION_TRACE_ENABLED`: fără tabel nu are
     # unde să ajungă, deci implicitul ON nu schimbă nimic unde captura e stinsă (byte-identic).
     trace_model_io_enabled: bool = Field(default=True, validation_alias="TRACE_MODEL_IO_ENABLED")
+    # NX-371: «mai ieftin» se ancorează în produsul NUMIT de client („tonerul"), văzut pe ecranul
+    # curent sau pe unul anterior, nu în cel mai ieftin card de pe ecranul curent. Conversația c9
+    # (prod, 2026-10-01): tonerul de 110 lei → o bandă de nas de 3 lei. ON (defect măsurat, replay
+    # pe turul real); OFF = ancora de dinainte (ecranul), byte-identic.
+    cheaper_named_anchor_enabled: bool = Field(
+        default=True, validation_alias="CHEAPER_NAMED_ANCHOR_ENABLED"
+    )
     # NX-257 — poarta de POTRIVIRE: produsele ale căror date CONTRAZIC o constrângere rostită de
     # client, pe o fațetă declarată `partitioning` și peste pragul ei de acoperire, ies din
     # `ctx.retrieval`. UNKNOWN trece mereu (D7). OFF = byte-identic. Asta E enforcement-ul NX-188,
