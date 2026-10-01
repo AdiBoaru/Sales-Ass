@@ -170,6 +170,14 @@ class ToolRun:
         """NX-326: turul a chemat măcar o unealtă care citește catalogul de produse."""
         return any(name in CATALOG_READ_TOOLS for name in self.called)
 
+    @property
+    def read_beyond_catalog(self) -> bool:
+        """NX-367: turul a chemat o unealtă care NU citește catalogul (FAQ, comandă, coș…) sau a
+        adus texte ale magazinului. Perechea lui `read_catalog`, pe aceeași listă de apeluri."""
+        return bool(self.grounded_sources) or any(
+            name not in CATALOG_READ_TOOLS for name in self.called
+        )
+
     def _tool_gate(self) -> tool_budget.ToolGate:
         if self._gate is None:
             self._gate = tool_budget.ToolGate(self._max_parallel_reads())
