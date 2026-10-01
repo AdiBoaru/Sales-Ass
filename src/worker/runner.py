@@ -18,7 +18,7 @@ from time import perf_counter
 import asyncpg
 from redis.asyncio import Redis
 
-from src.agent import fallbacks, response_quality, usage
+from src.agent import fallbacks, model_io, response_quality, usage
 from src.agent.llm import LLMClient
 from src.agent.pricing import savings_for
 from src.channels.base import MediaFetcherRegistry
@@ -92,6 +92,7 @@ async def run_pipeline(ctx: TurnContext, deps: PipelineDeps, stages: list[Stage]
     faza 0) să poată emite `turn_latency` DUPĂ commit. Apelanții care rulează pipeline-ul de unul
     singur pot ignora valoarea — atunci runner-ul a deschis acumulatorul și emite el, ca înainte."""
     acc, token = usage.push()
+    io_acc, io_token = _push_model_io()  # NX-366: (None, None) cu captura stinsă
     runtime = _open_runtime(ctx)  # NX-241: deadline + buget + spans (no-op cu flagurile stinse)
     turn_started = perf_counter()
     by_stage: dict[str, dict] = {}
@@ -147,6 +148,9 @@ async def run_pipeline(ctx: TurnContext, deps: PipelineDeps, stages: list[Stage]
             safety_compose.enforce(ctx)
     finally:
         usage.pop(token)
+        if io_token is not None:
+            model_io.pop(io_token)
+            _attach_model_io(ctx, io_acc)
         latency_ms = round((perf_counter() - turn_started) * 1000, 1)
         runtime.pipeline_ms = latency_ms
         if runtime.owns_latency:
@@ -222,6 +226,34 @@ class TurnRuntime:
     #: A rulat poarta de AUTORITATE (`gates_stage`)? Cât timp nu a rulat, nu știm dacă botul are
     #: voie să vorbească (bot_active / contact blocat) — deci fallback-ul de deadline TACE.
     gates_done: bool = False
+
+
+def _push_model_io() -> tuple[model_io.ModelIOAccumulator | None, object | None]:
+    """NX-366: acumulatorul ieșirilor de model, deschis doar când are unde ajunge (captura
+    `conversation_traces`). Stins ⇒ adaptorul nu înregistrează nimic, turul e byte-identic."""
+    s = get_settings()
+    if not (
+        getattr(s, "conversation_trace_enabled", False)
+        and getattr(s, "trace_model_io_enabled", False)
+    ):
+        return None, None
+    return model_io.push()
+
+
+def _attach_model_io(ctx: TurnContext, acc: model_io.ModelIOAccumulator | None) -> None:
+    """Runner-ul e proprietarul lui `ctx.trace["model_io"]` (P3), cum e al lui `ctx.usage`: el a
+    deschis acumulatorul, el îl închide. Evenimentul spune acoperirea capturii pe trafic, fără
+    conținut (P12)."""
+    if acc is None:
+        return
+    ctx.trace["model_io"] = acc.as_trace()
+    ctx.emit(
+        "model_io_captured",
+        calls=len(acc.calls),
+        bytes_bucket=model_io.bytes_bucket(acc.bytes),
+        truncated=acc.truncated,
+        replayable=not acc.truncated and not acc.failed,
+    )
 
 
 def _open_runtime(ctx: TurnContext) -> TurnRuntime:

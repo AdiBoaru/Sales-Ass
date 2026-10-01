@@ -1,0 +1,13 @@
+{
+ "prod-2026-10-01.json": {
+  "sha256": "5d7e3711a57afb584851915c698b58a1299206a1e07331574f5463bd547953a4",
+  "conversations": 10,
+  "messages": 36
+ },
+ "heldout-2026-10-01.json": {
+  "sha256": "cc72b384447a6995ccd8e4ae236e645a87aae09bfac931c452d804021041fdd3",
+  "conversations": 10,
+  "messages": 42,
+  "frozen": "2026-10-01, scris de un agent fără acces la analiza setului prod-2026-10-01; nu se citește și nu se rulează până la verdictul final"
+ }
+}

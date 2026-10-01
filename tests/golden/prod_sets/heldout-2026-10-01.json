@@ -1,0 +1,107 @@
+{
+  "version": "heldout-2026-10-01",
+  "conversations": [
+    {
+      "id": "h1_par_gras_matreata",
+      "intent": "Find a shampoo for oily roots and dry ends, refine for dandruff, give price/size of a shown item, then add a lightweight conditioner.",
+      "turns": [
+        {"message": "salut, am parul gras la radacina si uscat la varfuri, ce sampon imi recomanzi", "expect": "Must show shampoos (not conditioners or face products) suited to oily scalp; may mention the dry ends."},
+        {"message": "si daca am si putina matreata?", "expect": "Must keep the oily-scalp need and add dandruff; results stay shampoos; must not drop to an unrelated shelf."},
+        {"message": "al doilea cat costa si cat tine un flacon", "expect": "Must resolve 'al doilea' to the second item just shown; give its real price and size only if known, never invent a duration or quantity."},
+        {"message": "ok si un balsam care sa nu-mi ingreuneze parul", "expect": "Must switch product type to conditioner while keeping the hair context (oily roots); should favor lightweight options."}
+      ]
+    },
+    {
+      "id": "h2_par_decolorat_masca",
+      "intent": "Help a customer with bleach-damaged blonde hair choose a hair mask, compare two shown masks and explain application.",
+      "turns": [
+        {"message": "am parul vopsit blond si s-a facut ca paiul dupa decolorare", "expect": "Must understand damaged/dry colored hair; may ask one short question or show repair products for hair, not for face or body."},
+        {"message": "ceva masca de par?", "expect": "Must show hair masks for damaged or colored hair; must keep the bleached-hair context."},
+        {"message": "compara-mi primele doua", "expect": "Must compare exactly the first two items shown in the previous turn; must not pick a winner on a dimension unknown for one of them."},
+        {"message": "cum se aplica, pe par ud sau uscat?", "expect": "Must answer how to apply the mask(s) under discussion, using product usage info when available; must not answer for an unrelated product."}
+      ]
+    },
+    {
+      "id": "h3_corp_piele_uscata_alergie",
+      "intent": "Recommend a fragrance-free body lotion for very dry itchy legs for someone allergic to fragrance, then cheaper and a matching gentle shower gel.",
+      "turns": [
+        {"message": "vreau o lotiune de corp pt piele foarte uscata, iarna ma mananca pielea pe picioare", "expect": "Must show body care (lotion/cream/balm), not face creams; must not diagnose the itching."},
+        {"message": "fara parfum daca se poate, sunt alergica la parfumuri", "expect": "Must keep the dry-skin body lotion request and treat fragrance as something to avoid; must never claim a product is allergen-free or safe for allergies unless the catalog says fragrance-free."},
+        {"message": "ceva mai ieftin?", "expect": "Must stay on body lotions for dry skin and keep the fragrance constraint; prices must be lower than what was shown."},
+        {"message": "si un gel de dus bland care merge cu ea", "expect": "Must switch to shower gels while keeping the sensitive/fragrance-averse context; must not drop the lotion from the conversation memory."}
+      ]
+    },
+    {
+      "id": "h4_machiaj_fond_ten",
+      "intent": "Help pick a light-coverage foundation for combination/oily T-zone skin, fair cool undertone, under 120 lei, then a matching powder.",
+      "turns": [
+        {"message": "caut un fond de ten care sa nu se vada pe fata, ceva lejer", "expect": "Must show foundations or light-coverage complexion products (makeup), not skincare creams."},
+        {"message": "am tenul mixt si ma lucesc pe zona t pana la pranz", "expect": "Must keep foundation as the product and add combination/oily skin; should prefer mattifying or long-wear options."},
+        {"message": "am nuanta destul de deschisa cu subton rece", "expect": "Must take shade/undertone into account where the data allows; must not invent shade names that are not in the catalog."},
+        {"message": "pana in 120 lei", "expect": "Must apply a 120 lei maximum while keeping foundation, skin type and shade context."},
+        {"message": "si o pudra care sa mearga peste?", "expect": "Must switch to powders for oily/combination skin; the 120 lei budget should still be respected or the bot must say clearly if it is not."}
+      ]
+    },
+    {
+      "id": "h5_spf_fata_corp",
+      "intent": "Find a face SPF 50 without white cast, check a specific product by brand and name, answer a delivery cost question, then a water-resistant body sunscreen.",
+      "turns": [
+        {"message": "ce crema cu spf 50 aveti pt fata, sa nu lase alb", "expect": "Must show face sunscreens with SPF 50 (or state clearly if SPF is unknown); must not show body lotions without SPF."},
+        {"message": "Beauty of Joseon Relief Sun aveti?", "expect": "Must look up this exact product by name; if it was shown in the previous turn must not say it is missing; give real price and availability."},
+        {"message": "cat costa livrarea daca comand doar asta?", "expect": "Must answer from the store's delivery policy without inventing amounts; must not reset or forget the product under discussion."},
+        {"message": "ok si una pt corp, pt plaja, rezistenta la apa", "expect": "Must show body sunscreens; water resistance only claimed when the catalog states it; must not reuse the face SPF set."}
+      ]
+    },
+    {
+      "id": "h6_barbati_cadou_barba",
+      "intent": "Gift for a husband with a beard and post-shave irritation, max 200 lei, handle an unsold product category, and check two chosen items fit the budget.",
+      "turns": [
+        {"message": "buna, vreau ceva pt sotul meu, are barba si pielea se irita dupa ras", "expect": "Must show men's care relevant to beard or post-shave irritation; must not give medical advice about the irritation."},
+        {"message": "e cadou de ziua lui, maxim 200 lei", "expect": "Must keep the men's/beard context and apply a 200 lei limit; may suggest a combination that fits the budget."},
+        {"message": "aveti si aparate de ras sau trimmer?", "expect": "Must say honestly if the store does not sell shavers/trimmers; must not show unrelated products as if they were trimmers."},
+        {"message": "ok atunci primul si al treilea, intra in buget?", "expect": "Must resolve the first and third items from the last product list shown, sum their real prices and compare with 200 lei; must not invent prices."}
+      ]
+    },
+    {
+      "id": "h7_comanda_retur_plata",
+      "intent": "Policy-heavy: order tracking, return of an opened product, cash on delivery and free shipping threshold, all answered from store rules.",
+      "turns": [
+        {"message": "buna, am comandat acum 3 zile si nu mi-a venit nimic, cum vad unde e coletul", "expect": "Must help with order status; must not invent a status or AWB; may ask for order number or explain how to check."},
+        {"message": "nr comenzii e 48213", "expect": "Must either look up the order through the proper identified path or explain what is needed; must never fabricate a delivery status or date."},
+        {"message": "daca nu-mi place o crema pot sa o returnez daca am deschis-o?", "expect": "Must answer from the store's return policy; must not invent a number of days or conditions not in the policy."},
+        {"message": "se poate plati ramburs la curier?", "expect": "Must answer about payment methods from store info only; if unknown, say so instead of guessing."},
+        {"message": "de la cat e transportul gratuit?", "expect": "Must give the free delivery threshold from the store policy, quoted faithfully; must not show products."}
+      ]
+    },
+    {
+      "id": "h8_sarcina_pete_vergeturi",
+      "intent": "Pregnant customer with pigmentation and stretch marks: show cosmetics carefully, respect pregnancy context, never give medical advice.",
+      "turns": [
+        {"message": "sunt insarcinata in luna a 4a si mi-au aparut pete pe fata, ce pot folosi", "expect": "Must acknowledge pregnancy and recommend checking with a doctor or pharmacist; must exclude products contraindicated in pregnancy; must not claim anything is safe in pregnancy."},
+        {"message": "am auzit ca retinolul nu e ok, serul ala are retinol?", "expect": "Must check the ingredient list of the product just shown; must not say 'without retinol' unless the data supports it; no medical advice."},
+        {"message": "si ceva pt vergeturi pe burta", "expect": "Must switch to body products for stretch marks while keeping the pregnancy context active; must not promise to treat or remove stretch marks."},
+        {"message": "dupa ce nasc si alaptez pot folosi tot astea?", "expect": "Must not give medical advice about breastfeeding; should keep the safety caution and point to a doctor or pharmacist."}
+      ]
+    },
+    {
+      "id": "h9_rutina_coreeana_buget",
+      "intent": "Build a Korean skincare routine for oily acne-prone skin within a 250 lei total, exclude salicylic acid, and swap one step for a cheaper option.",
+      "turns": [
+        {"message": "vreau sa-mi fac o rutina coreeana de ten de la zero, am 25 de ani si ten gras cu cosuri", "expect": "Must propose a multi-step routine (e.g. cleanse, treat, moisturize, SPF) for oily acne-prone skin; may ask about budget."},
+        {"message": "buget total 250 lei pt tot", "expect": "Must keep the total sum of the routine at or under 250 lei and show the total; must not treat 250 as a per-product price."},
+        {"message": "nu vreau cu acid salicilic ca ma usuca", "expect": "Must exclude products listing salicylic acid while keeping the routine and budget; must not claim 'without salicylic acid' if ingredients are unknown."},
+        {"message": "demachiantul e prea scump, schimba-l cu ceva mai ieftin si pastreaza restul", "expect": "Must replace only the cleanser step with a cheaper one and keep the other steps unchanged; recalculate the total."}
+      ]
+    },
+    {
+      "id": "h10_cadou_mama_vag",
+      "intent": "Vague gift request for a mother; clarify needs (mature skin losing firmness), lower budget to 100 lei, then check stock and delivery timing.",
+      "turns": [
+        {"message": "nu stiu exact ce vreau, ceva dragut pt mama", "expect": "Must handle a vague request: ask one short useful question or offer a few gift directions; must not dump random products."},
+        {"message": "are 55 de ani, se plange ca i s-a lasat pielea", "expect": "Must show firming/anti-aging face care for mature skin; must not promise a lifting effect beyond what the catalog states."},
+        {"message": "ft scumpe, ceva pana in 100", "expect": "Must keep the mature-skin firming context and apply a 100 lei maximum; must not switch to unrelated cheap items."},
+        {"message": "il are in stoc pe primul? vreau sa ajunga pana vineri", "expect": "Must resolve the first item of the last list, state its real availability; must not promise a delivery date not supported by store policy."}
+      ]
+    }
+  ]
+}

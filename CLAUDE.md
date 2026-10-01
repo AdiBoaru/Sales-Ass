@@ -1304,6 +1304,33 @@ din turele care trimit una, un produs epuizat pe 20,8% din turele cu carduri, mo
 scrub pe 13,7%; detectorii kernelului sunt separați („dark”). Card: [`tasks/stage1/NX-363.md`](tasks/stage1/NX-363.md); probă:
 `pytest tests/test_nx363_turn_defects.py -q`.
 
+**NX-366 — turul de pe producție devine test determinist: captura ieșirilor modelului + replay (0 $).**
+Setul de 10 conversații rulat pe producție pe 2026-10-01 a dat 12 ture greșite din 36, iar jumătate
+din cauze au fost deduse, nu citite (`tool_call` publică doar argumentele din lista albă, proza
+respinsă nu se salva). Verificarea unei reparații cerea o nouă rulare cu modelul, care formulează
+altfel de fiecare dată. Acum, cu `CONVERSATION_TRACE_ENABLED`, captura (`TRACE_MODEL_IO_ENABLED`, ON)
+pune în `conversation_traces.diagnostics` două chei: `model_io` (fiecare apel LOGIC către furnizor,
+după retry: `_guarded` + moderare + Vision + embedding, cu forma/scopul/schema/uneltele cererii, nu
+promptul; o eroare doar ca clasă; plafon 64 KB pe apel și 256 KB pe tur, peste ⇒ marcaj, turul
+nerejucabil; textele prin frontiera NX-230, iar o redactare degradată face turul nerejucabil) și
+`turn_input` (snapshotul încărcat, fără mesajul clientului, care vine din `client_text` safe; release,
+`config_revision`, setările date explicit procesului, amprenta pachetului și a catalogului turului).
+Un test AST cere ca fiecare `self._client.<endpoint>.create` din `llm.py` să fie înregistrat.
+`src/evals/trace_replay.py` rejoacă turul pe codul local: `processor.prepare_turn_context` (extrasă
+din `_run_turn`, aceeași funcție ca producția) + `run_pipeline` + `_build_new_state`, cu un client fals
+peste `LLMClient`-ul REAL care servește răspunsurile înregistrate reconstruite cu `model_validate`. O
+cerere de alt fel, un apel în plus sau în minus, ori o înregistrare care nu se poate reface ⇒
+`diverged` (niciun răspuns ghicit); fiecare checkout e o tranzacție `READ ONLY` anulată (`db_aborted`
+dacă o instrucțiune pică). `scripts/trace_replay.py --business <slug> (--turn|--conversation|--since)
+[--fidelity]` raportează statusul, ce vede clientul (identic sau nu), driftul de catalog și detectorii
+NX-363 înainte/după (`fixed`). `--fidelity` e poarta INSTRUMENTULUI (≥ 95% identic pe release-ul care a
+produs turele). Probat pe pipeline-ul real (DB real, furnizor fals): 3 din 3 ture identice; proba a
+prins că moderarea (câmpuri cu alias) nu se reconstruia și cădea tăcut pe fail-open. Seturile de test:
+`tests/golden/prod_sets/` (`prod-2026-10-01`, plus `heldout-2026-10-01`, scris de un agent fără acces
+la analiză și ÎNGHEȚAT pe SHA-256 până la verdictul final); `scripts/sim/prod_set_run.py --set … --yes`
+le rulează pe API ca widgetul (credite, îl pornește Adi). Card:
+[`tasks/stage1/NX-366.md`](tasks/stage1/NX-366.md); probă: `pytest tests/test_nx366_*.py -q`.
+
 **NX-360 — stocul și prețurile SOLE se resincronizează din paginile live.** Catalogul era o fotografie
 din 2026-08-28: cele 391 de produse `out_of_stock` aveau prețul voucherului WELCOME15 drept preț de
 listă (scraperul cădea pe `offers.price` din JSON-LD când pagina epuizată nu arăta rândul de preț), iar

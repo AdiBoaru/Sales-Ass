@@ -91,6 +91,8 @@ reports/nx353/
 reports/nx363/
 # NX-360: rapoartele de resincronizare SOLE (id-uri, prețuri) rămân LOCALE.
 reports/nx360/
+# NX-366: rapoartele de replay (id-uri de tur, amprente de răspuns) rămân LOCALE.
+reports/nx366/
 .env.new
 
 # Spațiu local de lucru (hărți, note, rapoarte personale) — niciodată în git

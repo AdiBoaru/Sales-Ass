@@ -62,6 +62,7 @@ from src.observability import turn_latency
 from src.privacy import RawInbound, RawText, SafeInbound, apply_boundary
 from src.web.action_models import ActionCommand
 from src.web.context import from_payload as page_context_from_payload
+from src.worker import turn_capture
 from src.worker.admission import tenant_bucket
 from src.worker.aftercare import AftercareWork, persist_events, run_aftercare
 from src.worker.compose import comparison_wire, ensure_disclaimer
@@ -842,7 +843,7 @@ def _emit_turn_latency_now(ctx: TurnContext, runtime, turn_started: float | None
     emit_turn_latency(ctx, runtime, round((perf_counter() - turn_started) * 1000, 1))
 
 
-async def _run_turn(  # noqa: PLR0913 — o fază, mulți parametri deja validați de apelant
+async def prepare_turn_context(
     db: DbProvider,
     business: BusinessConfig,
     event: dict,
@@ -853,21 +854,12 @@ async def _run_turn(  # noqa: PLR0913 — o fază, mulți parametri deja valida�
     safe_body: str | None,
     channel_id: str,
     channel_kind: str,
-    sender_external_id: str,
-    provider_msg_id: str | None,
     verified_customer_ref: str | None,
-    redis: Redis | None,
-    stages: list[Stage],
-    deliver: bool,
-    defer_aftercare: bool,
-    db_acc: op_metrics.DbOpAccumulator,
-    turn_started: float | None = None,
-    commit_hook: "CommitHook | None" = None,
-    stage_hook: Callable[[str], None] | None = None,
-) -> TurnResult:
-    """Fazele 2-4 pe un `TurnLoadSnapshot` deja citit: compute (fără conexiune) → commit →
-    aftercare. Separată de `handle_turn` ca faza de load să se vadă ca fază, nu ca preambul."""
-    _s = get_settings()
+) -> TurnContext:
+    """`TurnContext` din snapshotul încărcat: contextul, starea v2, acțiunea și contextul de pagină.
+
+    NX-366: extrasă din `_run_turn` ca replay-ul (`src/evals/trace_replay.py`) să construiască
+    turul EXACT ca producția, prin aceeași funcție, nu printr-o copie care ar diverge tăcut."""
     contact = snap.contact
     conversation_id = snap.conversation_id
     ctx = TurnContext(
@@ -915,6 +907,50 @@ async def _run_turn(  # noqa: PLR0913 — o fază, mulți parametri deja valida�
         channel_id=channel_id,
         raw_body=raw_body,
         safe_body=safe_body,
+    )
+
+    return ctx
+
+
+async def _run_turn(  # noqa: PLR0913 — o fază, mulți parametri deja validați de apelant
+    db: DbProvider,
+    business: BusinessConfig,
+    event: dict,
+    snap: TurnLoadSnapshot,
+    *,
+    turn_id: str,
+    raw_body: str,
+    safe_body: str | None,
+    channel_id: str,
+    channel_kind: str,
+    sender_external_id: str,
+    provider_msg_id: str | None,
+    verified_customer_ref: str | None,
+    redis: Redis | None,
+    stages: list[Stage],
+    deliver: bool,
+    defer_aftercare: bool,
+    db_acc: op_metrics.DbOpAccumulator,
+    turn_started: float | None = None,
+    commit_hook: "CommitHook | None" = None,
+    stage_hook: Callable[[str], None] | None = None,
+) -> TurnResult:
+    """Fazele 2-4 pe un `TurnLoadSnapshot` deja citit: compute (fără conexiune) → commit →
+    aftercare. Separată de `handle_turn` ca faza de load să se vadă ca fază, nu ca preambul."""
+    _s = get_settings()
+    contact = snap.contact
+    conversation_id = snap.conversation_id
+    ctx = await prepare_turn_context(
+        db,
+        business,
+        event,
+        snap,
+        turn_id=turn_id,
+        raw_body=raw_body,
+        safe_body=safe_body,
+        channel_id=channel_id,
+        channel_kind=channel_kind,
+        verified_customer_ref=verified_customer_ref,
     )
 
     # NX-148: acoperirea memoriei (chei/contoare, nu valori — P12).
@@ -970,6 +1006,9 @@ async def _run_turn(  # noqa: PLR0913 — o fază, mulți parametri deja valida�
     # ele (triaj nano, agent mini, tool loop, embed) poolul e liber (NX-231).
     deps = PipelineDeps(db=db, redis=redis, llm=llm, media=media, stage_hook=stage_hook)
     runtime = await run_pipeline(ctx, deps, stages)
+    # NX-366: cu ce a pornit turul (snapshotul + amprentele), lângă ieșirile modelului pe care le-a
+    # pus runner-ul. Împreună fac turul rejucabil fără model (`scripts/trace_replay.py`).
+    turn_capture.record_turn_input(ctx, snap, event, business, channel_id=channel_id)
     await persist_events(db, business.id, conversation_id, contact.id, ctx.events)
     # Evenimentele emise de aici încolo (metrici DB, conflict de stare, reply_split) apar DUPĂ
     # persistarea principală → coada listei se scrie separat, o singură dată, la final.
