@@ -1822,6 +1822,22 @@ def _fp(filters: dict[str, Any]) -> str:
     return hashlib.sha1(canon.encode()).hexdigest()[:16]
 
 
+def _features_known(vocab: Any, facets: Sequence[str] | None, features: list[str] | None) -> bool:
+    """NX-370: fiecare valoare din `features` e o valoare REALĂ a uneia dintre fațetele căutabile
+    (vocabularul catalogului, pe text normalizat ca SQL). Fără vocabular sau fără fațete nu se poate
+    judeca, deci nu e cunoscută: o valoare nejudecată nu are voie să țină o căutare la zero."""
+    if not features or not facets or vocab is None:
+        return False
+    known: set[str] = set()
+    for dim in facets:
+        try:
+            entries = vocab.entries(dim)
+        except Exception:  # noqa: BLE001 — dimensiune absentă din vocabular
+            continue
+        known.update(normalize(str(getattr(e, "key", "") or "")) for e in entries)
+    return all(f in known for f in features)
+
+
 def _first_page_excludes(ctx: TurnContext, seen: set[str], planned: bool) -> set[str]:
     """NX-370: ce exclude prima pagină a unei căutări NOI. Doar când clientul a cerut ALTELE
     („mai arată-mi", „nu ai altele?", `deterministic.show_more_phrase`, același detector ca
@@ -2181,7 +2197,13 @@ async def _search(
         category_uttered=category_uttered,
         facets_uttered=facets_uttered,
         # NX-370: pe calea planificată `features` vin din fațetele dure ale stării (ca fațetele).
-        features_uttered=planned or uttered_by_client(ctx, *(a.features or [])),
+        # Pe v1 se țin până la capăt doar dacă sunt ROSTITE și CUNOSCUTE de catalog: „spf" rostit
+        # de client, trimis ca feature, nu e valoarea niciunui produs (SPF e atribut numeric).
+        features_uttered=planned
+        or (
+            uttered_by_client(ctx, *(a.features or []))
+            and _features_known(vocab, searchable_facets, norm_features)
+        ),
     )
     if category_keys and not category_uttered:
         # Raftul e o IPOTEZĂ a modelului, nu o cerere. Se emite indiferent dacă treapta apucă să

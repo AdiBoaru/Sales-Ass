@@ -103,3 +103,35 @@ def test_planned_search_never_excludes_on_its_first_page():
 def test_kill_switch_restores_unconditional_exclusion(monkeypatch):
     monkeypatch.setattr(get_settings(), "search_first_page_keeps_shown_enabled", False)
     assert ct._first_page_excludes(_ctx("fara sulfati"), {"p1"}, planned=False) == {"p1"}
+
+
+class _Vocab:
+    def __init__(self, by_dim):
+        self.by_dim = by_dim
+
+    def entries(self, dim):
+        return [NS(key=k) for k in self.by_dim.get(dim, [])]
+
+
+VOCAB = _Vocab({"key_ingredients": ["niacinamida", "acid hialuronic"], "concerns": ["acne"]})
+FACETS = ("key_ingredients", "concerns")
+
+
+@pytest.mark.parametrize(
+    "features, known",
+    [
+        (["niacinamida"], True),
+        (["niacinamida", "acne"], True),
+        (["spf"], False),  # rostit de client pe c5, dar nu e valoarea niciunui produs
+        (["sulfate_free"], False),  # inventat de model pe c8
+        (["niacinamida", "spf"], False),  # o singură valoare necunoscută e destul
+        ([], False),
+    ],
+)
+def test_features_known_against_the_catalog_vocabulary(features, known):
+    assert ct._features_known(VOCAB, FACETS, features) is known
+
+
+def test_features_unknown_without_vocabulary_or_facets():
+    assert ct._features_known(None, FACETS, ["niacinamida"]) is False
+    assert ct._features_known(VOCAB, (), ["niacinamida"]) is False
