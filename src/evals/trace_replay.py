@@ -475,12 +475,14 @@ async def replay_turn(
     status = "replayed"
     if player.divergence is not None:
         status = "diverged"
-    elif player.unused:
-        status = "shortened"
     elif db_state["wrote"]:
         status = "wrote"
     elif db_state["aborted"]:
         status = "db_aborted"
+    elif player.unused:
+        # DUPĂ scrieri și abandonuri (recenzia NX-369): un checkout picat care face codul să sară
+        # un apel ar arăta altfel ca o reparație, iar detectorii l-ar număra „reparat".
+        status = "shortened"
     drift = {"pack": turn_capture.pack_sha(business) != ti["env"].get("pack_sha")}
     return ReplayResult(
         turn_id=turn_id,

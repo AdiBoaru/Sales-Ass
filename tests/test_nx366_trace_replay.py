@@ -249,6 +249,25 @@ async def test_a_failed_statement_in_a_checkout_is_reported(capture_on):
     assert conn.rollbacks >= 1  # fiecare checkout se anulează, inclusiv cel eșuat
 
 
+async def test_a_failed_checkout_that_skips_a_call_is_db_aborted_not_shortened(capture_on):
+    """Recenzia NX-369: `shortened` se judecă de detectori, deci nu poate ascunde un abandon."""
+    row = await _produce(_Provider(_completion('{"text": "Uite"}')), [_schema_stage])
+
+    async def db_fails_then_skips_model(ctx, deps):
+        try:
+            async with deps.db("read_attempt") as conn:
+                await conn.fetchval("select 1")
+        except Exception:
+            return  # codul degradează (fail-open) și nu mai cheamă modelul
+        await _schema_stage(ctx, deps)
+
+    res = await trace_replay.replay_turn(
+        row, db=_db(_Conn(fail=True)), business=_business(), stages=[db_fails_then_skips_model]
+    )
+    assert res.unused_calls == 1
+    assert res.status == "db_aborted"
+
+
 async def test_rows_without_capture_are_not_replayable():
     v_in, v_io = turn_capture.FORMAT_VERSION, trace_replay.model_io.FORMAT_VERSION
     for diag, reason in [

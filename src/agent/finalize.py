@@ -1001,7 +1001,7 @@ async def _finalize_rich(
 _HANDLE_IN_PROSE = re.compile(r"\bP(\d{1,2})\b")
 
 #: Câmpurile de proză ale compunerii bogate în care modelul poate scăpa un handle.
-_PROSE_FIELDS = ("intro", "education")
+_PROSE_FIELDS = ("intro", "education", "question")
 
 
 def _handle_names(products: list[dict[str, Any]], handles: dict[str, str]) -> dict[str, str]:
@@ -1035,10 +1035,23 @@ def _resolve_handles(
     mutație (`j` e și diagnoza brută din `ctx.trace`). Un handle necunoscut (imposibil sub
     `strict`, dar defensiv) rămâne ca atare și cade la apartenență, ca un id străin azi.
 
-    NX-369: cu `names`, handle-urile scrise în PROZĂ (intro, educație, motivul pick-ului, clauza
-    fiecărui card) devin numele scurte ale produselor."""
+    NX-369: cu `names`, handle-urile scrise în PROZĂ (intro, educație, întrebarea NX-315, motivul
+    pick-ului, clauza fiecărui card, sugestiile) devin numele scurte ale produselor; o sugestie
+    cu un handle fără nume cade."""
     names = names or {}
     out = {k: (_named_handles(v, names) if k in _PROSE_FIELDS else v) for k, v in j.items()}
+    if names and isinstance(j.get("suggestions"), list):
+        # Textul unui chip ESTE comanda (NX-296): un handle rămas netradus n-ar însemna nimic
+        # pentru client, deci sugestia cade întreagă.
+        named = (_named_handles(s, names) for s in j["suggestions"])
+        out["suggestions"] = [
+            s
+            for s in named
+            if not (
+                isinstance(s, str)
+                and any(m.group(0) in handles for m in _HANDLE_IN_PROSE.finditer(s))
+            )
+        ]
     out["items"] = [
         {
             **it,
@@ -1423,13 +1436,39 @@ async def render(
         # NX-369: turul a citit regulile magazinului, iar proza a picat fiindcă le PARAFRAZEAZĂ
         # (NX-346 acceptă doar citatul întreg). Răspunsul devine textul regulilor pe care proza le
         # redă, în cuvintele magazinului; niciodată „n-am găsit produse" la o întrebare de retur.
-        rules = store_rules.quoted_rules(final, _sources(plan), ctx.language)
-        if rules:
-            ctx.set_reply(" ".join(rules))
-            ctx.emit("store_rules_quoted", n=len(rules), outcome="mapped")
+        # Recenzia: o regulă se servește doar dacă și clientul a întrebat de ea (întrebarea FAQ-ului
+        # are un cuvânt comun cu mesajul), iar dacă o propoziție substanțială a prozei vorbește
+        # despre ALTCEVA (jumătatea de produs a unei întrebări mixte) regulile nu se dau drept
+        # răspuns întreg: urmează mesajul de no-result și chips-urile de continuare.
+        match = store_rules.match_rules(
+            final,
+            _sources(plan),
+            ctx.language,
+            client=plan.query or getattr(ctx.message, "body", None) or "",
+            questions=getattr(plan, "grounded_questions", None) or {},
+        )
+        if match.rules and match.complete:
+            ctx.set_reply(" ".join(match.rules))
+            ctx.emit("store_rules_quoted", n=len(match.rules), outcome="mapped")
             return ValidationResult(ok=True, reasons=["store_rules_quoted"])
         if _sources(plan):
-            ctx.emit("store_rules_quoted", n=0, outcome="unmapped")
+            ctx.emit(
+                "store_rules_quoted",
+                n=len(match.rules),
+                outcome="partial" if match.rules else "unmapped",
+            )
+        if match.rules:
+            ctx.set_reply(
+                " ".join(match.rules) + "\n\n" + _no_result_msg(is_order=False), cacheable=False
+            )
+            _attach_no_result_alternatives(ctx)
+            return validate_prose(
+                final,
+                products=[],
+                generated_links=plan.generated_links,
+                grounded_prices=plan.grounded_prices,
+                grounded_sources=_sources(plan),
+            )
         # SALES: preț negroundat fără produse care să-l susțină → mesaj sigur de vânzare.
         # NU cacheabil: altfel „n-am găsit" otrăvește semantic_cache și se re-servește la
         # fiecare query similar, sărind agentul (bug găsit live: hit_count=9 pe demo).

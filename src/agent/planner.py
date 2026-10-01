@@ -21,7 +21,7 @@ import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from src.agent import prompt_builder
+from src.agent import prompt_builder, store_rules
 from src.agent.deterministic import _CHEAPER_RE, turn_has_new_constraints
 from src.agent.fallbacks import (
     _cart_confirm_msg,
@@ -30,7 +30,7 @@ from src.agent.fallbacks import (
     _relation_chain_query,
     _thin_path_chips,
 )
-from src.agent.finalize import _finalize_rich, rich_omissions
+from src.agent.finalize import _finalize_rich, _sources, rich_omissions
 from src.agent.match_gate import build_match_set
 from src.agent.query_rewrite import build_query_spec
 from src.agent.relevance_gate import apply_mask
@@ -258,6 +258,7 @@ class ResponsePlan:
     generated_links: set[str] = field(default_factory=set)
     grounded_prices: set[float] = field(default_factory=set)
     grounded_sources: list[str] = field(default_factory=list)  # NX-346: textele FAQ servite
+    grounded_questions: dict[str, str] = field(default_factory=dict)  # NX-369: răspuns → întrebare
     order_views: list[str] = field(default_factory=list)
     checkout_url: str | None = None
     successful_action_ids: set[str] = field(default_factory=set)
@@ -658,6 +659,15 @@ def _plan_mode(
     return "fallback"
 
 
+def _store_rules_turn(ctx: TurnContext, run: Any, final: str) -> bool:
+    """NX-369 (recenzia): turul a citit regulile magazinului (cu kill-switch-ul NX-346 aplicat de
+    ACELAȘI `_sources` ca în finalize) și proza modelului nu numește niciun produs afișat."""
+    if not final or not _sources(run):
+        return False
+    names = [p.name for p in ctx.state.displayed_products if getattr(p, "name", None)]
+    return not store_rules.names_any(final, names, ctx.language)
+
+
 async def build_plan(
     ctx: TurnContext,
     deps: PipelineDeps,
@@ -826,10 +836,12 @@ async def build_plan(
         and not cheaper_intent
         and not show_more
         and ctx.state.displayed_products
-        # NX-369: un tur care a citit regulile magazinului (FAQ) e despre MAGAZIN; textul lui
-        # respins e o regulă parafrazată, nu un follow-up pe cardurile vechi (c7, livrarea servită
-        # cu cele trei carduri de dinainte dedesubt). Îl tratează ramura fără produse din finalize.
-        and not run.grounded_sources
+        # NX-369: un tur care a citit regulile magazinului (FAQ) și a cărui proză nu numește
+        # niciun produs de pe ecran e despre MAGAZIN; textul lui respins e o regulă parafrazată, nu
+        # un follow-up pe cardurile vechi (c7, livrarea servită cu cele trei carduri de dinainte
+        # dedesubt). Îl tratează ramura fără produse din finalize. O întrebare mixtă („care e mai
+        # ieftină dintre ele și cât costă livrarea?") numește produsul în proză, deci R3 rămâne.
+        and not _store_rules_turn(ctx, run, final)
         and not (
             final
             and _valid(
@@ -888,6 +900,7 @@ async def build_plan(
         generated_links=run.generated_links,
         grounded_prices=run.grounded_prices,
         grounded_sources=list(run.grounded_sources),
+        grounded_questions=dict(getattr(run, "grounded_questions", None) or {}),
         order_views=run.order_views,
         checkout_url=run.checkout_url,
         successful_action_ids=set(run.successful_action_ids),

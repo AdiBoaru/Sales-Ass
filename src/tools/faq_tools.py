@@ -87,8 +87,10 @@ async def faq_lookup_tool(ctx: TurnContext, deps: PipelineDeps, args: dict[str, 
         return ToolResult(ok=True, llm_view=_EMPTY)
     # NX-346: răspunsurile ARĂTATE modelului sunt sursele turului: proza care le citează (cifre,
     # „livrare", „zile") e întemeiată, nu inventată.
+    fitting = _fitting(rows)
     return ToolResult(
         ok=True,
         llm_view=render_view(rows),
-        sources=[r["answer"].strip() for r in _fitting(rows)],
+        sources=[r["answer"].strip() for r in fitting],
+        source_questions={r["answer"].strip(): r["question"].strip() for r in fitting},
     )
