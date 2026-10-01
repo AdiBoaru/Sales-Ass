@@ -18,7 +18,7 @@ import hashlib
 import json
 import logging
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any
 
 from src.agent import prompt_builder, store_rules
@@ -36,13 +36,23 @@ from src.agent.query_rewrite import build_query_spec
 from src.agent.relevance_gate import apply_mask
 from src.agent.validator import _valid
 from src.analytics.demand import clean_ids
+from src.catalog.folding import fold_text
+from src.catalog.query_terms import (
+    inflection_suffixes,
+    negation_markers,
+    prepositions,
+    stopwords,
+    tokens,
+)
 from src.catalog.relation_chain import walk_chain
 from src.config import get_settings
+from src.conversation.provenance import _NEGATION_WINDOW
 from src.conversation.state_v2 import active_needs
 from src.conversation.subject import SUBJECT_KEY, ConversationSubject
 from src.db.queries.catalog import (
     get_complementary_products,
     get_products_by_ids,
+    product_types_by_ids,
     related_in_stock,
     search_cheaper_than,
     traverse_relation_chain,
@@ -298,6 +308,113 @@ def cheaper_followup_detected(ctx: TurnContext, query: str) -> bool:
     )
 
 
+def _shown_screens(ctx: TurnContext) -> list[list[tuple[str, float]]]:
+    """Ecranele pe care le-a VĂZUT clientul, cel mai recent întâi: ecranul curent, apoi ecranele
+    turelor anterioare din istoric (`payload.shown`, NX-255). Un ecran = `(product_id, preț)`."""
+    screens: list[list[tuple[str, float]]] = []
+    current = [(str(p.product_id), float(p.price)) for p in ctx.state.displayed_products]
+    if current:
+        screens.append(current)
+    for m in reversed(ctx.history or []):
+        screen: list[tuple[str, float]] = []
+        for ref in (getattr(m, "payload", None) or {}).get("shown") or []:
+            pid, price = ref.get("product_id") or ref.get("id"), ref.get("price")
+            if pid and isinstance(price, (int, float)):
+                screen.append((str(pid), float(price)))
+        if screen:
+            screens.append(screen)
+    return screens
+
+
+#: Granițele de clauză: o negație nu trece de o virgulă («nu știu, tonerul mai ieftin?»).
+_CLAUSE_BREAK = re.compile(r"[,.;:!?]+")
+
+
+def type_mention(text: str, type_key: str | None, locale: str | None) -> str | None:
+    """Cum numește clientul TIPUL `type_key` în `text`: `inflected` («tonerul», «serurile»), `bare`
+    («un toner») sau `None` (nu-l numește). PUR; toate tabelele sunt ale locale-i (P11).
+
+    Pe cuvântul de bază al tipului, cu flexiunea din `query_terms` (aceleași sufixe ca resolverul
+    NX-329), niciodată pe un prefix liber: „serios" nu e „ser". Pe un cuvânt de bază de 3 litere
+    un sufix de o literă nu ajunge („seri" nu e „ser" + „i"). Nu se numără: un tip negat în clauza
+    lui, la cel mult `_NEGATION_WINDOW` cuvinte înainte (fereastra provenienței kernelului: «nu
+    vreau ser», «fără luciu»); un cuvânt NEARTICULAT imediat după o prepoziție («în fond», «în
+    esență»), adică o locuțiune, nu obiectul cererii."""
+    head = fold_text(type_key or "").split(" ", 1)[0]
+    if len(head) < 3 or head in stopwords(locale):
+        return None
+    suffixes = inflection_suffixes(locale)
+    negations = negation_markers(locale)
+    preps = prepositions(locale)
+    found: str | None = None
+    for clause in _CLAUSE_BREAK.split(text or ""):
+        words = tokens(clause)
+        for i, word in enumerate(words):
+            if word == head:
+                form = "bare"
+            elif (
+                word.startswith(head)
+                and word[len(head) :] in suffixes
+                and (len(head) >= 4 or len(word) - len(head) >= 2)
+            ):
+                form = "inflected"
+            else:
+                continue
+            if any(words[j] in negations for j in range(max(0, i - _NEGATION_WINDOW), i)):
+                continue
+            if form == "bare" and i > 0 and words[i - 1] in preps:
+                continue
+            if form == "inflected":
+                return form
+            found = form
+    return found
+
+
+async def _named_anchor(
+    ctx: TurnContext, deps: PipelineDeps
+) -> tuple[list[tuple[str, float]], str] | None:
+    """NX-371: produsul (sau produsele) la care se referă «mai ieftin», când clientul numește un TIP
+    văzut recent. Conversația c9 din 2026-10-01: «pot să înlocuiesc tonerul cu ceva mai ieftin?»
+    după o rutină; tonerul (110 lei) era pe ecranul de DINAINTE, pragul era cel mai ieftin card
+    de pe ecranul curent (un ser de 30 de lei), iar clientul a primit o bandă de nas de 3 lei.
+
+    Referințele sunt produsele tipului de pe CEL MAI RECENT ecran care îl are (ecranul curent
+    întâi), nu de pe toate: un toner mai ieftin arătat acum trei ture nu coboară pragul celui
+    arătat acum. Un tip numit doar prin cuvântul de bază («un toner») și aflat pe ecranul curent nu
+    ridică pragul peste minimul ecranului (rămâne ancora de azi): forma nearticulată e mai des o
+    locuțiune decât cea articulată.
+
+    `None` când mesajul nu numește niciun tip văzut sau numește mai multe (atunci rămâne ancora de
+    azi, ecranul). Un singur query, cu `business_id`."""
+    text = ctx.message.body or ""
+    screens = _shown_screens(ctx)
+    if not text.strip() or not screens:
+        return None
+    ids = list(dict.fromkeys(pid for screen in screens for pid, _ in screen))
+    try:
+        async with deps.db("cheaper_anchor") as conn:
+            types = await product_types_by_ids(conn, ctx.business.id, ids)
+    except Exception as e:  # noqa: BLE001 — ancora e o îmbunătățire: fără ea, ecranul (P6)
+        log.warning("cheaper: ancora numită indisponibilă (%s)", type(e).__name__)
+        ctx.emit("cheaper_anchor_unavailable", cause=type(e).__name__)
+        return None
+    mentions = {
+        t: form for t in set(types.values()) if t and (form := type_mention(text, t, ctx.language))
+    }
+    if len(mentions) != 1:
+        return None
+    ptype, form = next(iter(mentions.items()))
+    at, refs = next(
+        (i, hits)
+        for i, screen in enumerate(screens)
+        if (hits := [(pid, price) for pid, price in screen if types.get(pid) == ptype])
+    )
+    on_current = at == 0 and bool(ctx.state.displayed_products)
+    if form == "bare" and on_current and min(p for _, p in refs) > min(p for _, p in screens[0]):
+        return None
+    return refs, ptype
+
+
 async def resolve_cheaper_followup(
     ctx: TurnContext, deps: PipelineDeps, *, policy: SafetyPolicy
 ) -> CheaperOutcome:
@@ -313,30 +430,56 @@ async def resolve_cheaper_followup(
     minimul a ceea ce clientul a VĂZUT, nu ceva ce se poate deduce din text."""
     baseline = min(p.price for p in ctx.state.displayed_products)
     ref_ids = [p.product_id for p in ctx.state.displayed_products]
+    anchor = (
+        await _named_anchor(ctx, deps)
+        if getattr(get_settings(), "cheaper_named_anchor_enabled", False)
+        else None
+    )
     # NX-314: subiectul conversației (tipul dominant al setului arătat + nevoile rostite), scris de
     # `_learn_constraints`. Fără el, singurul lucru păstrat era categoria grosieră a produselor
     # afișate, iar `preț asc` aducea în față cel mai ieftin lucru din ea: o bandă de nas de 3 lei
     # după o cremă de 110. Stins = `None` = SQL-ul de dinainte, byte cu byte.
+    subject_enabled = getattr(get_settings(), "conversation_subject_enabled", False)
     subject = (
         ConversationSubject.from_dict((ctx.state.search_constraints or {}).get(SUBJECT_KEY))
-        if getattr(get_settings(), "conversation_subject_enabled", False)
+        if subject_enabled
         else None
     )
-    # `subject` pleacă doar când există: apelul fără el e EXACT cel de dinainte.
-    extra = {"subject": subject} if subject is not None else {}
+    extra: dict[str, Any] = {}
+    if anchor is not None:
+        # NX-371: ancora e produsul numit (pe ecranul curent sau pe unul anterior): pragul e
+        # prețul lui, categoria e a lui, iar tipul lui ordonează rezultatele (NX-314). Ecranul
+        # curent nu se re-servește, chiar dacă referința e de pe alt ecran.
+        named_refs, named_type = anchor
+        extra["exclude_ids"] = [str(pid) for pid in ref_ids]
+        baseline = min(price for _, price in named_refs)
+        ref_ids = [pid for pid, _ in named_refs]
+        if subject_enabled:
+            # Subiectul păstrat: nevoile rostite rămân (ordonează), raftul doar când tipul e
+            # același (raftul serului nu e al tonerului). Flagul NX-314 stins ⇒ niciun subiect.
+            base = subject or ConversationSubject()
+            subject = replace(
+                base,
+                product_type=named_type,
+                shelf_key=base.shelf_key if base.product_type == named_type else None,
+            )
+    # `subject`/`exclude_ids` pleacă doar când există: apelul fără ele e EXACT cel de dinainte.
+    if subject is not None:
+        extra["subject"] = subject
     async with deps.db("search_cheaper_than") as conn:
         cheaper = await search_cheaper_than(
             conn, ctx.business.id, ref_ids, baseline, limit=6, **extra
         )
     # NX-173 (P0): „ceva mai ieftin" e o CĂUTARE NOUĂ în DB, în afara `ToolRun` → gate propriu.
     cheaper = policy.gate(ctx, cheaper, purpose="cheaper")[0]
-    if getattr(get_settings(), "conversation_subject_enabled", False):
+    if subject_enabled:
         ctx.emit(
             "cheaper_followup",
             baseline=round(baseline, 2),
             found=len(cheaper),
             subject_type_known=bool(subject and subject.product_type),
             type_matched=sum(1 for p in cheaper if p.get("subject_match") is True),
+            anchor="named" if anchor is not None else "screen",
         )
     else:
         ctx.emit("cheaper_followup", baseline=round(baseline, 2), found=len(cheaper))

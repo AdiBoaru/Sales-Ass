@@ -201,6 +201,9 @@ def _ctx() -> TurnContext:
 def _flag(monkeypatch):
     def _set(on: bool) -> None:
         monkeypatch.setattr(get_settings(), "conversation_subject_enabled", on)
+        # Testele de aici fixează SQL-ul subiectului NX-314 ca PRIMĂ interogare. Ancora numită
+        # (NX-371) citește tipurile înaintea ei; o testează `test_nx371_cheaper_named_item`.
+        monkeypatch.setattr(get_settings(), "cheaper_named_anchor_enabled", False)
 
     return _set
 

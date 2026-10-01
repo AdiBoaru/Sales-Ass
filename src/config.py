@@ -302,6 +302,13 @@ class Settings(BaseSettings):
     search_first_page_keeps_shown_enabled: bool = Field(
         default=True, validation_alias="SEARCH_FIRST_PAGE_KEEPS_SHOWN_ENABLED"
     )
+    # NX-371: «mai ieftin» se ancorează în produsul NUMIT de client („tonerul"), văzut pe ecranul
+    # curent sau pe unul anterior, nu în cel mai ieftin card de pe ecranul curent. Conversația c9
+    # (prod, 2026-10-01): tonerul de 110 lei → o bandă de nas de 3 lei. ON (defect măsurat, replay
+    # pe turul real); OFF = ancora de dinainte (ecranul), byte-identic.
+    cheaper_named_anchor_enabled: bool = Field(
+        default=True, validation_alias="CHEAPER_NAMED_ANCHOR_ENABLED"
+    )
     # NX-257 — poarta de POTRIVIRE: produsele ale căror date CONTRAZIC o constrângere rostită de
     # client, pe o fațetă declarată `partitioning` și peste pragul ei de acoperire, ies din
     # `ctx.retrieval`. UNKNOWN trece mereu (D7). OFF = byte-identic. Asta E enforcement-ul NX-188,

@@ -1777,6 +1777,7 @@ card_coupon_enabled = true
 catalog_projection_v2_enabled = true
 catalog_reason_codes_enabled = true
 cheaper_intent_enabled = true
+cheaper_named_anchor_enabled = true
 cheapest_alternatives_enabled = true
 checkout_intent_fallback_enabled = true
 chip_drop_dead_enabled = true
