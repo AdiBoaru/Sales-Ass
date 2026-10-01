@@ -1373,6 +1373,20 @@ nu pornește pe un tur care a citit regulile. Replay-ul are statusul `shortened`
 prefix al înregistrării). Card: [`tasks/stage1/NX-369.md`](tasks/stage1/NX-369.md); probă:
 `pytest tests/test_nx369_text_paths.py -q`.
 
+**NX-370 — o rafinare nu mai pierde produsul de pe ecran care o împlinește.** Pe c8 («fără
+sulfați» după un șampon fără sulfați afișat) modelul a cerut `features=["sulfate_free"]` (cod inventat,
+0 produse); relaxat ULTIMUL, el ținea pagina goală până ce scara arunca nevoia reală și raftul, iar
+prima pagină a oricărei căutări noi excludea ce era pe ecran, deci șamponul potrivit, primul în pool,
+nu ajungea pe pagină. Acum un `features` nerostit se relaxează primul (proveniență, NX-299), iar prima
+pagină exclude afișatele după o regulă STRUCTURALĂ, nu după cuvinte: aceleași filtre ca sesiunea
+activă, în afara formulării (`query`/`rank_terms`/`prefer`), = cererea de altele ⇒ ies; un filtru nou
+sau schimbat = rafinare ⇒ rămân; un `product_name` nu se exclude; fără sesiune, ca înainte
+(`show_more_phrase` e un declanșator în plus). Pe calea planificată decide actul: căutarea unui
+`show_more` (`PlannedTurn.excludes_shown`). Produsul numit, găsit în pool dar nu pe pagină, urcă pe ea,
+iar „lipsește" se judecă pe pagina servită (c10 primea „nu există" despre produsul afișat). Flag
+`SEARCH_FIRST_PAGE_KEEPS_SHOWN_ENABLED` (ON). Card: [`tasks/stage1/NX-370.md`](tasks/stage1/NX-370.md);
+probă: `pytest tests/test_nx370_refinement_keeps_shown.py -q`.
+
 **NX-360 — stocul și prețurile SOLE se resincronizează din paginile live.** Catalogul era o fotografie
 din 2026-08-28: cele 391 de produse `out_of_stock` aveau prețul voucherului WELCOME15 drept preț de
 listă (scraperul cădea pe `offers.price` din JSON-LD când pagina epuizată nu arăta rândul de preț), iar

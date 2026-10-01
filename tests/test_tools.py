@@ -1349,3 +1349,24 @@ async def test_completarea_respecta_kill_switch(monkeypatch):
         _ctx(), _deps_no_llm(), "search_products", {"query": "x", "concerns": ["acne"], "limit": 6}
     )
     assert [p["id"] for p in res.products] == ["text1"]
+
+
+async def test_named_product_on_screen_is_not_declared_missing(monkeypatch):
+    """NX-370 (c10): produsul numit, scos de pe pagină ca deja afișat, nu e declarat lipsă: urcă pe
+    pagină din pool, iar „lipsește" se judecă pe pagina servită."""
+    from src.models import ProductRef
+
+    async def fake_lex(conn, business_id, **k):
+        return [PRODUCTS[0]]  # p1 „Crema A", singurul rezultat, deja pe ecran
+
+    monkeypatch.setattr(ct, "has_embeddings", _has_emb_false)
+    monkeypatch.setattr(ct, "search_products_lexical", fake_lex)
+    ctx = _ctx()
+    ctx.message.body = "mai arată-mi altele"  # pagina exclude ce e pe ecran...
+    ctx.state.displayed_products = [ProductRef("p1", "Crema A", 82.99)]
+    res = await run_tool(
+        ctx, _deps(_LLM()), "search_products", {"query": "x", "product_name": "Crema A"}
+    )
+    # ...dar produsul NUMIT, găsit în pool, urcă pe pagină: e chiar ce a cerut clientul
+    assert [p["id"] for p in res.products] == ["p1"]
+    assert "nu există ca atare" not in res.llm_view

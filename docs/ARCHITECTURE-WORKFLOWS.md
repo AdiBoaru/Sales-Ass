@@ -1895,6 +1895,7 @@ search_diversify_enabled = true
 search_diversify_subject_aware_enabled = true
 search_fill_from_subject_filter_enabled = true
 search_filters_only_fallback_enabled = true
+search_first_page_keeps_shown_enabled = true
 search_guessed_filter_coherence_enabled = true
 search_guessed_filter_rescue_enabled = true
 search_offcategory_guard_enabled = true

@@ -154,7 +154,10 @@ async def test_refined_filters_start_new_session(monkeypatch):
     # pool-ul rafinat e COMPLET (review #1): produsele deja afișate rămân în pool (nu starved),
     # pot resurfa la continuare; doar prima pagină le sare prin unseen-dedup.
     assert sess2["pool"] == [f"p{i}" for i in range(10)]
-    assert "p0" not in [p["id"] for p in res2.products]  # prima pagină sare ce s-a arătat deja
+    # NX-370: o RAFINARE („ceva sub 50 lei") nu mai exclude ce e pe ecran: un produs afișat care
+    # îndeplinește noul criteriu rămâne răspunsul potrivit (c8, „fără sulfați"). Excluderea e a
+    # cererii de ALTELE (`test_tools::test_search_dedups_displayed_products`).
+    assert "p0" in [p["id"] for p in res2.products]
 
 
 async def test_continuation_skips_seen_from_displayed(monkeypatch):
