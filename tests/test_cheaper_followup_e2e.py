@@ -18,6 +18,7 @@ Turul 2-empty: `search_cheaper_than` → [] → mesajul „cea mai ieftină", f�
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 import pytest
@@ -188,7 +189,14 @@ class ScriptedLLM:
 
 def _ids_from_bundle(user: str, products: list[dict[str, Any]]) -> list[str]:
     """Care produse au ajuns în bundle-ul rich (din `retrieved` al turului) — le luăm pe cele
-    al căror id apare în promptul user trimis la complete_schema."""
+    al căror id apare în promptul user trimis la complete_schema.
+
+    NX-324: cu handle-uri, modelul vede `[P1]`, nu id-ul, și răspunde cu handle-ul. Fără ramura
+    asta modelul fals nu alegea NIMIC, adică un refuz pe care testul nu-l voia (NX-365: poarta
+    respectă acum refuzul pe orice căutare nouă, deci refuzul nevrut ascundea setul)."""
+    handles = re.findall(r"\[(P\d+)\]", user)
+    if handles:
+        return handles
     return [p["id"] for p in products if str(p["id"]) in user]
 
 

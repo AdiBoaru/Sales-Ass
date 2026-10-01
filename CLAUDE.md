@@ -1272,6 +1272,27 @@ refuzat rămâne pe ecran (NX-306). Deschis, declarat: `active_search` păstreaz
 kill-switch. Card: [`tasks/stage1/NX-362.md`](tasks/stage1/NX-362.md);
 probă: `pytest tests/test_refused_set_withheld.py -q`.
 
+**NX-365 — modelul vede faptele întregi, iar refuzul lui se respectă pe orice căutare nouă.** Rejucarea
+pe producție a conversațiilor din 2026-09-30, după NX-360…364, a arătat aceleași defecte: reparațiile
+erau în kernel (dark), într-un script nerulat, sau într-o poartă îngustă. «nu vreau cu acid
+hialuronic» a primit DR.JART+ Cicapair „fără acid hialuronic”, deși îl conține: `_facet_cell` tăia
+orice listă la 4 valori, iar ingredientul era al 7-lea (pe catalog, 55% din produse au peste 4
+ingrediente, iar la 28% din cele cu acid hialuronic el era invizibil pentru model). Lista trimisă
+compunerii n-avea nici disponibilitatea, deci un produs epuizat ieșea „varianta mai accesibilă”. Acum
+bundle-ul are listele întregi (`facet_summary(whole=True)`, tăierea la 4 rămâne pentru ochi) și
+„disponibilitate: EPUIZAT”, cu regula lor în `_RICH_RULES`: un ingredient listat exclude produsul,
+dar „fără X” nu se afirmă niciodată (ingredientele cheie nu sunt compoziția: 442 de produse au acid
+hialuronic doar în compoziție), iar un epuizat cerut pe nume rămâne pe card, marcat. Poarta NX-306/362 cere acum `relevance is
+not None` (set din căutare nouă), nu `relaxed`: pe 30 de zile, 4 din 5 refuzuri pe seturi stricte erau
+corecte, iar setul servit sub textul nostru era cel cu ingredientul exclus. Seturile deterministe
+(«mai ieftin», paginare, re-hidratare) lasă `relevance` gol și rămân pe ecran. Două harnessuri
+ascundeau clasa: golden-ul răspundea la schema bogată cu planul creierului unic (citit ca refuz), iar
+un e2e căuta id-uri unde promptul are handle-uri. A/B pe `/web/chat`: 5 carduri epuizate pe `main`, 0 pe
+ramură. Declarat: excluderea pe v1 nu există (acum modelul refuză onest; reparația e NX-364 când
+kernelul servește), «păr gras» e gaură de date (`oily` pe șampoane e zgomot), bugetul vag și paginarea
+după tip rămân. Card: [`tasks/stage1/NX-365.md`](tasks/stage1/NX-365.md); probă:
+`pytest tests/test_nx365_model_sees_whole_facts.py tests/test_refused_set_withheld.py -q`.
+
 **NX-363 — detectorii de defecte: ce mecanism a lovit câte ture, pe tot traficul.** Defectele se
 găseau citind conversații de mână, deși fiecare lasă un semnal pe care îl scriem deja (evenimente,
 `conversation_traces`, catalog). `scripts/turn_defects.py --business <slug>` (read-only, 0 $) rulează

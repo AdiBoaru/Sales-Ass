@@ -1329,10 +1329,17 @@ def _facet_value_label(facet: FacetSpec, code: Any, language: str | None) -> str
     return s
 
 
-def _facet_cell(facet: FacetSpec, attributes: Any, language: str | None) -> str | None:
+def _facet_cell(
+    facet: FacetSpec, attributes: Any, language: str | None, *, whole: bool = False
+) -> str | None:
     """Celula de fațetă pentru un produs: citește `attributes[facet.key]` (listă → etichete unite,
     scalar → o etichetă). Lipsă/gol → None (randat „—"; rândul TOT-gol e sărit). Fapt din date, zero
-    LLM → zero halucinație (aceeași garanție ca restul tabelului)."""
+    LLM → zero halucinație (aceeași garanție ca restul tabelului).
+
+    O listă se taie la 4 valori pentru OCHI (tabel, fișă). `whole=True` o dă întreagă: pentru
+    MODEL, o listă tăiată e o minciună prin omisiune. NX-365: la DR.JART+ Cicapair acidul
+    hialuronic e al 7-lea ingredient din 12, modelul vedea primele 4 și a scris „fără acid
+    hialuronic"; pe catalogul SOLE, 55% din produse au peste 4 ingrediente cheie."""
     if not isinstance(attributes, dict):
         return None
     raw = attributes.get(facet.key)
@@ -1341,7 +1348,7 @@ def _facet_cell(facet: FacetSpec, attributes: Any, language: str | None) -> str 
     if isinstance(raw, (list, tuple)):
         labels = [_facet_value_label(facet, v, language) for v in raw]
         labels = [lbl for lbl in labels if lbl]
-        return ", ".join(labels[:4]) or None
+        return ", ".join(labels if whole else labels[:4]) or None
     return _facet_value_label(facet, raw, language)
 
 
@@ -1350,7 +1357,11 @@ def _facet_label(facet: FacetSpec, language: str | None) -> str:
 
 
 def facet_summary(
-    product: dict[str, Any], facets: Sequence[FacetSpec], language: str | None
+    product: dict[str, Any],
+    facets: Sequence[FacetSpec],
+    language: str | None,
+    *,
+    whole: bool = False,
 ) -> str:
     """Tier 2b: rezumat compact al fațetelor unui produs pentru BUNDLE-ul rich (input pentru model):
     „Label: val; Label: val". Fapt din `attributes` (`_facet_cell`) → grounded, nu inventat.
@@ -1359,7 +1370,7 @@ def facet_summary(
     parts = [
         f"{_facet_label(f, language)}: {cell}"
         for f in facets
-        if (cell := _facet_cell(f, attrs, language))
+        if (cell := _facet_cell(f, attrs, language, whole=whole))
     ]
     return "; ".join(parts)
 
@@ -1419,7 +1430,8 @@ def spec_numbers(
         out |= set(re.findall(r"\d+", p.get("name") or ""))
         attrs = p.get("attributes")
         for facet in facets:
-            cell = _facet_cell(facet, attrs, language)
+            # NX-365: ce a VĂZUT modelul, deci lista întreagă («vitamina B5» pe poziția 6).
+            cell = _facet_cell(facet, attrs, language, whole=True)
             if cell:
                 out |= set(re.findall(r"\d+", cell))
     return out

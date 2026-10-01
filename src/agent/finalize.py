@@ -398,6 +398,10 @@ def _rich_facets(ctx: TurnContext) -> tuple:
     return pack.comparison_facets if pack else ()
 
 
+#: Disponibilitățile pe care clientul nu le poate cumpăra acum (vocabularul catalogului).
+_UNAVAILABLE = frozenset({"out_of_stock", "discontinued"})
+
+
 def _rich_bundle(
     products: list[dict[str, Any]],
     facets: tuple = (),
@@ -431,8 +435,12 @@ def _rich_bundle(
         rating = f"{float(p['rating']):.1f}★" if p.get("rating") else "-"
         desc = " ".join((p.get("ai_summary") or "").split())[:160]
         desc_str = f" | descriere: {desc}" if desc else ""
-        fac = compose.facet_summary(p, facets, language) if facets else ""
+        # NX-365: listele întregi (vezi `_facet_cell`) și disponibilitatea. Fără ea, modelul
+        # recomanda un produs epuizat ca „varianta mai accesibilă” (prețul lui e al voucherului).
+        fac = compose.facet_summary(p, facets, language, whole=True) if facets else ""
         fac_str = f" | fațete: {fac}" if fac else ""
+        if str(p.get("availability") or "") in _UNAVAILABLE:
+            fac_str += " | disponibilitate: EPUIZAT"
         ref = handle_of.get(str(p["id"]), p["id"])
         lines.append(
             f"[{ref}] {p['name']} | preț {amount_text(p['price'], language)} lei | "
@@ -1234,9 +1242,19 @@ async def render(
         # servit: rămâne refuzul modelului (`model_intro`, trecut prin aceeași poartă ca orice text
         # de vânzare fără produse), altfel mesajul de no-result. `result` rămâne cel al validării,
         # ca `agent_prompt` să raporteze în continuare de ce a picat proza.
+        #
+        # NX-365: poarta se uita la `relevance.relaxed` („scara a renunțat la un filtru”), adică la
+        # un indiciu despre CUM a ieșit setul, nu la ce a spus modelul. Turul real `86725ca1`
+        # (2026-09-30): filtrele stricte, dar excluderea clientului nu ajunsese niciodată în
+        # căutare, iar modelul a scris „nu ți-aș recomanda niciuna: toate conțin acid hialuronic”.
+        # Codul a servit cele șase produse sub textul NOSTRU. Pe 30 de zile, 4 din 5 refuzuri pe
+        # seturi stricte erau corecte («calculator», «placă video», «Gerovital», acidul
+        # hialuronic). Acum contează doar că setul vine dintr-o căutare NOUĂ (`relevance` setat);
+        # „mai ieftin", paginarea, `choose_within` și re-hidratarea lasă `relevance` gol
+        # (`planner.build_plan`), deci setul lor determinist rămâne pe ecran, ca înainte.
         servable = products
         _relevance = getattr(getattr(ctx, "retrieval", None), "relevance", None)
-        if downgrade_reason == "no-items-selected" and getattr(_relevance, "relaxed", False):
+        if downgrade_reason == "no-items-selected" and _relevance is not None:
             model_prose = result.ok and bool(final) and reply == final
             servable = compose.named_products(reply, products) if model_prose else []
             ctx.emit(

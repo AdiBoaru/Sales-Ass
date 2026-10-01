@@ -231,6 +231,16 @@ class ScriptedLLM:
         repetăm ACELAȘI plan — un model care nu știe să repare, deci turul trebuie să cadă în
         fallback determinist. A întoarce aici un plan „reparat" din senin ar face repair-ul să
         pară că funcționează în cazuri în care n-a fost niciodată exercitat."""
+        if isinstance(schema, dict) and schema.get("name") == "sales_recommendation":
+            # Compunerea bogată de pe calea v1 (`finalize._finalize_rich`). Fixtura o scrie în
+            # `rich` când cazul o testează; altfel modelul scriptat n-are ce răspunde, deci apelul
+            # EȘUEAZĂ, ca un furnizor căzut. Înainte întorcea planul creierului unic, pe care codul
+            # îl citea drept „modelul n-a ales niciun produs”, adică un REFUZ pe care producția nu
+            # l-ar fi primit (NX-365: poarta respectă acum refuzul pe orice căutare nouă).
+            rich = self._fx.get("rich")
+            if rich is None:
+                raise RuntimeError("scripted: rich compose not scripted")
+            return dict(rich)
         repair = self._fx.get("plan_repair")
         return dict(repair) if repair else self._plan(user)
 
