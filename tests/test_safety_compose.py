@@ -94,8 +94,12 @@ def test_unavailable_registry_sentence_is_honest():
 
 
 def test_enforce_prepends_sentence_to_reply():
+    # NX-367: produsul recomandat a fost PĂSTRAT de filtru (un `kept` gol înseamnă că excluderea a
+    # golit turul, caz în care răspunsul e al codului, vezi testele `emptied` de mai jos).
+    kept = [{"id": "p2", "name": "Ser Bakuchiol"}]
     ctx = _Ctx(
-        Reply(text="Îți recomand Ser Bakuchiol la 84.00 lei. Vrei linkul?"), _blocked_decision()
+        Reply(text="Îți recomand Ser Bakuchiol la 84.00 lei. Vrei linkul?"),
+        _blocked_decision(kept=kept),
     )
     enforce(ctx)
     assert "medicul sau farmacistul" in ctx.reply.text
