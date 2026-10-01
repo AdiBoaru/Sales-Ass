@@ -1336,6 +1336,20 @@ la analiză și ÎNGHEȚAT pe SHA-256 până la verdictul final); `scripts/sim/p
 le rulează pe API ca widgetul (credite, îl pornește Adi). Card:
 [`tasks/stage1/NX-366.md`](tasks/stage1/NX-366.md); probă: `pytest tests/test_nx366_*.py -q`.
 
+**NX-367 — excluderea de siguranță se spune, iar modelul nu o mai poate nega (P0).** Pe c6 din
+2026-10-01, 13 retinoizi excluși în sarcină au devenit „Nu am găsit seruri cu retinol în catalog":
+fraza garantată se retrăgea când modelul scria „farmacist" (amprenta dovedea trimiterea, nu ce am
+exclus), modelul nu știa de excludere, iar răspunsul pleca `cacheable`. Acum idempotența e pe fraza
+NOASTRĂ, trimiterile scrise de model se scot pe propoziție (rămâne una care numește un card), un
+set golit de excludere (nimic păstrat în tur, zero carduri, fără întrebare deschisă) primește
+răspunsul codului (fraza + `alternatives_offer`), modelul primește câte au fost scoase, iar
+`cacheable=False` vine primul. `kept` din decizia turului e reuniunea evaluărilor. Registrul
+recunoaște retinoații (`retino`, `hydroxypinacolon`: DR.REJU-ALL Retino-Mela, VT Cica Reti-A), iar
+`scripts/safety_registry_audit.py` listează ce poartă un termen al familiei vitaminei A și nu e
+blocat (pe SOLE rămân 21, toate „vitamina A" ca ingredient: decizie editorială a lui Adi). Cazul de
+replay c6 trece. Card: [`tasks/stage1/NX-367.md`](tasks/stage1/NX-367.md); probă:
+`pytest tests/test_nx367_safety_disclosure.py -q`.
+
 **NX-360 — stocul și prețurile SOLE se resincronizează din paginile live.** Catalogul era o fotografie
 din 2026-08-28: cele 391 de produse `out_of_stock` aveau prețul voucherului WELCOME15 drept preț de
 listă (scraperul cădea pe `offers.price` din JSON-LD când pagina epuizată nu arăta rândul de preț), iar
