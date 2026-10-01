@@ -451,7 +451,11 @@ async def _search(
     result = await run.execute_planned(
         plan.search_args,
         exclude_shown=exclude_shown,
-        seen_extra=_seen_by_subject(ctx) if exclude_shown else (),
+        seen_extra=(
+            _seen_by_subject(ctx)
+            if exclude_shown and get_settings().search_resume_excludes_subject_seen_enabled
+            else ()
+        ),
     )
     if not run.retrieved:
         if result.llm_view == catalog_tools._NO_MORE_VIEW:

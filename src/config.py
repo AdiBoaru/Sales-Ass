@@ -627,6 +627,13 @@ class Settings(BaseSettings):
     search_pool_from_filter_fill_enabled: bool = Field(
         default=True, validation_alias="SEARCH_POOL_FROM_FILTER_FILL_ENABLED"
     )
+    # NX-378 — pe calea kernelului, «mai arată-mi» (`show_more`) sare și ce a văzut clientul după
+    # starea PORȚII (ecranul subiectului reluat, seturile de mai devreme), nu doar vederea v1, care
+    # pe o reluare arată ecranul subiectului parcat (k1 T4: zero carduri). ON (defect măsurat);
+    # OFF = apelul de pe `main`, byte-identic.
+    search_resume_excludes_subject_seen_enabled: bool = Field(
+        default=True, validation_alias="SEARCH_RESUME_EXCLUDES_SUBJECT_SEEN_ENABLED"
+    )
     # NX-118: afirmație POZITIVĂ de stoc/disponibilitate („pe stoc", „in stock") validată
     # AVAILABILITY-aware — drop (rich) / invalid+retry+fallback (proză) DOAR dacă niciun produs
     # retrievat nu e pe stoc (in_stock/low_stock). `has_stock_claim` sare peste negat/viitor

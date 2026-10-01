@@ -324,7 +324,7 @@ def test_the_tail_passes_the_numeric_constraints_before_merging():
         _row("cheap", "Ser Ieftin", 50.0),
         {**_row("dear", "Ser Scump", 300.0), "_tail": "unknown_fill"},
     ]
-    out, _ = ct._merge_pool_tail(
+    out, _, _ = ct._merge_pool_tail(
         _ctx(_sole_pack()),
         ct.SearchArgs(query="ser"),
         [_row("m0", "Ser 0")],
@@ -394,3 +394,117 @@ async def test_a_resumed_session_keeps_paging_after_the_unknowns_fill_the_page(m
     )
     page2 = [p["id"] for p in (await ct.continue_search_session(ctx2, _DEPS, sess, 6)).products]
     assert page2 and not set(page2) & (set(seen) | set(page1))
+
+
+# --- recenzia adversarială (runda 2) ------------------------------------------------------------
+
+
+def _ret(pid: str, name: str = "Auralis Retinol Ser") -> dict:
+    return {**_row(pid, name), "attributes": {}}
+
+
+def _block_events(ctx) -> list:
+    return [e for e in ctx.events if e.type == "safety_contraindication_block"]
+
+
+async def test_kept_tail_rows_not_served_do_not_keep_the_emptied_set_alive(monkeypatch):
+    """NX-367: s1/s2 sunt pe ecran, căutarea nouă are doar retinoizi (blocați), iar coada NX-303
+    aduce înapoi s1/s2, scoși apoi ca deja văzuți. `kept`-ul turului trebuie să rămână gol, ca
+    răspunsul să fie al codului, nu proza modelului despre „nu există în catalog"."""
+    from src.models import Reply
+    from src.safety import compose, messages
+
+    _install(
+        monkeypatch,
+        [_ret("m0", "Retinol A"), _ret("m1", "Retinol B")],
+        subject_tail=[_row("s1", "Ser S1"), _row("s2", "Ser S2")],
+    )
+    ctx = _ctx(_sole_pack())
+    ctx.state = ConversationState(
+        safety=dict(_PREGNANT),
+        displayed_products=[ProductRef(product_id=i, name=i, price=1.0) for i in ("s1", "s2")],
+    )
+    res = await _search(ctx, limit=3)
+    assert not res.products
+    assert not ctx.safety_decision.kept
+    ctx.reply = Reply(text="Nu am gasit seruri cu retinol in catalog.")
+    compose.enforce(ctx)
+    assert messages.alternatives_offer("ro") in ctx.reply.text
+    assert "Nu am gasit" not in ctx.reply.text
+
+
+async def test_served_tail_rows_count_as_kept(monkeypatch):
+    """Simetric: un rând de coadă care ajunge pe pagină intră în `kept`-ul turului."""
+    _install(monkeypatch, [_ret("m0", "Retinol A")], subject_tail=[_row("t1", "Ser T1")])
+    ctx = _pregnant_ctx()
+    res = await _search(ctx, limit=3)
+    assert [p["id"] for p in res.products] == ["t1"]
+    assert [p["id"] for p in ctx.safety_decision.kept] == ["t1"]
+
+
+async def test_a_page_row_blocked_once_is_not_judged_again_by_the_nx303_tail(monkeypatch):
+    """Coada NX-303 e tot setul filtrelor, deci conține și rândurile paginii deja blocate."""
+    matches = [_row("m0", "Ser Pete Gras 0"), _ret("m1"), _ret("m2", "Bio Retinol Cream")]
+    tail = [_ret("m1"), _ret("m2", "Bio Retinol Cream"), _row("t1", "Ser T1")]
+    _install(monkeypatch, matches, subject_tail=tail)
+    ctx = _pregnant_ctx()
+    res = await _search(ctx, limit=3)
+    blocked = ctx.safety_decision.blocked
+    assert sorted(b.product_id for b in blocked) == ["m1", "m2"]
+    assert len(_block_events(ctx)) == 1
+    assert "2 produse găsite au fost scoase" in (res.llm_view or "")
+
+
+def test_the_turn_decision_counts_a_product_blocked_on_two_paths_once():
+    from src.safety.policy import SafetyPolicy
+
+    ctx = _pregnant_ctx()
+    policy = SafetyPolicy.for_turn(ctx)
+    policy.gate(ctx, [_ret("r1")], purpose="search")
+    policy.gate(ctx, [_ret("r1"), _ret("r2", "Retinol C")], purpose="details")
+    assert [b.product_id for b in ctx.safety_decision.blocked] == ["r1", "r2"]
+
+
+@pytest.mark.parametrize("on", [True, False])
+async def test_the_resume_seen_set_is_behind_its_kill_switch(monkeypatch, on):
+    """Stins, executorul cheamă căutarea exact ca pe `main` (fără `seen_extra`)."""
+    monkeypatch.setattr(get_settings(), "search_resume_excludes_subject_seen_enabled", on)
+    sent: dict = {}
+
+    class _Stop(Exception):
+        pass
+
+    async def capture(self, args, **kw):
+        sent.update(kw)
+        raise _Stop
+
+    monkeypatch.setattr(ToolRun, "execute_planned", capture)
+    gate = ConversationStateV2(references=_refs(["s1"], [["a"]]))
+    ctx = NS(kernel_view=NS(gate_state=gate))
+    with pytest.raises(_Stop):
+        await kx._search(ctx, NS(), NS(search_args=object()), NS(), exclude_shown=True)
+    assert sent["seen_extra"] == (("s1", "a") if on else ())
+
+
+async def test_paging_refills_a_page_emptied_by_a_mid_conversation_safety_context(monkeypatch):
+    """P6: pool semănat înainte de «sunt însărcinată»; pagina golită de poartă nu e „sesiune
+    epuizată" cât timp pool-ul mai are produse sigure."""
+    sess = {
+        "filters": {},
+        "pool": ["r0", "r1", "r2", "s0", "s1", "s2", "s3"],
+        "cursor": 0,
+        "fp": "x",
+        "page": 0,
+    }
+    ctx = _ctx(_sole_pack())
+    ctx.state = ConversationState(safety=dict(_PREGNANT), active_search=sess)
+    names = {"r0": "Retinol A", "r1": "Retinol B", "r2": "Retinol C"}
+
+    async def by_ids(conn, biz, ids, **k):
+        return [_ret(i, names[i]) if i in names else _row(i, f"Ser {i}") for i in ids]
+
+    monkeypatch.setattr(ct, "get_products_by_ids", by_ids)
+    res = await ct.continue_search_session(ctx, _DEPS, sess, 3)
+    assert [p["id"] for p in res.products] == ["s0", "s1", "s2"]
+    assert res.llm_view != ct._NO_MORE_VIEW
+    assert ctx.state_patch["active_search"]["cursor"] == 6

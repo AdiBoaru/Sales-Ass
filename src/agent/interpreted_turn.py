@@ -862,7 +862,7 @@ async def _dark_search(
     started = perf_counter()
     paging = chain.planned.primary in chain.planned.excludes_shown  # NX-370
     extra: dict[str, Any] = {"exclude_shown": True} if paging else {}
-    if paging:  # NX-378: aceeași mulțime văzută ca pe calea servită
+    if paging and get_settings().search_resume_excludes_subject_seen_enabled:  # NX-378: ca servita
         from src.agent.kernel_executors import seen_in_state  # noqa: PLC0415
 
         if seen := seen_in_state(chain.reduced.state):

@@ -1905,6 +1905,7 @@ search_pool_from_filter_fill_enabled = true
 search_price_as_filter_only_enabled = true
 search_price_bound_provenance_enabled = true
 search_relax_by_provenance_enabled = true
+search_resume_excludes_subject_seen_enabled = true
 search_semantic_enabled = false
 search_sessions_enabled = true
 search_shadow_enabled = false

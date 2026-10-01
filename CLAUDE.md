@@ -1419,8 +1419,12 @@ completarea aduce produse doar pe k1. Cozile pool-ului (NX-303, necunoscutele, r
 prima pagină când un rând al ei e scos, deci trec la îmbinare prin aceleași porți ca pagina
 (`_merge_pool_tail`): poarta de siguranță NX-173 FĂRĂ flag (recenzia a găsit un retinoid din coadă
 servit în sarcină, iar gaura exista pe `main` pe coada NX-303), constrângerile numerice, excluderile
-și banda; decizia turului (NX-367) numără și excluderile cozii. Flaguri `SEARCH_UNKNOWN_FILL_ENABLED`,
-`SEARCH_POOL_FROM_FILTER_FILL_ENABLED` (ON; stinse amândouă, pagina e cea de pe `main`). Carduri: [`tasks/stage1/NX-378.md`](tasks/stage1/NX-378.md),
+și banda; decizia turului (NX-367) numără excluderile cozii o dată pe produs, iar rândurile ei intră
+în `kept` doar când se servesc (`count_kept=False` + `count_served`, altfel un set golit de noi ar fi
+păstrat proza modelului). Pe drum: paginarea (`continue_search_session`) reumple pagina golită de
+un context de siguranță apărut la mijlocul conversației, în loc de „sesiune epuizată". Flaguri
+`SEARCH_UNKNOWN_FILL_ENABLED`, `SEARCH_POOL_FROM_FILTER_FILL_ENABLED`,
+`SEARCH_RESUME_EXCLUDES_SUBJECT_SEEN_ENABLED` (ON; stinse toate, pagina e cea de pe `main`). Carduri: [`tasks/stage1/NX-378.md`](tasks/stage1/NX-378.md),
 [`tasks/stage1/NX-377.md`](tasks/stage1/NX-377.md); probă: `pytest tests/test_nx377_unknown_facet_fill.py
 tests/test_nx378_resume_and_pool.py -q`.
 
