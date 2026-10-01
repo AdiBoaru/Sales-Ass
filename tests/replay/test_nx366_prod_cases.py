@@ -129,8 +129,9 @@ async def test_faq_turn_never_answers_with_product_no_result():
 # --- P0: siguranța -------------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="P0 siguranță: excluderea nu e spusă, iar modelul o neagă")
 async def test_safety_exclusion_is_disclosed():
+    """Reparat de NX-367 (era xfail): fraza garantată nu se mai retrage, iar setul golit de
+    excludere primește răspunsul codului, nu „nu am găsit în catalog"."""
     from src.safety.messages import safety_sentence  # noqa: PLC0415
 
     res = await _replay(_load("c6_sarcina/f09fea77-1.json"))

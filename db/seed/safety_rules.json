@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "updated_at": "2026-07-17",
+  "updated_at": "2026-10-01",
   "notice": [
     "REGISTRU CURAT de restricții de produs (NX-173). Date, nu cod — revizuibile de om.",
     "REGULI:",
@@ -45,7 +45,10 @@
   "rules": [
     {
       "id": "pregnancy-retinoids",
-      "contexts": ["pregnancy", "breastfeeding"],
+      "contexts": [
+        "pregnancy",
+        "breastfeeding"
+      ],
       "level": "hard",
       "match_ingredient_prefixes": [
         "retinol",
@@ -59,11 +62,13 @@
         "isotretinoin",
         "adapalen",
         "tazaroten",
-        "acid retinoic"
+        "acid retinoic",
+        "retino",
+        "hydroxypinacolon"
       ],
       "source": "editorial_policy",
-      "source_ref": "Nativx safety policy v1 — politică editorială a magazinului: retinoizii (derivați de vitamina A) NU se recomandă proactiv în sarcină/alăptare fără aviz medical. Context de reglementare (informativ, NU temeiul afirmației): Reg. (UE) 2024/996 restrânge vitamina A/retinol în cosmetice (Anexa III la Reg. (CE) 1223/2009); Opinia SCCS/1576/16 privind vitamina A. Regula NU afirmă un risc medical — declină recomandarea și trimite la medic/farmacist.",
-      "verified_at": "2026-07-17",
+      "source_ref": "Nativx safety policy v1 — politică editorială a magazinului: retinoizii (derivați de vitamina A) NU se recomandă proactiv în sarcină/alăptare fără aviz medical. Context de reglementare (informativ, NU temeiul afirmației): Reg. (UE) 2024/996 restrânge vitamina A/retinol în cosmetice (Anexa III la Reg. (CE) 1223/2009); Opinia SCCS/1576/16 privind vitamina A. Regula NU afirmă un risc medical — declină recomandarea și trimite la medic/farmacist. NX-367 (2026-10-01): adăugate „retino” (retinoați, inclusiv hydroxypinacolone retinoate/HPR, și numele de tip „Retino-Mela”) și „hydroxypinacolon”, după ce auditul `scripts/safety_registry_audit.py` a găsit serul DR.REJU-ALL Retino-Mela și masca VT Cica Reti-A nerecunoscute; aprobat de Adi în conversația din 2026-10-01.",
+      "verified_at": "2026-10-01",
       "reviewed_by": "adi-boaru"
     }
   ]

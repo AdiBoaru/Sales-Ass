@@ -859,6 +859,7 @@ async def build_plan(
         source="tools",
         relevance=relevance,
         catalog_read=bool(products) or run.read_catalog or rehydrated or cheaper_intent,
+        read_beyond_catalog=run.read_beyond_catalog,
     )
 
     return ResponsePlan(
