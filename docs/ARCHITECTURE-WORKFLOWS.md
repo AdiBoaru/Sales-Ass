@@ -1916,6 +1916,7 @@ single_brain_enabled = false
 skin_type_anti_fit_enabled = false
 spec_digits_grounded_enabled = true
 speculative_retrieval_enabled = false
+store_info_fallback_enabled = true
 structured_history_enabled = true
 summary_enabled = true
 tool_field_errors_enabled = true

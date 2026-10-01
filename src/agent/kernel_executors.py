@@ -83,6 +83,7 @@ from src.catalog.render_text import display_name
 from src.config import get_settings
 from src.conversation.answer_policy import dimension_label
 from src.db.queries.catalog import get_products_by_ids
+from src.domain.pack import kernel_sentence
 from src.models import RetrievalResult
 from src.safety.policy import SafetyPolicy
 
@@ -152,15 +153,6 @@ class NoSentence(Exception):
     def __init__(self, code: str) -> None:
         super().__init__(code)
         self.code = code
-
-
-def kernel_sentence(pack: Any, locale: str | None, code: str) -> str | None:
-    """Fraza unui cod în limba turului (cu fallback pe limba de bază), sau `None`."""
-    table = getattr(pack, "kernel_sentences", None) or {}
-    lang = (locale or "").strip().lower()
-    per_code = table.get(lang) or table.get(lang.split("-")[0]) or {}
-    phrase = per_code.get(code)
-    return phrase if isinstance(phrase, str) and phrase.strip() else None
 
 
 def _required_sentence(ctx: TurnContext, code: str) -> str:
