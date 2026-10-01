@@ -357,6 +357,13 @@ _STEP_NOTE_RO: dict[str, str] = {
 }
 
 
+def unknown_facet_note(p: dict[str, Any]) -> str:
+    """NX-377: nota unei completări cu necunoscute (`facet_unknown`), pentru ambele vederi ale
+    modelului (`_brief` și compunerea bogată, `finalize._rich_bundle`)."""
+    keys = ", ".join(str(k) for k in p.get("facet_unknown") or ())
+    return f"completare: nu știm dacă se potrivește la {keys}, nu afirma asta"
+
+
 #: NX-314 — nota pentru un produs adus pe «mai ieftin» care NU are tipul subiectului.
 _SUBJECT_FILLER_NOTE_RO = "completare, alt tip de produs decât cel discutat"
 
@@ -532,6 +539,9 @@ def _step_note(p: dict[str, Any]) -> str:
     # treptele lexicale. `True` și absența tac, din același motiv ca `strict`.
     if p.get("subject_match") is False:
         out += f" | {_SUBJECT_FILLER_NOTE_RO}"
+    # NX-377: o completare cu atributul NECUNOSCUT; modelul nu afirmă potrivirea pe el.
+    if p.get("facet_unknown"):
+        out += f" | {unknown_facet_note(p)}"
     return out
 
 
@@ -1179,6 +1189,25 @@ class _ResolvedTerms:
     #: amândouă zero chei, dar cer reacții OPUSE: prima e o degradare a noastră și nu are voie să
     #: schimbe nimic pentru client, a doua e o eroare de argument a modelului.
     category: Resolution | None = None
+
+
+def _unknown_fill_keys(ctx: TurnContext, facet_filters: Mapping[str, Any]) -> list[str]:
+    """NX-377: cheile din filtre pe care o pagină subțire le poate completa cu NECUNOSCUTE: fațete
+    care CALIFICĂ cererea (`binding: partitioning`, tipul de ten, mărimea) și pe care pachetul nu
+    le-a auditat (`enforce_ready`; doar o fațetă auditată are dreptul să EXCLUDĂ un produs fără
+    atribut, D7). Niciodată fațeta care POARTĂ nevoia (`additive`, `concerns`): acolo un produs
+    fără atribut nu e „poate potrivit", e altă cerere (recenzia). Ordinea filtrelor."""
+    facets = getattr(getattr(ctx.business, "domain_pack", None), "facets", ()) or ()
+    fillable: set[str] = set()
+    for f in facets:
+        if getattr(f, "binding", None) != "partitioning" or getattr(f, "enforce_ready", False):
+            continue
+        fillable |= {k for k in (getattr(f, "key", None), getattr(f, "source_key", None)) if k}
+    return [k for k in facet_filters if k in fillable]
+
+
+#: NX-377: treptele de text din care o completare cu necunoscute are voie să vină.
+_UNKNOWN_FILL_STEPS: frozenset[str | None] = frozenset({None, "relaxed"})
 
 
 def _rank_kwargs(a: SearchArgs) -> dict[str, Any]:
@@ -2604,6 +2633,91 @@ async def _search(
                 ranked_final.append(p)
                 fill_n += 1
 
+        # NX-377 — pagina SUBȚIRE pe un filtru de fațetă NEAUDITAT se completează cu produsele
+        # care nu poartă deloc atributul. Rularea din 2026-10-01 (k1, «ser pentru pete, am tenul
+        # gras»): `skin_type` e completat pe 40% din catalog, iar intersecția hiperpigmentare ∧ ten
+        # gras a avut 5 produse; scara se oprește la prima treaptă cu ORICE rezultat, deci clientul
+        # a primit 5 carduri, iar «mai arată-mi» după reluare n-a mai avut nimic. Un produs fără tip
+        # de ten declarat nu e unul nepotrivit (D7, ca `_facet_prefer_rank`); dreptul de a EXCLUDE
+        # îl are doar o fațetă auditată (`enforce_ready`). Potrivirile rămân primele; necunoscutele
+        # vin după, pe pagină până la `limit`, restul în coada pool-ului (paginarea), nu în
+        # diversificare. Niciodată un produs care CONTRAZICE filtrul.
+        unknown_tail: list[dict[str, Any]] = []
+        if (
+            get_settings().search_unknown_fill_enabled
+            and winning_step is not None
+            and len(ranked_final) < a.limit
+            and winning_step["facet_filters"]
+        ):
+            unknown_keys = _unknown_fill_keys(ctx, winning_step["facet_filters"])
+            have = {str(p.get("id")) for p in ranked_final}
+            page_n = 0
+            for key in unknown_keys:
+                # O fațetă pe rând: necunoscut pe ea, potrivire pe celelalte filtre. Cererea
+                # trebuie să rămână cu un subiect (alt filtru, raft sau ingredient), altfel
+                # completarea ar căuta prin tot catalogul fără atributul ăsta (recenzia).
+                kept = {k: v for k, v in winning_step["facet_filters"].items() if k != key}
+                if not (kept or winning_step["category"] or winning_step["features"]):
+                    continue
+                rows = await search_products_lexical(
+                    conn,
+                    ctx.business.id,
+                    query_text=a.query,
+                    price_max=winning_step["price_max"],
+                    constraints=winning_step["constraints"],
+                    facet_filters=kept or None,
+                    features=winning_step["features"],
+                    searchable_facets=searchable_facets,
+                    variant_label=a.variant_label,
+                    category=winning_step["category"],
+                    brand=a.brand,
+                    sort_mode=a.sort_mode,
+                    in_stock_only=winning_step["in_stock_only"],
+                    locale=ctx.language,
+                    allow_filters_only=False,  # cuvintele clientului rămân poartă (recenzia)
+                    pool=_FUSION_POOL,
+                    missing_facets=(key,),
+                    **_rank_kwargs(a),
+                )
+                # doar potriviri de TEXT curate: fără plasa de typo și fără SAU pe singulari
+                rows = [r for r in rows if r.get("lexical_step") in _UNKNOWN_FILL_STEPS]
+                rows = fuse_candidates(
+                    rows,
+                    [],
+                    sort_mode=a.sort_mode,
+                    concerns=concern_keys,
+                    weights=rank_weights,
+                    prefer=need_prefer,
+                )
+                tail_n = 0
+                for r in rows:
+                    rid = str(r.get("id"))
+                    if rid in have:
+                        continue
+                    have.add(rid)
+                    tagged = {**r, "facet_unknown": [key]}
+                    if len(ranked_final) < a.limit:
+                        ranked_final.append(tagged)
+                        page_n += 1
+                    elif tail_n < a.limit:  # o pagină în plus pe fațetă, pentru paginare
+                        unknown_tail.append(tagged)
+                        tail_n += 1
+            if unknown_keys:
+                # coada nu trece prin gate-ul de mai jos (`ranked_final`): îl primește aici (NX-173)
+                unknown_tail, _ = _safety_gate(ctx, unknown_tail, purpose="search")
+                if hard_needs and get_settings().skin_type_anti_fit_enabled:
+                    anti = anti_fit_for(getattr(ctx.business.domain_pack, "facets", ()), hard_needs)
+                    if anti:
+                        unknown_tail = [
+                            r for r in unknown_tail if not anti_fit_hit(r.get("attributes"), anti)
+                        ]
+                ctx.emit(
+                    "search_unknown_fill",
+                    facets=unknown_keys,
+                    page=page_n,
+                    tail=len(unknown_tail),
+                )
+
         # NX-303 — coada de POOL. Textul a umplut pagina, dar ca POARTĂ nu spunea nimic peste
         # filtre, deci „mai arată-mi" ar fi avut 6 rânduri dintr-un set de 518. Rândurile se
         # COLECTEAZĂ aici (cât mai avem conexiunea) și se aplică abia DUPĂ diversificare: pagina
@@ -2619,6 +2733,8 @@ async def _search(
             pool_tail = await _subject_filter_tail(
                 conn, ctx, a, winning_step, searchable_facets=searchable_facets
             )
+        if unknown_tail:  # NX-377: necunoscutele de după pagină, doar pentru paginare
+            pool_tail = [*pool_tail, *unknown_tail]
 
     # NX-173 (P0): gate de contraindicații pe setul FUZIONAT, ÎNAINTE de diversificare/pool/pagină.
     # Poziția e esențială: `pool_ids` (mai jos) semănează sesiunea din `ranked_final`, iar sesiunea
@@ -2697,7 +2813,8 @@ async def _search(
         before = len(ranked_final)
         # Sub două prețuri pe pagina filtrată (verificarea independentă v6.0), plafonul se ia pe
         # pagină + coadă, altfel coada ar intra fără bandă.
-        band_cap = price_band_cap(ranked_final)
+        # NX-377: mediana e a POTRIVIRILOR; completările cu necunoscute n-o mută
+        band_cap = price_band_cap([p for p in ranked_final if not p.get("facet_unknown")])
         if band_cap is None:
             band_cap = price_band_cap([*ranked_final, *pool_tail])
         ranked_final = [p for p in ranked_final if within_band(p, band_cap)]

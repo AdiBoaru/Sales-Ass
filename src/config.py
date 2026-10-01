@@ -612,6 +612,14 @@ class Settings(BaseSettings):
     # găsit produse potrivite" (11 din 20 de FAQ-uri SOLE). ON implicit: defect măsurat, iar fără
     # surse comportamentul e byte-identic.
     faq_grounding_enabled: bool = Field(default=True, validation_alias="FAQ_GROUNDING_ENABLED")
+    # NX-377 — o pagină SUBȚIRE (mai puține potriviri decât o pagină) pe un filtru de fațetă
+    # neauditat (`enforce_ready: false`) se completează, DUPĂ potriviri, cu produsele care NU
+    # poartă deloc atributul (necunoscute, nu nepotrivite: D7); niciodată cu cele care îl
+    # contrazic. Rularea din 2026-10-01: «ser pentru pete, ten gras» a rulat pe 5 produse
+    # (`skin_type` e completat pe 40% din catalog). OFF = pagina de dinainte, byte-identic.
+    search_unknown_fill_enabled: bool = Field(
+        default=True, validation_alias="SEARCH_UNKNOWN_FILL_ENABLED"
+    )
     # NX-118: afirmație POZITIVĂ de stoc/disponibilitate („pe stoc", „in stock") validată
     # AVAILABILITY-aware — drop (rich) / invalid+retry+fallback (proză) DOAR dacă niciun produs
     # retrievat nu e pe stoc (in_stock/low_stock). `has_stock_claim` sare peste negat/viitor
