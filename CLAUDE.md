@@ -1373,6 +1373,17 @@ nu pornește pe un tur care a citit regulile. Replay-ul are statusul `shortened`
 prefix al înregistrării). Card: [`tasks/stage1/NX-369.md`](tasks/stage1/NX-369.md); probă:
 `pytest tests/test_nx369_text_paths.py -q`.
 
+**NX-373 — pe un tur mixt, partea de magazin e a codului, nu a compunerii bogate.** Setul
+`kernel-live-2026-10-01` (clasa A2): «arată-mi un cushion pentru ten gras și spune-mi cât costă
+livrarea» a citit produsele și regula de livrare, proza rundei 2 o avea corectă, iar compunerea
+bogată (care primește doar produsele) a scris „Nu am informații despre costul livrării", servit
+clientului. Acum regulile pe care proza le redă și pe care clientul le-a întrebat (testul NX-369) se
+adaugă în cuvintele magazinului (pe compunerea bogată, pe recuperarea din catalog NX-302 și pe
+proză), înaintea unei întrebări finale; propozițiile compunerii care sunt ale magazinului (peste
+jumătate din cuvinte în regulile servite, fără un produs numit: `store_rules.drop_store_sentences`,
+date, nu o listă de cuvinte) ies pe loc, iar compunerea primește nota că partea de magazin nu e a ei. Flag `MIXED_TURN_STORE_RULES_ENABLED` (ON). Card:
+[`tasks/stage1/NX-373.md`](tasks/stage1/NX-373.md); probă: `pytest tests/test_nx373_mixed_turn_store_rules.py -q`.
+
 **NX-370 — o rafinare nu mai pierde produsul de pe ecran care o împlinește.** Pe c8 («fără
 sulfați» după un șampon fără sulfați afișat) modelul a cerut `features=["sulfate_free"]` (cod inventat,
 0 produse); relaxat ULTIMUL, el ținea pagina goală până ce scara arunca nevoia reală și raftul, iar

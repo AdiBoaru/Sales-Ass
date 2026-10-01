@@ -166,3 +166,71 @@ def names_any(text: str | None, names: Sequence[str], locale: str | None) -> boo
         if any(keys[i : i + n] == prefix for i in range(len(keys) - n + 1)):
             return True
     return False
+
+
+#: NX-373: rădăcina scurtă pentru propozițiile compunerii despre magazin. Mai scurtă decât `_STEM`,
+#: fiindcă aici cuvântul compunerii e o FLEXIUNE a celui din regulă («costul»/«costă»,
+#: «livrării»/«livrare»); potrivirea pe proporție, nu pe un singur cuvânt, ține falsurile jos.
+_TOPIC_STEM = 4
+#: O propoziție e a magazinului dacă PESTE jumătate din cuvintele ei de conținut sunt ale regulilor.
+#: Strict: «Toate trei costă sub 100 de lei» are exact jumătate („costă”, „lei” sunt și în regula
+#: de livrare) și e o propoziție de produs (recenzia NX-373).
+STORE_SHARE = 0.5
+#: Rândurile goale rămase după o propoziție scoasă se strâng la cel mult unul.
+_BLANK_RUNS = re.compile(r"\n{3,}")
+
+
+def _short_stems(text: str, locale: str | None) -> set[str]:
+    return {t[:_TOPIC_STEM] for t in content_terms(text, locale)}
+
+
+def drop_store_sentences(
+    text: str | None,
+    rules: Sequence[str],
+    locale: str | None,
+    *,
+    questions: Mapping[str, str] | None = None,
+    names: Sequence[str] = (),
+) -> tuple[str, int]:
+    """NX-373: scoate din `text` (intro-ul compunerii bogate, sau proza servită) propozițiile care
+    sunt ale MAGAZINULUI, fiindcă regulile întrebate (`rules`) le servește codul, în cuvintele
+    magazinului, imediat după.
+
+    O propoziție e a magazinului dacă PESTE jumătate (`STORE_SHARE`) din cuvintele ei de conținut
+    sunt în regulile servite sau în întrebările lor (`questions`) și nu numește niciun produs din
+    set (`names`, `names_any`). Pe producție: „Nu am informații despre costul livrării" (2 din 3,
+    iese) lângă regula reală; «Toate trei costă sub 100 de lei» (2 din 4) și «Pentru ten sensibil,
+    ambele creme au ingrediente blânde» rămân (recenzia NX-373: un singur cuvânt comun nu ajunge).
+    Datele sunt ale magazinului, nu o listă de cuvinte (P11). Propozițiile ies PE LOC: rândurile,
+    listele și separatorii rămași nu se ating (lecția NX-299). PURĂ. Întoarce textul și câte au
+    ieșit."""
+    if not text or not rules:
+        return text or "", 0
+    store: set[str] = set()
+    for rule in rules:
+        store |= _short_stems(rule, locale)
+        question = (questions or {}).get(rule)
+        if question:
+            store |= _short_stems(question, locale)
+    dropped = 0
+    lines_out: list[str] = []
+    for line in text.split("\n"):
+        bullet = _BULLET.match(line)
+        prefix = bullet.group(0) if bullet else ""
+        body = line[len(prefix) :]
+        kept: list[str] = []
+        parts = _SENTENCE_SPLIT.split(body) if body.strip() else []
+        for sentence in parts:
+            words = _short_stems(sentence, locale)
+            share = len(words & store) / len(words) if words else 0.0
+            if share > STORE_SHARE + _EPS and not names_any(sentence, names, locale):
+                dropped += 1
+            else:
+                kept.append(sentence)
+        if parts and not kept:
+            continue  # rândul întreg era al magazinului: iese cu tot cu marcaj
+        lines_out.append(prefix + " ".join(kept) if parts else line)
+    if not dropped:
+        return text, 0
+    out = _BLANK_RUNS.sub("\n\n", "\n".join(lines_out)).strip()
+    return out, dropped
