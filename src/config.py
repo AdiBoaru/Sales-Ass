@@ -282,11 +282,13 @@ class Settings(BaseSettings):
     # (`scripts/trace_replay.py`). Efectiv DOAR cu `CONVERSATION_TRACE_ENABLED`: fără tabel nu are
     # unde să ajungă, deci implicitul ON nu schimbă nimic unde captura e stinsă (byte-identic).
     trace_model_io_enabled: bool = Field(default=True, validation_alias="TRACE_MODEL_IO_ENABLED")
-    # NX-370: prima pagină a unei căutări NOI exclude produsele deja afișate DOAR când clientul a
-    # cerut altele („mai arată-mi", „nu ai altele?"). Înainte, excluderea necondiționată scotea de
+    # NX-370: prima pagină a unei căutări NOI exclude produsele deja afișate DOAR când cererea e
+    # aceeași (filtrele sesiunii active, altă formulare) sau e un act de paginare; o rafinare
+    # (filtru nou) și un produs numit le păstrează. Înainte, excluderea necondiționată scotea de
     # pe pagină exact produsul de pe ecran care împlinea o rafinare (c8, „fără sulfați") și golea
-    # pagina la o întrebare despre produsul afișat (c10). Implicit ON (defect măsurat, replay pe
-    # turele reale); OFF = excluderea de dinainte, byte-identic.
+    # pagina la o întrebare despre produsul afișat (c10). Tot el trage pe pagină produsul numit
+    # găsit în pool.
+    # Implicit ON (defect măsurat, replay pe turele reale); OFF = comportamentul de dinainte.
     search_first_page_keeps_shown_enabled: bool = Field(
         default=True, validation_alias="SEARCH_FIRST_PAGE_KEEPS_SHOWN_ENABLED"
     )

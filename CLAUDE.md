@@ -1340,10 +1340,13 @@ le rulează pe API ca widgetul (credite, îl pornește Adi). Card:
 sulfați» după un șampon fără sulfați afișat) modelul a cerut `features=["sulfate_free"]` (cod inventat,
 0 produse); relaxat ULTIMUL, el ținea pagina goală până ce scara arunca nevoia reală și raftul, iar
 prima pagină a oricărei căutări noi excludea ce era pe ecran, deci șamponul potrivit, primul în pool,
-nu ajungea pe pagină. Acum un `features` nerostit se relaxează primul (proveniență, NX-299), prima
-pagină exclude afișatele doar când mesajul cere altele (`show_more_phrase`, același detector ca
-paginarea; pe calea planificată excluderea e a actului de paginare), iar „produsul numit lipsește" se
-judecă pe pool (c10 primea „nu există" despre produsul afișat). Flag
+nu ajungea pe pagină. Acum un `features` nerostit se relaxează primul (proveniență, NX-299), iar prima
+pagină exclude afișatele după o regulă STRUCTURALĂ, nu după cuvinte: aceleași filtre ca sesiunea
+activă, în afara formulării (`query`/`rank_terms`/`prefer`), = cererea de altele ⇒ ies; un filtru nou
+sau schimbat = rafinare ⇒ rămân; un `product_name` nu se exclude; fără sesiune, ca înainte
+(`show_more_phrase` e un declanșator în plus). Pe calea planificată decide actul: căutarea unui
+`show_more` (`PlannedTurn.excludes_shown`). Produsul numit, găsit în pool dar nu pe pagină, urcă pe ea,
+iar „lipsește" se judecă pe pagina servită (c10 primea „nu există" despre produsul afișat). Flag
 `SEARCH_FIRST_PAGE_KEEPS_SHOWN_ENABLED` (ON). Card: [`tasks/stage1/NX-370.md`](tasks/stage1/NX-370.md);
 probă: `pytest tests/test_nx370_refinement_keeps_shown.py -q`.
 

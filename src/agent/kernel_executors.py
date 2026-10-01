@@ -416,14 +416,18 @@ def _confirm(ctx: TurnContext, question: str) -> None:
 
 
 async def _search(
-    ctx: TurnContext, deps: PipelineDeps, plan: TurnPlan, outcome: GateOutcome
+    ctx: TurnContext,
+    deps: PipelineDeps,
+    plan: TurnPlan,
+    outcome: GateOutcome,
+    exclude_shown: bool = False,
 ) -> bool:
     from src.tools import catalog_tools  # noqa: PLC0415 — ciclul unelte ↔ agent
 
     if plan.search_args is None:
         return False
     run = ToolRun(ctx, deps)
-    result = await run.execute_planned(plan.search_args)
+    result = await run.execute_planned(plan.search_args, exclude_shown=exclude_shown)
     if not run.retrieved:
         if result.llm_view == catalog_tools._NO_MORE_VIEW:
             # aceeași amprentă ca sesiunea activă, pool epuizat: nu e „nu am găsit în catalog"
@@ -641,7 +645,16 @@ async def _serve_mutation_then(
     saved = _SecondPlan.take(ctx)
     if not (second.depends_on == 0 and not mutation.added):
         try:
-            served = bool(await _run_plan(ctx, deps, second, outcome, policy_for))
+            served = bool(
+                await _run_plan(
+                    ctx,
+                    deps,
+                    second,
+                    outcome,
+                    policy_for,
+                    exclude_shown=1 in planned.excludes_shown,
+                )
+            )
         except NoSentence:
             served = False
         except Exception as e:  # noqa: BLE001 — o mutație picată n-a scris nimic: v1 poate relua
@@ -679,7 +692,10 @@ async def _run_plan(
     outcome: GateOutcome,
     policy_for: PolicyFor | None,
     mutating: bool = False,
+    exclude_shown: bool = False,
 ) -> bool | None:
+    """`exclude_shown` (NX-370) = planul e o căutare născută dintr-un act `show_more`
+    (`PlannedTurn.excludes_shown`): prima pagină sare produsele de pe ecran."""
     kind, ids = plan.executor, list(plan.product_ids)
     if kind == "reply_only":
         # Doar răspunsul unei MUTAȚII oprite de poartă fără întrebare (orice motiv: epuizat, țintă
@@ -695,7 +711,7 @@ async def _run_plan(
     if kind == "cart":
         return await _serve_cart(ctx, deps, plan) if ids else False
     if kind == "search":
-        return await _search(ctx, deps, plan, outcome)
+        return await _search(ctx, deps, plan, outcome, exclude_shown)
     if kind == "page":
         return await _page(ctx, deps)
     if kind == "ask":
@@ -777,7 +793,9 @@ async def execute_read_plans(
     plan = plans[0]
     if plan.executor not in READ_EXECUTORS:
         return None
-    verdict = await _run_plan(ctx, deps, plan, outcome, policy_for, mutating)
+    verdict = await _run_plan(
+        ctx, deps, plan, outcome, policy_for, mutating, exclude_shown=0 in planned.excludes_shown
+    )
     if not verdict:
         return verdict
     no_results = (

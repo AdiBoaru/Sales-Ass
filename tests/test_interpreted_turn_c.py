@@ -194,6 +194,28 @@ def _args():
     return SearchArgs(query="x")
 
 
+@pytest.mark.parametrize("excludes, expected", [((0,), {"exclude_shown": True}), ((), {})])
+async def test_nx370_a_show_more_search_asks_the_search_to_skip_the_screen(
+    monkeypatch, electronics, excludes, expected
+):
+    """NX-370 (recenzia): `PlannedTurn.excludes_shown` ajunge la căutarea planificată; fără el,
+    apelul e cel de azi (fără argument), deci suprafața I16 rămâne neschimbată."""
+    from src.tools import catalog_tools
+
+    seen: list[dict] = []
+
+    async def search(ctx, deps, args, **kw):
+        seen.append(kw)
+        return ToolResult(ok=True, products=sh.product_rows(electronics, []))
+
+    monkeypatch.setattr(catalog_tools, "run_planned_search", search)
+    planned = PlannedTurn(
+        plans=(_plan(executor="search", search_args=_args()),), excludes_shown=excludes
+    )
+    await kx.execute_read_plans(_ctx(electronics), _deps(), planned, _outcome())
+    assert seen == [expected]
+
+
 async def test_link_is_never_called_with_no_ids(monkeypatch, electronics):
     seen = []
 

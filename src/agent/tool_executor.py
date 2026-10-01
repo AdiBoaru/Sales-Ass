@@ -282,7 +282,7 @@ class ToolRun:
             if seq is not None:
                 await self._finish_ticket(seq)
 
-    async def execute_planned(self, args: Any) -> Any:
+    async def execute_planned(self, args: Any, *, exclude_shown: bool = False) -> Any:
         """NX-336 PR C: căutarea PLANULUI kernelului (`SearchArgs` scris de planner, I2), cu
         aceeași acumulare ca o unealtă chemată de model: plasa de siguranță, `retrieved`,
         relevanța, `called`, linkurile și sumele grounded, `state_patch` (sesiunea de căutare) și
@@ -293,7 +293,10 @@ class ToolRun:
 
         started = perf_counter()
         with turn_latency.span("tools"):
-            result = await run_planned_search(self.ctx, self.deps, args)
+            # NX-370: argumentul pleacă doar când e cerut, ca semnătura de azi să rămână apelabilă
+            result = await run_planned_search(
+                self.ctx, self.deps, args, **({"exclude_shown": True} if exclude_shown else {})
+            )
         return self._absorb_planned("search_products", result, args, started)
 
     async def execute_planned_routine(

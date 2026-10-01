@@ -144,13 +144,17 @@ class PlannedTurn:
     """Planul turului. `plans` are cel mult `MAX_PLANS` intrări, mutația înaintea citirii;
     `primary` = indexul planului actului principal (ultimul act nescos). `disclosures` = (index
     plan, cod din `DISCLOSURES`), cu `TURN_LEVEL` pentru un act nefăcut; `gaps` = coduri din
-    `GAPS`, fără duplicate, în ordinea apariției."""
+    `GAPS`, fără duplicate, în ordinea apariției. `excludes_shown` (NX-370) = indexurile
+    planurilor `search` născute dintr-un act `show_more` (o rafinare a paginării sau o sesiune
+    dispărută): prima lor pagină sare produsele de pe ecran, fiindcă actul cere ALTELE. Orice altă
+    căutare planificată le păstrează (o rafinare poate fi împlinită chiar de produsul afișat)."""
 
     plans: tuple[TurnPlan, ...]
     dropped_acts: int = 0
     gaps: tuple[str, ...] = ()
     disclosures: tuple[tuple[int, str], ...] = ()
     primary: int = 0
+    excludes_shown: tuple[int, ...] = ()
 
 
 def _read_act_query(
@@ -529,15 +533,28 @@ class _Planner:
             )
         primary_act = kept[-1][0]
         primary = next(n for n, (i, _) in enumerate(selected) if i == primary_act)
-        return self._finish(tuple(plans), dropped=dropped, primary=primary)
+        paging = tuple(
+            n
+            for n, ((_, act), plan) in enumerate(zip(selected, plans, strict=True))
+            if act.kind == "show_more" and plan.executor == "search"
+        )
+        return self._finish(tuple(plans), dropped=dropped, primary=primary, paging=paging)
 
-    def _finish(self, plans: tuple[TurnPlan, ...], *, dropped: int, primary: int) -> PlannedTurn:
+    def _finish(
+        self,
+        plans: tuple[TurnPlan, ...],
+        *,
+        dropped: int,
+        primary: int,
+        paging: tuple[int, ...] = (),
+    ) -> PlannedTurn:
         return PlannedTurn(
             plans=plans,
             dropped_acts=dropped,
             gaps=tuple(self.gaps),
             disclosures=tuple(self.disclosures),
             primary=primary,
+            excludes_shown=paging,
         )
 
     def _ask(self, kept: list[tuple[int, Act]]) -> TurnPlan:
