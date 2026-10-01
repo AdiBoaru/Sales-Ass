@@ -223,6 +223,10 @@ async def _cache_writeback(db: DbProvider, llm, business_id, locale, body, ctx) 
     if SafetyPolicy.for_turn(ctx).contexts:
         ctx.emit("cache_write_skipped", reason="safety_context")
         return
+    # NX-368: un mesaj semnalat de moderare care a ajuns la agent nu devine răspuns de cache.
+    if getattr(ctx, "moderation_flagged", False):
+        ctx.emit("cache_write_skipped", reason="moderated")
+        return
     text = (reply.text or "").strip()
     if not 5 <= len(text) <= 4000:
         return
@@ -369,6 +373,10 @@ async def _extract_profile_and_score(
     (short). LLM-ul NU ține niciodată conn (regula 1)."""
     settings = get_settings()
     if not settings.profile_extraction_enabled or llm is None or shadow_mode or ctx.route is None:
+        return
+    # NX-368: ce spune un mesaj semnalat de moderare nu intră în profilul/memoria clientului.
+    if getattr(ctx, "moderation_flagged", False):
+        ctx.emit("profile_extraction_skipped", reason="moderated")
         return
     try:
         facts_on = settings.conversation_facts_enabled

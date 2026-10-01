@@ -109,7 +109,10 @@ async def test_content_never_empty(path, request):
 # --- P0: moderarea --------------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="P0 moderare: un flag al clasificatorului reduce la tăcere")
+# NX-368: turul nu mai iese la poartă, ci ajunge la agent, iar înregistrarea are doar apelul de
+# moderare: replay-ul e `diverged` și testul se SARE (dovada pe mecanism e în
+# `tests/test_nx368_moderation.py`, pe categoriile înregistrate ale lui c13; dovada pe tur cere o
+# înregistrare nouă). Nu e `xfail`: un `xfail` care se sare n-ar putea trece niciodată.
 async def test_moderation_does_not_silence_a_product_question():
     from src.worker.stages.gates import NEUTRAL_MSG  # noqa: PLC0415
 
