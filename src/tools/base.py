@@ -42,6 +42,10 @@ class ToolResult:
     # NX-346: textele MAGAZINULUI servite în tur (răspunsurile FAQ): cifrele și afirmațiile citate
     # din ele sunt întemeiate pentru validatorul de proză. Nu vin niciodată de la model.
     sources: list[str] = field(default_factory=list)
+    # NX-369 (recenzia): întrebarea fiecărui răspuns din `sources` (răspuns → întrebare), ca o
+    # regulă să se servească doar când clientul a întrebat chiar de ea. Separat de `sources`, care
+    # rămâne lista de texte citabile a NX-346 (`strip_quoted`).
+    source_questions: dict[str, str] = field(default_factory=dict)
     # Mutație de state cerută de tool (NX-79, ex. cart_add → {"cart": [...]}). Stagiul Agent
     # o acumulează în `ctx.state_patch`; processor-ul o persistă. Tool-urile NU scriu ctx direct.
     state_patch: dict[str, Any] = field(default_factory=dict)

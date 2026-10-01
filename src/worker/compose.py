@@ -855,6 +855,11 @@ def assemble(
             pack = getattr(ctx.business, "domain_pack", None)
             types = answer_shape.distinct_types(shown)
             source = "types"
+            # NX-369: fără intro ȘI fără educație, încadrarea e SINGURA frază a răspunsului, deci
+            # pragul coboară la un tip (regula din `framing_text`, aplicată până acum doar pe calea
+            # creierului unic). Pe c5 din 2026-10-01, trei creme SPF de același tip ieșeau fără
+            # niciun cuvânt (P6).
+            min_types = 1 if not education and items else answer_shape._MIN_TYPES_FOR_FRAMING
             if getattr(get_settings(), "framing_labels_enabled", False):
                 # NX-325: pe o rutină, pașii (etichete localizate, ordinea sloturilor); altfel
                 # tipurile, cu eticheta din pachet în loc de cheia de catalog.
@@ -869,9 +874,11 @@ def assemble(
                     types, missing = answer_shape.type_labels(pack, ctx.language, types)
                     if missing:
                         ctx.emit("framing_label_missing", n=missing)
-                    intro = answer_shape.framing_text(pack, ctx.language, types)
+                    intro = answer_shape.framing_text(
+                        pack, ctx.language, types, min_types=min_types
+                    )
             else:
-                intro = answer_shape.framing_text(pack, ctx.language, types)
+                intro = answer_shape.framing_text(pack, ctx.language, types, min_types=min_types)
             if intro:
                 ctx.emit("answer_shape_filled", slot=answer_shape.SLOT_FRAMING, source=source)
 

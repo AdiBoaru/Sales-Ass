@@ -206,9 +206,9 @@ async def _main(args: argparse.Namespace) -> dict[str, Any]:
                     same_release=bool(head) and ti["env"].get("release") == head,
                 )
                 rec_turn = recorded.get(res.turn_id)
-                if res.status == "replayed" and rec_turn is not None:
-                    # Doar pe un replay CURAT: unul divergent a rulat un fallback, iar un „reparat"
-                    # acolo ar fi un artefact al instrumentului (recenzia NX-366).
+                if res.status in ("replayed", "shortened") and rec_turn is not None:
+                    # Doar pe un replay curat sau scurtat: unul divergent a rulat un fallback, iar
+                    # un „reparat" acolo ar fi un artefact al instrumentului (recenzia NX-366).
                     was = detector_hits(rec_turn)
                     now = detector_hits(replay_as_defect_turn(rec_turn, res, catalog))
                     entry.update(
