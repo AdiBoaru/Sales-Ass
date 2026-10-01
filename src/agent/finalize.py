@@ -13,11 +13,12 @@ Grounding-ul rămâne la `validator` (P2: modelul propune, codul dispune); texte
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any
 
-from src.agent import prompt_builder
+from src.agent import prompt_builder, store_rules
 from src.agent.brain_rich import rich_from_facts
 from src.agent.compare_narrative import compose_comparison
 from src.agent.deterministic import _comparison_facets
@@ -40,6 +41,7 @@ from src.agent.validator import (
     validate_prose,
 )
 from src.analytics.demand import clean_ids, product_ids_from_dicts
+from src.catalog.render_text import display_name
 from src.config import card_slots, chip_slots, get_settings
 from src.conversation.state_reducer import StateUpdateProposal
 from src.conversation.state_v2 import ConversationStateV2
@@ -983,7 +985,7 @@ async def _finalize_rich(
         if handles:
             trace["rich_handles"] = handles  # fără mapare, `rich_raw` n-ar mai putea fi citit
     if handles:
-        j = _resolve_handles(j, handles)
+        j = _resolve_handles(j, handles, _handle_names(products, handles))
     emitted = [it for it in (j.get("items") or []) if isinstance(it, dict) and it.get("product_id")]
     rich = compose.assemble(ctx, j, products, grounded_numbers=shape.grounded_numbers)
     if rich.items:
@@ -995,13 +997,67 @@ async def _finalize_rich(
     return _RichOutcome(reply=rich, model_items=len(emitted), model_intro=model_intro)
 
 
-def _resolve_handles(j: dict[str, Any], handles: dict[str, str]) -> dict[str, Any]:
+#: Un handle scris în PROZĂ („P1 are SPF 50, iar P2 și P6…"), ca token întreg.
+_HANDLE_IN_PROSE = re.compile(r"\bP(\d{1,2})\b")
+
+#: Câmpurile de proză ale compunerii bogate în care modelul poate scăpa un handle.
+_PROSE_FIELDS = ("intro", "education", "question")
+
+
+def _handle_names(products: list[dict[str, Any]], handles: dict[str, str]) -> dict[str, str]:
+    """`P1` → numele scurt al produsului (`render_text.display_name`, NX-301), exact cel de pe
+    card: numele de catalog are fraza de marketing și gramajul lipite (mediana 195 de caractere).
+    PURĂ."""
+    by_id = {str(p.get("id")): p for p in products if p.get("id")}
+    out: dict[str, str] = {}
+    for handle, pid in handles.items():
+        name = display_name((by_id.get(pid) or {}).get("name"))
+        if name:
+            out[handle] = name
+    return out
+
+
+def _named_handles(text: Any, names: dict[str, str]) -> Any:
+    """NX-369: handle-urile din proză devin numele produsului. Turul c5 din 2026-10-01: modelul a
+    scris „Pentru tenul gras, P1 are SPF 50…, P2 și P6 sunt…", iar scrub-ul a aruncat ambele
+    propoziții pentru cifra „1" (necunoscută clientului): trei carduri, zero text. Handle-ul e
+    eticheta NOASTRĂ (NX-324), deci traducerea lui nu adaugă nicio afirmație a modelului. Un handle
+    necunoscut rămâne ca atare (îl judecă scrub-ul, ca înainte)."""
+    if not isinstance(text, str) or not names:
+        return text
+    return _HANDLE_IN_PROSE.sub(lambda m: names.get(m.group(0), m.group(0)), text)
+
+
+def _resolve_handles(
+    j: dict[str, Any], handles: dict[str, str], names: dict[str, str] | None = None
+) -> dict[str, Any]:
     """`P3` → `product_id`, pe `items` și pe `pick`, ÎNAINTE de `compose.assemble`. Copie, nu
     mutație (`j` e și diagnoza brută din `ctx.trace`). Un handle necunoscut (imposibil sub
-    `strict`, dar defensiv) rămâne ca atare și cade la apartenență, ca un id străin azi."""
-    out = dict(j)
+    `strict`, dar defensiv) rămâne ca atare și cade la apartenență, ca un id străin azi.
+
+    NX-369: cu `names`, handle-urile scrise în PROZĂ (intro, educație, întrebarea NX-315, motivul
+    pick-ului, clauza fiecărui card, sugestiile) devin numele scurte ale produselor; o sugestie
+    cu un handle fără nume cade."""
+    names = names or {}
+    out = {k: (_named_handles(v, names) if k in _PROSE_FIELDS else v) for k, v in j.items()}
+    if names and isinstance(j.get("suggestions"), list):
+        # Textul unui chip ESTE comanda (NX-296): un handle rămas netradus n-ar însemna nimic
+        # pentru client, deci sugestia cade întreagă.
+        named = (_named_handles(s, names) for s in j["suggestions"])
+        out["suggestions"] = [
+            s
+            for s in named
+            if not (
+                isinstance(s, str)
+                and any(m.group(0) in handles for m in _HANDLE_IN_PROSE.finditer(s))
+            )
+        ]
     out["items"] = [
-        {**it, "product_id": handles.get(it.get("product_id"), it.get("product_id"))}
+        {
+            **it,
+            "product_id": handles.get(it.get("product_id"), it.get("product_id")),
+            "fit_clause": _named_handles(it.get("fit_clause"), names),
+        }
         if isinstance(it, dict)
         else it
         for it in (j.get("items") or [])
@@ -1011,6 +1067,7 @@ def _resolve_handles(j: dict[str, Any], handles: dict[str, str]) -> dict[str, An
         out["pick"] = {
             **pick,
             "product_id": handles.get(pick.get("product_id"), pick.get("product_id")),
+            "justification": _named_handles(pick.get("justification"), names),
         }
     return out
 
@@ -1376,6 +1433,42 @@ async def render(
             # SALES: text fără produse și fără sumă inventată (clarificare) → servim
             ctx.set_reply(final)
             return ValidationResult(ok=True, reasons=[])
+        # NX-369: turul a citit regulile magazinului, iar proza a picat fiindcă le PARAFRAZEAZĂ
+        # (NX-346 acceptă doar citatul întreg). Răspunsul devine textul regulilor pe care proza le
+        # redă, în cuvintele magazinului; niciodată „n-am găsit produse" la o întrebare de retur.
+        # Recenzia: o regulă se servește doar dacă și clientul a întrebat de ea (întrebarea FAQ-ului
+        # are un cuvânt comun cu mesajul), iar dacă o propoziție substanțială a prozei vorbește
+        # despre ALTCEVA (jumătatea de produs a unei întrebări mixte) regulile nu se dau drept
+        # răspuns întreg: urmează mesajul de no-result și chips-urile de continuare.
+        match = store_rules.match_rules(
+            final,
+            _sources(plan),
+            ctx.language,
+            client=plan.query or getattr(ctx.message, "body", None) or "",
+            questions=getattr(plan, "grounded_questions", None) or {},
+        )
+        if match.rules and match.complete:
+            ctx.set_reply(" ".join(match.rules))
+            ctx.emit("store_rules_quoted", n=len(match.rules), outcome="mapped")
+            return ValidationResult(ok=True, reasons=["store_rules_quoted"])
+        if _sources(plan):
+            ctx.emit(
+                "store_rules_quoted",
+                n=len(match.rules),
+                outcome="partial" if match.rules else "unmapped",
+            )
+        if match.rules:
+            ctx.set_reply(
+                " ".join(match.rules) + "\n\n" + _no_result_msg(is_order=False), cacheable=False
+            )
+            _attach_no_result_alternatives(ctx)
+            return validate_prose(
+                final,
+                products=[],
+                generated_links=plan.generated_links,
+                grounded_prices=plan.grounded_prices,
+                grounded_sources=_sources(plan),
+            )
         # SALES: preț negroundat fără produse care să-l susțină → mesaj sigur de vânzare.
         # NU cacheabil: altfel „n-am găsit" otrăvește semantic_cache și se re-servește la
         # fiecare query similar, sărind agentul (bug găsit live: hit_count=9 pe demo).

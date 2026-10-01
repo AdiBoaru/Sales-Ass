@@ -8,6 +8,7 @@ riscul detectat NU mai schimbă turul — transferul la operator a fost scos din
 from types import SimpleNamespace
 
 from src.agent.llm import LLMClient, ModerationResult
+from src.config import get_settings
 from src.models import BusinessConfig, Contact, InboundMessage, TurnContext
 from src.worker.runner import PipelineDeps
 from src.worker.stages import gates
@@ -175,6 +176,8 @@ async def test_moderation_clean_passes():
 
 
 async def test_moderation_threshold_blocks(monkeypatch):
+    """Calea de dinainte de NX-368 (kill-switch stins): blocare după prag."""
+    monkeypatch.setattr(get_settings(), "moderation_flag_telemetry_enabled", False)
     blocked = {}
 
     async def fake_block(conn, business_id, contact_id):

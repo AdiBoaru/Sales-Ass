@@ -221,7 +221,7 @@ async def test_a_different_request_kind_is_divergence(capture_on):
     assert res.divergence["recorded"]["schema"] == "rich_reply"
 
 
-async def test_fewer_calls_than_recorded_is_divergence(capture_on):
+async def test_fewer_calls_than_recorded_is_shortened_not_identical(capture_on):
     row = await _produce(_Provider(_completion('{"text": "Uite"}')), [_schema_stage])
 
     async def no_model(ctx, deps):
@@ -230,7 +230,7 @@ async def test_fewer_calls_than_recorded_is_divergence(capture_on):
     res = await trace_replay.replay_turn(
         row, db=_db(_Conn()), business=_business(), stages=[no_model]
     )
-    assert res.status == "diverged" and res.unused_calls == 1
+    assert res.status == "shortened" and res.unused_calls == 1
 
 
 async def test_a_failed_statement_in_a_checkout_is_reported(capture_on):
@@ -247,6 +247,25 @@ async def test_a_failed_statement_in_a_checkout_is_reported(capture_on):
     )
     assert res.status == "db_aborted"
     assert conn.rollbacks >= 1  # fiecare checkout se anulează, inclusiv cel eșuat
+
+
+async def test_a_failed_checkout_that_skips_a_call_is_db_aborted_not_shortened(capture_on):
+    """Recenzia NX-369: `shortened` se judecă de detectori, deci nu poate ascunde un abandon."""
+    row = await _produce(_Provider(_completion('{"text": "Uite"}')), [_schema_stage])
+
+    async def db_fails_then_skips_model(ctx, deps):
+        try:
+            async with deps.db("read_attempt") as conn:
+                await conn.fetchval("select 1")
+        except Exception:
+            return  # codul degradează (fail-open) și nu mai cheamă modelul
+        await _schema_stage(ctx, deps)
+
+    res = await trace_replay.replay_turn(
+        row, db=_db(_Conn(fail=True)), business=_business(), stages=[db_fails_then_skips_model]
+    )
+    assert res.unused_calls == 1
+    assert res.status == "db_aborted"
 
 
 async def test_rows_without_capture_are_not_replayable():

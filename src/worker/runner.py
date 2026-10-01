@@ -32,6 +32,7 @@ from src.runtime import deadline, turn_budget
 from src.runtime.deadline import TurnDeadline
 from src.runtime.turn_budget import BudgetLedger, TurnClass
 from src.safety import compose as safety_compose
+from src.worker.stages.gates import apply_moderation_notice
 
 log = logging.getLogger(__name__)
 
@@ -134,6 +135,7 @@ async def run_pipeline(ctx: TurnContext, deps: PipelineDeps, stages: list[Stage]
                 ctx.emit("pipeline_early_exit", stage=name)
                 if ctx.reply is not None:  # halt (tăcere) n-are reply de măsurat
                     safety_compose.enforce(ctx)  # NX-173: vezi mai jos
+                    apply_moderation_notice(ctx)  # NX-368
                     _emit_response_shape(ctx, name)
                     _emit_subject_match(ctx)
                 break
@@ -146,6 +148,7 @@ async def run_pipeline(ctx: TurnContext, deps: PipelineDeps, stages: list[Stage]
         # context de siguranță. (Stagiile nu știu că sunt măsurate — nici că sunt gate-uite, P10.)
         if ctx.reply is not None:
             safety_compose.enforce(ctx)
+            apply_moderation_notice(ctx)  # NX-368: fraza de sprijin, idempotentă
     finally:
         usage.pop(token)
         if io_token is not None:
