@@ -61,6 +61,8 @@ async def _replay(row: dict[str, Any]) -> Any:
     res = await trace_replay.replay_turn(row)
     if res.status in ("wrote", "db_aborted", "not_replayable"):
         pytest.fail(f"replay {res.status} ({res.reason}): instrumentul nu poate judeca turul")
+    # `shortened`: codul s-a oprit mai devreme, pe un prefix al înregistrării (o reparație care
+    # scoate un apel): rezultatul e al ieșirilor înregistrate, deci se judecă.
     if res.status == "diverged":
         pytest.skip(
             f"diverged la apelul {res.divergence and res.divergence['index']}: codul cere "
@@ -88,7 +90,9 @@ def _events(res: Any, kind: str) -> list[dict[str, Any]]:
 
 # --- P6: niciun răspuns fără text --------------------------------------------------------------
 
-_EMPTY_TEXT = {"c5_spf/940f8da5-0.json"}  # intro aruncat de scrub, 3 carduri fără niciun cuvânt
+#: Reparat de NX-369 (handle-urile `P1…` din proză devin numele de pe card, iar rezerva de
+#: încadrare coboară la un tip când e singura frază). Lista rămâne pentru următoarele cazuri.
+_EMPTY_TEXT: set[str] = set()
 
 
 @pytest.mark.parametrize("path", ALL, ids=[f"{p.parent.name}/{p.stem}" for p in ALL])
@@ -105,7 +109,10 @@ async def test_content_never_empty(path, request):
 # --- P0: moderarea --------------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="P0 moderare: un flag al clasificatorului reduce la tăcere")
+# NX-368: turul nu mai iese la poartă, ci ajunge la agent, iar înregistrarea are doar apelul de
+# moderare: replay-ul e `diverged` și testul se SARE (dovada pe mecanism e în
+# `tests/test_nx368_moderation.py`, pe categoriile înregistrate ale lui c13; dovada pe tur cere o
+# înregistrare nouă). Nu e `xfail`: un `xfail` care se sare n-ar putea trece niciodată.
 async def test_moderation_does_not_silence_a_product_question():
     from src.worker.stages.gates import NEUTRAL_MSG  # noqa: PLC0415
 
@@ -116,10 +123,8 @@ async def test_moderation_does_not_silence_a_product_question():
 # --- FAQ ----------------------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    strict=True, reason="regula magazinului respinsă, servit mesajul de fără produse"
-)
 async def test_faq_turn_never_answers_with_product_no_result():
+    """Reparat de NX-369 (era xfail): regula parafrazată se servește în cuvintele magazinului."""
     from src.agent.finalize import _no_result_msg  # noqa: PLC0415
 
     res = await _replay(_load("c14_retur/f27b0ee3-0.json"))
@@ -150,13 +155,16 @@ async def test_safety_exclusion_is_disclosed():
 _MOISTURE_BURST = "bcdfd78b-d5f4-4eea-9b52-fb3632962a5a"
 
 
-@pytest.mark.xfail(
-    strict=True, reason="căutarea nouă exclude produsele afișate; features nevalidat"
-)
 async def test_refinement_keeps_the_on_screen_match():
+    """Reparat de NX-370 (era xfail). Invariantul ține de ce OFERĂ căutarea modelului (pagina), nu
+    de alegerea lui: reparația schimbă lista, deci alegerea înregistrată („P6") se joacă peste altă
+    listă (`inputs_changed`), iar cardul final nu mai spune nimic despre mecanism. Verificat la
+    recenzie: compunerea alege prin handle-uri `P1…Pk` (NX-324), deci handle-ul înregistrat cade pe
+    alt produs al listei noi (COLOR WOW), iar o aserțiune pe carduri ar măsura poziția, nu
+    reparația. Dovada pe carduri cere o înregistrare nouă (`scripts/sim/prod_set_run.py`)."""
     res = await _replay(_load("c8_par_cret/fea953f3-1.json"))
-    ids = [str(p.get("product_id") or p.get("id")) for p in (res.reply or {}).get("products") or []]
-    assert _MOISTURE_BURST in ids
+    pages = [e.get("top_product_ids") or [] for e in _events(res, "product_search")]
+    assert any(_MOISTURE_BURST in page for page in pages)
 
 
 # --- „mai ieftin" pe pasul numit ------------------------------------------------------------------
@@ -187,3 +195,17 @@ async def test_cheaper_than_the_named_step():
         r for r in rows if r["product_type"] == _TONER_TYPE and float(r["price"]) < _TONER_PRICE
     ]
     assert toners, "niciun toner mai ieftin decât tonerul numit"
+
+
+async def test_store_info_turn_does_not_reload_old_cards():
+    """NX-369, c7 T3 („cat costa livrarea?"): proza care parafraza regula de livrare pica, iar R3 o
+    citea drept follow-up pe cardurile de dinainte: răspunsul plecau cu trei carduri vechi dedesubt
+    (verificat pe înregistrare). Acum: regula de livrare, fără carduri."""
+    from src.agent.finalize import _no_result_msg  # noqa: PLC0415
+
+    row = _load("c7_cadou/1fd688a6-3.json")
+    assert len(row["reply"].get("products") or []) == 3  # defectul, pe înregistrare
+    res = await _replay(row)
+    assert not (res.reply or {}).get("products")
+    text = shown_text(res.reply)
+    assert text and text != _no_result_msg(False)

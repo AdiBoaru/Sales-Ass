@@ -231,6 +231,21 @@ def _named_product_found(name: str, products: list[dict[str, Any]]) -> bool:
     return any(all(t in _normname(p.get("name") or "") for t in key) for p in products)
 
 
+def _named_match(name: str, products: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Primul produs care poartă tokenurile distinctive ale numelui (aceeași regulă ca
+    `_named_product_found`); `None` când numele n-are ce distinge sau nu se potrivește nimic."""
+    toks = sorted(
+        {t for t in re.findall(r"[a-z0-9]+", _normname(name)) if len(t) >= 4},
+        key=len,
+        reverse=True,
+    )[:2]
+    if not toks:
+        return None
+    return next(
+        (p for p in products if all(t in _normname(p.get("name") or "") for t in toks)), None
+    )
+
+
 # --- NX-169: proiecția faptelor canonice v3 în view-urile text (generic din DomainPack) ------
 
 _USAGE_RO = {
@@ -1064,6 +1079,7 @@ def _relax_ladder(
     constraints: Sequence[BoundConstraint] = (),
     category_uttered: bool = True,
     facets_uttered: bool = True,
+    features_uttered: bool = True,
 ) -> list[dict[str, Any]]:
     """Trepte de filtre dure, relaxate CUMULATIV ca să iasă ceva relevant înainte de listă goală
     (P6). Brand-ul NU se relaxează niciodată.
@@ -1117,6 +1133,13 @@ def _relax_ladder(
     # deci la proveniență egală rămâne ordinea istorică (fațete, apoi categorie) și nimic nu se
     # mișcă pe turele în care clientul a numit ambele.
     soft: list[tuple[bool, str]] = []
+    # NX-370: un `features` pe care clientul nu l-a rostit e o ipoteză a modelului, de obicei un cod
+    # inventat („sulfate_free"), pe care catalogul nu-l poartă: ca filtru dur întoarce zero, iar
+    # fiind relaxat ULTIMUL, scara arunca întâi nevoile REALE ale clientului (c8: păr uscat, raftul
+    # păr) și servea o căutare fără niciun filtru. Nerostit, intră primul în ordinea de relaxare.
+    features_first = bool(features) and by_provenance and not features_uttered
+    if features_first:
+        soft.append((False, "features"))
     if facet_filters:
         soft.append((facets_uttered if by_provenance else True, "facet_filters"))
     if category_relaxable:
@@ -1137,7 +1160,7 @@ def _relax_ladder(
     # cu `search_sort_mode_enabled`: prețul + stocul rămân fixate; relaxăm doar softul
     for _, field in soft:
         steps.append({**steps[-1], field: None})
-    if features:  # feature relaxat DUPĂ category (păstrat cât mai mult; P6 la epuizare)
+    if features and not features_first:  # rostit: relaxat DUPĂ category (P6 la epuizare)
         steps.append({**steps[-1], "features": None})
     return steps
 
@@ -1814,6 +1837,87 @@ def _fp(filters: dict[str, Any]) -> str:
     return hashlib.sha1(canon.encode()).hexdigest()[:16]
 
 
+def features_uttered_by_client(ctx: TurnContext, features: Sequence[object] | None) -> bool:
+    """NX-370: TOATE valorile din `features` au fost rostite de client (coroborarea NX-251/299).
+
+    Una singură nerostită face lista o ipoteză a modelului („sulfate_free" la «fără sulfați»),
+    care intră PRIMA în ordinea de relaxare. Deliberat fără confruntare cu vocabularul: acela e
+    plafonat (200 de valori, suport minim 2), deci un ingredient real și rar, rostit de client,
+    ar fi ieșit „necunoscut" și aruncat înaintea nevoilor (recenzia NX-370)."""
+    values = [f for f in features or () if isinstance(f, str) and f.strip()]
+    return bool(values) and all(uttered_by_client(ctx, f) for f in values)
+
+
+#: NX-370: cheile amprentei de sesiune care NU schimbă cererea, doar formularea sau ordinea ei.
+#: Două căutări care diferă doar prin ele cer același lucru, altfel spus.
+_WORDING_KEYS = frozenset({"query", "rank_terms", "prefer"})
+
+
+def same_request(filters: Mapping[str, Any], session_filters: Mapping[str, Any]) -> bool:
+    """NX-370: căutarea nouă are EXACT filtrele sesiunii active, în afara formulării (`query`,
+    `rank_terms`, `prefer`). PURĂ. Comparația trece prin aceeași formă canonică ca amprenta
+    (`_fp`), fiindcă filtrele sesiunii au trecut prin JSON-ul stării."""
+
+    def bare(f: Mapping[str, Any]) -> dict[str, Any]:
+        return {k: v for k, v in f.items() if k not in _WORDING_KEYS and v not in (None, [], {})}
+
+    return _fp(bare(filters)) == _fp(bare(session_filters))
+
+
+def _first_page_excludes(
+    ctx: TurnContext,
+    seen: set[str],
+    *,
+    planned: bool,
+    exclude_shown: bool = False,
+    filters: Mapping[str, Any] | None = None,
+    session_filters: Mapping[str, Any] | None = None,
+    product_name: str | None = None,
+) -> set[str]:
+    """NX-370: ce exclude prima pagină a unei căutări NOI. Regula e STRUCTURALĂ, pe filtre, nu pe
+    cuvintele mesajului (P11):
+      • aceleași filtre ca sesiunea activă (doar altă formulare: «altceva?», «alte creme?», «de la
+        alt brand?») = aceeași cerere, deci clientul vrea ALTELE: afișatele ies de pe pagină;
+      • un filtru schimbat sau adăugat = o RAFINARE (c8: «fără sulfați» adaugă `features`): un
+        produs afișat care o împlinește rămâne răspunsul potrivit;
+      • un produs numit (`product_name`, c10: «cât costă și e în stoc?») nu se exclude;
+      • fără sesiune activă, ca înainte: afișatele ies.
+    `deterministic.show_more_phrase` (detectorul paginării) rămâne un declanșator în plus.
+
+    Pe calea planificată (kernel) cererea de altele e un ACT (`show_more`), deci decizia e a
+    plannerului (`PlannedTurn.excludes_shown`), primită aici ca `exclude_shown`. Cu flagul stins,
+    excluderea necondiționată de dinainte."""
+    if not get_settings().search_first_page_keeps_shown_enabled:
+        return seen
+    if not seen:
+        return seen
+    if planned:
+        return seen if exclude_shown else set()
+    from src.agent.deterministic import show_more_phrase  # noqa: PLC0415 — ciclu unelte ↔ agent
+
+    if show_more_phrase(ctx.message.body or ""):
+        return seen
+    if product_name:
+        return set()
+    if not session_filters:
+        return seen
+    return seen if same_request(filters or {}, session_filters) else set()
+
+
+def _pull_named(
+    name: str | None, page_ids: list[str], pool_ids: list[str], by_id: Mapping[str, Any], limit: int
+) -> list[str]:
+    """NX-370: produsul NUMIT de client, găsit în pool dar nu pe pagină (diversificare, excluderea
+    afișatelor), urcă pe primul loc al paginii, în locul ultimului. E exact ce a cerut clientul, iar
+    „lipsește" se judecă apoi pe pagină: un produs pe care clientul nu-l vede nu e „găsit"."""
+    if not name or _named_product_found(name, [by_id[i] for i in page_ids]):
+        return page_ids
+    match = _named_match(name, [by_id[i] for i in pool_ids])
+    if match is None:
+        return page_ids
+    return [str(match["id"]), *page_ids][: max(limit, 1)]
+
+
 def _next_page(pool: list[str], cursor: int, seen: set[str], limit: int) -> tuple[list[str], int]:
     """Următoarea pagină de ≤`limit` id-uri NEVĂZUTE din `pool[cursor:]` → (ids, cursor_nou);
     cursor_nou trece peste tot ce s-a consumat (inclusiv id-urile sărite ca deja-văzute)."""
@@ -1931,14 +2035,24 @@ def _model_args(ctx: TurnContext, args: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in args.items() if k not in PLANNER_ONLY_FIELDS}
 
 
-async def run_planned_search(ctx: TurnContext, deps: PipelineDeps, a: SearchArgs) -> ToolResult:
+async def run_planned_search(
+    ctx: TurnContext, deps: PipelineDeps, a: SearchArgs, *, exclude_shown: bool = False
+) -> ToolResult:
     """NX-333 — intrarea PLANNERULUI kernelului (`src/agent/turn_planner.py`, I2): același corp ca
-    unealta, cu `SearchArgs` construit din starea redusă. N-are apelant până la pasul 6."""
-    return await _search(ctx, deps, a.model_copy(deep=True), planned=True)
+    unealta, cu `SearchArgs` construit din starea redusă. `exclude_shown` (NX-370) = planul vine
+    dintr-un act `show_more`: prima pagină sare ce e pe ecran (`PlannedTurn.excludes_shown`)."""
+    return await _search(
+        ctx, deps, a.model_copy(deep=True), planned=True, exclude_shown=exclude_shown
+    )
 
 
 async def _search(
-    ctx: TurnContext, deps: PipelineDeps, a: SearchArgs, *, planned: bool
+    ctx: TurnContext,
+    deps: PipelineDeps,
+    a: SearchArgs,
+    *,
+    planned: bool,
+    exclude_shown: bool = False,
 ) -> ToolResult:
     """Corpul comun al căutării. `planned=False` = calea de azi, byte-identică.
 
@@ -2153,6 +2267,9 @@ async def _search(
         constraints=tc.bounds,
         category_uttered=category_uttered,
         facets_uttered=facets_uttered,
+        # NX-370: pe calea planificată `features` vin din fațetele dure ale stării (ca fațetele).
+        # Pe v1 se țin până la capăt doar dacă TOATE valorile sunt rostite de client.
+        features_uttered=planned or features_uttered_by_client(ctx, a.features),
     )
     if category_keys and not category_uttered:
         # Raftul e o IPOTEZĂ a modelului, nu o cerere. Se emite indiferent dacă treapta apucă să
@@ -2656,7 +2773,18 @@ async def _search(
     # (unseen-dedup vs displayed, P8) → cursorul reflectă poziția în pool, paritate cu paginarea.
     pool_ids = [str(p["id"]) for p in ranked_final][:MAX_SEARCH_POOL]
     by_id = {str(p["id"]): p for p in ranked_final}
-    page_ids, cursor = _next_page(pool_ids, 0, seen, a.limit)
+    excluded = _first_page_excludes(
+        ctx,
+        seen,
+        planned=planned,
+        exclude_shown=exclude_shown,
+        filters=filters,
+        session_filters=sess_filters,
+        product_name=a.product_name,
+    )
+    page_ids, cursor = _next_page(pool_ids, 0, excluded, a.limit)
+    if get_settings().search_first_page_keeps_shown_enabled:
+        page_ids = _pull_named(a.product_name, page_ids, pool_ids, by_id, a.limit)
     products = [by_id[i] for i in page_ids]
     # NX-135: search filtrat pe variant_label → TOATE rezultatele au varianta cerută (construcție).
     # Marcăm fiecare produs → `_brief` îl semnalează → modelul scrie fit grounded, nu inventat.
@@ -2674,6 +2802,9 @@ async def _search(
     mode = "semantic" if vector_contributed else "lexical"
     # NX-163: produs NUMIT cerut dar absent din setul întors — precomputat aici (o dată) fiindcă e
     # și semnalul de unmet «named_not_found» (mai jos) și condiția de disclosure (nota de mai jos).
+    # NX-370: judecat pe PAGINA servită, după ce produsul numit găsit în pool a urcat pe ea
+    # (`_pull_named`): ce găsește căutarea, clientul vede, iar „lipsește" rămâne adevărat doar
+    # când nu e nici în pool.
     named_miss = bool(a.product_name) and not _named_product_found(a.product_name, products)
     # Treapta de TEXT care a servit pagina, calculată o dată: o citesc și evenimentul de căutare, și
     # captura de cerere neîmplinită de mai jos (NX-293 — un set servit din filtre înseamnă că
@@ -2795,7 +2926,8 @@ async def _search(
             page_index=0,
             pool_size=len(pool_ids),
             served=len(products),
-            unseen=len(page_ids),
+            # NX-370: câte produse de pe pagină NU erau deja pe ecran (o rafinare le poate păstra).
+            unseen=sum(1 for i in page_ids if i not in seen),
         )
     # Brand cerut + ZERO match real (nu doar zero după dedup) = brandul nu e în catalog. Semnal
     # EXPLICIT pentru agent („nu lucrăm cu brandul X"), nu prezenta alt brand ca al lui (CAT-001).

@@ -21,11 +21,12 @@ def _entry(status="replayed", **kw):
     return base
 
 
-def test_diverged_and_written_turns_count_against_fidelity():
-    results = [_entry() for _ in range(19)] + [_entry("diverged"), _entry("wrote")]
+def test_diverged_shortened_and_written_turns_count_against_fidelity():
+    others = [_entry("diverged"), _entry("wrote"), _entry("shortened")]
+    results = [_entry() for _ in range(19)] + others
     f = script.fidelity(results, gate=True, head=HEAD)
-    assert (f["judged"], f["same"]) == (21, 19)
-    assert f["verdict"] == "FAIL"  # 19/21 = 90,5% < 95%
+    assert (f["judged"], f["same"]) == (22, 19)
+    assert f["verdict"] == "FAIL"  # 19/22 < 95%
 
 
 def test_a_changed_input_is_not_identical():

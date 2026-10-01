@@ -241,16 +241,32 @@ def test_show_more_pages_an_active_session_when_nothing_changed(name):
 @pytest.mark.parametrize("name", PACKS)
 def test_show_more_with_changes_is_a_refinement(name):
     state = _state(_shelf(name), active_search={"fp": "x", "pool": ["a"], "cursor": 0})
-    plan = _only(_plan(name, _interp(acts=[{"kind": "show_more"}]), state, changed=True))
+    planned = _plan(name, _interp(acts=[{"kind": "show_more"}]), state, changed=True)
+    plan = _only(planned)
     assert plan.executor == "search" and plan.search_args.category == _shelf(name)
+    # NX-370 (recenzia): căutarea unui `show_more` cere ALTELE, deci prima ei pagină sare ecranul
+    assert planned.excludes_shown == (0,)
+
+
+@pytest.mark.parametrize("name", PACKS)
+def test_nx370_only_a_show_more_search_excludes_what_is_on_screen(name):
+    """Un `find` (o rafinare, o cerere nouă) păstrează produsele afișate în joc; paginarea pură
+    (`page`) nu e o căutare nouă."""
+    state = _state(_shelf(name), active_search={"fp": "x", "pool": ["a"], "cursor": 0})
+    found = _plan(name, _interp(acts=[{"kind": "find", "query": "ceva"}]), state, changed=True)
+    assert _only(found).executor == "search" and found.excludes_shown == ()
+    paged = _plan(name, _interp(acts=[{"kind": "show_more"}]), state)
+    assert _only(paged).executor == "page" and paged.excludes_shown == ()
 
 
 @pytest.mark.parametrize("name", PACKS)
 def test_show_more_without_a_session_searches_from_state(name):
     """Rândul nou (kernel.v1.1): fără sesiune și fără schimbări, «mai arată-mi» e o căutare din
     stare; fără subiect, `reply_only`."""
-    with_subject = _only(_plan(name, _interp(acts=[{"kind": "show_more"}]), _state(_shelf(name))))
+    subject_turn = _plan(name, _interp(acts=[{"kind": "show_more"}]), _state(_shelf(name)))
+    with_subject = _only(subject_turn)
     assert with_subject.executor == "search" and with_subject.search_args.query == _label(name)
+    assert subject_turn.excludes_shown == (0,)  # NX-370
     planned = _plan(name, _interp(acts=[{"kind": "show_more"}]), _state())
     assert _only(planned).executor == "reply_only" and planned.gaps == ("no_subject",)
 

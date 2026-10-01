@@ -860,7 +860,10 @@ async def _dark_search(
         return
     mark = len(ctx.events)
     started = perf_counter()
-    result = await run_planned_search(ctx, deps, plan.search_args)
+    paging = chain.planned.primary in chain.planned.excludes_shown  # NX-370
+    result = await run_planned_search(
+        ctx, deps, plan.search_args, **({"exclude_shown": True} if paging else {})
+    )
     out["ms"] = round((perf_counter() - started) * 1000, 1)
     slots = int(getattr(get_settings(), "card_slots", 6))
     ids = [str(p.get("product_id") or p.get("id")) for p in (result.products or [])]

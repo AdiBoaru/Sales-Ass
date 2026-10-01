@@ -1350,6 +1350,43 @@ blocat (pe SOLE rămân 21, toate „vitamina A" ca ingredient: decizie editoria
 replay c6 trece. Card: [`tasks/stage1/NX-367.md`](tasks/stage1/NX-367.md); probă:
 `pytest tests/test_nx367_safety_disclosure.py -q`.
 
+**NX-368 — moderarea nu mai reduce la tăcere o întrebare despre corp (P0).** „se descuamează și
+mă mănâncă" ieșea `violence`, clientul primea „Hai să păstrăm conversația respectuoasă", iar al
+treilea flag în 24 h îl bloca definitiv; singurul flag din tot istoricul `sole-ro` a fost acest fals
+pozitiv. Acum acțiunea depinde de categorie: intenția sau instrucțiunile de auto-vătămare primesc un
+mesaj de sprijin cu 112, `self_harm` singur (aprins și de vorbirea despre piele) lasă agentul să
+răspundă cu fraza de sprijin înainte, `sexual_minors` un refuz, abuzul spre bot (`harassment*`,
+`hate*`) răspunsul neutru, iar `violence*`/`illicit*`/`sexual` sunt telemetrie
+(`message_moderated{action}`) și turul îl răspunde agentul. Un mesaj semnalat care ajunge la agent nu
+intră în cache și nici în memoria clientului. Nimeni nu mai e blocat automat de un clasificator. Flag `MODERATION_FLAG_TELEMETRY_ENABLED`
+(ON; OFF = calea veche). Card: [`tasks/stage1/NX-368.md`](tasks/stage1/NX-368.md); probă:
+`pytest tests/test_nx368_moderation.py -q`.
+
+**NX-369 — textul modelului nu se mai pierde.** Pe c5 modelul scria handle-urile de card în
+proză („P1 are SPF 50…, P2 și P6 sunt…"), scrub-ul arunca propozițiile pentru „1", iar trei
+carduri rămâneau fără niciun cuvânt; acum `_resolve_handles` le traduce în numele scurte de pe card,
+iar rezerva de încadrare coboară la un tip când e singura frază. Pe c14 („pot returna?") proza
+corectă, dar parafrazată, pica la NX-346 și clientul primea „n-am găsit produse"; pe c7 același
+eșec reîncărca cardurile vechi sub regula de livrare. Acum `store_rules.quoted_rules` leagă fiecare
+propoziție respinsă de regula pe care o redă și servește textul magazinului, cuvânt cu cuvânt, iar R3
+nu pornește pe un tur care a citit regulile. Replay-ul are statusul `shortened` (codul folosește un
+prefix al înregistrării). Card: [`tasks/stage1/NX-369.md`](tasks/stage1/NX-369.md); probă:
+`pytest tests/test_nx369_text_paths.py -q`.
+
+**NX-370 — o rafinare nu mai pierde produsul de pe ecran care o împlinește.** Pe c8 («fără
+sulfați» după un șampon fără sulfați afișat) modelul a cerut `features=["sulfate_free"]` (cod inventat,
+0 produse); relaxat ULTIMUL, el ținea pagina goală până ce scara arunca nevoia reală și raftul, iar
+prima pagină a oricărei căutări noi excludea ce era pe ecran, deci șamponul potrivit, primul în pool,
+nu ajungea pe pagină. Acum un `features` nerostit se relaxează primul (proveniență, NX-299), iar prima
+pagină exclude afișatele după o regulă STRUCTURALĂ, nu după cuvinte: aceleași filtre ca sesiunea
+activă, în afara formulării (`query`/`rank_terms`/`prefer`), = cererea de altele ⇒ ies; un filtru nou
+sau schimbat = rafinare ⇒ rămân; un `product_name` nu se exclude; fără sesiune, ca înainte
+(`show_more_phrase` e un declanșator în plus). Pe calea planificată decide actul: căutarea unui
+`show_more` (`PlannedTurn.excludes_shown`). Produsul numit, găsit în pool dar nu pe pagină, urcă pe ea,
+iar „lipsește" se judecă pe pagina servită (c10 primea „nu există" despre produsul afișat). Flag
+`SEARCH_FIRST_PAGE_KEEPS_SHOWN_ENABLED` (ON). Card: [`tasks/stage1/NX-370.md`](tasks/stage1/NX-370.md);
+probă: `pytest tests/test_nx370_refinement_keeps_shown.py -q`.
+
 **NX-371 — «mai ieftin» pe produsul numit.** Pe c9 «pot să înlocuiesc tonerul cu ceva mai ieftin?»
 primea o bandă de nas de 3 lei: pragul era cel mai ieftin card de pe ecranul curent (30 lei), iar
 tonerul numit (110 lei) era pe ecranul de dinainte. Acum ancora e produsul al cărui TIP îl numește

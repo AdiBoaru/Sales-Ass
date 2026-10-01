@@ -180,9 +180,19 @@ class Settings(BaseSettings):
     # --- Moderation gate (NX-15) ---
     # Poartă în Gates înaintea triajului: mesaj flagged → răspuns neutru (gratuit la OpenAI).
     moderation_enabled: bool = Field(default=True, validation_alias="MODERATION_ENABLED")
-    # Câte flag-uri într-o fereastră de 24h trec contactul pe abuse blocklist.
+    # Câte flag-uri într-o fereastră de 24h trec contactul pe abuse blocklist (doar cu
+    # `MODERATION_FLAG_TELEMETRY_ENABLED=false`, calea de dinainte de NX-368).
     moderation_block_threshold: int = Field(
         default=3, validation_alias="MODERATION_BLOCK_THRESHOLD"
+    )
+    # NX-368: acțiunea unui flag de moderare depinde de categorie: auto-vătămarea primește un mesaj
+    # de sprijin, conținutul sexual cu minori un refuz, abuzul spre bot răspunsul neutru, iar restul
+    # (violență, ilicit, sexual) e TELEMETRIE și turul îl răspunde agentul. Nimeni nu mai e blocat
+    # automat de un clasificator. Măsurat: singurul flag din istoricul `sole-ro` a fost un fals
+    # pozitiv („se descuamează și mă mănâncă" = violență). Implicit ON, ca NX-311 (defect măsurat);
+    # OFF = răspuns neutru pe orice flag + blocare după prag, byte-identic cu înainte.
+    moderation_flag_telemetry_enabled: bool = Field(
+        default=True, validation_alias="MODERATION_FLAG_TELEMETRY_ENABLED"
     )
 
     # --- Redis ---
@@ -282,6 +292,16 @@ class Settings(BaseSettings):
     # (`scripts/trace_replay.py`). Efectiv DOAR cu `CONVERSATION_TRACE_ENABLED`: fără tabel nu are
     # unde să ajungă, deci implicitul ON nu schimbă nimic unde captura e stinsă (byte-identic).
     trace_model_io_enabled: bool = Field(default=True, validation_alias="TRACE_MODEL_IO_ENABLED")
+    # NX-370: prima pagină a unei căutări NOI exclude produsele deja afișate DOAR când cererea e
+    # aceeași (filtrele sesiunii active, altă formulare) sau e un act de paginare; o rafinare
+    # (filtru nou) și un produs numit le păstrează. Înainte, excluderea necondiționată scotea de
+    # pe pagină exact produsul de pe ecran care împlinea o rafinare (c8, „fără sulfați") și golea
+    # pagina la o întrebare despre produsul afișat (c10). Tot el trage pe pagină produsul numit
+    # găsit în pool.
+    # Implicit ON (defect măsurat, replay pe turele reale); OFF = comportamentul de dinainte.
+    search_first_page_keeps_shown_enabled: bool = Field(
+        default=True, validation_alias="SEARCH_FIRST_PAGE_KEEPS_SHOWN_ENABLED"
+    )
     # NX-371: «mai ieftin» se ancorează în produsul NUMIT de client („tonerul"), văzut pe ecranul
     # curent sau pe unul anterior, nu în cel mai ieftin card de pe ecranul curent. Conversația c9
     # (prod, 2026-10-01): tonerul de 110 lei → o bandă de nas de 3 lei. ON (defect măsurat, replay
