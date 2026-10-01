@@ -612,6 +612,14 @@ class Settings(BaseSettings):
     # găsit produse potrivite" (11 din 20 de FAQ-uri SOLE). ON implicit: defect măsurat, iar fără
     # surse comportamentul e byte-identic.
     faq_grounding_enabled: bool = Field(default=True, validation_alias="FAQ_GROUNDING_ENABLED")
+    # NX-372 — un tur care a citit DOAR regulile magazinului (nicio unealtă de catalog, cel puțin
+    # una din afara lui) și n-a putut răspunde din ele primește fraza pachetului
+    # `store_info_unknown`, nu „Momentan n-am găsit produse potrivite": nu a căutat niciun produs.
+    # Rularea pe producție din 2026-10-01: «livrați și în Republica Moldova?» și «cât fac toate în
+    # coș?». ON (defect măsurat); OFF = mesajul de produse, byte-identic.
+    store_info_fallback_enabled: bool = Field(
+        default=True, validation_alias="STORE_INFO_FALLBACK_ENABLED"
+    )
     # NX-118: afirmație POZITIVĂ de stoc/disponibilitate („pe stoc", „in stock") validată
     # AVAILABILITY-aware — drop (rich) / invalid+retry+fallback (proză) DOAR dacă niciun produs
     # retrievat nu e pe stoc (in_stock/low_stock). `has_stock_claim` sare peste negat/viitor

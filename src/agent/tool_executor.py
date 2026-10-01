@@ -26,7 +26,7 @@ from src.models import TurnContext
 from src.observability import hooks, turn_latency
 from src.runtime import deadline, turn_budget
 from src.safety.policy import SafetyPolicy
-from src.tools.base import ARGS_REJECTED, CATALOG_READ_TOOLS, run_tool
+from src.tools.base import ARGS_REJECTED, CATALOG_READ_TOOLS, STORE_READ_TOOLS, run_tool
 
 if TYPE_CHECKING:
     from src.worker.runner import PipelineDeps
@@ -179,6 +179,13 @@ class ToolRun:
         return bool(self.grounded_sources) or any(
             name not in CATALOG_READ_TOOLS for name in self.called
         )
+
+    @property
+    def read_store_only(self) -> bool:
+        """NX-372: turul a chemat cel puțin o unealtă și TOATE citesc regulile magazinului
+        (`STORE_READ_TOOLS`). Mai îngust decât `read_beyond_catalog`, deliberat: o clarificare, o
+        comandă sau o mutație picată nu sunt întrebări despre regulile magazinului."""
+        return bool(self.called) and all(name in STORE_READ_TOOLS for name in self.called)
 
     def _tool_gate(self) -> tool_budget.ToolGate:
         if self._gate is None:

@@ -45,6 +45,7 @@ from src.catalog.render_text import display_name
 from src.config import card_slots, chip_slots, get_settings
 from src.conversation.state_reducer import StateUpdateProposal
 from src.conversation.state_v2 import ConversationStateV2
+from src.domain.pack import kernel_sentence
 from src.models import MAX_OFFERED_CHIPS, Offer, RichReply, TurnContext
 from src.web.localization import amount_text
 from src.worker import compose
@@ -380,6 +381,39 @@ def _no_result_msg(is_order: bool) -> str:
     return (
         "Momentan n-am găsit produse potrivite. Îmi spui mai exact ce cauți (tip de produs, buget)?"
     )
+
+
+#: NX-372: codul frazei de pachet pentru un tur de magazin fără răspuns.
+PACK_CODE = "store_info_unknown"
+
+
+def _store_info_fallback(ctx: TurnContext, reason: str) -> bool:
+    """NX-372: răspunsul unui tur de MAGAZIN care n-a putut răspunde din regulile citite.
+
+    Turul a chemat DOAR unelte care citesc regulile magazinului (`RetrievalResult.store_only`,
+    `tools.base.STORE_READ_TOOLS`) și niciuna de catalog, deci n-a căutat niciun produs, iar
+    „Momentan n-am găsit produse potrivite" ar fi o afirmație despre o căutare care nu a avut loc.
+    Pe producție (2026-10-01) asta primea «livrați și în Republica Moldova?» după ce modelul
+    scrisese că nu are informația. Regula e structurală (ce unelte a chemat turul), nu citește
+    mesajul. Nu `read_beyond_catalog` (recenzia): o clarificare, o comandă sau o mutație picată
+    ar fi primit „nu am informația în regulile magazinului", falsă pentru ele. Fraza e a pachetului
+    (`kernel_sentences.store_info_unknown`, P11); fără ea, mesajul de dinainte, numărat. Fără chips
+    de produse: o întrebare de livrare nu se continuă cu „arată-mi produse populare". `True` =
+    răspunsul e pus."""
+    retrieval = getattr(ctx, "retrieval", None)
+    if (
+        not get_settings().store_info_fallback_enabled
+        or retrieval is None
+        or retrieval.catalog_read
+        or not retrieval.store_only
+    ):
+        return False
+    phrase = kernel_sentence(getattr(ctx.business, "domain_pack", None), ctx.language, PACK_CODE)
+    ctx.emit("store_info_unanswered", reason=reason, sentence=phrase is not None)
+    if phrase is None:
+        return False
+    ctx.set_reply(phrase, cacheable=False)
+    return True
 
 
 def _attach_no_result_alternatives(ctx: TurnContext) -> None:
@@ -1472,8 +1506,10 @@ async def render(
         # SALES: preț negroundat fără produse care să-l susțină → mesaj sigur de vânzare.
         # NU cacheabil: altfel „n-am găsit" otrăvește semantic_cache și se re-servește la
         # fiecare query similar, sărind agentul (bug găsit live: hit_count=9 pe demo).
-        ctx.set_reply(_no_result_msg(is_order=False), cacheable=False)
-        _attach_no_result_alternatives(ctx)  # NX-159 felia 2: chips de continuare
+        # NX-372: un tur care n-a căutat produse nu spune că n-a găsit produse.
+        if not _store_info_fallback(ctx, "prose_rejected"):
+            ctx.set_reply(_no_result_msg(is_order=False), cacheable=False)
+            _attach_no_result_alternatives(ctx)  # NX-159 felia 2: chips de continuare
         return validate_prose(
             final,
             products=[],
@@ -1487,6 +1523,9 @@ async def render(
         ctx.set_reply(login_required_for_ctx(ctx), cacheable=False)
         return None
     else:
+        # NX-372: același tur de magazin, fără niciun text al modelului.
+        if not is_order and _store_info_fallback(ctx, "no_text"):
+            return None
         ctx.set_reply(_no_result_msg(is_order), cacheable=False)
         if not is_order:  # NX-159 felia 2: chips de continuare doar pe sales (order cere numărul)
             _attach_no_result_alternatives(ctx)

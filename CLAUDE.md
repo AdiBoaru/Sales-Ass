@@ -1405,6 +1405,18 @@ cheia bate eticheta; între etichete regula rămâne. Pe vocabularul real se sch
 («corp», «Corp»). Card: [`tasks/stage1/NX-376.md`](tasks/stage1/NX-376.md); probă:
 `pytest tests/test_nx376_shelf_key_beats_label.py -q`.
 
+**NX-372 — un tur care a citit doar regulile magazinului nu mai spune „n-am găsit produse".** Setul
+`kernel-live-2026-10-01` (rulat pe producție, analiza în
+[`tasks/stage1/KERNEL-LIVE-2026-10-01.md`](tasks/stage1/KERNEL-LIVE-2026-10-01.md), clasa A1): la
+«livrați și în Republica Moldova?» și «cât fac toate în coș?» modelul a răspuns onest, validatorul a
+respins corect fraza, iar rezerva comună a vânzării fără produse („Momentan n-am găsit produse
+potrivite…") vorbea despre o căutare care nu avusese loc. Regula e structurală: un tur care n-a citit
+catalogul (`catalog_read`, NX-326) și a citit altceva (`read_beyond_catalog`, NX-367) primește fraza
+pachetului `kernel_sentences.store_info_unknown`, fără chips de produse, pe ambele căi (executorii
+`faq`/`delegate` compun prin `finalize.render`). `kernel_sentence` locuiește acum în
+`src/domain/pack.py`. Flag `STORE_INFO_FALLBACK_ENABLED` (ON). Card:
+[`tasks/stage1/NX-372.md`](tasks/stage1/NX-372.md); probă: `pytest tests/test_nx372_store_info_fallback.py -q`.
+
 **NX-360 — stocul și prețurile SOLE se resincronizează din paginile live.** Catalogul era o fotografie
 din 2026-08-28: cele 391 de produse `out_of_stock` aveau prețul voucherului WELCOME15 drept preț de
 listă (scraperul cădea pe `offers.price` din JSON-LD când pagina epuizată nu arăta rândul de preț), iar

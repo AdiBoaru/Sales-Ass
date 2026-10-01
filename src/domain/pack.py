@@ -30,7 +30,9 @@ DEFAULT_REFERENCE_DIMENSIONS: tuple[str, ...] = ("brand", "product_type")
 #: (`verdict_unknown`, cu eticheta dimensiunii, și `verdict_unknown_any`, fără ea: NX-336 C2,
 #: I12), plus mutația coșului (D2): `cart_added`, `cart_failed` și refuzul porții fără întrebare
 #: (`mutation_unavailable`, `mutation_not_exact`). Domeniul nu importă kernelul, deci lista se
-#: repetă aici, iar testul ține cele două liste de acord.
+#: repetă aici, iar testul ține cele două liste de acord. NX-372: `store_info_unknown` e răspunsul
+#: unui tur care a citit doar regulile magazinului și n-a putut răspunde din ele; îl folosește și
+#: calea v1 (`finalize.render`), fiindcă executorii `faq`/`delegate` compun prin ea.
 KERNEL_SENTENCE_CODES: frozenset[str] = frozenset(
     {
         "not_exact_match",
@@ -44,12 +46,24 @@ KERNEL_SENTENCE_CODES: frozenset[str] = frozenset(
         "cart_failed",
         "mutation_unavailable",
         "mutation_not_exact",
+        "store_info_unknown",
     }
 )
 #: Singurele coduri cu un marcator, fiecare exact o dată (loaderul respinge orice alt marcator):
 #: `verdict_unknown` numește dimensiunea care lipsește, cu eticheta ei de rând din pachet, iar
 #: `cart_added` produsul adăugat, cu numele lui scurt (NX-336 D2).
 KERNEL_SENTENCE_MARKERS: dict[str, str] = {"verdict_unknown": "dimension", "cart_added": "product"}
+
+
+def kernel_sentence(pack: object | None, locale: str | None, code: str) -> str | None:
+    """Fraza unui cod din `kernel_sentences`, în limba turului (cu fallback pe limba de bază), sau
+    `None`. PUR. Locuiește lângă date (NX-372): o citesc și kernelul, și calea v1 (`finalize`), iar
+    o a doua copie a căutării ar putea alege altă limbă decât prima."""
+    table = getattr(pack, "kernel_sentences", None) or {}
+    lang = (locale or "").strip().lower()
+    per_code = table.get(lang) or table.get(lang.split("-")[0]) or {}
+    phrase = per_code.get(code)
+    return phrase if isinstance(phrase, str) and phrase.strip() else None
 
 
 @dataclass(frozen=True)

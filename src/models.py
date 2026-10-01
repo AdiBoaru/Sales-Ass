@@ -345,6 +345,9 @@ class RetrievalResult:
     # comandă, orice unealtă din afara `CATALOG_READ_TOOLS`). Atunci un set golit de excluderea de
     # siguranță NU face răspunsul al codului (`safety.compose.enforce`): proza poartă și acel fapt.
     read_beyond_catalog: bool = False
+    # NX-372: turul a chemat DOAR unelte care citesc regulile magazinului (`STORE_READ_TOOLS`).
+    # Fără răspuns din ele, `finalize.render` spune că nu are informația, nu că n-a găsit produse.
+    store_only: bool = False
 
 
 # ---------------------------------------------------------------------------
