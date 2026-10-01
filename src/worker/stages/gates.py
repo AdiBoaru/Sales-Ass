@@ -45,6 +45,33 @@ NEUTRAL_MSG = (
     "Cu ce te pot ajuta legat de produse sau comenzi?"
 )
 
+# NX-368: categoriile de moderare (numele câmpurilor din `Categories` ale furnizorului) care au
+# răspuns propriu. Restul flag-urilor sunt doar telemetrie (vezi `_moderation_blocked`).
+_SELF_HARM = frozenset({"self_harm", "self_harm_intent", "self_harm_instructions"})
+_MINORS = frozenset({"sexual_minors"})
+#: Abuzul îndreptat spre bot primește în continuare răspunsul neutru. Categoriile care se aprind
+#: pe vorbirea despre corp și produse (`violence`: „mă mănâncă", „arde"; `sexual`: produse intime;
+#: `illicit`) sunt doar telemetrie: pe ele, un răspuns neutru e un fals pozitiv servit clientului.
+_ABUSE = frozenset({"harassment", "harassment_threatening", "hate", "hate_threatening"})
+
+# Mesajul de sprijin la auto-vătămare, per locale (P11). 112 e numărul de urgență în toată UE;
+# nicio linie de consiliere numită aici, fiindcă ar trebui verificată și ținută la zi pe țară.
+_SUPPORT_MSG: dict[str, str] = {
+    "ro": (
+        "Îmi pare foarte rău că treci prin asta. Dacă te gândești să-ți faci rău sau ești în "
+        "pericol, te rog sună acum la 112, acolo te pot ajuta imediat."
+    ),
+    "en": (
+        "I'm really sorry you're going through this. If you're thinking about hurting yourself "
+        "or you're in danger, please call 112 now, they can help you right away."
+    ),
+}
+
+
+def _localized(table: dict[str, str], locale: str | None) -> str:
+    return table.get(locale or "ro") or table["ro"]
+
+
 # Fereastra contorului de flag-uri (secunde) — 24h, ca pragul de blocklist să fie pe zi.
 _FLAG_WINDOW_S = 24 * 60 * 60
 
@@ -312,7 +339,8 @@ async def _rate_limited(ctx: TurnContext, deps: PipelineDeps) -> bool:
 
 
 async def _moderation_blocked(ctx: TurnContext, deps: PipelineDeps) -> bool:
-    """Poarta de moderare (NX-15). True ⇒ flagged: a setat răspunsul neutru → early-exit.
+    """Poarta de moderare (NX-15, NX-368). True ⇒ a setat un răspuns propriu → early-exit.
+    Un flag obișnuit întoarce False: turul continuă la agent, flagul rămâne în telemetrie.
 
     Fail-OPEN: fără cheie / API jos → False (mesajul trece normal). Indisponibilitatea
     moderării NU trebuie să tacă tot traficul; e best-effort safety, nu o poartă dură."""
@@ -333,11 +361,34 @@ async def _moderation_blocked(ctx: TurnContext, deps: PipelineDeps) -> bool:
         return False
     if not res.flagged:
         return False
-    # Flagged: NICIODATĂ corpul în analytics (principiul 12) — doar categoriile.
-    ctx.emit("message_moderated", categories=res.categories)
-    await _record_flag_and_maybe_block(ctx, deps)
-    ctx.set_reply(NEUTRAL_MSG, cacheable=False)
-    return True
+    if not getattr(settings, "moderation_flag_telemetry_enabled", False):
+        # Calea de dinainte de NX-368 (kill-switch): orice flag ⇒ răspuns neutru + contor.
+        ctx.emit("message_moderated", categories=res.categories)
+        await _record_flag_and_maybe_block(ctx, deps)
+        ctx.set_reply(NEUTRAL_MSG, cacheable=False)
+        return True
+    # NX-368: acțiunea depinde de CATEGORIE, iar nimeni nu mai e blocat automat. Clasificatorul
+    # citea un simptom pe română („se descuamează și mă mănâncă") ca violență, iar clientul primea
+    # „hai să păstrăm conversația respectuoasă"; al treilea flag în 24 h îl bloca definitiv
+    # (tăcere). Pe tot istoricul `sole-ro`, singurul flag a fost acel fals pozitiv. Auto-vătămarea
+    # primește un mesaj de sprijin (nu o mustrare), conținutul sexual cu minori un refuz, abuzul
+    # spre bot răspunsul neutru, iar restul e telemetrie: turul îl răspunde agentul.
+    # NICIODATĂ corpul în analytics (principiul 12): doar categoriile și acțiunea.
+    categories = set(res.categories)
+    if categories & _SELF_HARM:
+        action = "support"
+        ctx.set_reply(_localized(_SUPPORT_MSG, ctx.language), cacheable=False)
+    elif categories & _MINORS:
+        action = "refused"
+        ctx.set_reply(NEUTRAL_MSG, cacheable=False)
+    elif categories & _ABUSE:
+        # Abuzul îndreptat spre bot e motivul porții (NX-15): răspuns neutru, fără blocare.
+        action = "neutral"
+        ctx.set_reply(NEUTRAL_MSG, cacheable=False)
+    else:
+        action = "observed"
+    ctx.emit("message_moderated", categories=res.categories, action=action)
+    return action != "observed"
 
 
 async def _charge_vision_cost(ctx: TurnContext, deps: PipelineDeps) -> None:
