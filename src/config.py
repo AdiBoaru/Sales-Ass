@@ -277,6 +277,11 @@ class Settings(BaseSettings):
     conversation_trace_enabled: bool = Field(
         default=False, validation_alias="CONVERSATION_TRACE_ENABLED"
     )
+    # NX-366 — în aceeași captură: ce a ieșit din model (fiecare apel logic) și cu ce a pornit turul
+    # (snapshotul încărcat + amprentele mediului), ca turul să poată fi rejucat fără model
+    # (`scripts/trace_replay.py`). Efectiv DOAR cu `CONVERSATION_TRACE_ENABLED`: fără tabel nu are
+    # unde să ajungă, deci implicitul ON nu schimbă nimic unde captura e stinsă (byte-identic).
+    trace_model_io_enabled: bool = Field(default=True, validation_alias="TRACE_MODEL_IO_ENABLED")
     # NX-257 — poarta de POTRIVIRE: produsele ale căror date CONTRAZIC o constrângere rostită de
     # client, pe o fațetă declarată `partitioning` și peste pragul ei de acoperire, ies din
     # `ctx.retrieval`. UNKNOWN trece mereu (D7). OFF = byte-identic. Asta E enforcement-ul NX-188,

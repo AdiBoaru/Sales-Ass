@@ -1,0 +1,163 @@
+{
+ "version": "prod-2026-10-01",
+ "conversations": [
+  {
+   "id": "c5_spf",
+   "turns": [
+    {
+     "message": "am nevoie de o crema cu spf pt fata, am tenul gras"
+    },
+    {
+     "message": "ceva care sa nu lase urme albe"
+    },
+    {
+     "message": "compara primele doua"
+    },
+    {
+     "message": "care e mai buna pentru tenul meu?"
+    }
+   ]
+  },
+  {
+   "id": "c6_sarcina",
+   "turns": [
+    {
+     "message": "sunt insarcinata si vreau un ser anti-pete"
+    },
+    {
+     "message": "dar ceva cu retinol ai?"
+    },
+    {
+     "message": "ok, si o crema de corp pentru vergeturi"
+    }
+   ]
+  },
+  {
+   "id": "c7_cadou",
+   "turns": [
+    {
+     "message": "caut un cadou pentru iubitul meu, ceva de ingrijire, pana in 150 lei"
+    },
+    {
+     "message": "are barba, ceva pentru asta?"
+    },
+    {
+     "message": "ai si un set?"
+    },
+    {
+     "message": "cat costa livrarea?"
+    }
+   ]
+  },
+  {
+   "id": "c8_par_cret",
+   "turns": [
+    {
+     "message": "ce sampon imi recomanzi pt par cret si uscat"
+    },
+    {
+     "message": "fara sulfati te rog"
+    },
+    {
+     "message": "mai arata-mi"
+    },
+    {
+     "message": "cum se foloseste al doilea?"
+    }
+   ]
+  },
+  {
+   "id": "c9_rutina",
+   "turns": [
+    {
+     "message": "vreau sa-mi fac o rutina de seara, am ten mixt si cativa pori dilatati"
+    },
+    {
+     "message": "nu vreau sa dau mai mult de 200 lei pe tot"
+    },
+    {
+     "message": "pot sa inlocuiesc tonerul cu ceva mai ieftin?"
+    }
+   ]
+  },
+  {
+   "id": "c10_nume",
+   "turns": [
+    {
+     "message": "aveti beauty of joseon relief sun?"
+    },
+    {
+     "message": "cat costa si e in stoc?"
+    },
+    {
+     "message": "trimite-mi linkul"
+    },
+    {
+     "message": "ai ceva asemanator mai ieftin?"
+    }
+   ]
+  },
+  {
+   "id": "c11_offcatalog",
+   "turns": [
+    {
+     "message": "aveti uscator de par?"
+    },
+    {
+     "message": "dar o perie pentru par?"
+    },
+    {
+     "message": "ok atunci un ulei pentru varfuri"
+    }
+   ]
+  },
+  {
+   "id": "c12_machiaj",
+   "turns": [
+    {
+     "message": "vreau un fond de ten pentru ten sensibil care sa acopere bine"
+    },
+    {
+     "message": "ceva mai lejer, gen bb cream"
+    },
+    {
+     "message": "si o crema de fata hidratanta pe care s-o pun inainte"
+    },
+    {
+     "message": "inapoi la fondul de ten, care din ele are spf?"
+    }
+   ]
+  },
+  {
+   "id": "c13_vag",
+   "turns": [
+    {
+     "message": "salut"
+    },
+    {
+     "message": "nu stiu ce sa-mi iau, am pielea cam ciudata"
+    },
+    {
+     "message": "se descuameaza in jurul nasului si ma mananca"
+    },
+    {
+     "message": "ok si ceva bland pentru curatare?"
+    }
+   ]
+  },
+  {
+   "id": "c14_retur",
+   "turns": [
+    {
+     "message": "daca nu-mi place o crema o pot returna?"
+    },
+    {
+     "message": "si daca am deschis-o?"
+    },
+    {
+     "message": "unde e comanda mea?"
+    }
+   ]
+  }
+ ]
+}

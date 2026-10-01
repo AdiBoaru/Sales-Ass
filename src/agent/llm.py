@@ -23,7 +23,7 @@ from typing import Any, NamedTuple
 import openai
 from openai import AsyncOpenAI
 
-from src.agent import tool_budget, usage
+from src.agent import model_io, tool_budget, usage
 from src.config import get_settings
 from src.observability import turn_latency
 from src.runtime import deadline, turn_budget
@@ -842,21 +842,25 @@ class LLMClient:
         purpose = usage.request_purpose(kwargs)
         started = perf_counter()
         try:
-            resp = await _with_retry(
-                lambda t: create(**(kwargs if t is None else {**kwargs, "timeout": t})),
-                max_retries=s.llm_retry_max,
-                cap_ms=budget.cap_ms,
-                attempt_timeout_s=budget.attempt_timeout_s,
-                total_cap_s=budget.total_cap_s,
-                slow_after_ms=budget.slow_after_ms,
-            )
-        except BaseException:
+            with model_io.in_flight():  # NX-366: două apeluri deodată fac turul nerejucabil
+                resp = await _with_retry(
+                    lambda t: create(**(kwargs if t is None else {**kwargs, "timeout": t})),
+                    max_retries=s.llm_retry_max,
+                    cap_ms=budget.cap_ms,
+                    attempt_timeout_s=budget.attempt_timeout_s,
+                    total_cap_s=budget.total_cap_s,
+                    slow_after_ms=budget.slow_after_ms,
+                )
+        except BaseException as exc:
             # Și apelul EȘUAT e un rând: timpul lui a fost plătit de tur. Re-ridicăm neatins —
             # măsurătoarea nu are voie să schimbe ce vede apelantul (P6, P10).
             _note_call(shape, reasoning_on, started, None, ok=False, purpose=purpose)
+            model_io.record_error(model_io.endpoint_for(kwargs), kwargs, exc)  # NX-366
             raise
         _note_call(shape, reasoning_on, started, resp, ok=True, purpose=purpose)
         _note_cache_on_span(resp)
+        # NX-366: apelul LOGIC (după retry), ca turul să poată fi rejucat fără model.
+        model_io.record_ok(model_io.endpoint_for(kwargs), kwargs, resp)
         return resp
 
     def _responses_sampling(self, *, model: str, effort: str) -> Sampling:
@@ -1215,18 +1219,19 @@ class LLMClient:
         deci o cerere lentă pe fiecare fază ar putea trece de buget. Expirat ⇒ `TimeoutError`,
         prins de poartă ca orice eșec. Stins ⇒ calea de dinainte, byte-identic."""
         mdl = model or self.model_moderation
-        if _wait_bounded():
-            cap_s = float(get_settings().moderation_timeout_s)
-            async with asyncio.timeout(cap_s):
-                resp = await _with_retry(
-                    lambda t: self._client.moderations.create(model=mdl, input=text, timeout=t),
-                    max_retries=get_settings().llm_retry_max,
-                    cap_ms=int(cap_s * 1000),
-                    attempt_timeout_s=cap_s,
-                    total_cap_s=cap_s,
-                )
-        else:
-            resp = await _with_retry(
+
+        async def call() -> Any:
+            if _wait_bounded():
+                cap_s = float(get_settings().moderation_timeout_s)
+                async with asyncio.timeout(cap_s):
+                    return await _with_retry(
+                        lambda t: self._client.moderations.create(model=mdl, input=text, timeout=t),
+                        max_retries=get_settings().llm_retry_max,
+                        cap_ms=int(cap_s * 1000),
+                        attempt_timeout_s=cap_s,
+                        total_cap_s=cap_s,
+                    )
+            return await _with_retry(
                 # NX-311: `_t` ignorat DELIBERAT pe calea veche. Plafonul `MODERATION_CAP_MS` se
                 # aplică doar cu deadline-ul de tur aprins; fără el rămâne `timeout` din constructor
                 # și retry-ul, cu `Retry-After` fără tavan (NX-357).
@@ -1234,6 +1239,8 @@ class LLMClient:
                 max_retries=get_settings().llm_retry_max,
                 cap_ms=MODERATION_CAP_MS,
             )
+
+        resp = await _recorded("moderations", {"input": text}, call())
         r = resp.results[0]
         data = r.categories.model_dump()
         flagged = [k for k, v in data.items() if v]
@@ -1246,28 +1253,29 @@ class LLMClient:
         vedere (mini). Ridică la eroare de API — caller-ul (gate) prinde și degradează fail-soft."""
         mdl = model or self.model_vision
         # Vision: NU trecem prin `_chat` (fără `temperature` — extracție, nu generare). Doar retry.
-        resp = await _with_retry(
-            lambda _t: self._client.chat.completions.create(  # `_t`: vezi nota din `moderate`
-                model=mdl,
-                messages=[
-                    {"role": "system", "content": _VISION_SYSTEM},
+        messages = [
+            {"role": "system", "content": _VISION_SYSTEM},
+            {
+                "role": "user",
+                "content": [
                     {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "text",
-                                "text": "Descrie produsul din poză ca interogare de căutare.",
-                            },
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:{mime};base64,{image_b64}",
-                                    "detail": "low",
-                                },
-                            },
-                        ],
+                        "type": "text",
+                        "text": "Descrie produsul din poză ca interogare de căutare.",
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:{mime};base64,{image_b64}",
+                            "detail": "low",
+                        },
                     },
                 ],
+            },
+        ]
+        call = _with_retry(
+            lambda _t: self._client.chat.completions.create(  # `_t`: vezi nota din `moderate`
+                model=mdl,
+                messages=messages,
                 # max_completion_tokens (NU max_tokens, deprecat → 400 pe gpt-5.4-*); 256 = headroom
                 # pentru tokenii de „reasoning" + extracția scurtă, cost tot mic (detail:"low").
                 max_completion_tokens=256,
@@ -1276,6 +1284,7 @@ class LLMClient:
             cap_ms=getattr(get_settings(), "llm_call_cap_ms", 8_000),
             total_cap_s=_extraction_total_cap_s(),  # NX-357
         )
+        resp = await _recorded("chat.completions", {"messages": messages}, call)
         usage.record_chat(resp, mdl)
         return (resp.choices[0].message.content or "").strip()
 
@@ -1285,7 +1294,7 @@ class LLMClient:
         cache semantic / search semantic."""
         mdl = model or self.model_embed
         s = get_settings()
-        resp = await _with_retry(
+        call = _with_retry(
             lambda _t: self._client.embeddings.create(  # `_t`: vezi nota din `moderate`
                 model=mdl, input=texts
             ),
@@ -1295,8 +1304,22 @@ class LLMClient:
             cap_ms=s.embed_timeout_ms or None,
             total_cap_s=_extraction_total_cap_s(),  # NX-357
         )
+        resp = await _recorded("embeddings", {"input": texts}, call)
         usage.record_embeddings(resp, mdl)
         return [d.embedding for d in resp.data]
+
+
+async def _recorded(endpoint: str, kwargs: dict[str, Any] | None, call: Awaitable[Any]) -> Any:
+    """NX-366 — apelurile care nu trec prin `_guarded` (moderare, Vision, embedding) se
+    înregistrează aici, o dată, după retry. Rezultatul și excepția ies neatinse (P6, P10)."""
+    try:
+        with model_io.in_flight():
+            resp = await call
+    except BaseException as exc:
+        model_io.record_error(endpoint, kwargs, exc)
+        raise
+    model_io.record_ok(endpoint, kwargs, resp)
+    return resp
 
 
 _llm: LLMClient | None = None
