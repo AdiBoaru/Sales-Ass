@@ -23,7 +23,19 @@ Versioning: the contract is `kernel.v1.0`. **Minor** (`v1.1`): additive schema f
 
 No invariant, ownership row or state rule changes in v1.2, so no replay gate is required. The open questions step 6 raised on I5 (the safety prune on `aside`), I20 (the cart on `cart_ref`) and I15a/I12 (`grounding_guard` does not run on the v1 composition) are decided in the PRs that need them (B and C), under the minor/major rule.
 
-**Current version: `kernel.v6.1` (minor, NX-374, 2026-10-01).** One additive value in a closed
+**Current version: `kernel.v6.2` (minor, NX-375, 2026-10-01).** One planner row, additive: a
+`find` act on a turn that declares a `name` reference no act targets and no change anchors
+(`relative_to`) searches on that NAME (`SearchArgs.product_name` and the query text), exactly like
+`detail`/`compare` on a name not found. The rule this follows was already the contract's: the
+resolver finds only a distinctive name written in full, and approximate name search is the
+planner's. A reference the resolver reclassified (a name that denotes a property, I24) or found
+`stale` is not a product name. Found by the production run `kernel-live-2026-10-01` (k6 T1, «aveți
+ANUA Heartleaf 77 toner?»: the reference was declared, `find.targets` was empty, the search ran on
+„toner” and the customer was told the product does not exist; it is in stock).
+`TurnInterpretation` is unchanged; the schema snapshot differs only in its version stamp. No
+meaning, invariant, ownership row or state rule changes, so no replay gate is required.
+
+**Previous version: `kernel.v6.1` (minor, NX-374, 2026-10-01).** One additive value in a closed
 vocabulary the planner writes: the disclosure `need_unverifiable`. A need the customer SPOKE (source
 `user_explicit`, which the delta writes only from an accepted `explicit` change) that falls into the
 gap `unsupported_need` is told to the customer once per conversation, with the pack sentence

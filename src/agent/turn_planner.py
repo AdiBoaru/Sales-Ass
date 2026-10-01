@@ -718,6 +718,19 @@ class _Planner:
         )
 
     def _find(self, act: Act, index: int) -> TurnPlan:
+        # `kernel.v6.2` (NX-375): un produs NUMIT în cerere e ce caută clientul. Căutarea
+        # aproximativă după nume e a plannerului (resolverul găsește doar un nume scris întreg),
+        # deci textul căutării e numele, ca la `detail`/`compare` pe un nume negăsit.
+        named = self._untargeted_name()
+        if named is not None:
+            plan = self._search(act, index, name=named)
+            if plan.search_args is None:
+                return plan
+            # Recenzia: clientul cere produsul pe NUME, deci raftul unui subiect vechi și bugetul
+            # conversației nu-l mai filtrează (altfel unealta i-ar spune că produsul „nu există
+            # ca atare" doar fiindcă stă pe alt raft sau peste un buget de acum câteva ture).
+            unscoped = plan.search_args.model_copy(update={"category": None, "price_max": None})
+            return self._plan("search", (), unscoped)
         words = read_query(act, pack=self.pack, locale=self.locale).has_words
         nothing = not (words or self._facet_needs() or self._missing_name(act))
         if not self._subject() and nothing:
@@ -726,6 +739,38 @@ class _Planner:
             self._gap("no_subject")
             return self._plan("reply_only")
         return self._search(act, index)
+
+    def _untargeted_name(self) -> str | None:
+        """NX-375: numele unei referințe `name` a turului pe care n-o folosește nimic altceva: nu e
+        țintă a niciunui act și nu e ancoră a unei schimbări (`relative_to`: «ceva ca X, mai
+        ieftin» caută ALTCEVA decât X). Rularea din 2026-10-01: «aveți ANUA Heartleaf 77 toner?»
+        avea referința declarată, dar `find.targets` gol, deci căutarea a rulat pe „toner", fără
+        produsul numit (fără tip în catalog), iar clientul a primit „nu apare". Prima, în ordinea
+        declarării; o referință pe care resolverul a găsit-o `stale` nu mai e în catalog."""
+        # Recenzia (interpretări reale stocate, d32/e34): «ai ceva mai ieftin decât Aurelia?» vine
+        # uneori cu limita relativă de preț FĂRĂ `relative_to`. O limită de preț fără număr are o
+        # ancoră, iar singura ancoră posibilă e numele: clientul vrea ALTCEVA decât el.
+        if any(
+            c.dimension == PRICE_DIMENSION and c.relation in ("lte", "gte") and c.number is None
+            for c in self.interp.changes
+        ):
+            return None
+        used = {t for a in self.interp.acts for t in a.targets}
+        used |= {c.relative_to for c in self.interp.changes if c.relative_to}
+        names: list[str] = []
+        for ref in self.interp.references:
+            if ref.kind != "name" or ref.id in used:
+                continue
+            resolved = self.resolved.get(ref.id)
+            # `stale` = nu mai e în catalog; reclasificată de resolver (un „nume" care numește o
+            # proprietate, «linkul la roșeață», I24) = nu e un nume de produs
+            if resolved is not None and (resolved.outcome == "stale" or resolved.kind != "name"):
+                continue
+            name = self._name(ref.id)
+            if name is not None and name not in names:
+                names.append(name)
+        # Două nume nefolosite («X sau Y?»): nu ghicim pe care; căutarea compusă rămâne.
+        return names[0] if len(names) == 1 else None
 
     def _show_more(self, act: Act, index: int) -> TurnPlan:
         if not self.changed and self.state.active_search:
