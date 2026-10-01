@@ -40,6 +40,7 @@ from src.agent.validator import (
     strip_quoted,
     validate_prose,
 )
+from src.agent.voice import naturalize
 from src.analytics.demand import clean_ids, product_ids_from_dicts
 from src.catalog.render_text import display_name
 from src.config import card_slots, chip_slots, get_settings
@@ -445,6 +446,146 @@ def _store_rules_partial(ctx: TurnContext, rules: tuple[str, ...] | list[str]) -
     text = " ".join(rules)
     ctx.set_reply(f"{text}\n\n{phrase}" if phrase else text, cacheable=False)
     return True
+
+
+#: NX-373: nota pentru compunerea bogată pe un tur mixt. Fără subiecte numite (P11): partea de
+#: magazin e a codului, deci compunerea nu trebuie nici s-o redea, nici s-o nege.
+MIXED_STORE_NOTE = (
+    "clientul a întrebat și despre regulile magazinului. Răspunsul la partea asta se adaugă "
+    "separat, în cuvintele magazinului, după textul tău. În `intro` vorbește doar despre produse "
+    "și nu spune că nu ai informații despre regulile magazinului."
+)
+
+
+def _mixed_store_rules(ctx: TurnContext, plan: ResponsePlan) -> tuple[str, ...]:
+    """NX-373: regulile magazinului pe care le-a cerut un tur MIXT (produse + regulă).
+
+    Rularea din 2026-10-01 (k7 T1, «arată-mi un cushion pentru ten gras și spune-mi cât costă
+    livrarea»): runda 1 a chemat `search_products` și `faq_lookup`, proza rundei 2 avea regula
+    de livrare corectă, iar compunerea bogată, care primește doar produsele, a scris „Nu am
+    informații despre costul livrării". Proprietarul răspunsului de magazin devine codul:
+    regulile pe care proza modelului le redă și pe care clientul le-a întrebat
+    (`store_rules.match_rules`, matcher-ul NX-369, cu întrebarea clientului pe SUBIECTUL regulii,
+    `topical`, recenzia F4) se servesc în cuvintele magazinului. Fără sursele citite în tur, nimic.
+
+    Recenzia F2: fără proză (runda de proză sărită, sau goală), regula nu se pierde. Se alege din
+    sursele turului regula pe care a întrebat-o clientul (`store_rules.asked_rule`), altfel
+    negarea compunerii („Nu am informații despre costul livrării") ar ajunge din nou la client."""
+    if not get_settings().mixed_turn_store_rules_enabled or plan.is_order:
+        return ()
+    sources = _sources(plan)
+    if not sources:
+        return ()
+    client = plan.query or getattr(ctx.message, "body", None) or ""
+    questions = getattr(plan, "grounded_questions", None) or {}
+    if not (plan.final or "").strip():
+        return store_rules.asked_rule(sources, ctx.language, client=client, questions=questions)
+    match = store_rules.match_rules(
+        plan.final, sources, ctx.language, client=client, questions=questions, topical=True
+    )
+    return match.rules
+
+
+#: Un loc unde POATE începe o propoziție nouă, pe un rând: semn de final + spațiu.
+_SENTENCE_GAP = re.compile(r"(?<=[.!?])\s+")
+
+
+def _sure_gap(line: str, gap: re.Match[str]) -> bool:
+    """O despărțire de propoziție SIGURĂ (recenzia F1): după „!" sau „?" mereu, după „." doar dacă
+    urmează o literă mare și cuvântul dinainte nu e o sigură de majuscule sau un număr («DR. JART»,
+    «COSRX.», «★ 5.0.»). Cazurile nesigure nu se despart."""
+    before = line[: gap.start()].split()
+    after = line[gap.end() :]
+    if not before or not after:
+        return False
+    if before[-1][-1] in "!?":
+        return True
+    core = before[-1].rstrip(".")
+    letters = [ch for ch in core if ch.isalpha()]
+    if any(ch.isdigit() for ch in core) or (letters and all(ch.isupper() for ch in letters)):
+        return False
+    return after[0].isupper()
+
+
+def _closing_question(text: str) -> tuple[str, str]:
+    """NX-373: `(text fără întrebarea finală, întrebarea finală)`, ca regulile să intre ÎNAINTEA
+    unei întrebări de închidere (NX-315 cere întrebarea de îngustare ca ultimă frază a `intro`).
+
+    Invariantul (recenzia F1): regula nu stă NICIODATĂ înaintea textului de produs. Întrebarea e
+    doar ultima propoziție a ULTIMULUI rând, despărțită sigur (`_sure_gap`): o listă cu marcaje fără
+    punct final rămâne deasupra, iar un punct din numele unui brand («DR.JART+») nu mai face din tot
+    textul o întrebare. Ultimul rând nu se termină cu „?", are o despărțire nesigură, sau întrebarea
+    e tot textul ⇒ `(text, "")`, iar regula se adaugă la final."""
+    body = text.rstrip()
+    if not body.endswith("?"):
+        return body, ""
+    above, _, last = body.rpartition("\n")
+    gaps = list(_SENTENCE_GAP.finditer(last))
+    if any(not _sure_gap(last, g) for g in gaps):
+        return body, ""
+    if gaps:
+        cut = gaps[-1]
+        lead, question = last[: cut.start()], last[cut.end() :]
+        above = f"{above}\n{lead}" if above else lead
+    else:
+        question = last
+    if not above.strip():
+        return body, ""
+    return above.rstrip(), question.strip()
+
+
+def _store_text(
+    ctx: TurnContext, plan: ResponsePlan, text: str | None, rules: tuple[str, ...], path: str
+) -> str:
+    """NX-373: partea de magazin a unui tur mixt e a CODULUI. Întâi scoate din `text`
+    propozițiile care sunt ale magazinului (`store_rules.drop_store_sentences`: compunerea nu vede
+    regulile, deci le poate doar nega sau inventa), apoi adaugă regulile, în cuvintele magazinului,
+    fiecare o singură dată, înaintea unei întrebări finale (`_closing_question`: niciodată înaintea
+    textului de produs), trecute prin plasa de voce (P13: o regulă a comerciantului poate avea
+    liniuță sau punct și virgulă)."""
+    names = [str(p.get("name") or "") for p in plan.products]
+    body, dropped = store_rules.drop_store_sentences(
+        text,
+        rules,
+        ctx.language,
+        questions=getattr(plan, "grounded_questions", None) or {},
+        names=names,
+        prices=_set_prices(plan.products),
+    )
+    added = [r for r in rules if r not in body]
+    ctx.emit("store_rules_appended", n=len(added), dropped=dropped, path=path)
+    if not added:
+        return body
+    block = naturalize(" ".join(added)) or ""
+    head, question = _closing_question(body)
+    return "\n\n".join(part for part in (head.strip(), block, question.strip()) if part)
+
+
+def _set_prices(products: list[dict[str, Any]]) -> list[float]:
+    """Prețurile setului (de listă, reduse, cu voucher), pentru `drop_store_sentences`: o propoziție
+    care spune prețul unui produs e despre produs (recenzia F3)."""
+    out: list[float] = []
+    for p in products:
+        for key in ("price", "sale_price", "coupon_price", "list_price"):
+            value = p.get(key)
+            if value is None or isinstance(value, bool):
+                continue
+            try:
+                out.append(float(value))
+            except (TypeError, ValueError):
+                continue
+    return out
+
+
+def _with_store_rules(
+    ctx: TurnContext,
+    plan: ResponsePlan,
+    rich: RichReply,
+    rules: tuple[str, ...],
+    path: str,
+) -> None:
+    """`_store_text` pe `rich.intro`: widgetul citește `intro`, iar `flatten` îl duce în `text`."""
+    rich.intro = _store_text(ctx, plan, rich.intro, rules, path)
 
 
 def _attach_no_result_alternatives(ctx: TurnContext) -> None:
@@ -1242,6 +1383,8 @@ async def render(
         # NX-362: refuzul modelului, scris de EL pe calea bogată (`intro`, scrubuit de compose).
         # Singurul text al modelului care există când runda de proză a fost sărită (NX-312/359).
         refusal_intro: str | None = None
+        # NX-373: regulile magazinului cerute într-un tur mixt; le servește codul, nu compunerea.
+        store_part = _mixed_store_rules(ctx, plan)
         # Calea BOGATĂ (model iZi): recomandare structurată → compose. Doar pe SALES.
         # Orice eșec (apel structurat, zero items după membership) → fallback pe proză.
         if not is_order:
@@ -1256,11 +1399,15 @@ async def render(
                 products,
                 ctx,
                 plan.history,
-                notes=plan.commerce_note,
+                notes=" ".join(
+                    n for n in (plan.commerce_note, store_part and MIXED_STORE_NOTE) if n
+                ),
                 shape=await _turn_shape(ctx, deps, products),
             )
             rich = outcome.reply
             if rich is not None and rich.items:
+                if store_part:
+                    _with_store_rules(ctx, plan, rich, store_part, "rich")
                 await _apply_move_chips(ctx, deps, rich)
                 ctx.set_rich_reply(
                     rich,
@@ -1424,6 +1571,8 @@ async def render(
             else None
         )
         if salvaged is not None and salvaged.items:
+            if store_part:  # NX-373: și pe recuperarea din catalog, partea de magazin rămâne
+                _with_store_rules(ctx, plan, salvaged, store_part, "facts")
             await _apply_move_chips(ctx, deps, salvaged)
             ctx.set_rich_reply(
                 salvaged,
@@ -1453,6 +1602,10 @@ async def render(
         # „Nu am găsit o mănușă" scris în `semantic_cache` s-ar re-servi la fiecare întrebare
         # similară, sărind agentul — exact otrăvirea pe care ramura de no-result o evită din 2026-06
         # (`hit_count=9` pe demo). Aici textul e chiar un no-result, doar că a ajuns pe altă ramură.
+        # NX-373: și pe proză (setul refuzat, sau compunerea bogată picată fără recuperare din
+        # catalog), regulile magazinului cerute rămân în răspuns, în cuvintele magazinului.
+        if store_part:
+            reply = _store_text(ctx, plan, reply, store_part, "prose")
         ctx.set_reply(
             reply,
             products=_card_products(servable),
