@@ -84,3 +84,11 @@ def test_on_another_domain_the_key_wins_too():
     )
     assert resolve(vocab, "audio", CATEGORY_DIMENSION).key == "audio"
     assert resolve(vocab, "accesorii-audio", CATEGORY_DIMENSION).key == "accesorii-audio"
+
+
+def test_an_overlay_onto_a_shelf_key_reaches_the_same_node_as_the_key():
+    """Recenzia: ramura de overlay chema `_best` fără regula cheii, deci «trup» → «corp» ajungea la
+    subraft, iar «corp» scris direct la rădăcină. O singură regulă pe ambele ramuri."""
+    direct = resolve(SOLE, "corp", CATEGORY_DIMENSION)
+    via = resolve(SOLE, "trup", CATEGORY_DIMENSION, overlay={"trup": "corp"})
+    assert (via.status, via.key) == (direct.status, direct.key) == (ResolutionStatus.KNOWN, "corp")
