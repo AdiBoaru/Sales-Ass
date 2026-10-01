@@ -465,27 +465,73 @@ def _mixed_store_rules(ctx: TurnContext, plan: ResponsePlan) -> tuple[str, ...]:
     de livrare corectă, iar compunerea bogată, care primește doar produsele, a scris „Nu am
     informații despre costul livrării". Proprietarul răspunsului de magazin devine codul:
     regulile pe care proza modelului le redă și pe care clientul le-a întrebat
-    (`store_rules.match_rules`, ACELAȘI test ca NX-369, cu întrebarea clientului) se servesc în
-    cuvintele magazinului. Fără sursele citite în tur sau fără proză (runda sărită de NX-312 doar
-    când turul n-a chemat altceva decât căutarea), nimic."""
-    if not get_settings().mixed_turn_store_rules_enabled or plan.is_order or not plan.final:
+    (`store_rules.match_rules`, matcher-ul NX-369, cu întrebarea clientului pe SUBIECTUL regulii,
+    `topical`, recenzia F4) se servesc în cuvintele magazinului. Fără sursele citite în tur, nimic.
+
+    Recenzia F2: fără proză (runda de proză sărită, sau goală), regula nu se pierde. Se alege din
+    sursele turului regula pe care a întrebat-o clientul (`store_rules.asked_rule`), altfel
+    negarea compunerii („Nu am informații despre costul livrării") ar ajunge din nou la client."""
+    if not get_settings().mixed_turn_store_rules_enabled or plan.is_order:
         return ()
     sources = _sources(plan)
     if not sources:
         return ()
+    client = plan.query or getattr(ctx.message, "body", None) or ""
+    questions = getattr(plan, "grounded_questions", None) or {}
+    if not (plan.final or "").strip():
+        return store_rules.asked_rule(sources, ctx.language, client=client, questions=questions)
     match = store_rules.match_rules(
-        plan.final,
-        sources,
-        ctx.language,
-        client=plan.query or getattr(ctx.message, "body", None) or "",
-        questions=getattr(plan, "grounded_questions", None) or {},
+        plan.final, sources, ctx.language, client=client, questions=questions, topical=True
     )
     return match.rules
 
 
-#: Ultima propoziție a unui text, ca regulile să intre ÎNAINTEA unei întrebări finale (NX-315 cere
-#: întrebarea de îngustare ca ultimă frază a `intro`).
-_LAST_SENTENCE = re.compile(r"(?<=[.!?])\s+(?=[^.!?]*\?\s*$)")
+#: Un loc unde POATE începe o propoziție nouă, pe un rând: semn de final + spațiu.
+_SENTENCE_GAP = re.compile(r"(?<=[.!?])\s+")
+
+
+def _sure_gap(line: str, gap: re.Match[str]) -> bool:
+    """O despărțire de propoziție SIGURĂ (recenzia F1): după „!" sau „?" mereu, după „." doar dacă
+    urmează o literă mare și cuvântul dinainte nu e o sigură de majuscule sau un număr («DR. JART»,
+    «COSRX.», «★ 5.0.»). Cazurile nesigure nu se despart."""
+    before = line[: gap.start()].split()
+    after = line[gap.end() :]
+    if not before or not after:
+        return False
+    if before[-1][-1] in "!?":
+        return True
+    core = before[-1].rstrip(".")
+    letters = [ch for ch in core if ch.isalpha()]
+    if any(ch.isdigit() for ch in core) or (letters and all(ch.isupper() for ch in letters)):
+        return False
+    return after[0].isupper()
+
+
+def _closing_question(text: str) -> tuple[str, str]:
+    """NX-373: `(text fără întrebarea finală, întrebarea finală)`, ca regulile să intre ÎNAINTEA
+    unei întrebări de închidere (NX-315 cere întrebarea de îngustare ca ultimă frază a `intro`).
+
+    Invariantul (recenzia F1): regula nu stă NICIODATĂ înaintea textului de produs. Întrebarea e
+    doar ultima propoziție a ULTIMULUI rând, despărțită sigur (`_sure_gap`): o listă cu marcaje fără
+    punct final rămâne deasupra, iar un punct din numele unui brand («DR.JART+») nu mai face din tot
+    textul o întrebare. Ultimul rând nu se termină cu „?", are o despărțire nesigură, sau întrebarea
+    e tot textul ⇒ `(text, "")`, iar regula se adaugă la final."""
+    body = text.rstrip()
+    if not body.endswith("?"):
+        return body, ""
+    above, _, last = body.rpartition("\n")
+    gaps = list(_SENTENCE_GAP.finditer(last))
+    if any(not _sure_gap(last, g) for g in gaps):
+        return body, ""
+    if gaps:
+        cut = gaps[-1]
+        lead, question = last[: cut.start()], last[cut.end() :]
+        above = f"{above}\n{lead}" if above else lead
+    else:
+        question = last
+    if not above.strip():
+        return body, ""
+    return above.rstrip(), question.strip()
 
 
 def _store_text(
@@ -494,8 +540,9 @@ def _store_text(
     """NX-373: partea de magazin a unui tur mixt e a CODULUI. Întâi scoate din `text`
     propozițiile care sunt ale magazinului (`store_rules.drop_store_sentences`: compunerea nu vede
     regulile, deci le poate doar nega sau inventa), apoi adaugă regulile, în cuvintele magazinului,
-    fiecare o singură dată, înaintea unei întrebări finale, trecute prin plasa de voce (P13: o
-    regulă a comerciantului poate avea liniuță sau punct și virgulă)."""
+    fiecare o singură dată, înaintea unei întrebări finale (`_closing_question`: niciodată înaintea
+    textului de produs), trecute prin plasa de voce (P13: o regulă a comerciantului poate avea
+    liniuță sau punct și virgulă)."""
     names = [str(p.get("name") or "") for p in plan.products]
     body, dropped = store_rules.drop_store_sentences(
         text,
@@ -503,19 +550,31 @@ def _store_text(
         ctx.language,
         questions=getattr(plan, "grounded_questions", None) or {},
         names=names,
+        prices=_set_prices(plan.products),
     )
     added = [r for r in rules if r not in body]
     ctx.emit("store_rules_appended", n=len(added), dropped=dropped, path=path)
     if not added:
         return body
     block = naturalize(" ".join(added)) or ""
-    head, question = body.rstrip(), ""
-    split = _LAST_SENTENCE.split(head, maxsplit=1)
-    if len(split) == 2:
-        head, question = split
-    elif head.endswith("?"):
-        head, question = "", head
+    head, question = _closing_question(body)
     return "\n\n".join(part for part in (head.strip(), block, question.strip()) if part)
+
+
+def _set_prices(products: list[dict[str, Any]]) -> list[float]:
+    """Prețurile setului (de listă, reduse, cu voucher), pentru `drop_store_sentences`: o propoziție
+    care spune prețul unui produs e despre produs (recenzia F3)."""
+    out: list[float] = []
+    for p in products:
+        for key in ("price", "sale_price", "coupon_price", "list_price"):
+            value = p.get(key)
+            if value is None or isinstance(value, bool):
+                continue
+            try:
+                out.append(float(value))
+            except (TypeError, ValueError):
+                continue
+    return out
 
 
 def _with_store_rules(

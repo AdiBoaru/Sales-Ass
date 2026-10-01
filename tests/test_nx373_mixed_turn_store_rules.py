@@ -344,3 +344,182 @@ def test_a_locale_without_word_tables_keeps_the_text():
         intro, [rule], "en", questions={rule: "How much does shipping cost?"}, names=HEADPHONES
     )
     assert (text, dropped) == (intro, 0)
+
+
+# --- recenzia adversarială 2 (F1-F4) ------------------------------------------------------------
+
+
+def _store_text(text: str, plan: ResponsePlan | None = None) -> str:
+    from src.agent.finalize import _store_text as store_text
+
+    return store_text(_ctx(), plan or _plan(), text, (DELIVERY,), "prose")
+
+
+async def test_f1_a_closing_question_with_a_dotted_brand_stays_after_the_product_text():
+    """F1: «DR.JART+» are un punct, deci vechea despărțire lua tot textul drept întrebare și punea
+    regula ÎNAINTEA textului de produs."""
+    question = "Îl preferi pe acesta sau pe DR.JART+ Cicapair?"
+    intro = f"Pentru ten gras, TIRTIR Mask Fit Red Cushion pune accent pe matifiere. {question}"
+    ctx = await _render(_LLM(intro=intro), _plan())
+    text = ctx.reply.rich.intro
+    assert text.index("Pentru ten gras") < text.index(DELIVERY) < text.index(question)
+    assert text.endswith(question)
+
+
+async def test_f1_a_lone_question_keeps_the_rule_after_it():
+    """F1: un intro care e doar o întrebare despre produse nu primește regula în față."""
+    question = "Îl preferi pe TIRTIR sau pe DR.JART+ Cicapair?"
+    ctx = await _render(_LLM(intro=question), _plan())
+    text = ctx.reply.rich.intro
+    assert text.startswith(question) and text.index(question) < text.index(DELIVERY)
+
+
+def test_f1_a_bullet_list_then_a_question_keeps_the_list_first():
+    """F1: forma lui `_deterministic_reply` (listă fără punctuație finală, apoi întrebarea)."""
+    reply = (
+        "Îți recomand:\n• TIRTIR Mask Fit Red Cushion, 135 lei\n"
+        "• MUZIGAE MANSION Sleek Matt Cushion, 190 lei\nVrei detalii sau linkul la vreunul?"
+    )
+    text = _store_text(reply)
+    assert text.index("190 lei") < text.index(DELIVERY) < text.index("Vrei detalii")
+    assert text.startswith("Îți recomand:\n• TIRTIR")
+
+
+def test_f1_an_unsure_split_puts_the_rule_after_the_whole_text():
+    """F1: «DR. JART» are punct urmat de spațiu; despărțirea nu e sigură, deci regula merge la
+    sfârșit, niciodată în mijlocul unei propoziții despre produs."""
+    reply = "Am ales TIRTIR pentru tine.\nCe zici de DR. JART Cicapair?"
+    text = _store_text(reply)
+    assert text.index("Ce zici de DR. JART Cicapair?") < text.index(DELIVERY)
+
+
+async def test_f2_without_prose_the_asked_rule_is_still_served():
+    """F2: `faq_lookup` în runda 1, `search_products` în runda 2, runda de proză sărită: proza e
+    goală, iar regula cerută se ia din sursele turului, după mesajul clientului."""
+    llm = _LLM()
+    ctx = await _render(llm, _plan(final=""))
+    intro = ctx.reply.rich.intro
+    assert DELIVERY in intro and DENIAL not in intro and RETURN not in intro
+    assert MIXED_STORE_NOTE in llm.user
+
+
+async def test_f2_without_prose_a_rule_nobody_asked_about_is_not_served():
+    ctx = await _render(
+        _LLM(intro="Pentru ten gras, TIRTIR Mask Fit Red Cushion pune accent pe matifiere."),
+        _plan(final="", query="arata-mi un cushion pentru ten gras"),
+        _ctx("arata-mi un cushion pentru ten gras"),
+    )
+    assert DELIVERY not in ctx.reply.rich.intro
+
+
+def test_f2_a_turn_that_read_store_rules_keeps_its_prose_round(monkeypatch):
+    """F2, cauza: decizia NX-312 era pe RUNDĂ. Runda 2 a chemat doar căutarea, deci runda de proză
+    se sărea, deși runda 1 citise regulile magazinului. Acum decizia e pe tur."""
+    from types import SimpleNamespace
+
+    from src.agent import turn_profile
+    from src.worker.stages.agent import _ProseRoundGate
+
+    monkeypatch.setattr(turn_profile, "name_for_turn", lambda ctx: "recommend")
+    run = SimpleNamespace(retrieved=[])
+    gate = _ProseRoundGate(SimpleNamespace(), run, is_order=False)
+    assert gate(["faq_lookup"]) is False
+    run.retrieved = [dict(PRODUCTS[0])]
+    assert gate(["search_products"]) is False and gate.reason == "other_tool"
+
+
+def test_f2_search_only_rounds_still_skip(monkeypatch):
+    """NX-312 rămâne: o căutare fără rezultat, apoi una cu rezultat, sare runda de proză."""
+    from types import SimpleNamespace
+
+    from src.agent import turn_profile
+    from src.worker.stages.agent import _ProseRoundGate
+
+    monkeypatch.setattr(turn_profile, "name_for_turn", lambda ctx: "recommend")
+    run = SimpleNamespace(retrieved=[])
+    gate = _ProseRoundGate(SimpleNamespace(), run, is_order=False)
+    assert gate(["search_products"]) is False
+    run.retrieved = [dict(PRODUCTS[0])]
+    assert gate(["search_products"]) is True and gate.reason == "search_only"
+
+
+def _sole_faqs() -> dict[str, str]:
+    """Setul REAL de reguli SOLE (`faq_lookup` îl aduce întreg): răspuns → întrebare."""
+    import json
+    from pathlib import Path
+
+    raw = json.loads(Path("db/seed/faqs_sole_ro.json").read_text(encoding="utf-8"))
+    items = raw if isinstance(raw, list) else raw.get("faqs", raw)
+    return {f["answer"].strip(): f["question"].strip() for f in items}
+
+
+@pytest.mark.parametrize(
+    ("client", "question"),
+    [
+        (CLIENT, "Cât costă livrarea?"),
+        ("arata-mi un ser si zi-mi in cat timp primesc comanda", "În cât timp primesc comanda?"),
+        ("vreau o crema, pot plati in rate?", "Pot plăti în rate?"),
+        ("cat costa un cushion bun pentru ten gras?", None),
+        ("arata-mi un cushion pentru ten gras", None),
+    ],
+)
+def test_f2_asked_rule_on_the_whole_sole_set(client, question):
+    """Fără proză, din cele 20 de reguli SOLE se alege UNA, cea întrebată, sau niciuna."""
+    from src.agent.store_rules import asked_rule
+
+    faqs = _sole_faqs()
+    got = asked_rule(list(faqs), "ro", client=client, questions=faqs)
+    assert [faqs[a] for a in got] == ([question] if question else [])
+
+
+PRICES = [p["price"] for p in PRODUCTS]
+
+
+@pytest.mark.parametrize(
+    "sentence",
+    [
+        "Costă 135 lei.",
+        "Prima costă 149 lei.",
+        "Ambele costă sub 199 lei.",
+        "Prețul e 135 lei, cu TVA inclus.",
+    ],
+)
+def test_f3_product_price_sentences_stay(sentence):
+    """F3: un cuvânt de preț («costă»), o sumă sau „TVA inclus” nu fac din ea o regulă."""
+    got = drop_store_sentences(
+        sentence, [DELIVERY], "ro", questions=QUESTIONS, names=NAMES, prices=PRICES
+    )
+    assert got == (sentence, 0)
+
+
+def test_f3_an_invented_store_amount_still_goes():
+    """O regulă inventată («Livrarea costă 15 lei») e a magazinului: regula reală o înlocuiește."""
+    got = drop_store_sentences(
+        "Livrarea costă 15 lei.", [DELIVERY], "ro", questions=QUESTIONS, names=NAMES, prices=PRICES
+    )
+    assert got == ("", 1)
+
+
+async def test_f4_a_product_price_question_is_not_a_store_question():
+    """F4: «cât costă un cushion» împarte cu «Cât costă livrarea?» doar „costă”. Subiectul regulii
+    («livrare») lipsește, deci regula nu se servește."""
+    client = "cat costa un cushion bun pentru ten gras?"
+    ctx = await _render(
+        _LLM(intro="Pentru ten gras, TIRTIR Mask Fit Red Cushion pune accent pe matifiere."),
+        _plan(query=client),
+        _ctx(client),
+    )
+    assert DELIVERY not in ctx.reply.rich.intro and DELIVERY not in ctx.reply.text
+
+
+def test_f4_match_rules_on_the_rule_subject():
+    from src.agent.store_rules import match_rules
+
+    product = "cat costa un cushion bun pentru ten gras?"
+    kw = dict(questions=QUESTIONS, topical=True)
+    assert match_rules(PROSE, [DELIVERY, RETURN], "ro", client=product, **kw).rules == ()
+    assert match_rules(PROSE, [DELIVERY, RETURN], "ro", client=CLIENT, **kw).rules == (DELIVERY,)
+    # fără `topical`, testul NX-369 rămâne cel de dinainte (orice rădăcină comună)
+    assert match_rules(PROSE, [DELIVERY], "ro", client=product, questions=QUESTIONS).rules == (
+        DELIVERY,
+    )

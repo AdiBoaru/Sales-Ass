@@ -1377,11 +1377,16 @@ prefix al înregistrării). Card: [`tasks/stage1/NX-369.md`](tasks/stage1/NX-369
 `kernel-live-2026-10-01` (clasa A2): «arată-mi un cushion pentru ten gras și spune-mi cât costă
 livrarea» a citit produsele și regula de livrare, proza rundei 2 o avea corectă, iar compunerea
 bogată (care primește doar produsele) a scris „Nu am informații despre costul livrării", servit
-clientului. Acum regulile pe care proza le redă și pe care clientul le-a întrebat (testul NX-369) se
-adaugă în cuvintele magazinului (pe compunerea bogată, pe recuperarea din catalog NX-302 și pe
-proză), înaintea unei întrebări finale; propozițiile compunerii care sunt ale magazinului (peste
-jumătate din cuvinte în regulile servite, fără un produs numit: `store_rules.drop_store_sentences`,
-date, nu o listă de cuvinte) ies pe loc, iar compunerea primește nota că partea de magazin nu e a ei. Flag `MIXED_TURN_STORE_RULES_ENABLED` (ON). Card:
+clientului. Acum regulile pe care proza le redă și pe care clientul le-a întrebat (testul NX-369, pe
+SUBIECTUL regulii: cuvintele comune întrebării și răspunsului ei, deci «cât costă un cushion» nu
+întreabă de livrare) se adaugă în cuvintele magazinului (pe compunerea bogată, pe recuperarea din
+catalog NX-302 și pe proză), înaintea unei întrebări finale despărțite sigur, niciodată înaintea
+textului de produs. Fără proză, regula întrebată se alege din sursele turului (`asked_rule`), iar
+runda de proză NX-312 se judecă pe uneltele întregului tur (un tur care a citit regulile nu e „doar
+căutare"). Propozițiile compunerii care sunt ale magazinului (peste jumătate din cuvinte, fără sume,
+în regulile servite, măcar unul din textul regulii, fără un produs numit sau prețul lui:
+`store_rules.drop_store_sentences`, date, nu o listă de cuvinte) ies pe loc, iar compunerea primește
+nota că partea de magazin nu e a ei. Flag `MIXED_TURN_STORE_RULES_ENABLED` (ON). Card:
 [`tasks/stage1/NX-373.md`](tasks/stage1/NX-373.md); probă: `pytest tests/test_nx373_mixed_turn_store_rules.py -q`.
 
 **NX-370 — o rafinare nu mai pierde produsul de pe ecran care o împlinește.** Pe c8 («fără

@@ -1839,6 +1839,7 @@ memory_canonicalize_enabled = true
 memory_open_capture_enabled = true
 memory_safe_injection_enabled = true
 memory_v2_enabled = true
+mixed_turn_store_rules_enabled = true
 moderation_enabled = true
 moderation_flag_telemetry_enabled = true
 named_shortcut_targets_enabled = true

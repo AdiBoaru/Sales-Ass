@@ -53,6 +53,16 @@ def _stems(text: str, locale: str | None) -> set[str]:
     return {t[:_STEM] for t in content_terms(text, locale)}
 
 
+def _subject(answer: str, question: str, locale: str | None) -> set[str]:
+    """NX-373 (recenzia F4): SUBIECTUL unei reguli = cuvintele pe care întrebarea și răspunsul ei
+    le au în comun. «Cât costă livrarea?» are ca răspuns „Taxa de livrare e între…", deci subiectul
+    e „livrare", iar „costă" e doar forma întrebării (apare și în «cât costă un cushion»). Datele
+    sunt ale magazinului, nu o listă de cuvinte (P11). Fără nimic comun (sau fără întrebare
+    cunoscută), subiectul e întrebarea întreagă, ca înainte."""
+    asked = _stems(question, locale)
+    return (asked & _stems(answer, locale)) or asked
+
+
 def _sentences(text: str) -> list[str]:
     out: list[str] = []
     for line in _LINE_SPLIT.split(text):
@@ -79,10 +89,16 @@ def match_rules(
     *,
     client: str | None = None,
     questions: Mapping[str, str] | None = None,
+    topical: bool = False,
 ) -> RuleMatch:
     """Regulile magazinului (din `sources`, textul exact arătat modelului) pe care `text` le
     parafrazează. Cu `client`, o regulă rămâne doar dacă mesajul clientului are o rădăcină comună cu
-    întrebarea ei (`questions`: răspuns → întrebare; fără întrebare cunoscută, cu răspunsul)."""
+    întrebarea ei (`questions`: răspuns → întrebare; fără întrebare cunoscută, cu răspunsul).
+
+    `topical` (NX-373, recenzia F4): rădăcina comună trebuie să fie din SUBIECTUL regulii
+    (`_subject`), nu din forma întrebării. Pe un tur mixt mesajul clientului vorbește și despre
+    produse, deci «cât costă un cushion» nu e o întrebare despre livrare. NX-369 (turul în care
+    proza respinsă devine regula) păstrează testul de dinainte."""
     if not text or not sources:
         return RuleMatch()
     rules = [_stems(s, locale) for s in sources]
@@ -123,7 +139,8 @@ def match_rules(
         kept = []
         for i in chosen:
             question = (questions or {}).get(sources[i]) or sources[i]
-            if asked & _stems(question, locale):
+            target = _subject(sources[i], question, locale) if topical else _stems(question, locale)
+            if asked & target:
                 kept.append(i)
             else:
                 unasked += 1
@@ -146,6 +163,36 @@ def quoted_rules(
 ) -> list[str]:
     """Doar regulile din `match_rules` (vezi acolo). Gol = nicio propoziție nu se leagă clar."""
     return list(match_rules(text, sources, locale, client=client, questions=questions).rules)
+
+
+def asked_rule(
+    sources: Sequence[str],
+    locale: str | None,
+    *,
+    client: str | None,
+    questions: Mapping[str, str] | None = None,
+) -> tuple[str, ...]:
+    """NX-373 (recenzia F2): regula pe care a ÎNTREBAT-O clientul, când nu există proză de legat.
+
+    `faq_lookup` aduce setul ÎNTREG al magazinului (20 de reguli pe SOLE), deci nu se servesc toate
+    cele care ating mesajul: rămâne UNA, cea a cărei întrebare are cea mai mare parte din cuvinte în
+    mesaj, și doar dacă mesajul îi numește SUBIECTUL (`_subject`). La egalitate, prima din set.
+    «spune-mi cât costă livrarea» alege «Cât costă livrarea?» (2 din 2), nu «Cu ce curier
+    livrați?» (1 din 2). PURĂ. Gol = nicio regulă întrebată."""
+    asked = _stems(client or "", locale)
+    if not asked:
+        return ()
+    best: str | None = None
+    best_score = 0.0
+    for source in sources:
+        question = (questions or {}).get(source) or source
+        if not asked & _subject(source, question, locale):
+            continue
+        words = _stems(question, locale)
+        score = len(asked & words) / len(words) if words else 0.0
+        if score > best_score + _EPS:
+            best, best_score = source, score
+    return (best,) if best else ()
 
 
 def names_any(text: str | None, names: Sequence[str], locale: str | None) -> bool:
@@ -184,6 +231,43 @@ def _short_stems(text: str, locale: str | None) -> set[str]:
     return {t[:_TOPIC_STEM] for t in content_terms(text, locale)}
 
 
+#: O sumă dintr-o propoziție («135», «19,90»), comparată cu prețurile setului.
+_AMOUNT = re.compile(r"\d+(?:[.,]\d+)?")
+
+
+def _sentence_words(sentence: str, locale: str | None) -> set[str]:
+    """Cuvintele de conținut ale unei propoziții, FĂRĂ sume (recenzia F3): un număr și cuvântul
+    imediat de după el (unitatea lui, «135 lei», «24 de luni») sunt forma unei cantități, nu
+    subiectul propoziției. Altfel «Prima costă 149 lei» ar fi a magazinului fiindcă „149" și „lei"
+    sunt și în regula de livrare. Regula gramaticală e a cifrelor, nu a unei limbi (P11)."""
+    out: set[str] = set()
+    after_amount = False
+    for term in content_terms(sentence, locale):
+        if any(ch.isdigit() for ch in term):
+            after_amount = True
+            continue
+        if after_amount:
+            after_amount = False
+            continue
+        out.add(term[:_TOPIC_STEM])
+    return out
+
+
+def _states_a_set_price(sentence: str, prices: Sequence[float]) -> bool:
+    """Propoziția spune o sumă care e prețul unui produs din set («Prețul e 135 lei, cu TVA
+    inclus»): e despre produs, oricât de mult ar semăna cu regula."""
+    if not prices:
+        return False
+    for match in _AMOUNT.finditer(sentence):
+        try:
+            value = float(match.group(0).replace(",", "."))
+        except ValueError:
+            continue
+        if any(abs(value - p) < 0.005 for p in prices):
+            return True
+    return False
+
+
 def drop_store_sentences(
     text: str | None,
     rules: Sequence[str],
@@ -191,27 +275,34 @@ def drop_store_sentences(
     *,
     questions: Mapping[str, str] | None = None,
     names: Sequence[str] = (),
+    prices: Sequence[float] = (),
 ) -> tuple[str, int]:
     """NX-373: scoate din `text` (intro-ul compunerii bogate, sau proza servită) propozițiile care
     sunt ale MAGAZINULUI, fiindcă regulile întrebate (`rules`) le servește codul, în cuvintele
     magazinului, imediat după.
 
-    O propoziție e a magazinului dacă PESTE jumătate (`STORE_SHARE`) din cuvintele ei de conținut
-    sunt în regulile servite sau în întrebările lor (`questions`) și nu numește niciun produs din
-    set (`names`, `names_any`). Pe producție: „Nu am informații despre costul livrării" (2 din 3,
-    iese) lângă regula reală; «Toate trei costă sub 100 de lei» (2 din 4) și «Pentru ten sensibil,
-    ambele creme au ingrediente blânde» rămân (recenzia NX-373: un singur cuvânt comun nu ajunge).
-    Datele sunt ale magazinului, nu o listă de cuvinte (P11). Propozițiile ies PE LOC: rândurile,
-    listele și separatorii rămași nu se ating (lecția NX-299). PURĂ. Întoarce textul și câte au
-    ieșit."""
+    O propoziție e a magazinului dacă, toate odată:
+    - PESTE jumătate (`STORE_SHARE`) din cuvintele ei de conținut, fără sume (`_sentence_words`),
+      sunt în regulile servite sau în întrebările lor (`questions`);
+    - măcar unul dintre ele e în TEXTUL unei reguli, nu doar în întrebarea ei (recenzia F3: „costă"
+      din «Cât costă livrarea?» e forma întrebării, iar «Costă 135 lei.» e o propoziție de produs);
+    - nu numește niciun produs din set (`names`, `names_any`) și nu spune prețul unuia (`prices`).
+    Pe producție: „Nu am informații despre costul livrării" (2 din 3, „livrare" e în regulă, iese)
+    lângă regula reală; «Toate trei costă sub 100 de lei», «Prima costă 149 lei» și «Pentru ten
+    sensibil, ambele creme au ingrediente blânde» rămân. O regulă inventată («Livrarea costă 15
+    lei») iese, iar regula reală o înlocuiește. Datele sunt ale magazinului, nu o listă de cuvinte
+    (P11). Propozițiile ies PE LOC: rândurile, listele și separatorii rămași nu se ating (lecția
+    NX-299). PURĂ. Întoarce textul și câte au ieșit."""
     if not text or not rules:
         return text or "", 0
     store: set[str] = set()
+    said: set[str] = set()
     for rule in rules:
-        store |= _short_stems(rule, locale)
+        said |= _short_stems(rule, locale)
         question = (questions or {}).get(rule)
         if question:
             store |= _short_stems(question, locale)
+    store |= said
     dropped = 0
     lines_out: list[str] = []
     for line in text.split("\n"):
@@ -221,9 +312,15 @@ def drop_store_sentences(
         kept: list[str] = []
         parts = _SENTENCE_SPLIT.split(body) if body.strip() else []
         for sentence in parts:
-            words = _short_stems(sentence, locale)
-            share = len(words & store) / len(words) if words else 0.0
-            if share > STORE_SHARE + _EPS and not names_any(sentence, names, locale):
+            words = _sentence_words(sentence, locale)
+            shared = words & store
+            share = len(shared) / len(words) if words else 0.0
+            if (
+                share > STORE_SHARE + _EPS
+                and shared & said
+                and not names_any(sentence, names, locale)
+                and not _states_a_set_price(sentence, prices)
+            ):
                 dropped += 1
             else:
                 kept.append(sentence)
