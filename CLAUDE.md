@@ -63,7 +63,7 @@ gate-ul NX-210**. Direcția aprobată către care migrăm:
 
 **Înghețate până la GO-ul de la NX-210:** enforcement-ul QuerySpec/Match Gate (NX-188, NX-189).
 
-**Kernelul conversațional — contractul `kernel.v1.0` (înghețat 2026-09-25, NORMATIV; azi `kernel.v6.1`: MAJOR la v2.0, NX-336 PR B, sensul lui I5; minor la v2.1, NX-336 D3, `TurnPlan.family`; MAJOR la v3.0, NX-348, sensul unei schimbări de subiect; MAJOR la v4.0, NX-350, un tip spus vag devine umbrelă, nu tipul subiectului; MAJOR la v5.0, NX-352, nevoia spusă e filtru relaxabil, căutarea se compune din ce a validat kernelul, «mai ieftin» ambiguu = mediana; minor la v5.1, NX-349, fațetele da/nu; MAJOR la v6.0, NX-364, ordinalul după detaliu, flexiunea în proveniență, excluderea și banda de preț; minor la v6.1, NX-374, dezvăluirea `need_unverifiable`; porțile de replay derogate de Adi).**
+**Kernelul conversațional — contractul `kernel.v1.0` (înghețat 2026-09-25, NORMATIV; azi `kernel.v6.2`: MAJOR la v2.0, NX-336 PR B, sensul lui I5; minor la v2.1, NX-336 D3, `TurnPlan.family`; MAJOR la v3.0, NX-348, sensul unei schimbări de subiect; MAJOR la v4.0, NX-350, un tip spus vag devine umbrelă, nu tipul subiectului; MAJOR la v5.0, NX-352, nevoia spusă e filtru relaxabil, căutarea se compune din ce a validat kernelul, «mai ieftin» ambiguu = mediana; minor la v5.1, NX-349, fațetele da/nu; MAJOR la v6.0, NX-364, ordinalul după detaliu, flexiunea în proveniență, excluderea și banda de preț; minor la v6.1, NX-374, dezvăluirea `need_unverifiable`; minor la v6.2, NX-375, `find` caută pe numele produsului numit; porțile de replay derogate de Adi).**
 Sursa: [`docs/KERNEL-CONTRACT-v1.md`](docs/KERNEL-CONTRACT-v1.md); designul din care vine, ca
 referință: [`docs/KERNEL-DESIGN.md`](docs/KERNEL-DESIGN.md). Modelul scrie O interpretare a turului
 (`TurnInterpretation`: acte, schimbări de stare adresate prin handle, referințe, ambiguități); codul
@@ -592,6 +592,19 @@ câmp pentru nevoie (fanion da/nu, fațetă fără atribut), deci fraza e adevă
 nevoie descrisă (`implicit`) sau inferată rămâne doar gol; o căutare abandonată (`no_query`) își
 scoate și dezvăluirea. Card:
 [`tasks/stage1/NX-374.md`](tasks/stage1/NX-374.md); probă: `pytest tests/test_nx374_need_unverifiable.py -q`.
+
+**NX-375 — `kernel.v6.2` (minor): un produs numit într-o cerere `find` e ce caută clientul.** Setul
+`kernel-live-2026-10-01` (clasa A3): «aveți ANUA Heartleaf 77 toner?» avea referința `name` declarată,
+dar `find.targets` gol; plannerul citea numele doar printre ținte, a căutat „toner", produsul (fără tip
+în catalog) n-a intrat în pool, iar clientul a aflat că „nu apare" (e în stoc la 30 de lei). Acum un
+`find` care numește un produs (o țintă `name` sau o referință `name` nefolosită de nimic altceva,
+aleasă de `references.find_name_reference`, comună cu poarta) e servit după resolver: `exact` ⇒
+`detail` pe id-ul recitit, `ambiguous` pe ≤ 3 candidați ⇒ `detail` pe toți, altfel căutarea pe
+numele lui, ca `detail`/`compare` pe un nume negăsit. Căutarea pe nume poartă doar filtrele spuse în
+tur (raftul, bugetul, nevoile și tipul vechi ies, cu golul `name_unscoped`), iar un nume singur e
+subiect pentru poartă. Declarat: o descriere etichetată `name` de model e căutată ca nume (niciun
+semnal structural n-o deosebește de un nume scris parțial). Card:
+[`tasks/stage1/NX-375.md`](tasks/stage1/NX-375.md); probă: `pytest tests/test_nx375_find_named_product.py -q`.
 
 **NX-238 — retrievalul trece printr-un PORT, iar candidatul e inert (verdict `NOT-READY`).**
 `src/retrieval/` e contractul stabil pe care îl consumă NX-239: `RetrievalPort` + `RetrievalBundle`

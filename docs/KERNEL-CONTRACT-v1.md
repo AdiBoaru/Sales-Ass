@@ -23,7 +23,34 @@ Versioning: the contract is `kernel.v1.0`. **Minor** (`v1.1`): additive schema f
 
 No invariant, ownership row or state rule changes in v1.2, so no replay gate is required. The open questions step 6 raised on I5 (the safety prune on `aside`), I20 (the cart on `cart_ref`) and I15a/I12 (`grounding_guard` does not run on the v1 composition) are decided in the PRs that need them (B and C), under the minor/major rule.
 
-**Current version: `kernel.v6.1` (minor, NX-374, 2026-10-01).** One additive value in a closed
+**Current version: `kernel.v6.2` (minor, NX-375, 2026-10-01).** One planner row, additive: a
+`find` act that names a product. The name reference is chosen by one pure function,
+`references.find_name_reference`, shared by the planner and the gate: a `name` target of the `find`
+act, or a `name` reference no other act targets and no change anchors (`relative_to`). It is not a
+product name when the resolver reclassified it (a name that denotes a property, I24) or found it
+`stale`; it is not the request on a turn whose ACCEPTED changes carry a price bound without a
+number (the name is then the anchor of «cheaper than X», the customer wants something else), nor
+when two different names are unused («X or Y?»). The plan follows the resolver: an `exact` name
+is served as the product (`detail` on the re-read id, as the `detail` row on an exact target, I1);
+an `ambiguous` name with at most three candidates answers about all of them (`detail` with ≥ 2
+candidates, as `act_both` on a read); otherwise (`not_found`, or more candidates) the search runs
+on that NAME (`SearchArgs.product_name` and the query text), exactly like `detail`/`compare` on a
+name not found. The name search carries only what THIS turn says (needs written now from an
+accepted change, a shelf or a type named now, the turn's ranking signals): the old subject's shelf,
+budget, needs, exclusions and type would hide the product asked for by name, and are dropped with
+the gap `name_unscoped`, never silently. A name alone is a subject for the gate: a `find` without
+query words or a subject that names a product is not asked for a shelf. The rule this follows was
+already the contract's: the resolver finds only a distinctive name written in full, and approximate
+name search is the planner's. Declared: a description the model labels `name` («telefon rezistent
+pentru santier») is searched as a name, because no structural signal available to the planner
+separates it from a partially written product name («ANUA Heartleaf 77 toner»); see NX-375. Found by
+the production run `kernel-live-2026-10-01` (k6 T1, «aveți ANUA Heartleaf 77 toner?»: the reference
+was declared, `find.targets` was empty, the search ran on „toner” and the customer was told the
+product does not exist; it is in stock). `TurnInterpretation` is unchanged; the schema snapshot
+differs only in its version stamp. Additive only (a planner row, a gap code); no meaning, invariant,
+ownership row or state rule changes, so no replay gate is required.
+
+**Previous version: `kernel.v6.1` (minor, NX-374, 2026-10-01).** One additive value in a closed
 vocabulary the planner writes: the disclosure `need_unverifiable`. A need the customer SPOKE (source
 `user_explicit`, which the delta writes only from an accepted `explicit` change) that falls into the
 gap `unsupported_need` is told to the customer once per conversation, with the pack sentence
@@ -577,6 +604,7 @@ The planner reads the reduced state, the resolved references and the gate verdic
 
 | Act | Condition (after reduction and gating) | Executor |
 | --- | --- | --- |
+| `find` | (v6.2) names a product: a `name` target, or a `name` reference nothing else uses (`references.find_name_reference`) | `exact` ⇒ `detail` on the re-read id; `ambiguous` with ≤ 3 candidates ⇒ `detail` on all (as `act_both`); otherwise `search` on the name (`product_name` + query) with only this turn's filters, the dropped old ones as the gap `name_unscoped`. Takes precedence over the other `find` rows, and the gate does not ask for a subject |
 | `find` | no subject, no query words, no facet needs | `ask`: a subject question from the pack's top shelves, gain-gated |
 | `find` | subject known, no new words („Ce recomanzi?”) | `search` from state. The plan carries no query; because today's `SearchArgs.query` requires ≥ 1 character, the `SearchArgs` builder fills it with the subject's label and the `filters_only` rung serves it. This is a declared v1 workaround inside the builder, not planner logic |
 | `find` | subject or query words present | `search`, `SearchArgs` derived as in design section D; (v5.0) `query` is composed from what the kernel validated (the subject's words or name, a filtered facet's words, the unmapped values), the whole request is the last resort |

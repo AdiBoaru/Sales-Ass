@@ -129,7 +129,7 @@ def test_the_executor_says_the_pack_sentence(name):
 
 def test_the_disclosure_is_in_both_closed_vocabularies_and_the_contract_is_minor():
     assert "need_unverifiable" in DISCLOSURES and "need_unverifiable" in KERNEL_SENTENCE_CODES
-    assert KERNEL_CONTRACT_VERSION == "kernel.v6.1"
+    assert KERNEL_CONTRACT_VERSION.startswith("kernel.v6.")
 
 
 def test_the_sentences_respect_the_voice_rules():
