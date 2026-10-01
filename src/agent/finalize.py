@@ -649,6 +649,10 @@ def _rich_bundle(
         fac_str = f" | fațete: {fac}" if fac else ""
         if str(p.get("availability") or "") in _UNAVAILABLE:
             fac_str += " | disponibilitate: EPUIZAT"
+        if p.get("facet_unknown"):  # NX-377: completare cu atributul necunoscut
+            from src.tools.catalog_tools import unknown_facet_note  # noqa: PLC0415 — ciclu
+
+            fac_str += f" | {unknown_facet_note(p)}"
         ref = handle_of.get(str(p["id"]), p["id"])
         lines.append(
             f"[{ref}] {p['name']} | preț {amount_text(p['price'], language)} lei | "

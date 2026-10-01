@@ -15,6 +15,7 @@ emite din `execute` (cu `turn_id`, P10); args-urile sunt whitelisted (`_safe_too
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Collection
 from dataclasses import dataclass, field
 from time import perf_counter
 from typing import TYPE_CHECKING, Any
@@ -308,7 +309,9 @@ class ToolRun:
             if seq is not None:
                 await self._finish_ticket(seq)
 
-    async def execute_planned(self, args: Any, *, exclude_shown: bool = False) -> Any:
+    async def execute_planned(
+        self, args: Any, *, exclude_shown: bool = False, seen_extra: Collection[str] = ()
+    ) -> Any:
         """NX-336 PR C: căutarea PLANULUI kernelului (`SearchArgs` scris de planner, I2), cu
         aceeași acumulare ca o unealtă chemată de model: plasa de siguranță, `retrieved`,
         relevanța, `called`, linkurile și sumele grounded, `state_patch` (sesiunea de căutare) și
@@ -320,9 +323,10 @@ class ToolRun:
         started = perf_counter()
         with turn_latency.span("tools"):
             # NX-370: argumentul pleacă doar când e cerut, ca semnătura de azi să rămână apelabilă
-            result = await run_planned_search(
-                self.ctx, self.deps, args, **({"exclude_shown": True} if exclude_shown else {})
-            )
+            extra: dict[str, Any] = {"exclude_shown": True} if exclude_shown else {}
+            if seen_extra:  # NX-378: doar când e cerut, ca semnătura de azi să rămână apelabilă
+                extra["seen_extra"] = tuple(seen_extra)
+            result = await run_planned_search(self.ctx, self.deps, args, **extra)
         return self._absorb_planned("search_products", result, args, started)
 
     async def execute_planned_routine(

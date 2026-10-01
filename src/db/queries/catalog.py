@@ -795,6 +795,7 @@ async def search_products_lexical(
     only_filters_step: bool = False,
     pool: int = 50,
     rank_terms: Sequence[str] = (),
+    missing_facets: Sequence[str] = (),
 ) -> list[dict[str, Any]]:
     """Lexical REAL (NX-113a) — înlocuiește `p.name ILIKE '%q%'`. ACELEAȘI filtre dure ca
     `search_products` (paritate). Întoarce ~`pool` rânduri; pe `relevance` POZIȚIA în listă =
@@ -873,6 +874,7 @@ async def search_products_lexical(
             in_stock_only=in_stock_only,
             pool=pool,
             rank_terms=rank,
+            missing_facets=missing_facets,
         )
         if rows:
             # Degradarea trebuie să fie VIZIBILĂ. Un rezultat obținut prin relaxare sau prin plasa
@@ -910,6 +912,7 @@ async def _lexical_fetch(
     in_stock_only: bool,
     pool: int,
     rank_terms: Sequence[str] = (),
+    missing_facets: Sequence[str] = (),
 ) -> list[dict[str, Any]]:
     """O treaptă a scării lexicale. Filtrele dure sunt IDENTICE pe toate treptele — se relaxează
     potrivirea de TEXT, niciodată constrângerile (preț, brand, categorie, variantă, stoc). Scara
@@ -995,6 +998,10 @@ async def _lexical_fetch(
         conds.append(f"(p.attributes->'concerns') ?| {placeholder(concerns)}::text[]")
     if facet_filters and (fc := _facet_filter_clause(facet_filters, placeholder)):
         conds.append(fc)
+    # NX-377: produsele care NU poartă deloc atributul (necunoscute pe fațetă, nu nepotrivite: D7).
+    # Gol ⇒ nicio condiție, SQL byte-identic. Cheia e PARAMETRIZATĂ, ca în `_facet_filter_clause`.
+    for key in missing_facets:
+        conds.append(f"not (p.attributes ? {placeholder(key)})")
     if features and searchable_facets:
         conds.append(_feature_clause(searchable_facets, features, placeholder))
     if variant_label:  # NX-135: filtru DUR pe eticheta de variantă (fallback gradat)

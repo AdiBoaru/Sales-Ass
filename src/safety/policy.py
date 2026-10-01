@@ -22,7 +22,7 @@ Reguli de folosire (invarianți):
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from src.config import get_settings
@@ -182,16 +182,41 @@ class SafetyPolicy:
         )
 
     def gate(
-        self, ctx: Any, products: list[dict[str, Any]], *, purpose: str
+        self,
+        ctx: Any,
+        products: list[dict[str, Any]],
+        *,
+        purpose: str,
+        count_kept: bool = True,
     ) -> tuple[list[dict[str, Any]], Decision]:
         """`evaluate` + `emit` + păstrarea deciziei pe tur — helperul folosit de call-site-uri.
         Decizia se ACUMULEAZĂ pe `ctx` (`ctx.safety_decision`) → compunerea o citește o dată, la
-        final, ca să garanteze fraza (fără să depindă de ce cale a produs produsele)."""
+        final, ca să garanteze fraza (fără să depindă de ce cale a produs produsele).
+
+        `count_kept=False` (NX-378): rândurile păstrate NU intră în `kept`-ul turului, doar
+        excluderile. Pentru candidați care poate nu se servesc niciodată (cozile pool-ului): NX-367
+        judecă „setul golit" pe `kept`, deci un rând păstrat dar neservit ar ține în viață proza
+        modelului despre un set golit de noi. Cine îi servește îi numără cu `count_served`."""
         d = self.evaluate(products, purpose=purpose)
         self.emit(ctx, d, purpose=purpose)
         if d.active:
-            _merge_decision(ctx, d)
+            _merge_decision(ctx, d if count_kept else replace(d, kept=[], unverifiable=0))
         return d.kept, d
+
+    def count_served(self, ctx: Any, products: list[dict[str, Any]]) -> None:
+        """Adaugă la `kept`-ul turului produse DEJA evaluate (`gate(count_kept=False)`) care chiar
+        ajung la client. Nu re-evaluează și nu emite: decizia lor a fost luată o dată."""
+        if not self.contexts or not products:
+            return
+        _merge_decision(
+            ctx,
+            Decision(
+                kept=list(products),
+                contexts=tuple(sorted(self.contexts)),
+                must_refer=True,
+                unverifiable=sum(1 for p in products if not has_verifiable_ingredients(p)),
+            ),
+        )
 
 
 def _persisted_contexts(ctx: Any) -> set[str]:
@@ -224,7 +249,10 @@ def _merge_decision(ctx: Any, d: Decision) -> None:
         # NX-367: tot ce a PĂSTRAT turul, nu doar ultima evaluare: o căutare care păstrează A,
         # urmată de un detaliu pe un produs blocat, nu înseamnă că turul a rămas fără nimic.
         kept=_union_by_id(prev.kept, d.kept),
-        blocked=list(prev.blocked) + list(d.blocked),
+        # NX-378: un produs blocat pe două căi ale aceluiași tur e UN produs scos (nota pentru
+        # model și fraza numără produse, nu evaluări)
+        blocked=list(prev.blocked)
+        + [b for b in d.blocked if b.product_id not in {x.product_id for x in prev.blocked}],
         contexts=tuple(sorted(set(prev.contexts) | set(d.contexts))),
         rule_ids=tuple(sorted(set(prev.rule_ids) | set(d.rule_ids))),
         must_refer=prev.must_refer or d.must_refer,
