@@ -306,6 +306,24 @@ _RO_RELATIVE_COMPARATORS = """
 _RELATIVE_COMPARATORS: dict[str, tuple[tuple[str, str], ...]] = {}
 
 
+#: NX-371 — PREPOZIȚIILE locale-i, subgrupul gramatical al cuvintelor goale de mai sus. Un
+#: substantiv NEARTICULAT imediat după o prepoziție e de obicei o locuțiune («în fond», «în
+#: esență»), nu obiectul cererii: ancora numită a lui «mai ieftin» nu-l ia drept tipul unui
+#: produs. Doar cuvinte funcționale; „fără" e negație (`negation_markers`), nu intră aici.
+_PREPOSITIONS: dict[str, frozenset[str]] = {
+    "ro": frozenset(
+        "a cu de din dintre in intr intre la pe pentru peste pana prin spre sub dupa".split()
+    ),
+}
+
+
+def prepositions(locale: str | None) -> frozenset[str]:
+    """Prepozițiile locale-i. Locale necunoscută → mulțimea goală (P11)."""
+    if not locale:
+        return frozenset()
+    return _PREPOSITIONS.get(locale.split("-")[0].lower(), frozenset())
+
+
 def negation_markers(locale: str | None) -> frozenset[str]:
     """Cuvintele de negație ale locale-i. Locale necunoscută → mulțimea goală: orice `avoid`
     coboară la `implicit` (soft), deci nicio negație ghicită nu exclude produse (P11)."""

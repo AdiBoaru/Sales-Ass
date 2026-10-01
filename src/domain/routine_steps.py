@@ -58,6 +58,8 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
+from src.catalog.folding import fold_text
+
 log = logging.getLogger(__name__)
 
 __all__ = [
@@ -192,8 +194,6 @@ class RoutineSpec:
             return None
         if value in self.time_markers:
             return value
-        from src.catalog.folding import fold_text  # noqa: PLC0415 — domeniul nu cere catalogul
-
         folded = fold_text(value).strip()
         for key, terms in self.time_markers.items():
             if folded == fold_text(key) or folded in {fold_text(t).strip() for t in terms}:
