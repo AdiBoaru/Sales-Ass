@@ -1405,6 +1405,21 @@ cheia bate eticheta; între etichete regula rămâne. Pe vocabularul real se sch
 («corp», «Corp»). Card: [`tasks/stage1/NX-376.md`](tasks/stage1/NX-376.md); probă:
 `pytest tests/test_nx376_shelf_key_beats_label.py -q`.
 
+**NX-378 (cu NX-377) — după o reluare, «mai arată-mi altele» arată ALTELE din subiectul reluat.** Setul
+`kernel-live-2026-10-01` (k1): «înapoi la seruri, mai arată-mi altele» primea zero carduri. Replay-ul a
+corectat analiza inițială (C3) și a găsit trei cauze: (1) căutarea planificată excludea ecranul v1
+(șampoanele), nu ecranul subiectului reluat; acum executorul trimite uneltei ce a văzut clientul
+după starea porții (`seen_extra`), scos și din pool-ul sesiunii; (2) restul rândurilor completării
+NX-298 se arunca, deci pool-ul paginării era cât pagina; acum intră în coada pool-ului; (3) după
+puținele potriviri, NX-298 punea produse fără textul cererii, deși existau seruri pentru pete cu tip
+de ten necunoscut: NX-377 (D7: o fațetă `partitioning` neauditată nu exclude un produs fără atribut)
+completează ÎNAINTEA lui NX-298, doar cu potriviri STRICTE de text, marcate `facet_unknown` pentru
+model. Pe replay: 5 seruri noi pentru pete în loc de 0 carduri; pe toate turele din 2026-10-01
+completarea aduce produse doar pe k1. Flaguri `SEARCH_UNKNOWN_FILL_ENABLED`,
+`SEARCH_POOL_FROM_FILTER_FILL_ENABLED` (ON). Carduri: [`tasks/stage1/NX-378.md`](tasks/stage1/NX-378.md),
+[`tasks/stage1/NX-377.md`](tasks/stage1/NX-377.md); probă: `pytest tests/test_nx377_unknown_facet_fill.py
+tests/test_nx378_resume_and_pool.py -q`.
+
 **NX-360 — stocul și prețurile SOLE se resincronizează din paginile live.** Catalogul era o fotografie
 din 2026-08-28: cele 391 de produse `out_of_stock` aveau prețul voucherului WELCOME15 drept preț de
 listă (scraperul cădea pe `offers.price` din JSON-LD când pagina epuizată nu arăta rândul de preț), iar

@@ -415,6 +415,27 @@ def _confirm(ctx: TurnContext, question: str) -> None:
     reply.cacheable = False
 
 
+def _seen_by_subject(ctx: TurnContext) -> tuple[str, ...]:
+    """NX-378: ce a văzut clientul, după starea PORȚII: ecranul (pe o reluare, reducerul a pus
+    înapoi setul subiectului parcat) și seturile de mai devreme. Vederea v1 (`displayed_products`)
+    arată încă ecranul subiectului de dinainte de reluare: pe k1 T4 («înapoi la seruri, mai
+    arată-mi altele») căutarea exclusese șampoanele, aducea aceleași seruri, iar compunerea le
+    refuza ca deja văzute (zero carduri)."""
+    view = getattr(ctx, "kernel_view", None)
+    return seen_in_state(getattr(view, "gate_state", None))
+
+
+def seen_in_state(state: Any) -> tuple[str, ...]:
+    """Ecranul și seturile de mai devreme ale unei stări v2, ca id-uri, în ordine, fără dubluri.
+    PUR. Îl folosesc și calea servită, și cea dark (`interpreted_turn._dark_search`)."""
+    refs = getattr(state, "references", None)
+    if refs is None:
+        return ()
+    ids = [d.product_id for d in refs.displayed_products]
+    ids += [d.product_id for s in refs.recent_sets for d in s]
+    return tuple(dict.fromkeys(i for i in ids if i))
+
+
 async def _search(
     ctx: TurnContext,
     deps: PipelineDeps,
@@ -427,7 +448,11 @@ async def _search(
     if plan.search_args is None:
         return False
     run = ToolRun(ctx, deps)
-    result = await run.execute_planned(plan.search_args, exclude_shown=exclude_shown)
+    result = await run.execute_planned(
+        plan.search_args,
+        exclude_shown=exclude_shown,
+        seen_extra=_seen_by_subject(ctx) if exclude_shown else (),
+    )
     if not run.retrieved:
         if result.llm_view == catalog_tools._NO_MORE_VIEW:
             # aceeași amprentă ca sesiunea activă, pool epuizat: nu e „nu am găsit în catalog"

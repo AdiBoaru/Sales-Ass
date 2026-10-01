@@ -861,9 +861,13 @@ async def _dark_search(
     mark = len(ctx.events)
     started = perf_counter()
     paging = chain.planned.primary in chain.planned.excludes_shown  # NX-370
-    result = await run_planned_search(
-        ctx, deps, plan.search_args, **({"exclude_shown": True} if paging else {})
-    )
+    extra: dict[str, Any] = {"exclude_shown": True} if paging else {}
+    if paging:  # NX-378: aceeași mulțime văzută ca pe calea servită
+        from src.agent.kernel_executors import seen_in_state  # noqa: PLC0415
+
+        if seen := seen_in_state(chain.reduced.state):
+            extra["seen_extra"] = seen
+    result = await run_planned_search(ctx, deps, plan.search_args, **extra)
     out["ms"] = round((perf_counter() - started) * 1000, 1)
     slots = int(getattr(get_settings(), "card_slots", 6))
     ids = [str(p.get("product_id") or p.get("id")) for p in (result.products or [])]
