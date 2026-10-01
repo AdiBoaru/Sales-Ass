@@ -67,6 +67,18 @@ _UNAVAILABLE: dict[str, str] = {
 }
 
 
+# NX-367: când excluderea a golit TOT setul turului, răspunsul e al codului (fraza garantată +
+# asta), nu al modelului, care altfel scria „nu am găsit în catalog" despre un set golit de noi.
+_ALTERNATIVES: dict[str, str] = {
+    "ro": "Dacă vrei, îți caut variante fără ele.",
+    "en": "If you like, I can look for options without them.",
+}
+
+
+def alternatives_offer(locale: str) -> str:
+    return _pick(_ALTERNATIVES, locale)
+
+
 def _pick(table: dict[str, str], locale: str) -> str:
     return table.get(locale) or table.get("ro") or next(iter(table.values()), "")
 

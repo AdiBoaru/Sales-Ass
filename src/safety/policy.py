@@ -202,6 +202,17 @@ def _persisted_contexts(ctx: Any) -> set[str]:
     return {str(c) for c in (safety.get("contexts") or [])}
 
 
+def _union_by_id(a: list[dict[str, Any]], b: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    seen: set[str] = set()
+    out: list[dict[str, Any]] = []
+    for p in list(a) + list(b):
+        pid = str(p.get("product_id") or p.get("id") or id(p))
+        if pid not in seen:
+            seen.add(pid)
+            out.append(p)
+    return out
+
+
 def _merge_decision(ctx: Any, d: Decision) -> None:
     """Decizia turului = uniunea evaluărilor (o cale poate bloca, alta nu). `must_refer` e sticky:
     dacă un context a fost activ măcar o dată în tur, fraza de siguranță se datorează."""
@@ -210,7 +221,9 @@ def _merge_decision(ctx: Any, d: Decision) -> None:
         ctx.safety_decision = d
         return
     ctx.safety_decision = Decision(
-        kept=d.kept,
+        # NX-367: tot ce a PĂSTRAT turul, nu doar ultima evaluare: o căutare care păstrează A,
+        # urmată de un detaliu pe un produs blocat, nu înseamnă că turul a rămas fără nimic.
+        kept=_union_by_id(prev.kept, d.kept),
         blocked=list(prev.blocked) + list(d.blocked),
         contexts=tuple(sorted(set(prev.contexts) | set(d.contexts))),
         rule_ids=tuple(sorted(set(prev.rule_ids) | set(d.rule_ids))),

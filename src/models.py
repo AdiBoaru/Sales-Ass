@@ -341,6 +341,10 @@ class RetrievalResult:
     # turul e o paranteză și nu golește sesiunea de căutare. Implicit adevărat: orice alt producător
     # (handlere deterministe, creierul unic) păstrează comportamentul de dinainte.
     catalog_read: bool = True
+    # NX-367: turul a citit și altceva decât catalogul (o regulă a magazinului prin `faq_lookup`, o
+    # comandă, orice unealtă din afara `CATALOG_READ_TOOLS`). Atunci un set golit de excluderea de
+    # siguranță NU face răspunsul al codului (`safety.compose.enforce`): proza poartă și acel fapt.
+    read_beyond_catalog: bool = False
 
 
 # ---------------------------------------------------------------------------
