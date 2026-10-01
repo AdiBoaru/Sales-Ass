@@ -1,0 +1,1158 @@
+{
+ "turn_id": "d2cbcf5f-a37c-49e6-b1f5-7c8b196ad841",
+ "conversation_id": "4ac20c2b-384d-47a2-9340-6dd1aa304cb3",
+ "business_id": "99fe1292-f9ed-469e-8183-f994ea5b59c0",
+ "client_text": "pot sa inlocuiesc tonerul cu ceva mai ieftin?",
+ "created_at": "2026-10-01 07:24:36.937361+00:00",
+ "reply": {
+  "kind": "message",
+  "rich": {
+   "pick": [
+    "1c1fc8e8-80bc-405c-a3f5-fb7ffd026fe2",
+    "Este alternativa din listă care se adresează porilor dilatați, deși nu ține loc de toner."
+   ],
+   "chips": [
+    {
+     "label": "Ce spun recenziile despre MIZON Pore Fresh Clear Nose",
+     "payload": "Ce spun recenziile despre MIZON Pore Fresh Clear Nose"
+    },
+    {
+     "label": "Trimite-mi linkul la MIZON Pore Fresh Clear Nose Pack",
+     "payload": "Trimite-mi linkul la MIZON Pore Fresh Clear Nose Pack"
+    }
+   ],
+   "intro": "Nu am în lista aceasta un toner, deci benzile MIZON nu îl înlocuiesc. Sunt o opțiune mai ieftină, dar doar pentru curățarea porilor din zona nasului.",
+   "items": [
+    {
+     "url": "https://sole.ro/ten/remediu-local/mizon-pore-fresh-clear-nose-pack-benzi-pentru-indepartarea-punctelor-negre-f81131.html",
+     "name": "MIZON Pore Fresh Clear Nose Pack",
+     "size": null,
+     "badge": "Top Favorit",
+     "image": "https://pidqzxymjhzlmoesfsba.supabase.co/storage/v1/object/public/product-images/sole/F81131/1.webp",
+     "price": 3.0,
+     "rating": 4.86,
+     "reason": "Pentru punctele negre de pe nas, argila Ghassoul și cărbunele contribuie la curățarea porilor.",
+     "details": null,
+     "currency": "RON",
+     "variants": [],
+     "badge_tone": "info",
+     "list_price": null,
+     "product_id": "1c1fc8e8-80bc-405c-a3f5-fb7ffd026fe2",
+     "review_count": 177
+    }
+   ],
+   "education": null,
+   "disclaimer": null
+  },
+  "text": "Nu am în lista aceasta un toner, deci benzile MIZON nu îl înlocuiesc. Sunt o opțiune mai ieftină, dar doar pentru curățarea porilor din zona nasului.\n\n1. MIZON Pore Fresh Clear Nose Pack, 3,00 lei  ⭐4.9  • Top Favorit\n   Pentru punctele negre de pe nas, argila Ghassoul și cărbunele contribuie la curățarea porilor.\n\nDacă vrei, putem continua cu: Ce spun recenziile despre MIZON Pore Fresh Clear Nose · Trimite-mi linkul la MIZON Pore Fresh Clear Nose Pack",
+  "offer": null,
+  "products": [
+   {
+    "url": "https://sole.ro/ten/remediu-local/mizon-pore-fresh-clear-nose-pack-benzi-pentru-indepartarea-punctelor-negre-f81131.html",
+    "name": "MIZON Pore Fresh Clear Nose Pack",
+    "image": "https://pidqzxymjhzlmoesfsba.supabase.co/storage/v1/object/public/product-images/sole/F81131/1.webp",
+    "price": 3.0,
+    "product_id": "1c1fc8e8-80bc-405c-a3f5-fb7ffd026fe2"
+   }
+  ],
+  "cacheable": false,
+  "comparison": null,
+  "suggestions": [],
+  "pending_question": null
+ },
+ "diagnostics": {
+  "kernel": {
+   "gaps": [],
+   "plan": {
+    "family": null,
+    "executor": "search",
+    "depends_on": null,
+    "product_ids": [],
+    "search_args": {
+     "brand": null,
+     "limit": 6,
+     "query": "tonerul",
+     "prefer": {},
+     "exclude": {},
+     "category": "ten",
+     "concerns": null,
+     "features": null,
+     "price_max": 200.0,
+     "sort_mode": "relevance",
+     "price_band": null,
+     "rank_terms": [],
+     "product_name": "tonerul",
+     "in_stock_only": false,
+     "variant_label": null
+    }
+   },
+   "plans": [
+    {
+     "family": null,
+     "executor": "search",
+     "depends_on": null,
+     "product_ids": [],
+     "search_args": {
+      "brand": null,
+      "limit": 6,
+      "query": "tonerul",
+      "prefer": {},
+      "exclude": {},
+      "category": "ten",
+      "concerns": null,
+      "features": null,
+      "price_max": 200.0,
+      "sort_mode": "relevance",
+      "price_band": null,
+      "rank_terms": [],
+      "product_name": "tonerul",
+      "in_stock_only": false,
+      "variant_label": null
+     }
+    }
+   ],
+   "executor": "none",
+   "rejected": [],
+   "ambiguity": {
+    "reason": "clear",
+    "verdict": "act",
+    "question": null
+   },
+   "proposals": [],
+   "truncated": false,
+   "disclosures": [
+    [
+     0,
+     "not_exact_match"
+    ]
+   ],
+   "gate_memory": null,
+   "state_after": {
+    "needs": [
+     "budget_max lte 200"
+    ],
+    "shown": [
+     "937c3195-954f-48e0-888c-73bfc4119198",
+     "9b5e5fe9-6978-42ff-bb69-bc29244a7a12"
+    ],
+    "topic": "ten"
+   },
+   "dropped_acts": 0,
+   "state_before": {
+    "needs": [
+     "budget_max lte 200"
+    ],
+    "shown": [
+     "937c3195-954f-48e0-888c-73bfc4119198",
+     "9b5e5fe9-6978-42ff-bb69-bc29244a7a12"
+    ],
+    "topic": "ten"
+   },
+   "answer_policy": null,
+   "resolved_refs": [
+    {
+     "kind": "name",
+     "reason": "name_not_found",
+     "ref_id": "r1",
+     "source": "shown_now",
+     "outcome": "not_found",
+     "product_ids": []
+    }
+   ],
+   "delta_counters": {
+    "ranking": 0,
+    "proposals": 0,
+    "reducer_rejected": 0,
+    "rejected_changes": 0
+   },
+   "interpretation": {
+    "acts": [
+     {
+      "kind": "detail",
+      "query": null,
+      "targets": [
+       "r1"
+      ]
+     }
+    ],
+    "thread": "continue",
+    "changes": [],
+    "references": [
+     {
+      "id": "r1",
+      "kind": "name",
+      "name": "tonerul",
+      "text": "tonerul",
+      "value": null,
+      "ordinal": null,
+      "dimension": null,
+      "direction": null
+     }
+    ],
+    "ambiguities": [],
+    "corrects_previous_turn": false
+   },
+   "checked_changes": [],
+   "contract_version": "kernel.v6.0",
+   "vocabulary_snapshot": "dc5ae9f2612ea9ab"
+  },
+  "model_io": {
+   "v": 2,
+   "calls": [
+    {
+     "i": 0,
+     "ok": true,
+     "shape": null,
+     "tools": [],
+     "schema": null,
+     "purpose": null,
+     "endpoint": "moderations",
+     "response": {
+      "id": "modr-258",
+      "model": "omni-moderation-latest",
+      "results": [
+       {
+        "flagged": false,
+        "categories": {
+         "hate": false,
+         "sexual": false,
+         "illicit": false,
+         "violence": false,
+         "self-harm": false,
+         "harassment": false,
+         "sexual/minors": false,
+         "illicit/violent": false,
+         "hate/threatening": false,
+         "self-harm/intent": false,
+         "violence/graphic": false,
+         "harassment/threatening": false,
+         "self-harm/instructions": false
+        },
+        "category_scores": {
+         "hate": 2.95957113513077e-05,
+         "sexual": 1.0889691002655445e-05,
+         "illicit": 0.09415560676127332,
+         "violence": 0.0004888526162855685,
+         "self-harm": 0.0004667426519547087,
+         "harassment": 5.0333557545281144e-05,
+         "sexual/minors": 4.1335397768930325e-06,
+         "illicit/violent": 0.0016655320144897958,
+         "hate/threatening": 7.602479448313689e-06,
+         "self-harm/intent": 0.00023495794751787928,
+         "violence/graphic": 4.832563818725537e-06,
+         "harassment/threatening": 1.0391067562761452e-05,
+         "self-harm/instructions": 0.00021337902185586662
+        },
+        "category_applied_input_types": {
+         "hate": [
+          "text"
+         ],
+         "sexual": [
+          "text"
+         ],
+         "illicit": [
+          "text"
+         ],
+         "violence": [
+          "text"
+         ],
+         "self-harm": [
+          "text"
+         ],
+         "harassment": [
+          "text"
+         ],
+         "sexual/minors": [
+          "text"
+         ],
+         "illicit/violent": [
+          "text"
+         ],
+         "hate/threatening": [
+          "text"
+         ],
+         "self-harm/intent": [
+          "text"
+         ],
+         "violence/graphic": [
+          "text"
+         ],
+         "harassment/threatening": [
+          "text"
+         ],
+         "self-harm/instructions": [
+          "text"
+         ]
+        }
+       }
+      ]
+     },
+     "input_sha": "97e74c19e7a8a0b6"
+    },
+    {
+     "i": 1,
+     "ok": true,
+     "shape": "schema",
+     "tools": [],
+     "schema": "turn_interpretation",
+     "purpose": "interpret",
+     "endpoint": "chat.completions",
+     "response": {
+      "id": "chatcmpl-EU5RPlP2Uo7BWZiyERnJ2M4GUzKG9",
+      "model": "gpt-6-luna",
+      "usage": {
+       "total_tokens": 3826,
+       "prompt_tokens": 3739,
+       "completion_tokens": 87,
+       "prompt_tokens_details": {
+        "audio_tokens": 0,
+        "cached_tokens": 2913,
+        "cache_write_tokens": 823
+       },
+       "completion_tokens_details": {
+        "audio_tokens": 0,
+        "reasoning_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+       }
+      },
+      "object": "chat.completion",
+      "choices": [
+       {
+        "index": 0,
+        "message": {
+         "role": "assistant",
+         "audio": null,
+         "content": "{\"thread\":\"continue\",\"acts\":[{\"kind\":\"detail\",\"targets\":[\"r1\"],\"query\":null}],\"changes\":[],\"references\":[{\"id\":\"r1\",\"text\":\"tonerul\",\"kind\":\"name\",\"ordinal\":null,\"name\":\"tonerul\",\"dimension\":null,\"value\":null,\"direction\":null}],\"ambiguities\":[],\"corrects_previous_turn\":false}",
+         "refusal": null,
+         "tool_calls": null,
+         "annotations": [],
+         "function_call": null
+        },
+        "logprobs": null,
+        "finish_reason": "stop"
+       }
+      ],
+      "created": 1790839463,
+      "moderation": null,
+      "service_tier": "default",
+      "system_fingerprint": null
+     },
+     "input_sha": "d6209292b06d9ecb"
+    },
+    {
+     "i": 2,
+     "ok": true,
+     "shape": "tools",
+     "tools": [
+      "cart_add",
+      "check_order",
+      "checkout_link",
+      "compare_products",
+      "faq_lookup",
+      "get_product_details",
+      "reorder",
+      "search_products",
+      "subscribe_back_in_stock"
+     ],
+     "schema": null,
+     "purpose": null,
+     "endpoint": "chat.completions",
+     "response": {
+      "id": "chatcmpl-EU5RS2xrj6lbO2zS9hjgv0osOkagr",
+      "model": "gpt-6-luna",
+      "usage": {
+       "total_tokens": 6517,
+       "prompt_tokens": 6411,
+       "completion_tokens": 106,
+       "prompt_tokens_details": {
+        "audio_tokens": 0,
+        "cached_tokens": 5031,
+        "cache_write_tokens": 1377
+       },
+       "completion_tokens_details": {
+        "audio_tokens": 0,
+        "reasoning_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+       }
+      },
+      "object": "chat.completion",
+      "choices": [
+       {
+        "index": 0,
+        "message": {
+         "role": "assistant",
+         "audio": null,
+         "content": null,
+         "refusal": null,
+         "tool_calls": [
+          {
+           "id": "call_5ZsWxeaDRNbFyEGBaoR2v7Ie",
+           "type": "function",
+           "function": {
+            "name": "search_products",
+            "arguments": "{\"query\":\"înlocuitor pentru toner de seară pentru pori dilatați și ten mixt, mai ieftin\",\"price_max\":200,\"category\":\"ten-tonifierea-si-calmarea-pielii\",\"brand\":null,\"concerns\":[\"pori dilatați\",\"ten mixt\"],\"features\":null,\"limit\":6,\"sort_mode\":\"price_asc\",\"in_stock_only\":false,\"product_name\":null,\"variant_label\":null}"
+           }
+          }
+         ],
+         "annotations": [],
+         "function_call": null
+        },
+        "logprobs": null,
+        "finish_reason": "tool_calls"
+       }
+      ],
+      "created": 1790839466,
+      "moderation": null,
+      "service_tier": "default",
+      "system_fingerprint": null
+     },
+     "input_sha": "2c48892ecc1e7531"
+    },
+    {
+     "i": 3,
+     "ok": true,
+     "shape": "schema",
+     "tools": [],
+     "schema": "sales_recommendation",
+     "purpose": null,
+     "endpoint": "chat.completions",
+     "response": {
+      "id": "chatcmpl-EU5RUzv7I8IhD51QsqfEAW0gAiEIe",
+      "model": "gpt-6-luna",
+      "usage": {
+       "total_tokens": 7454,
+       "prompt_tokens": 6871,
+       "completion_tokens": 583,
+       "prompt_tokens_details": {
+        "audio_tokens": 0,
+        "cached_tokens": 4658,
+        "cache_write_tokens": 2210
+       },
+       "completion_tokens_details": {
+        "audio_tokens": 0,
+        "reasoning_tokens": 374,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+       }
+      },
+      "object": "chat.completion",
+      "choices": [
+       {
+        "index": 0,
+        "message": {
+         "role": "assistant",
+         "audio": null,
+         "content": "{\"intro\":\"Nu am în lista aceasta un toner, deci benzile MIZON nu îl înlocuiesc. Sunt o opțiune mai ieftină, dar doar pentru curățarea porilor din zona nasului.\",\"items\":[{\"product_id\":\"P1\",\"pro_index\":0,\"fit_clause\":\"Pentru punctele negre de pe nas, argila Ghassoul și cărbunele contribuie la curățarea porilor.\"}],\"pick\":{\"product_id\":\"P1\",\"justification\":\"Este alternativa din listă care se adresează porilor dilatați, deși nu ține loc de toner.\"},\"education\":\"\",\"suggestions\":[\"Arată-mi tonere mai ieftine pentru pori dilatați\",\"Cum se folosesc benzile MIZON pentru nas?\",\"Compară benzile MIZON cu tonerul ANUA\",\"Vreau un produs mai ieftin pentru ten mixt\"]}",
+         "refusal": null,
+         "tool_calls": null,
+         "annotations": [],
+         "function_call": null
+        },
+        "logprobs": null,
+        "finish_reason": "stop"
+       }
+      ],
+      "created": 1790839468,
+      "moderation": null,
+      "service_tier": "default",
+      "system_fingerprint": null
+     },
+     "input_sha": "1291c68959cd033c"
+    }
+   ],
+   "replayable": true,
+   "unreplayable": []
+  },
+  "rich_raw": {
+   "pick": {
+    "product_id": "P1",
+    "justification": "Este alternativa din listă care se adresează porilor dilatați, deși nu ține loc de toner."
+   },
+   "intro": "Nu am în lista aceasta un toner, deci benzile MIZON nu îl înlocuiesc. Sunt o opțiune mai ieftină, dar doar pentru curățarea porilor din zona nasului.",
+   "items": [
+    {
+     "pro_index": 0,
+     "fit_clause": "Pentru punctele negre de pe nas, argila Ghassoul și cărbunele contribuie la curățarea porilor.",
+     "product_id": "P1"
+    }
+   ],
+   "education": "",
+   "suggestions": [
+    "Arată-mi tonere mai ieftine pentru pori dilatați",
+    "Cum se folosesc benzile MIZON pentru nas?",
+    "Compară benzile MIZON cu tonerul ANUA",
+    "Vreau un produs mai ieftin pentru ten mixt"
+   ]
+  },
+  "turn_input": {
+   "v": 2,
+   "env": {
+    "catalog": {
+     "09ff976a-f2c1-4cca-a23c-763143168957": [
+      10.0,
+      null,
+      "in_stock",
+      "2026-08-27 17:21:04.289740+00:00"
+     ],
+     "0d2d587e-9185-47e5-b690-0d51c103407f": [
+      10.0,
+      null,
+      "in_stock",
+      "2026-08-27 17:21:11.501682+00:00"
+     ],
+     "1c1fc8e8-80bc-405c-a3f5-fb7ffd026fe2": [
+      3.0,
+      null,
+      null,
+      null
+     ],
+     "2b2aa9d5-72ba-40fd-be95-0d69ae70eb4b": [
+      10.0,
+      null,
+      "in_stock",
+      "2026-08-27 17:33:08.104686+00:00"
+     ],
+     "3880c6dd-f838-4ce6-acc0-f212ad1f68bd": [
+      10.0,
+      null,
+      "in_stock",
+      "2026-08-27 17:32:58.633472+00:00"
+     ],
+     "490b829a-240d-4810-9d09-9b36b970e93a": [
+      10.0,
+      null,
+      "in_stock",
+      "2026-08-27 17:34:22.201830+00:00"
+     ]
+    },
+    "release": "6b383adf3742c9b514d23532bb812d6fa84c750e",
+    "pack_sha": "ad4006d65445390fb9a75a031714cb599b79cc3f5819e697837deda995586df0",
+    "settings": {
+     "env": "prod",
+     "log_level": "INFO",
+     "card_slots": 6,
+     "chip_slots": 5,
+     "faq_enabled": true,
+     "model_agent": "gpt-6-luna",
+     "model_embed": "text-embedding-3-small",
+     "release_sha": "6b383adf3742c9b514d23532bb812d6fa84c750e",
+     "web_enabled": true,
+     "max_per_type": 2,
+     "model_vision": "gpt-5.6-terra",
+     "service_name": "nativx-assistant",
+     "alias_enabled": true,
+     "cache_enabled": true,
+     "llm_retry_max": 2,
+     "llm_timeout_s": 30.0,
+     "release_track": "champion",
+     "cache_tau_high": 0.92,
+     "cost_agent_usd": 0.003,
+     "rate_limit_max": 20,
+     "vision_enabled": true,
+     "cost_vision_usd": 0.003,
+     "db_bot_pool_max": 10,
+     "llm_call_cap_ms": 8000,
+     "routine_enabled": true,
+     "summary_enabled": true,
+     "welcome_enabled": true,
+     "embed_timeout_ms": 800,
+     "llm_pricing_json": "",
+     "model_moderation": "omni-moderation-latest",
+     "turn_lock_ttl_ms": 15000,
+     "vision_max_bytes": 5000000,
+     "web_action_ttl_s": 1800,
+     "web_backlog_size": 20,
+     "web_cors_origins": "https://demo.nativextech.com",
+     "welcome_bot_name": "Native",
+     "admission_enabled": true,
+     "checkout_base_url": "",
+     "conv_lock_enabled": true,
+     "db_admin_pool_max": 10,
+     "embed_job_enabled": true,
+     "memory_v2_enabled": true,
+     "need_menu_enabled": false,
+     "proactive_enabled": true,
+     "reply_split_chars": 200,
+     "summary_max_chars": 600,
+     "summary_threshold": 20,
+     "web_backlog_ttl_s": 300,
+     "web_session_ttl_s": 43200,
+     "attr_query_enabled": true,
+     "chip_moves_enabled": true,
+     "cost_guard_enabled": true,
+     "cross_sell_enabled": true,
+     "daily_cost_cap_usd": 5.0,
+     "lifecycle_hour_utc": 2,
+     "moderation_enabled": true,
+     "rate_limit_enabled": true,
+     "web_max_body_bytes": 16384,
+     "web_turn_sse_max_s": 600.0,
+     "answer_plan_enabled": false,
+     "brain_chips_enabled": false,
+     "card_badges_enabled": true,
+     "card_coupon_enabled": true,
+     "db_isolation_assert": "strict",
+     "domain_pack_enabled": true,
+     "link_intent_enabled": true,
+     "model_agent_complex": "",
+     "release_environment": "",
+     "rich_facets_enabled": true,
+     "summary_regen_delta": 12,
+     "web_actions_enabled": false,
+     "web_context_enabled": false,
+     "web_sse_heartbeat_s": 15.0,
+     "web_turn_deadline_s": 120,
+     "web_turn_v2_enabled": false,
+     "answer_shape_enabled": true,
+     "clarify_max_attempts": 2,
+     "clarify_menu_enabled": true,
+     "clarify_tool_enabled": false,
+     "commerce_facts_sla_s": 86400,
+     "facet_search_enabled": true,
+     "lifecycle_churn_days": 30,
+     "llm_call_total_cap_s": 90.0,
+     "llm_max_tokens_agent": 0,
+     "llm_sampling_enabled": true,
+     "moderation_timeout_s": 3.0,
+     "pool_metrics_enabled": true,
+     "proactive_batch_size": 20,
+     "single_brain_enabled": false,
+     "turn_budget_enforced": false,
+     "turn_budget_exact_ms": 3000,
+     "turn_cost_budget_usd": 0.01,
+     "web_feedback_enabled": false,
+     "web_identity_enabled": false,
+     "web_turn_claim_batch": 8,
+     "web_turn_heartbeat_s": 60.0,
+     "web_turn_lease_ttl_s": 300,
+     "web_turn_sse_enabled": false,
+     "web_turn_sse_poll_ms": 1000,
+     "web_turns_stale_days": 7,
+     "admission_web_wait_ms": 1500,
+     "aftercare_deadline_ms": 20000,
+     "ai_disclaimer_enabled": false,
+     "cache_ttl_static_days": 7,
+     "chip_moves_v1_enabled": true,
+     "chip_moves_v2_enabled": false,
+     "conv_lock_ttl_seconds": 30,
+     "db_op_metrics_enabled": true,
+     "decision_axes_enabled": true,
+     "demand_rollup_enabled": true,
+     "detail_intent_enabled": true,
+     "dispatcher_batch_size": 10,
+     "faq_grounding_enabled": true,
+     "lifecycle_job_enabled": true,
+     "llm_retry_after_max_s": 10.0,
+     "llm_temperature_agent": 0.7,
+     "observability_enabled": false,
+     "partition_job_enabled": true,
+     "relevance_mask_facets": "",
+     "retrieval_deadline_ms": 0,
+     "review_intent_enabled": true,
+     "rich_pick_web_enabled": false,
+     "search_shadow_enabled": false,
+     "turn_deadline_enabled": false,
+     "turn_hard_deadline_ms": 15000,
+     "turn_lock_wait_max_ms": 10000,
+     "turn_profiles_enabled": false,
+     "web_admission_enabled": true,
+     "web_identity_leeway_s": 30,
+     "web_rate_limit_max_ip": 40,
+     "web_turn_lock_enabled": true,
+     "web_turn_max_attempts": 3,
+     "admission_lease_ttl_ms": 120000,
+     "admission_max_inflight": 24,
+     "cheaper_intent_enabled": true,
+     "checkout_link_ttl_days": 7,
+     "chip_drop_dead_enabled": true,
+     "compare_intent_enabled": true,
+     "conv_lock_max_requeues": 10,
+     "framing_labels_enabled": true,
+     "input_pii_mask_enabled": true,
+     "needs_retained_enabled": true,
+     "observability_exporter": "",
+     "partition_months_ahead": 1,
+     "proactive_idle_sleep_s": 5.0,
+     "relation_graph_enabled": false,
+     "relevance_mask_enabled": false,
+     "response_style_enabled": true,
+     "trace_model_io_enabled": true,
+     "turn_budget_complex_ms": 10000,
+     "turn_latency_budget_ms": 5000,
+     "web_demo_access_issuer": "",
+     "web_session_v2_enabled": false,
+     "web_turn_poll_after_ms": 1000,
+     "web_turn_view_contract": "web-chat.v1",
+     "webhook_max_body_bytes": 262144,
+     "answer_plan_max_quality": false,
+     "db_query_timing_enabled": false,
+     "dispatcher_idle_sleep_s": 0.5,
+     "fast_path_exact_enabled": false,
+     "lead_score_hint_enabled": true,
+     "lexical_rank_v2_enabled": false,
+     "llm_retry_min_budget_ms": 600,
+     "llm_timeout_reasoning_s": 75.0,
+     "observability_queue_max": 2048,
+     "ops_heartbeat_max_age_s": 90.0,
+     "relations_first_enabled": true,
+     "retrieval_decision_path": "reports/nx238/decision.json",
+     "rich_from_facts_enabled": true,
+     "search_semantic_enabled": false,
+     "search_sessions_enabled": true,
+     "short_ack_guard_enabled": true,
+     "turn_budget_mutation_ms": 8000,
+     "web_action_clock_skew_s": 60,
+     "web_demo_access_enabled": false,
+     "web_rate_limit_window_s": 60,
+     "web_session_v2_required": false,
+     "web_turn_ledger_enabled": false,
+     "brain_rich_reply_enabled": true,
+     "comparison_focus_enabled": true,
+     "injection_screen_enabled": false,
+     "interpreted_turn_enabled": false,
+     "interpreted_turn_tenants": "sole-ro",
+     "lexical_query_v2_enabled": true,
+     "llm_wait_bounded_enabled": true,
+     "refinement_guard_enabled": true,
+     "release_policy_refresh_s": 15.0,
+     "rich_schema_slim_enabled": false,
+     "search_diversify_enabled": true,
+     "search_sort_mode_enabled": true,
+     "validator_claims_enabled": true,
+     "web_demo_access_audience": "",
+     "web_demo_access_leeway_s": 30,
+     "web_legacy_async_enabled": true,
+     "web_session_secret_ttl_s": 60.0,
+     "web_turn_executor_poll_s": 2.0,
+     "cache_ttl_dynamic_minutes": 30,
+     "comparison_facets_enabled": true,
+     "conversation_cart_enabled": false,
+     "guidance_required_enabled": false,
+     "lead_score_high_threshold": 70.0,
+     "llm_call_cap_reasoning_ms": 60000,
+     "llm_temperature_interpret": 0.2,
+     "match_gate_shadow_enabled": false,
+     "query_spec_shadow_enabled": false,
+     "rate_limit_window_seconds": 60,
+     "rich_item_handles_enabled": true,
+     "routine_evidence_required": true,
+     "scheduler_rollup_hour_utc": 0,
+     "tool_field_errors_enabled": true,
+     "typed_constraints_enabled": false,
+     "web_turn_executor_enabled": false,
+     "web_turn_recovery_enabled": false,
+     "web_turn_shutdown_grace_s": 10.0,
+     "web_turn_sweep_interval_s": 30.0,
+     "web_turns_retention_hours": 168,
+     "admission_max_per_business": 0,
+     "admission_requeue_delay_ms": 200,
+     "answer_plan_critic_enabled": false,
+     "comparison_axes_v2_enabled": false,
+     "contact_daily_cost_cap_usd": 0.0,
+     "conv_lock_requeue_delay_ms": 150,
+     "conversation_facts_enabled": true,
+     "conversation_trace_enabled": true,
+     "history_shown_max_products": 6,
+     "howto_from_catalog_enabled": false,
+     "llm_reasoning_effort_agent": "low",
+     "llm_temperature_background": 0.2,
+     "moderation_block_threshold": 3,
+     "narrowing_question_enabled": false,
+     "observability_export_batch": 256,
+     "observability_otlp_headers": "",
+     "observability_sample_ratio": 0.05,
+     "proactive_initiators_batch": 200,
+     "profile_extraction_enabled": true,
+     "relation_traversal_enabled": false,
+     "release_controller_enabled": false,
+     "response_telemetry_enabled": true,
+     "retrieval_pipeline_version": "retrieval.v1",
+     "rich_review_anchor_enabled": false,
+     "skin_type_anti_fit_enabled": false,
+     "structured_history_enabled": true,
+     "topic_switch_reset_enabled": true,
+     "turn_budget_alerts_enabled": true,
+     "turn_latency_spans_enabled": true,
+     "unique_name_prefix_enabled": true,
+     "web_context_prompt_enabled": false,
+     "web_rate_limit_max_visitor": 15,
+     "web_session_origin_binding": false,
+     "comparison_lead_llm_enabled": true,
+     "faq_locale_fallback_enabled": false,
+     "memory_canonicalize_enabled": true,
+     "memory_open_capture_enabled": true,
+     "observability_otlp_endpoint": "",
+     "prompt_cache_layout_enabled": false,
+     "replay_store_prompt_enabled": false,
+     "retrieval_candidate_enabled": false,
+     "rich_card_reconcile_enabled": true,
+     "search_blended_rank_enabled": true,
+     "set_relative_badges_enabled": true,
+     "turn_parallel_reads_enabled": false,
+     "web_context_freshness_sla_s": 86400,
+     "abandoned_cart_after_seconds": 3600,
+     "admission_acquire_timeout_ms": 2000,
+     "admission_local_fallback_max": 4,
+     "admission_requeue_warn_every": 20,
+     "catalog_reason_codes_enabled": true,
+     "compare_with_similar_enabled": true,
+     "comparison_narrative_enabled": true,
+     "conversation_subject_enabled": true,
+     "observability_traces_enabled": true,
+     "observed_constraints_enabled": true,
+     "proactive_initiators_enabled": true,
+     "search_category_hard_enabled": true,
+     "search_category_menu_enabled": true,
+     "search_category_tree_enabled": true,
+     "spec_digits_grounded_enabled": true,
+     "tool_loop_skip_prose_enabled": true,
+     "web_aftercare_max_concurrent": 8,
+     "web_bootstrap_rate_limit_max": 10,
+     "web_context_pipeline_version": "web-chat.v1",
+     "web_cost_cap_per_visitor_usd": 0.5,
+     "admission_distributed_enabled": true,
+     "catalog_projection_v2_enabled": true,
+     "cheapest_alternatives_enabled": true,
+     "content_status_filter_enabled": true,
+     "conversation_state_v2_enabled": true,
+     "dispatcher_global_concurrency": 16,
+     "dispatcher_tenant_concurrency": 4,
+     "interpreted_turn_dark_enabled": true,
+     "memory_safe_injection_enabled": true,
+     "observability_metrics_enabled": true,
+     "observability_otlp_timeout_ms": 2000,
+     "speculative_retrieval_enabled": false,
+     "turn_budget_recommendation_ms": 6000,
+     "web_view_v2_projector_enabled": false,
+     "abandoned_cart_max_age_seconds": 604800,
+     "llm_reasoning_effort_interpret": "none",
+     "named_shortcut_targets_enabled": true,
+     "no_result_alternatives_enabled": true,
+     "observability_flush_timeout_ms": 2000,
+     "price_bound_unit_aware_enabled": true,
+     "rich_pick_relevance_cosine_max": 0.6,
+     "routine_arg_provenance_enabled": true,
+     "routine_dense_ordinals_enabled": true,
+     "search_guessed_filter_min_rows": 5,
+     "validator_bare_numbers_enabled": true,
+     "validator_stock_claims_enabled": false,
+     "clarification_policy_v2_enabled": false,
+     "compare_coherence_guard_enabled": true,
+     "interpreted_turn_canary_percent": 100,
+     "interpreted_turn_dark_timeout_s": 5.0,
+     "llm_call_budget_by_role_enabled": true,
+     "proactive_initiators_interval_s": 900,
+     "reference_precedence_v2_enabled": false,
+     "retrieval_candidate_rollout_pct": 0,
+     "rich_pick_deterministic_enabled": true,
+     "search_guessed_filter_min_share": 0.1,
+     "checkout_intent_fallback_enabled": true,
+     "plan_server_owned_fields_enabled": false,
+     "rich_pick_relevance_gate_enabled": true,
+     "safety_contraindications_enabled": true,
+     "safety_medical_guardrail_enabled": true,
+     "scheduler_embed_interval_seconds": 3600,
+     "search_offcategory_guard_enabled": true,
+     "web_context_hydration_timeout_ms": 1500,
+     "conversation_trace_retention_days": 30,
+     "scheduler_dedupe_interval_seconds": 21600,
+     "aside_keeps_search_session_enabled": true,
+     "clarification_min_information_gain": 0.3,
+     "labeled_quantity_grounding_enabled": true,
+     "search_one_card_per_family_enabled": true,
+     "search_relax_by_provenance_enabled": true,
+     "tool_loop_skip_prose_exact_enabled": true,
+     "conversation_state_v2_write_enabled": false,
+     "search_price_as_filter_only_enabled": true,
+     "web_chat_aftercare_detached_enabled": true,
+     "scheduler_partition_interval_seconds": 86400,
+     "scheduler_web_turns_interval_seconds": 21600,
+     "search_filters_only_fallback_enabled": true,
+     "search_guessed_filter_rescue_enabled": true,
+     "answer_plan_critic_coverage_threshold": 0.99,
+     "conversation_sensitive_memory_enabled": false,
+     "search_price_bound_provenance_enabled": true,
+     "admission_max_per_business_distributed": 6,
+     "search_diversify_subject_aware_enabled": true,
+     "reference_resolver_v2_shortcuts_enabled": true,
+     "search_fill_from_subject_filter_enabled": true,
+     "search_guessed_filter_coherence_enabled": true,
+     "search_subshelf_homograph_guard_enabled": true,
+     "search_text_gate_when_redundant_enabled": true
+    },
+    "config_revision": "e361af6a5ac8"
+   },
+   "event": {
+    "action": null,
+    "media_id": null,
+    "verified": false,
+    "channel_id": "ae254f0f-c60b-4ab4-b281-dd8a8490e82b",
+    "channel_kind": "webchat",
+    "content_type": "text",
+    "page_context": null,
+    "channel_account_id": "pub_b738dd1aa2ff2e0535b491792cc789d9"
+   },
+   "snapshot": {
+    "facts": [
+     {
+      "raw_key": "skin_type",
+      "fact_type": "skin_type",
+      "confidence": 1.0,
+      "expires_at": null,
+      "fact_value": "mixt",
+      "last_seen_at": "2026-10-01 07:24:11.353816+00:00",
+      "canonical_key": "skin_type"
+     },
+     {
+      "raw_key": "concerns",
+      "fact_type": "concerns",
+      "confidence": 1.0,
+      "expires_at": null,
+      "fact_value": "pori dilatați",
+      "last_seen_at": "2026-10-01 07:24:11.353816+00:00",
+      "canonical_key": "concerns"
+     },
+     {
+      "raw_key": "routine_time",
+      "fact_type": "routine_time",
+      "confidence": 1.0,
+      "expires_at": null,
+      "fact_value": "seara",
+      "last_seen_at": "2026-10-01 07:24:11.353816+00:00",
+      "canonical_key": "routine_time"
+     }
+    ],
+    "state": {
+     "constraints": {},
+     "active_search": {
+      "fp": "2205547754defab7",
+      "page": 0,
+      "pool": [
+       "937c3195-954f-48e0-888c-73bfc4119198",
+       "9b5e5fe9-6978-42ff-bb69-bc29244a7a12",
+       "c46b8644-1ab5-42b8-9a49-392688817af9",
+       "a0e28201-88ea-4a10-ae03-7e9efd428154",
+       "4b3333da-9f81-4203-9236-148d14725130",
+       "f75405c7-d0e3-4a9b-8bd7-e7b8b7558c8f",
+       "6e6684c1-e170-43a3-b966-618ac9107e58",
+       "25fcad96-c85e-4414-bf89-f28149a4e160",
+       "e3bb7e59-8817-43bb-8b8c-57ed3085fd02",
+       "fd603eca-1a18-48be-a38e-c8668973f739",
+       "d5427791-01f0-4293-824a-2a0e7be128f6",
+       "b34bd56d-45ef-40a4-9d17-a7d04bed7070",
+       "fc4d508c-2459-4501-a31d-605ab923964f",
+       "c2b61c9b-d8b9-4972-9d29-56eeccb79983",
+       "7803c8f6-96ed-43cf-9d40-923a6e27f168",
+       "846b8e8f-987a-485c-99e4-ebe93d339a88",
+       "d075681b-cfa4-4b8c-a292-4eb7398f4900",
+       "3cb46ddf-70c7-4be7-b0c1-0aeff6e2eb72",
+       "b85e74f1-d992-47d0-a0c0-3ab043d8abe6",
+       "73369b87-6fdc-481a-be8d-bab089ed1b19",
+       "59fcc952-8fd2-453b-b5fd-b05a6e79c65d",
+       "d0735509-c686-45fe-8f5c-ecf62376519b",
+       "83d533d7-6f0e-4d96-b730-6e2ed5285596",
+       "95f265cc-b250-4a69-92a7-e8a046023a13"
+      ],
+      "cursor": 6,
+      "filters": {
+       "brand": null,
+       "query": "rutina de seara pentru ten mixt si cativa pori dilatati, in limita totala de",
+       "category": "ten",
+       "concerns": [
+        "pores"
+       ],
+       "features": null,
+       "price_max": 200.0,
+       "sort_mode": "relevance",
+       "product_name": null,
+       "in_stock_only": false,
+       "variant_label": null
+      }
+     },
+     "asked_intents": [],
+     "offered_chips": [
+      "refine_facet:concerns:hydration",
+      "pivot_shelf:category:ten",
+      "compare:4baca6ca-619f-4cc3-85ca-9e1270a164a1:d6e57a4a-ad2f-4d89-b6ac-5c3d700e3dc1",
+      "link:1642f00f-b39d-44a8-9d66-1ecc7ef583df",
+      "price_band:100",
+      "refine_facet:concerns:redness",
+      "pivot_shelf:category:ten-ingrijirea-tenului",
+      "compare:937c3195-954f-48e0-888c-73bfc4119198:9b5e5fe9-6978-42ff-bb69-bc29244a7a12",
+      "link:937c3195-954f-48e0-888c-73bfc4119198",
+      "refine_facet:skin_type:dry"
+     ],
+     "pending_question": null,
+     "displayed_products": [
+      {
+       "name": "SOME BY MI Retinol Intense Reactivating Serum",
+       "price": 30.0,
+       "product_id": "937c3195-954f-48e0-888c-73bfc4119198"
+      },
+      {
+       "name": "CELIMAX Derma Nature Ulei Demachiant cu Jojoba",
+       "price": 90.0,
+       "product_id": "9b5e5fe9-6978-42ff-bb69-bc29244a7a12"
+      }
+     ],
+     "search_constraints": {
+      "budget_max": 200,
+      "category_key": "ten"
+     }
+    },
+    "locale": "ro",
+    "contact": {
+     "id": "abac9c4b-24b6-48b8-a458-545757c4f685",
+     "locale": null,
+     "consent": {},
+     "profile": {
+      "concerns": "pori dilatați"
+     },
+     "lifecycle": "new",
+     "lead_score": 15.0,
+     "business_id": "99fe1292-f9ed-469e-8183-f994ea5b59c0"
+    },
+    "history": [
+     {
+      "id": null,
+      "body": "vreau sa-mi fac o rutina de seara, am ten mixt si cativa pori dilatati",
+      "author": "contact",
+      "payload": {
+       "turn_id": "8f15ecf4-3edc-42f5-b68d-3e55ba706020",
+       "fragment_index": 0
+      },
+      "direction": "inbound",
+      "created_at": "2026-10-01T07:23:48.556122+00:00",
+      "content_type": "text"
+     },
+     {
+      "id": null,
+      "body": "1. Curățarea cu uleiul SKIN1004 îndepărtează machiajul și impuritățile, iar centella și jojoba susțin confortul pielii. 2. Tonerul ANUA aduce un pas de calmare, cu extract de heartleaf. 3. Esența ROVECTIN completează rutina cu hidratare, acid hialuronic și niacinamidă. 4. Crema JUMISO încheie rutina cu hidratare și o textură ușoară.\n\n1. SKIN1004 Madagascar Centella Light Cleansing Oil, 100,00 lei  ⭐5.0  • Curățare\n   Pentru curățarea de seară, are textură ușoară și centella pentru confortul pielii.\n2. ANUA Heartleaf 77% Soothing, 110,00 lei  ⭐5.0  • Tonifiere\n   Potrivit ca toner pentru pori dilatați, se absoarbe rapid și susține calmarea roșeții.\n3. ROVECTIN Aqua Hyaluronic Essence, 170,00 lei  ⭐5.0  • Esență\n   Când vrei un plus de hidratare, acidul hialuronic și niacinamida completează rutina.\n4. BIODANCE Bio-Collagen Real Deep, 25,00 lei  ⭐5.0  • Tratament\n5. JUMISO Waterfull Hyaluronic Acid Cream, 120,00 lei  ⭐5.0  • Hidratare\n   La final, textura ușoară și acidul hialuronic oferă hidratare și confort cutanat.\n\nDacă vrei, putem continua cu: Caut ceva pentru hidratare · Arata-mi ce ai la Ten · Compara SKIN1004 Madagascar cu ANUA Heartleaf 77% · Trimite-mi linkul la BIODANCE Bio-Collagen Real Deep · Vreau ceva sub 100 lei",
+      "author": "bot",
+      "payload": {
+       "shown": [
+        {
+         "name": "SKIN1004 Madagascar Centella Light Cleansing Oil",
+         "price": 100.0,
+         "product_id": "4baca6ca-619f-4cc3-85ca-9e1270a164a1"
+        },
+        {
+         "name": "ANUA Heartleaf 77% Soothing",
+         "price": 110.0,
+         "product_id": "d6e57a4a-ad2f-4d89-b6ac-5c3d700e3dc1"
+        },
+        {
+         "name": "ROVECTIN Aqua Hyaluronic Essence",
+         "price": 170.0,
+         "product_id": "3a8cd744-7bf0-4e77-a513-c97dc4afbbe6"
+        },
+        {
+         "name": "BIODANCE Bio-Collagen Real Deep",
+         "price": 25.0,
+         "product_id": "1642f00f-b39d-44a8-9d66-1ecc7ef583df"
+        },
+        {
+         "name": "JUMISO Waterfull Hyaluronic Acid Cream",
+         "price": 120.0,
+         "product_id": "ac3c8f70-b759-4458-bab0-40cf77846907"
+        }
+       ],
+       "turn_id": "8f15ecf4-3edc-42f5-b68d-3e55ba706020",
+       "fragment_index": 0
+      },
+      "direction": "outbound",
+      "created_at": "2026-10-01T07:24:06.802006+00:00",
+      "content_type": "text"
+     },
+     {
+      "id": null,
+      "body": "nu vreau sa dau mai mult de 200 lei pe tot",
+      "author": "contact",
+      "payload": {
+       "turn_id": "acd59c3a-69b5-44c4-a900-e3fbd997ef9c",
+       "fragment_index": 0
+      },
+      "direction": "inbound",
+      "created_at": "2026-10-01T07:24:07.471554+00:00",
+      "content_type": "text"
+     },
+     {
+      "id": null,
+      "body": "Am selectat un demachiant și un ser de seară, împreună se încadrează în bugetul tău. Serul vizează aspectul porilor, iar uleiul completează curățarea.\n\n1. SOME BY MI Retinol Intense Reactivating Serum, 30,00 lei  ⭐5.0\n   Pentru pasul de seară, retinolul și niacinamida susțin o textură mai uniformă și aspectul porilor.\n2. CELIMAX Derma Nature Ulei Demachiant cu Jojoba, 90,00 lei  ⭐5.0\n   Pentru curățarea de seară a tenului mixt, uleiul de jojoba ajută la controlul sebumului și al porilor dilatați.\n\nDacă vrei, putem continua cu: Caut ceva pentru calmare · Arata-mi ce ai la Ingrijirea tenului · Compara SOME BY MI Retinol cu CELIMAX Derma Nature Ulei · Trimite-mi linkul la SOME BY MI Retinol Intense · Caut ceva pentru ten uscat",
+      "author": "bot",
+      "payload": {
+       "shown": [
+        {
+         "name": "SOME BY MI Retinol Intense Reactivating Serum",
+         "price": 30.0,
+         "product_id": "937c3195-954f-48e0-888c-73bfc4119198"
+        },
+        {
+         "name": "CELIMAX Derma Nature Ulei Demachiant cu Jojoba",
+         "price": 90.0,
+         "product_id": "9b5e5fe9-6978-42ff-bb69-bc29244a7a12"
+        }
+       ],
+       "turn_id": "acd59c3a-69b5-44c4-a900-e3fbd997ef9c",
+       "fragment_index": 0
+      },
+      "direction": "outbound",
+      "created_at": "2026-10-01T07:24:22.110770+00:00",
+      "content_type": "text"
+     },
+     {
+      "id": null,
+      "body": "pot sa inlocuiesc tonerul cu ceva mai ieftin?",
+      "author": "contact",
+      "payload": {
+       "turn_id": "d2cbcf5f-a37c-49e6-b1f5-7c8b196ad841",
+       "fragment_index": 0
+      },
+      "direction": "inbound",
+      "created_at": "2026-10-01T07:24:22.770564+00:00",
+      "content_type": "text"
+     }
+    ],
+    "summary": null,
+    "bot_active": true,
+    "shadow_mode": false,
+    "state_version": 2,
+    "inbound_msg_id": "608c9460-d1b5-4863-9ab1-52f3dc8224a8",
+    "conversation_id": "4ac20c2b-384d-47a2-9340-6dd1aa304cb3"
+   }
+  },
+  "kernel_dark": {
+   "ms": 196.3,
+   "error": null,
+   "plans": 1,
+   "truth": {
+    "needs": [],
+    "shelf": "ten",
+    "types": [],
+    "type_learned": false
+   },
+   "executor": "search",
+   "searched": true,
+   "kernel_ids": [
+    "81234cae-7698-4aa0-ae9f-96f6c5ce4b49",
+    "0ff525e4-c726-4298-bbf1-e36c61f604c6",
+    "2da4834e-b593-4cf8-9f9c-eb396c5f357d",
+    "4e47d9a5-4d55-42ea-9ba5-f8a517b48004",
+    "5bb0d7a9-81f0-4c2f-b7d0-52bd8a4f8863",
+    "6bdbfb8f-ae85-4809-9c6e-a7519e6026c0"
+   ],
+   "lexical_step": "strict",
+   "state_v2_write": false
+  },
+  "rich_handles": {
+   "P1": "1c1fc8e8-80bc-405c-a3f5-fb7ffd026fe2",
+   "P2": "09ff976a-f2c1-4cca-a23c-763143168957",
+   "P3": "0d2d587e-9185-47e5-b690-0d51c103407f",
+   "P4": "490b829a-240d-4810-9d09-9b36b970e93a",
+   "P5": "2b2aa9d5-72ba-40fd-be95-0d69ae70eb4b",
+   "P6": "3880c6dd-f838-4ce6-acc0-f212ad1f68bd"
+  }
+ }
+}

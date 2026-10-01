@@ -1,0 +1,1284 @@
+{
+ "turn_id": "64a594fc-6546-471c-9f17-908d6d59a322",
+ "conversation_id": "9a5ed692-13da-4020-bac0-426eca3c0462",
+ "business_id": "99fe1292-f9ed-469e-8183-f994ea5b59c0",
+ "client_text": "ok si ceva bland pentru curatare?",
+ "created_at": "2026-10-01 07:25:14.136436+00:00",
+ "reply": {
+  "kind": "message",
+  "rich": {
+   "pick": [
+    "12db7082-6f12-426a-89ea-35a7dc13a460",
+    "Acidul hialuronic și ceramida susțin hidratarea, iar produsul nu usucă pielea."
+   ],
+   "chips": [
+    {
+     "label": "Compara Dear Klairs Rich Moist cu AXIS-Y Biome Resetting",
+     "payload": "Compara Dear Klairs Rich Moist cu AXIS-Y Biome Resetting"
+    },
+    {
+     "label": "Trimite-mi linkul la AXIS-Y Sunday Morning Refreshing",
+     "payload": "Trimite-mi linkul la AXIS-Y Sunday Morning Refreshing"
+    },
+    {
+     "label": "Arata-mi ce ai la Ingrijirea tenului",
+     "payload": "Arata-mi ce ai la Ingrijirea tenului"
+    },
+    {
+     "label": "Spune-mi mai multe despre AXIS-Y Sunday Morning",
+     "payload": "Spune-mi mai multe despre AXIS-Y Sunday Morning"
+    },
+    {
+     "label": "Trimite-mi linkul la Dear Klairs Rich Moist Foaming",
+     "payload": "Trimite-mi linkul la Dear Klairs Rich Moist Foaming"
+    }
+   ],
+   "intro": "Pentru descuamare și mâncărime, cere sfatul medicului sau farmacistului.",
+   "items": [
+    {
+     "url": "https://sole.ro/ten/curatarea-tenului/dear-klairs-rich-moist-foaming-cleanser-spuma-de-curatare-100-ml-f39556.html",
+     "name": "Dear Klairs Rich Moist Foaming Cleanser",
+     "size": null,
+     "badge": null,
+     "image": "https://pidqzxymjhzlmoesfsba.supabase.co/storage/v1/object/public/product-images/sole/F39556/1.webp",
+     "price": 110.0,
+     "rating": 4.96,
+     "reason": "Potrivită pentru curățarea zilnică, cu acid hialuronic și ceramidă, fără să usuce.",
+     "details": null,
+     "currency": "RON",
+     "variants": [],
+     "badge_tone": null,
+     "list_price": null,
+     "product_id": "12db7082-6f12-426a-89ea-35a7dc13a460",
+     "review_count": 130
+    },
+    {
+     "url": "https://sole.ro/ten/curatarea-tenului/axis-y-biome-resetting-moringa-ulei-de-curatare-200-ml-f74814.html",
+     "name": "AXIS-Y Biome Resetting Moringa",
+     "size": "200 ml",
+     "badge": null,
+     "image": "https://pidqzxymjhzlmoesfsba.supabase.co/storage/v1/object/public/product-images/sole/F74814/1.webp",
+     "price": 140.0,
+     "rating": 4.97,
+     "reason": "Pentru rutina de seară, uleiul de moringa și calendula susține confortul pielii sensibile.",
+     "details": null,
+     "currency": "RON",
+     "variants": [],
+     "badge_tone": null,
+     "list_price": null,
+     "product_id": "b39516d0-ae13-4ad3-bde2-1ba00f362462",
+     "review_count": 108
+    },
+    {
+     "url": "https://sole.ro/ten/curatarea-tenului/dear-klairs-gentle-black-deep-cleansing-ulei-de-curatare-150-ml-f37785.html",
+     "name": "Dear Klairs Gentle Black Deep Cleansing",
+     "size": null,
+     "badge": null,
+     "image": "https://pidqzxymjhzlmoesfsba.supabase.co/storage/v1/object/public/product-images/sole/F37785/1.jpg",
+     "price": 140.0,
+     "rating": 4.97,
+     "reason": "Dacă vrei să îndepărtezi machiajul, uleiurile de fasole neagră și soia neagră curăță fără a provoca iritații.",
+     "details": null,
+     "currency": "RON",
+     "variants": [],
+     "badge_tone": null,
+     "list_price": null,
+     "product_id": "7db05f95-c600-4966-8c02-7883ac5fb4bb",
+     "review_count": 107
+    },
+    {
+     "url": "https://sole.ro/ten/curatarea-tenului/majesta-wash-crema-de-curatare-100-ml-f81524.html",
+     "name": "MAJESTA Wash",
+     "size": "100 ml",
+     "badge": "Voucher -49%",
+     "image": "https://pidqzxymjhzlmoesfsba.supabase.co/storage/v1/object/public/product-images/sole/F81524/1.webp",
+     "price": 220.0,
+     "rating": 4.94,
+     "reason": "Crema cu glicerină și mușețel e potrivită când vrei curățare cu menținerea hidratării.",
+     "details": null,
+     "currency": "RON",
+     "variants": [],
+     "badge_tone": "danger",
+     "list_price": null,
+     "product_id": "ede21524-4c56-40a2-82d6-2c72afa5e668",
+     "review_count": 53
+    },
+    {
+     "url": "https://sole.ro/ten/curatarea-tenului/axis-y-sunday-morning-refreshing-cleansing-foam-spuma-de-curatare-cu-extracte-naturale-120-ml-f68475.html",
+     "name": "AXIS-Y Sunday Morning Refreshing Cleansing Foam",
+     "size": "120 ml",
+     "badge": null,
+     "image": "https://pidqzxymjhzlmoesfsba.supabase.co/storage/v1/object/public/product-images/sole/F68475/1.webp",
+     "price": 85.0,
+     "rating": 4.97,
+     "reason": "Pentru curățare și susținerea barierei pielii, spuma conține ceai verde și alantoină.",
+     "details": null,
+     "currency": "RON",
+     "variants": [],
+     "badge_tone": null,
+     "list_price": null,
+     "product_id": "0fef38a8-0f9c-4738-a00e-3cb8f960b416",
+     "review_count": 109
+    }
+   ],
+   "education": null,
+   "disclaimer": null
+  },
+  "text": "Pentru descuamare și mâncărime, cere sfatul medicului sau farmacistului.\n\n1. Dear Klairs Rich Moist Foaming Cleanser, 110,00 lei  ⭐5.0\n   Potrivită pentru curățarea zilnică, cu acid hialuronic și ceramidă, fără să usuce.\n2. AXIS-Y Biome Resetting Moringa, 140,00 lei  ⭐5.0\n   Pentru rutina de seară, uleiul de moringa și calendula susține confortul pielii sensibile.\n3. Dear Klairs Gentle Black Deep Cleansing, 140,00 lei  ⭐5.0\n   Dacă vrei să îndepărtezi machiajul, uleiurile de fasole neagră și soia neagră curăță fără a provoca iritații.\n4. MAJESTA Wash, 220,00 lei  ⭐4.9  • Voucher -49%\n   Crema cu glicerină și mușețel e potrivită când vrei curățare cu menținerea hidratării.\n5. AXIS-Y Sunday Morning Refreshing Cleansing Foam, 85,00 lei  ⭐5.0\n   Pentru curățare și susținerea barierei pielii, spuma conține ceai verde și alantoină.\n\nÎți mai pot arăta: Compara Dear Klairs Rich Moist cu AXIS-Y Biome Resetting · Trimite-mi linkul la AXIS-Y Sunday Morning Refreshing · Arata-mi ce ai la Ingrijirea tenului · Spune-mi mai multe despre AXIS-Y Sunday Morning · Trimite-mi linkul la Dear Klairs Rich Moist Foaming",
+  "offer": null,
+  "products": [
+   {
+    "url": "https://sole.ro/ten/curatarea-tenului/dear-klairs-rich-moist-foaming-cleanser-spuma-de-curatare-100-ml-f39556.html",
+    "name": "Dear Klairs Rich Moist Foaming Cleanser",
+    "image": "https://pidqzxymjhzlmoesfsba.supabase.co/storage/v1/object/public/product-images/sole/F39556/1.webp",
+    "price": 110.0,
+    "product_id": "12db7082-6f12-426a-89ea-35a7dc13a460"
+   },
+   {
+    "url": "https://sole.ro/ten/curatarea-tenului/axis-y-biome-resetting-moringa-ulei-de-curatare-200-ml-f74814.html",
+    "name": "AXIS-Y Biome Resetting Moringa",
+    "image": "https://pidqzxymjhzlmoesfsba.supabase.co/storage/v1/object/public/product-images/sole/F74814/1.webp",
+    "price": 140.0,
+    "product_id": "b39516d0-ae13-4ad3-bde2-1ba00f362462"
+   },
+   {
+    "url": "https://sole.ro/ten/curatarea-tenului/dear-klairs-gentle-black-deep-cleansing-ulei-de-curatare-150-ml-f37785.html",
+    "name": "Dear Klairs Gentle Black Deep Cleansing",
+    "image": "https://pidqzxymjhzlmoesfsba.supabase.co/storage/v1/object/public/product-images/sole/F37785/1.jpg",
+    "price": 140.0,
+    "product_id": "7db05f95-c600-4966-8c02-7883ac5fb4bb"
+   },
+   {
+    "url": "https://sole.ro/ten/curatarea-tenului/majesta-wash-crema-de-curatare-100-ml-f81524.html",
+    "name": "MAJESTA Wash",
+    "image": "https://pidqzxymjhzlmoesfsba.supabase.co/storage/v1/object/public/product-images/sole/F81524/1.webp",
+    "price": 220.0,
+    "product_id": "ede21524-4c56-40a2-82d6-2c72afa5e668"
+   },
+   {
+    "url": "https://sole.ro/ten/curatarea-tenului/axis-y-sunday-morning-refreshing-cleansing-foam-spuma-de-curatare-cu-extracte-naturale-120-ml-f68475.html",
+    "name": "AXIS-Y Sunday Morning Refreshing Cleansing Foam",
+    "image": "https://pidqzxymjhzlmoesfsba.supabase.co/storage/v1/object/public/product-images/sole/F68475/1.webp",
+    "price": 85.0,
+    "product_id": "0fef38a8-0f9c-4738-a00e-3cb8f960b416"
+   }
+  ],
+  "cacheable": false,
+  "comparison": null,
+  "suggestions": [],
+  "pending_question": null
+ },
+ "diagnostics": {
+  "kernel": {
+   "gaps": [],
+   "plan": {
+    "family": null,
+    "executor": "search",
+    "depends_on": null,
+    "product_ids": [],
+    "search_args": {
+     "brand": null,
+     "limit": 6,
+     "query": "gel",
+     "prefer": {
+      "product_type": [
+       "gel de curatare"
+      ]
+     },
+     "exclude": {},
+     "category": "ten",
+     "concerns": null,
+     "features": null,
+     "price_max": null,
+     "sort_mode": "relevance",
+     "price_band": null,
+     "rank_terms": [],
+     "product_name": null,
+     "in_stock_only": false,
+     "variant_label": null
+    }
+   },
+   "plans": [
+    {
+     "family": null,
+     "executor": "search",
+     "depends_on": null,
+     "product_ids": [],
+     "search_args": {
+      "brand": null,
+      "limit": 6,
+      "query": "gel",
+      "prefer": {
+       "product_type": [
+        "gel de curatare"
+       ]
+      },
+      "exclude": {},
+      "category": "ten",
+      "concerns": null,
+      "features": null,
+      "price_max": null,
+      "sort_mode": "relevance",
+      "price_band": null,
+      "rank_terms": [],
+      "product_name": null,
+      "in_stock_only": false,
+      "variant_label": null
+     }
+    }
+   ],
+   "executor": "none",
+   "rejected": [],
+   "ambiguity": {
+    "reason": "clear",
+    "verdict": "act",
+    "question": null
+   },
+   "proposals": [
+    {
+     "op": "set_topic",
+     "key": null
+    }
+   ],
+   "truncated": false,
+   "disclosures": [],
+   "gate_memory": null,
+   "state_after": {
+    "needs": [],
+    "shown": [
+     "0ad03273-ac3b-4a4e-a21a-ff6f935d5252",
+     "e7e3439f-fc3c-4c17-b0b8-5b3f3729296b",
+     "73617cc0-0b05-4521-913b-4ad355266617"
+    ],
+    "topic": "ten",
+    "umbrella": [
+     "gel de curatare"
+    ]
+   },
+   "dropped_acts": 0,
+   "state_before": {
+    "needs": [],
+    "shown": [
+     "0ad03273-ac3b-4a4e-a21a-ff6f935d5252",
+     "e7e3439f-fc3c-4c17-b0b8-5b3f3729296b",
+     "73617cc0-0b05-4521-913b-4ad355266617"
+    ],
+    "topic": "ten"
+   },
+   "answer_policy": null,
+   "resolved_refs": [],
+   "delta_counters": {
+    "ranking": 0,
+    "refined": 1,
+    "proposals": 1,
+    "reducer_rejected": 0,
+    "rejected_changes": 0,
+    "subject_type_umbrella": 1
+   },
+   "interpretation": {
+    "acts": [
+     {
+      "kind": "find",
+      "query": "ceva bland pentru curatare?",
+      "targets": []
+     }
+    ],
+    "thread": "continue",
+    "changes": [
+     {
+      "op": "set",
+      "unit": null,
+      "quote": "pentru curatare",
+      "value": "gel de curatare",
+      "number": null,
+      "target": null,
+      "relation": "eq",
+      "dimension": "product_type",
+      "relative_to": null
+     }
+    ],
+    "references": [],
+    "ambiguities": [],
+    "corrects_previous_turn": false
+   },
+   "checked_changes": [
+    {
+     "change": {
+      "op": "set",
+      "unit": null,
+      "quote": "pentru curatare",
+      "value": "gel de curatare",
+      "number": null,
+      "target": null,
+      "relation": "eq",
+      "dimension": "product_type",
+      "relative_to": null
+     },
+     "matched": [],
+     "rejected": null,
+     "strength": "soft",
+     "umbrella": [
+      "gel de curatare"
+     ],
+     "dimension": "product_type",
+     "provenance": "implicit",
+     "canonical_value": "gel de curatare"
+    }
+   ],
+   "contract_version": "kernel.v6.0",
+   "vocabulary_snapshot": "dc5ae9f2612ea9ab"
+  },
+  "model_io": {
+   "v": 2,
+   "calls": [
+    {
+     "i": 0,
+     "ok": true,
+     "shape": null,
+     "tools": [],
+     "schema": null,
+     "purpose": null,
+     "endpoint": "moderations",
+     "response": {
+      "id": "modr-3487",
+      "model": "omni-moderation-latest",
+      "results": [
+       {
+        "flagged": false,
+        "categories": {
+         "hate": false,
+         "sexual": false,
+         "illicit": false,
+         "violence": false,
+         "self-harm": false,
+         "harassment": false,
+         "sexual/minors": false,
+         "illicit/violent": false,
+         "hate/threatening": false,
+         "self-harm/intent": false,
+         "violence/graphic": false,
+         "harassment/threatening": false,
+         "self-harm/instructions": false
+        },
+        "category_scores": {
+         "hate": 1.5598027633743823e-05,
+         "sexual": 4.655269187520153e-05,
+         "illicit": 0.0037769374314549522,
+         "violence": 0.0004973009416623807,
+         "self-harm": 0.00046507958231904967,
+         "harassment": 0.0005607499136837443,
+         "sexual/minors": 5.307507822667365e-06,
+         "illicit/violent": 2.0027376671813928e-05,
+         "hate/threatening": 1.4285517650093407e-06,
+         "self-harm/intent": 0.00022770387218484876,
+         "violence/graphic": 5.649793328376294e-06,
+         "harassment/threatening": 1.177445922838707e-05,
+         "self-harm/instructions": 5.144221374220898e-06
+        },
+        "category_applied_input_types": {
+         "hate": [
+          "text"
+         ],
+         "sexual": [
+          "text"
+         ],
+         "illicit": [
+          "text"
+         ],
+         "violence": [
+          "text"
+         ],
+         "self-harm": [
+          "text"
+         ],
+         "harassment": [
+          "text"
+         ],
+         "sexual/minors": [
+          "text"
+         ],
+         "illicit/violent": [
+          "text"
+         ],
+         "hate/threatening": [
+          "text"
+         ],
+         "self-harm/intent": [
+          "text"
+         ],
+         "violence/graphic": [
+          "text"
+         ],
+         "harassment/threatening": [
+          "text"
+         ],
+         "self-harm/instructions": [
+          "text"
+         ]
+        }
+       }
+      ]
+     },
+     "input_sha": "4fc018bee06addae"
+    },
+    {
+     "i": 1,
+     "ok": true,
+     "shape": "schema",
+     "tools": [],
+     "schema": "turn_interpretation",
+     "purpose": "interpret",
+     "endpoint": "chat.completions",
+     "response": {
+      "id": "chatcmpl-EU5Ry4o28NeHlq5CNFXQ15Zz6PSCz",
+      "model": "gpt-6-luna",
+      "usage": {
+       "total_tokens": 3640,
+       "prompt_tokens": 3540,
+       "completion_tokens": 100,
+       "prompt_tokens_details": {
+        "audio_tokens": 0,
+        "cached_tokens": 2913,
+        "cache_write_tokens": 624
+       },
+       "completion_tokens_details": {
+        "audio_tokens": 0,
+        "reasoning_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+       }
+      },
+      "object": "chat.completion",
+      "choices": [
+       {
+        "index": 0,
+        "message": {
+         "role": "assistant",
+         "audio": null,
+         "content": "{\"thread\":\"continue\",\"acts\":[{\"kind\":\"find\",\"targets\":[],\"query\":\"ceva bland pentru curatare?\"}],\"changes\":[{\"op\":\"set\",\"target\":null,\"dimension\":\"product_type\",\"relation\":\"eq\",\"value\":\"gel de curatare\",\"number\":null,\"unit\":null,\"relative_to\":null,\"quote\":\"pentru curatare\"}],\"references\":[],\"ambiguities\":[],\"corrects_previous_turn\":false}",
+         "refusal": null,
+         "tool_calls": null,
+         "annotations": [],
+         "function_call": null
+        },
+        "logprobs": null,
+        "finish_reason": "stop"
+       }
+      ],
+      "created": 1790839498,
+      "moderation": null,
+      "service_tier": "default",
+      "system_fingerprint": null
+     },
+     "input_sha": "b13128d2b76cc25b"
+    },
+    {
+     "i": 2,
+     "ok": true,
+     "shape": "tools",
+     "tools": [
+      "cart_add",
+      "check_order",
+      "checkout_link",
+      "compare_products",
+      "faq_lookup",
+      "get_product_details",
+      "reorder",
+      "search_products",
+      "subscribe_back_in_stock"
+     ],
+     "schema": null,
+     "purpose": null,
+     "endpoint": "chat.completions",
+     "response": {
+      "id": "chatcmpl-EU5S1lADbhBFe3oodwgc1QGy25Kh4",
+      "model": "gpt-6-luna",
+      "usage": {
+       "total_tokens": 6100,
+       "prompt_tokens": 5977,
+       "completion_tokens": 123,
+       "prompt_tokens_details": {
+        "audio_tokens": 0,
+        "cached_tokens": 5031,
+        "cache_write_tokens": 943
+       },
+       "completion_tokens_details": {
+        "audio_tokens": 0,
+        "reasoning_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+       }
+      },
+      "object": "chat.completion",
+      "choices": [
+       {
+        "index": 0,
+        "message": {
+         "role": "assistant",
+         "audio": null,
+         "content": null,
+         "refusal": null,
+         "tool_calls": [
+          {
+           "id": "call_TaGkYrEM2LaRBb35IZlUOT2N",
+           "type": "function",
+           "function": {
+            "name": "search_products",
+            "arguments": "{\"query\":\"ceva blând pentru curățarea tenului, pentru piele care se descuamează în jurul nasului și mă mănâncă\",\"price_max\":null,\"category\":\"ten-demachierea-si-curatarea-tenului\",\"brand\":null,\"concerns\":[\"blând\",\"curățare\",\"descuamează\",\"mă mănâncă\"],\"features\":null,\"limit\":6,\"sort_mode\":\"relevance\",\"in_stock_only\":false,\"product_name\":null,\"variant_label\":null}"
+           }
+          }
+         ],
+         "annotations": [],
+         "function_call": null
+        },
+        "logprobs": null,
+        "finish_reason": "tool_calls"
+       }
+      ],
+      "created": 1790839501,
+      "moderation": null,
+      "service_tier": "default",
+      "system_fingerprint": null
+     },
+     "input_sha": "aad12fafb2f9af82"
+    },
+    {
+     "i": 3,
+     "ok": true,
+     "shape": "schema",
+     "tools": [],
+     "schema": "sales_recommendation",
+     "purpose": null,
+     "endpoint": "chat.completions",
+     "response": {
+      "id": "chatcmpl-EU5S4HQXDvSMzbYtrSDTxS3uAWuLW",
+      "model": "gpt-6-luna",
+      "usage": {
+       "total_tokens": 7420,
+       "prompt_tokens": 6632,
+       "completion_tokens": 788,
+       "prompt_tokens_details": {
+        "audio_tokens": 0,
+        "cached_tokens": 4658,
+        "cache_write_tokens": 1971
+       },
+       "completion_tokens_details": {
+        "audio_tokens": 0,
+        "reasoning_tokens": 369,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+       }
+      },
+      "object": "chat.completion",
+      "choices": [
+       {
+        "index": 0,
+        "message": {
+         "role": "assistant",
+         "audio": null,
+         "content": "{\"intro\":\"Pentru curățare blândă, P1 și P6 sunt spume pentru dimineață și seară, P4 este o cremă de curățare, iar P2 și P3 sunt uleiuri pentru seară. Pentru descuamare și mâncărime, cere sfatul medicului sau farmacistului.\",\"items\":[{\"product_id\":\"P1\",\"pro_index\":0,\"fit_clause\":\"Potrivită pentru curățarea zilnică, cu acid hialuronic și ceramidă, fără să usuce.\"},{\"product_id\":\"P2\",\"pro_index\":1,\"fit_clause\":\"Pentru rutina de seară, uleiul de moringa și calendula susține confortul pielii sensibile.\"},{\"product_id\":\"P3\",\"pro_index\":0,\"fit_clause\":\"Dacă vrei să îndepărtezi machiajul, uleiurile de fasole neagră și soia neagră curăță fără a provoca iritații.\"},{\"product_id\":\"P4\",\"pro_index\":0,\"fit_clause\":\"Crema cu glicerină și mușețel e potrivită când vrei curățare cu menținerea hidratării.\"},{\"product_id\":\"P6\",\"pro_index\":0,\"fit_clause\":\"Pentru curățare și susținerea barierei pielii, spuma conține ceai verde și alantoină.\"}],\"pick\":{\"product_id\":\"P1\",\"justification\":\"Acidul hialuronic și ceramida susțin hidratarea, iar produsul nu usucă pielea.\"},\"education\":\"\",\"suggestions\":[\"Arată-mi doar produse de curățare cu efect calmant\",\"Compară spumele P1 și P6 pentru ten sensibil\",\"Cum se folosește uleiul AXIS-Y seara?\",\"Arată-mi o cremă de curățare mai accesibilă\"]}",
+         "refusal": null,
+         "tool_calls": null,
+         "annotations": [],
+         "function_call": null
+        },
+        "logprobs": null,
+        "finish_reason": "stop"
+       }
+      ],
+      "created": 1790839504,
+      "moderation": null,
+      "service_tier": "default",
+      "system_fingerprint": null
+     },
+     "input_sha": "5bdf7d87c6098723"
+    }
+   ],
+   "replayable": true,
+   "unreplayable": []
+  },
+  "rich_raw": {
+   "pick": {
+    "product_id": "P1",
+    "justification": "Acidul hialuronic și ceramida susțin hidratarea, iar produsul nu usucă pielea."
+   },
+   "intro": "Pentru curățare blândă, P1 și P6 sunt spume pentru dimineață și seară, P4 este o cremă de curățare, iar P2 și P3 sunt uleiuri pentru seară. Pentru descuamare și mâncărime, cere sfatul medicului sau farmacistului.",
+   "items": [
+    {
+     "pro_index": 0,
+     "fit_clause": "Potrivită pentru curățarea zilnică, cu acid hialuronic și ceramidă, fără să usuce.",
+     "product_id": "P1"
+    },
+    {
+     "pro_index": 1,
+     "fit_clause": "Pentru rutina de seară, uleiul de moringa și calendula susține confortul pielii sensibile.",
+     "product_id": "P2"
+    },
+    {
+     "pro_index": 0,
+     "fit_clause": "Dacă vrei să îndepărtezi machiajul, uleiurile de fasole neagră și soia neagră curăță fără a provoca iritații.",
+     "product_id": "P3"
+    },
+    {
+     "pro_index": 0,
+     "fit_clause": "Crema cu glicerină și mușețel e potrivită când vrei curățare cu menținerea hidratării.",
+     "product_id": "P4"
+    },
+    {
+     "pro_index": 0,
+     "fit_clause": "Pentru curățare și susținerea barierei pielii, spuma conține ceai verde și alantoină.",
+     "product_id": "P6"
+    }
+   ],
+   "education": "",
+   "suggestions": [
+    "Arată-mi doar produse de curățare cu efect calmant",
+    "Compară spumele P1 și P6 pentru ten sensibil",
+    "Cum se folosește uleiul AXIS-Y seara?",
+    "Arată-mi o cremă de curățare mai accesibilă"
+   ]
+  },
+  "turn_input": {
+   "v": 2,
+   "env": {
+    "catalog": {
+     "0fef38a8-0f9c-4738-a00e-3cb8f960b416": [
+      85.0,
+      null,
+      null,
+      null
+     ],
+     "12db7082-6f12-426a-89ea-35a7dc13a460": [
+      110.0,
+      null,
+      null,
+      null
+     ],
+     "7db05f95-c600-4966-8c02-7883ac5fb4bb": [
+      140.0,
+      null,
+      null,
+      null
+     ],
+     "90803c24-2d4e-4dcb-aa2e-33a1d0ec0b12": [
+      100.0,
+      null,
+      "in_stock",
+      "2026-08-27 16:46:05.213065+00:00"
+     ],
+     "b39516d0-ae13-4ad3-bde2-1ba00f362462": [
+      140.0,
+      null,
+      null,
+      null
+     ],
+     "ede21524-4c56-40a2-82d6-2c72afa5e668": [
+      220.0,
+      null,
+      null,
+      null
+     ]
+    },
+    "release": "6b383adf3742c9b514d23532bb812d6fa84c750e",
+    "pack_sha": "ad4006d65445390fb9a75a031714cb599b79cc3f5819e697837deda995586df0",
+    "settings": {
+     "env": "prod",
+     "log_level": "INFO",
+     "card_slots": 6,
+     "chip_slots": 5,
+     "faq_enabled": true,
+     "model_agent": "gpt-6-luna",
+     "model_embed": "text-embedding-3-small",
+     "release_sha": "6b383adf3742c9b514d23532bb812d6fa84c750e",
+     "web_enabled": true,
+     "max_per_type": 2,
+     "model_vision": "gpt-5.6-terra",
+     "service_name": "nativx-assistant",
+     "alias_enabled": true,
+     "cache_enabled": true,
+     "llm_retry_max": 2,
+     "llm_timeout_s": 30.0,
+     "release_track": "champion",
+     "cache_tau_high": 0.92,
+     "cost_agent_usd": 0.003,
+     "rate_limit_max": 20,
+     "vision_enabled": true,
+     "cost_vision_usd": 0.003,
+     "db_bot_pool_max": 10,
+     "llm_call_cap_ms": 8000,
+     "routine_enabled": true,
+     "summary_enabled": true,
+     "welcome_enabled": true,
+     "embed_timeout_ms": 800,
+     "llm_pricing_json": "",
+     "model_moderation": "omni-moderation-latest",
+     "turn_lock_ttl_ms": 15000,
+     "vision_max_bytes": 5000000,
+     "web_action_ttl_s": 1800,
+     "web_backlog_size": 20,
+     "web_cors_origins": "https://demo.nativextech.com",
+     "welcome_bot_name": "Native",
+     "admission_enabled": true,
+     "checkout_base_url": "",
+     "conv_lock_enabled": true,
+     "db_admin_pool_max": 10,
+     "embed_job_enabled": true,
+     "memory_v2_enabled": true,
+     "need_menu_enabled": false,
+     "proactive_enabled": true,
+     "reply_split_chars": 200,
+     "summary_max_chars": 600,
+     "summary_threshold": 20,
+     "web_backlog_ttl_s": 300,
+     "web_session_ttl_s": 43200,
+     "attr_query_enabled": true,
+     "chip_moves_enabled": true,
+     "cost_guard_enabled": true,
+     "cross_sell_enabled": true,
+     "daily_cost_cap_usd": 5.0,
+     "lifecycle_hour_utc": 2,
+     "moderation_enabled": true,
+     "rate_limit_enabled": true,
+     "web_max_body_bytes": 16384,
+     "web_turn_sse_max_s": 600.0,
+     "answer_plan_enabled": false,
+     "brain_chips_enabled": false,
+     "card_badges_enabled": true,
+     "card_coupon_enabled": true,
+     "db_isolation_assert": "strict",
+     "domain_pack_enabled": true,
+     "link_intent_enabled": true,
+     "model_agent_complex": "",
+     "release_environment": "",
+     "rich_facets_enabled": true,
+     "summary_regen_delta": 12,
+     "web_actions_enabled": false,
+     "web_context_enabled": false,
+     "web_sse_heartbeat_s": 15.0,
+     "web_turn_deadline_s": 120,
+     "web_turn_v2_enabled": false,
+     "answer_shape_enabled": true,
+     "clarify_max_attempts": 2,
+     "clarify_menu_enabled": true,
+     "clarify_tool_enabled": false,
+     "commerce_facts_sla_s": 86400,
+     "facet_search_enabled": true,
+     "lifecycle_churn_days": 30,
+     "llm_call_total_cap_s": 90.0,
+     "llm_max_tokens_agent": 0,
+     "llm_sampling_enabled": true,
+     "moderation_timeout_s": 3.0,
+     "pool_metrics_enabled": true,
+     "proactive_batch_size": 20,
+     "single_brain_enabled": false,
+     "turn_budget_enforced": false,
+     "turn_budget_exact_ms": 3000,
+     "turn_cost_budget_usd": 0.01,
+     "web_feedback_enabled": false,
+     "web_identity_enabled": false,
+     "web_turn_claim_batch": 8,
+     "web_turn_heartbeat_s": 60.0,
+     "web_turn_lease_ttl_s": 300,
+     "web_turn_sse_enabled": false,
+     "web_turn_sse_poll_ms": 1000,
+     "web_turns_stale_days": 7,
+     "admission_web_wait_ms": 1500,
+     "aftercare_deadline_ms": 20000,
+     "ai_disclaimer_enabled": false,
+     "cache_ttl_static_days": 7,
+     "chip_moves_v1_enabled": true,
+     "chip_moves_v2_enabled": false,
+     "conv_lock_ttl_seconds": 30,
+     "db_op_metrics_enabled": true,
+     "decision_axes_enabled": true,
+     "demand_rollup_enabled": true,
+     "detail_intent_enabled": true,
+     "dispatcher_batch_size": 10,
+     "faq_grounding_enabled": true,
+     "lifecycle_job_enabled": true,
+     "llm_retry_after_max_s": 10.0,
+     "llm_temperature_agent": 0.7,
+     "observability_enabled": false,
+     "partition_job_enabled": true,
+     "relevance_mask_facets": "",
+     "retrieval_deadline_ms": 0,
+     "review_intent_enabled": true,
+     "rich_pick_web_enabled": false,
+     "search_shadow_enabled": false,
+     "turn_deadline_enabled": false,
+     "turn_hard_deadline_ms": 15000,
+     "turn_lock_wait_max_ms": 10000,
+     "turn_profiles_enabled": false,
+     "web_admission_enabled": true,
+     "web_identity_leeway_s": 30,
+     "web_rate_limit_max_ip": 40,
+     "web_turn_lock_enabled": true,
+     "web_turn_max_attempts": 3,
+     "admission_lease_ttl_ms": 120000,
+     "admission_max_inflight": 24,
+     "cheaper_intent_enabled": true,
+     "checkout_link_ttl_days": 7,
+     "chip_drop_dead_enabled": true,
+     "compare_intent_enabled": true,
+     "conv_lock_max_requeues": 10,
+     "framing_labels_enabled": true,
+     "input_pii_mask_enabled": true,
+     "needs_retained_enabled": true,
+     "observability_exporter": "",
+     "partition_months_ahead": 1,
+     "proactive_idle_sleep_s": 5.0,
+     "relation_graph_enabled": false,
+     "relevance_mask_enabled": false,
+     "response_style_enabled": true,
+     "trace_model_io_enabled": true,
+     "turn_budget_complex_ms": 10000,
+     "turn_latency_budget_ms": 5000,
+     "web_demo_access_issuer": "",
+     "web_session_v2_enabled": false,
+     "web_turn_poll_after_ms": 1000,
+     "web_turn_view_contract": "web-chat.v1",
+     "webhook_max_body_bytes": 262144,
+     "answer_plan_max_quality": false,
+     "db_query_timing_enabled": false,
+     "dispatcher_idle_sleep_s": 0.5,
+     "fast_path_exact_enabled": false,
+     "lead_score_hint_enabled": true,
+     "lexical_rank_v2_enabled": false,
+     "llm_retry_min_budget_ms": 600,
+     "llm_timeout_reasoning_s": 75.0,
+     "observability_queue_max": 2048,
+     "ops_heartbeat_max_age_s": 90.0,
+     "relations_first_enabled": true,
+     "retrieval_decision_path": "reports/nx238/decision.json",
+     "rich_from_facts_enabled": true,
+     "search_semantic_enabled": false,
+     "search_sessions_enabled": true,
+     "short_ack_guard_enabled": true,
+     "turn_budget_mutation_ms": 8000,
+     "web_action_clock_skew_s": 60,
+     "web_demo_access_enabled": false,
+     "web_rate_limit_window_s": 60,
+     "web_session_v2_required": false,
+     "web_turn_ledger_enabled": false,
+     "brain_rich_reply_enabled": true,
+     "comparison_focus_enabled": true,
+     "injection_screen_enabled": false,
+     "interpreted_turn_enabled": false,
+     "interpreted_turn_tenants": "sole-ro",
+     "lexical_query_v2_enabled": true,
+     "llm_wait_bounded_enabled": true,
+     "refinement_guard_enabled": true,
+     "release_policy_refresh_s": 15.0,
+     "rich_schema_slim_enabled": false,
+     "search_diversify_enabled": true,
+     "search_sort_mode_enabled": true,
+     "validator_claims_enabled": true,
+     "web_demo_access_audience": "",
+     "web_demo_access_leeway_s": 30,
+     "web_legacy_async_enabled": true,
+     "web_session_secret_ttl_s": 60.0,
+     "web_turn_executor_poll_s": 2.0,
+     "cache_ttl_dynamic_minutes": 30,
+     "comparison_facets_enabled": true,
+     "conversation_cart_enabled": false,
+     "guidance_required_enabled": false,
+     "lead_score_high_threshold": 70.0,
+     "llm_call_cap_reasoning_ms": 60000,
+     "llm_temperature_interpret": 0.2,
+     "match_gate_shadow_enabled": false,
+     "query_spec_shadow_enabled": false,
+     "rate_limit_window_seconds": 60,
+     "rich_item_handles_enabled": true,
+     "routine_evidence_required": true,
+     "scheduler_rollup_hour_utc": 0,
+     "tool_field_errors_enabled": true,
+     "typed_constraints_enabled": false,
+     "web_turn_executor_enabled": false,
+     "web_turn_recovery_enabled": false,
+     "web_turn_shutdown_grace_s": 10.0,
+     "web_turn_sweep_interval_s": 30.0,
+     "web_turns_retention_hours": 168,
+     "admission_max_per_business": 0,
+     "admission_requeue_delay_ms": 200,
+     "answer_plan_critic_enabled": false,
+     "comparison_axes_v2_enabled": false,
+     "contact_daily_cost_cap_usd": 0.0,
+     "conv_lock_requeue_delay_ms": 150,
+     "conversation_facts_enabled": true,
+     "conversation_trace_enabled": true,
+     "history_shown_max_products": 6,
+     "howto_from_catalog_enabled": false,
+     "llm_reasoning_effort_agent": "low",
+     "llm_temperature_background": 0.2,
+     "moderation_block_threshold": 3,
+     "narrowing_question_enabled": false,
+     "observability_export_batch": 256,
+     "observability_otlp_headers": "",
+     "observability_sample_ratio": 0.05,
+     "proactive_initiators_batch": 200,
+     "profile_extraction_enabled": true,
+     "relation_traversal_enabled": false,
+     "release_controller_enabled": false,
+     "response_telemetry_enabled": true,
+     "retrieval_pipeline_version": "retrieval.v1",
+     "rich_review_anchor_enabled": false,
+     "skin_type_anti_fit_enabled": false,
+     "structured_history_enabled": true,
+     "topic_switch_reset_enabled": true,
+     "turn_budget_alerts_enabled": true,
+     "turn_latency_spans_enabled": true,
+     "unique_name_prefix_enabled": true,
+     "web_context_prompt_enabled": false,
+     "web_rate_limit_max_visitor": 15,
+     "web_session_origin_binding": false,
+     "comparison_lead_llm_enabled": true,
+     "faq_locale_fallback_enabled": false,
+     "memory_canonicalize_enabled": true,
+     "memory_open_capture_enabled": true,
+     "observability_otlp_endpoint": "",
+     "prompt_cache_layout_enabled": false,
+     "replay_store_prompt_enabled": false,
+     "retrieval_candidate_enabled": false,
+     "rich_card_reconcile_enabled": true,
+     "search_blended_rank_enabled": true,
+     "set_relative_badges_enabled": true,
+     "turn_parallel_reads_enabled": false,
+     "web_context_freshness_sla_s": 86400,
+     "abandoned_cart_after_seconds": 3600,
+     "admission_acquire_timeout_ms": 2000,
+     "admission_local_fallback_max": 4,
+     "admission_requeue_warn_every": 20,
+     "catalog_reason_codes_enabled": true,
+     "compare_with_similar_enabled": true,
+     "comparison_narrative_enabled": true,
+     "conversation_subject_enabled": true,
+     "observability_traces_enabled": true,
+     "observed_constraints_enabled": true,
+     "proactive_initiators_enabled": true,
+     "search_category_hard_enabled": true,
+     "search_category_menu_enabled": true,
+     "search_category_tree_enabled": true,
+     "spec_digits_grounded_enabled": true,
+     "tool_loop_skip_prose_enabled": true,
+     "web_aftercare_max_concurrent": 8,
+     "web_bootstrap_rate_limit_max": 10,
+     "web_context_pipeline_version": "web-chat.v1",
+     "web_cost_cap_per_visitor_usd": 0.5,
+     "admission_distributed_enabled": true,
+     "catalog_projection_v2_enabled": true,
+     "cheapest_alternatives_enabled": true,
+     "content_status_filter_enabled": true,
+     "conversation_state_v2_enabled": true,
+     "dispatcher_global_concurrency": 16,
+     "dispatcher_tenant_concurrency": 4,
+     "interpreted_turn_dark_enabled": true,
+     "memory_safe_injection_enabled": true,
+     "observability_metrics_enabled": true,
+     "observability_otlp_timeout_ms": 2000,
+     "speculative_retrieval_enabled": false,
+     "turn_budget_recommendation_ms": 6000,
+     "web_view_v2_projector_enabled": false,
+     "abandoned_cart_max_age_seconds": 604800,
+     "llm_reasoning_effort_interpret": "none",
+     "named_shortcut_targets_enabled": true,
+     "no_result_alternatives_enabled": true,
+     "observability_flush_timeout_ms": 2000,
+     "price_bound_unit_aware_enabled": true,
+     "rich_pick_relevance_cosine_max": 0.6,
+     "routine_arg_provenance_enabled": true,
+     "routine_dense_ordinals_enabled": true,
+     "search_guessed_filter_min_rows": 5,
+     "validator_bare_numbers_enabled": true,
+     "validator_stock_claims_enabled": false,
+     "clarification_policy_v2_enabled": false,
+     "compare_coherence_guard_enabled": true,
+     "interpreted_turn_canary_percent": 100,
+     "interpreted_turn_dark_timeout_s": 5.0,
+     "llm_call_budget_by_role_enabled": true,
+     "proactive_initiators_interval_s": 900,
+     "reference_precedence_v2_enabled": false,
+     "retrieval_candidate_rollout_pct": 0,
+     "rich_pick_deterministic_enabled": true,
+     "search_guessed_filter_min_share": 0.1,
+     "checkout_intent_fallback_enabled": true,
+     "plan_server_owned_fields_enabled": false,
+     "rich_pick_relevance_gate_enabled": true,
+     "safety_contraindications_enabled": true,
+     "safety_medical_guardrail_enabled": true,
+     "scheduler_embed_interval_seconds": 3600,
+     "search_offcategory_guard_enabled": true,
+     "web_context_hydration_timeout_ms": 1500,
+     "conversation_trace_retention_days": 30,
+     "scheduler_dedupe_interval_seconds": 21600,
+     "aside_keeps_search_session_enabled": true,
+     "clarification_min_information_gain": 0.3,
+     "labeled_quantity_grounding_enabled": true,
+     "search_one_card_per_family_enabled": true,
+     "search_relax_by_provenance_enabled": true,
+     "tool_loop_skip_prose_exact_enabled": true,
+     "conversation_state_v2_write_enabled": false,
+     "search_price_as_filter_only_enabled": true,
+     "web_chat_aftercare_detached_enabled": true,
+     "scheduler_partition_interval_seconds": 86400,
+     "scheduler_web_turns_interval_seconds": 21600,
+     "search_filters_only_fallback_enabled": true,
+     "search_guessed_filter_rescue_enabled": true,
+     "answer_plan_critic_coverage_threshold": 0.99,
+     "conversation_sensitive_memory_enabled": false,
+     "search_price_bound_provenance_enabled": true,
+     "admission_max_per_business_distributed": 6,
+     "search_diversify_subject_aware_enabled": true,
+     "reference_resolver_v2_shortcuts_enabled": true,
+     "search_fill_from_subject_filter_enabled": true,
+     "search_guessed_filter_coherence_enabled": true,
+     "search_subshelf_homograph_guard_enabled": true,
+     "search_text_gate_when_redundant_enabled": true
+    },
+    "config_revision": "e361af6a5ac8"
+   },
+   "event": {
+    "action": null,
+    "media_id": null,
+    "verified": false,
+    "channel_id": "ae254f0f-c60b-4ab4-b281-dd8a8490e82b",
+    "channel_kind": "webchat",
+    "content_type": "text",
+    "page_context": null,
+    "channel_account_id": "pub_b738dd1aa2ff2e0535b491792cc789d9"
+   },
+   "snapshot": {
+    "facts": [],
+    "state": {
+     "constraints": {},
+     "active_search": {
+      "fp": "ed2dc9a25c1f8b72",
+      "page": 0,
+      "pool": [
+       "73617cc0-0b05-4521-913b-4ad355266617",
+       "a857a196-7fb5-4a3f-8af8-f93a84e88d91",
+       "854047e8-1c5c-419a-b849-3f45fe4b88d3",
+       "0ad03273-ac3b-4a4e-a21a-ff6f935d5252",
+       "e7e3439f-fc3c-4c17-b0b8-5b3f3729296b",
+       "12134b26-15e5-4c99-9119-bfd7ba2e3be0",
+       "0632ee9f-ad4e-4004-907f-08bb6516ee64",
+       "5b440e69-3099-4056-9f8a-28c3f043c24b",
+       "26e8890c-4bed-4887-bd8a-3fe864084ec8",
+       "33897149-e41f-46f3-9b3e-eb78c972fda7",
+       "923240eb-f79f-461f-99f3-d44dfbca8645",
+       "ea9ac8c0-65d9-4bef-b4a2-8af99921845e",
+       "7986fab5-7b31-4d93-8c02-588c32663bb2",
+       "f1a4053f-ecad-4a70-b761-23bcb5bd866b",
+       "3d513a9c-1c63-4c06-877c-d76315c1986b",
+       "a3954891-7b4b-4e53-92ac-4140263f3d41",
+       "af90ce83-af83-4506-b957-5184a66539ea",
+       "44aa4ea7-3ab8-49be-8618-a499c9bf4fdb",
+       "6312a725-02be-44a9-917e-fcf384333bff",
+       "e0139ff0-cfe5-4d1c-b518-aa52de4960b0",
+       "5ce65c42-2e9c-47cf-a45b-450c0b9b9a6c",
+       "12db7082-6f12-426a-89ea-35a7dc13a460",
+       "501a7628-ccb5-46e9-a5ba-b568a2896b15",
+       "eef5e05d-1b53-49ee-bb6b-93986e1d5644"
+      ],
+      "cursor": 6,
+      "filters": {
+       "brand": null,
+       "query": "produse pentru pielea cam ciudată, îngrijirea tenului pentru nevoi neclare",
+       "category": "ten",
+       "concerns": null,
+       "features": null,
+       "price_max": null,
+       "sort_mode": "relevance",
+       "product_name": null,
+       "in_stock_only": false,
+       "variant_label": null
+      }
+     },
+     "asked_intents": [],
+     "offered_chips": [
+      "compare:0ad03273-ac3b-4a4e-a21a-ff6f935d5252:e7e3439f-fc3c-4c17-b0b8-5b3f3729296b",
+      "link:0ad03273-ac3b-4a4e-a21a-ff6f935d5252",
+      "pivot_shelf:category:ten",
+      "detail:0ad03273-ac3b-4a4e-a21a-ff6f935d5252",
+      "link:73617cc0-0b05-4521-913b-4ad355266617"
+     ],
+     "pending_question": null,
+     "displayed_products": [
+      {
+       "name": "MEDIHEAL Teatree Nude Gel Hidrogel Mask",
+       "price": 20.0,
+       "product_id": "0ad03273-ac3b-4a4e-a21a-ff6f935d5252"
+      },
+      {
+       "name": "ANUA Peach 77 Niacin Lotiune de fata",
+       "price": 120.0,
+       "product_id": "e7e3439f-fc3c-4c17-b0b8-5b3f3729296b"
+      },
+      {
+       "name": "YADAH Cleansing Nose Pack 10 x 2 gr",
+       "price": 35.0,
+       "product_id": "73617cc0-0b05-4521-913b-4ad355266617"
+      }
+     ],
+     "search_constraints": {
+      "concerns": [
+       "piele ciudată"
+      ],
+      "category_key": "ten"
+     }
+    },
+    "locale": "ro",
+    "contact": {
+     "id": "a1e735bd-974f-448d-8bdc-56287277d358",
+     "locale": null,
+     "consent": {},
+     "profile": {},
+     "lifecycle": "new",
+     "lead_score": 0.0,
+     "business_id": "99fe1292-f9ed-469e-8183-f994ea5b59c0"
+    },
+    "history": [
+     {
+      "id": null,
+      "body": "salut",
+      "author": "contact",
+      "payload": {
+       "turn_id": "e84a6372-c386-4575-8c68-77c7868e7be0",
+       "fragment_index": 0
+      },
+      "direction": "inbound",
+      "created_at": "2026-10-01T07:24:40.363061+00:00",
+      "content_type": "text"
+     },
+     {
+      "id": null,
+      "body": "Bună! 👋 Eu sunt Native, asistentul tău de shopping SOLE.\n\nCu ce te ajut azi? Poți să-mi scrii produsul, bugetul sau pentru cine cauți.\n\nPoți încerca:\n• Ce aveți pentru spf?\n• Ce aveți pentru pete?",
+      "author": "bot",
+      "payload": {
+       "turn_id": "e84a6372-c386-4575-8c68-77c7868e7be0",
+       "fragment_index": 0
+      },
+      "direction": "outbound",
+      "created_at": "2026-10-01T07:24:40.981916+00:00",
+      "content_type": "text"
+     },
+     {
+      "id": null,
+      "body": "nu stiu ce sa-mi iau, am pielea cam ciudata",
+      "author": "contact",
+      "payload": {
+       "turn_id": "a95ac551-c210-4542-9ea4-c8f6b4bee95f",
+       "fragment_index": 0
+      },
+      "direction": "inbound",
+      "created_at": "2026-10-01T07:24:41.862685+00:00",
+      "content_type": "text"
+     },
+     {
+      "id": null,
+      "body": "Dacă nu ești sigură ce tip de ten ai, contează mai ales cum se simte pielea: pentru ten sensibil și congestionat, masca MEDIHEAL Teatree, pentru ten uscat, loțiunea ANUA Peach, pentru ten gras și pori dilatați, benzile YADAH.\n\n1. MEDIHEAL Teatree Nude Gel Hidrogel Mask, 20,00 lei  ⭐5.0\n   Pentru ten sensibil sau congestionat, cu tea tree și centella pentru calmarea pielii.\n2. ANUA Peach 77 Niacin Lotiune de fata, 120,00 lei  ⭐5.0  • Top Favorit\n   Dacă pielea e uscată, niacinamida și acidul hialuronic susțin hidratarea.\n3. YADAH Cleansing Nose Pack 10 x 2 gr, 35,00 lei  ⭐4.8\n   Când ai ten gras și pori dilatați, benzile cu hamamelis ajută la curățarea punctelor negre.\n\nDacă pielea se înroșește ușor sau e congestionată, MEDIHEAL Teatree e alegerea potrivită. Dacă se simte uscată, alege loțiunea ANUA, iar pentru ten gras și puncte negre, benzile YADAH.\n\nDacă vrei, putem continua cu: Compara MEDIHEAL Teatree Nude cu ANUA Peach 77 Niacin · Trimite-mi linkul la MEDIHEAL Teatree Nude Gel Hidrogel · Arata-mi ce ai la Ten · Spune-mi mai multe despre MEDIHEAL Teatree Nude Gel · Trimite-mi linkul la YADAH Cleansing Nose Pack 10 x 2 gr",
+      "author": "bot",
+      "payload": {
+       "shown": [
+        {
+         "name": "MEDIHEAL Teatree Nude Gel Hidrogel Mask",
+         "price": 20.0,
+         "product_id": "0ad03273-ac3b-4a4e-a21a-ff6f935d5252"
+        },
+        {
+         "name": "ANUA Peach 77 Niacin Lotiune de fata",
+         "price": 120.0,
+         "product_id": "e7e3439f-fc3c-4c17-b0b8-5b3f3729296b"
+        },
+        {
+         "name": "YADAH Cleansing Nose Pack 10 x 2 gr",
+         "price": 35.0,
+         "product_id": "73617cc0-0b05-4521-913b-4ad355266617"
+        }
+       ],
+       "turn_id": "a95ac551-c210-4542-9ea4-c8f6b4bee95f",
+       "fragment_index": 0
+      },
+      "direction": "outbound",
+      "created_at": "2026-10-01T07:24:54.909667+00:00",
+      "content_type": "text"
+     },
+     {
+      "id": null,
+      "body": "se descuameaza in jurul nasului si ma mananca",
+      "author": "contact",
+      "payload": {
+       "turn_id": "3aee17f0-49cb-4d74-8cb9-019ab235a46a",
+       "fragment_index": 0
+      },
+      "direction": "inbound",
+      "created_at": "2026-10-01T07:24:55.812144+00:00",
+      "content_type": "text"
+     },
+     {
+      "id": null,
+      "body": "Hai să păstrăm conversația respectuoasă, te rog 🙂 Cu ce te pot ajuta legat de produse sau comenzi?",
+      "author": "bot",
+      "payload": {
+       "turn_id": "3aee17f0-49cb-4d74-8cb9-019ab235a46a",
+       "fragment_index": 0
+      },
+      "direction": "outbound",
+      "created_at": "2026-10-01T07:24:56.598996+00:00",
+      "content_type": "text"
+     },
+     {
+      "id": null,
+      "body": "ok si ceva bland pentru curatare?",
+      "author": "contact",
+      "payload": {
+       "turn_id": "64a594fc-6546-471c-9f17-908d6d59a322",
+       "fragment_index": 0
+      },
+      "direction": "inbound",
+      "created_at": "2026-10-01T07:24:57.323100+00:00",
+      "content_type": "text"
+     }
+    ],
+    "summary": null,
+    "bot_active": true,
+    "shadow_mode": false,
+    "state_version": 3,
+    "inbound_msg_id": "382ce9df-6fa1-4dfb-a5da-34f6fbd97a29",
+    "conversation_id": "9a5ed692-13da-4020-bac0-426eca3c0462"
+   }
+  },
+  "kernel_dark": {
+   "ms": 436.1,
+   "error": null,
+   "plans": 1,
+   "truth": {
+    "needs": [],
+    "shelf": "ten",
+    "types": [
+     "gel de curatare"
+    ],
+    "type_learned": false
+   },
+   "executor": "search",
+   "searched": true,
+   "kernel_ids": [
+    "35268051-91b3-4613-a2c1-2749f19dabd6",
+    "1802a8aa-4791-47fd-922e-5fa2ff847010",
+    "a4e59dc3-c155-4d81-b8b0-47e8c9ee78f5",
+    "43d6f6c3-eb7f-4c35-bd77-1649a77a973d",
+    "398ea6f2-b7bd-42e0-a211-a7cfedce2555",
+    "3ea04091-7073-4b75-8b28-b265565d0d1a"
+   ],
+   "lexical_step": "strict",
+   "state_v2_write": false
+  },
+  "rich_handles": {
+   "P1": "12db7082-6f12-426a-89ea-35a7dc13a460",
+   "P2": "b39516d0-ae13-4ad3-bde2-1ba00f362462",
+   "P3": "7db05f95-c600-4966-8c02-7883ac5fb4bb",
+   "P4": "ede21524-4c56-40a2-82d6-2c72afa5e668",
+   "P5": "90803c24-2d4e-4dcb-aa2e-33a1d0ec0b12",
+   "P6": "0fef38a8-0f9c-4738-a00e-3cb8f960b416"
+  }
+ }
+}

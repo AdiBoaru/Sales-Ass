@@ -1,0 +1,1172 @@
+{
+ "turn_id": "980466bd-957c-4f77-a145-ea7982e5a497",
+ "conversation_id": "47ac5619-5348-4cd0-bc29-ec1c7b0aee88",
+ "business_id": "99fe1292-f9ed-469e-8183-f994ea5b59c0",
+ "client_text": "ok atunci un ulei pentru varfuri",
+ "created_at": "2026-10-01 07:25:02.430016+00:00",
+ "reply": {
+  "kind": "message",
+  "rich": {
+   "pick": [
+    "82400971-7e88-4f4a-a869-adb1890ee7d2",
+    "Are ulei de argan și cocos și este formulat pentru părul uscat și deteriorat."
+   ],
+   "chips": [
+    {
+     "label": "Compara LEE STAFFORD Argan Oil cu IUNIK Argan Nourishing",
+     "payload": "Compara LEE STAFFORD Argan Oil cu IUNIK Argan Nourishing"
+    },
+    {
+     "label": "Trimite-mi linkul la LEE STAFFORD Argan Oil from Morocco",
+     "payload": "Trimite-mi linkul la LEE STAFFORD Argan Oil from Morocco"
+    },
+    {
+     "label": "Spune-mi mai multe despre LEE STAFFORD Argan Oil from",
+     "payload": "Spune-mi mai multe despre LEE STAFFORD Argan Oil from"
+    },
+    {
+     "label": "Trimite-mi linkul la IUNIK Argan Nourishing",
+     "payload": "Trimite-mi linkul la IUNIK Argan Nourishing"
+    },
+    {
+     "label": "Ce spun recenziile despre LEE STAFFORD Argan Oil from",
+     "payload": "Ce spun recenziile despre LEE STAFFORD Argan Oil from"
+    }
+   ],
+   "intro": "Pentru vârfuri, LEE STAFFORD Argan Oil from Morocco Nourishing Miracle Oil combină uleiul de argan și cel de cocos pentru părul uscat sau deteriorat, iar IUNIK Argan Nourishing pune accent pe hidratare și strălucire.",
+   "items": [
+    {
+     "url": "https://sole.ro/par/uleiuri-pentru-par/lee-stafford-argan-oil-from-morocco-nourishing-miracle-oil-ulei-de-par-nutritiv-50-ml-f81188.html",
+     "name": "LEE STAFFORD Argan Oil from Morocco Nourishing Miracle Oil",
+     "size": "50 ml",
+     "badge": "Top Favorit",
+     "image": "https://pidqzxymjhzlmoesfsba.supabase.co/storage/v1/object/public/product-images/sole/F81188/1.webp",
+     "price": 70.0,
+     "rating": 4.9,
+     "reason": "Potrivit pentru păr uscat sau deteriorat, cu ulei de argan și cocos pentru îngrijirea vârfurilor.",
+     "details": null,
+     "currency": "RON",
+     "variants": [],
+     "badge_tone": "info",
+     "list_price": null,
+     "product_id": "82400971-7e88-4f4a-a869-adb1890ee7d2",
+     "review_count": 129
+    },
+    {
+     "url": "https://sole.ro/par/uleiuri-pentru-par/iunik-argan-nourishing-ulei-de-par-cu-efect-nutritiv-100-ml-f79624.html",
+     "name": "IUNIK Argan Nourishing",
+     "size": "100 ml",
+     "badge": "Top Favorit",
+     "image": "https://pidqzxymjhzlmoesfsba.supabase.co/storage/v1/object/public/product-images/sole/F79624/1.webp",
+     "price": 110.0,
+     "rating": 4.94,
+     "reason": "Alege-l dacă vrei hidratare și păr mai ușor de coafat, cu uleiuri botanice.",
+     "details": null,
+     "currency": "RON",
+     "variants": [],
+     "badge_tone": "info",
+     "list_price": null,
+     "product_id": "85c5dfe5-5a25-446f-9c36-8b9582c7d209",
+     "review_count": 122
+    }
+   ],
+   "education": null,
+   "disclaimer": null
+  },
+  "text": "Pentru vârfuri, LEE STAFFORD Argan Oil from Morocco Nourishing Miracle Oil combină uleiul de argan și cel de cocos pentru părul uscat sau deteriorat, iar IUNIK Argan Nourishing pune accent pe hidratare și strălucire.\n\n1. LEE STAFFORD Argan Oil from Morocco Nourishing Miracle Oil, 70,00 lei  ⭐4.9  • Top Favorit\n   Potrivit pentru păr uscat sau deteriorat, cu ulei de argan și cocos pentru îngrijirea vârfurilor.\n2. IUNIK Argan Nourishing, 110,00 lei  ⭐4.9  • Top Favorit\n   Alege-l dacă vrei hidratare și păr mai ușor de coafat, cu uleiuri botanice.\n\nSau, dacă preferi: Compara LEE STAFFORD Argan Oil cu IUNIK Argan Nourishing · Trimite-mi linkul la LEE STAFFORD Argan Oil from Morocco · Spune-mi mai multe despre LEE STAFFORD Argan Oil from · Trimite-mi linkul la IUNIK Argan Nourishing · Ce spun recenziile despre LEE STAFFORD Argan Oil from",
+  "offer": null,
+  "products": [
+   {
+    "url": "https://sole.ro/par/uleiuri-pentru-par/lee-stafford-argan-oil-from-morocco-nourishing-miracle-oil-ulei-de-par-nutritiv-50-ml-f81188.html",
+    "name": "LEE STAFFORD Argan Oil from Morocco Nourishing Miracle Oil",
+    "image": "https://pidqzxymjhzlmoesfsba.supabase.co/storage/v1/object/public/product-images/sole/F81188/1.webp",
+    "price": 70.0,
+    "product_id": "82400971-7e88-4f4a-a869-adb1890ee7d2"
+   },
+   {
+    "url": "https://sole.ro/par/uleiuri-pentru-par/iunik-argan-nourishing-ulei-de-par-cu-efect-nutritiv-100-ml-f79624.html",
+    "name": "IUNIK Argan Nourishing",
+    "image": "https://pidqzxymjhzlmoesfsba.supabase.co/storage/v1/object/public/product-images/sole/F79624/1.webp",
+    "price": 110.0,
+    "product_id": "85c5dfe5-5a25-446f-9c36-8b9582c7d209"
+   }
+  ],
+  "cacheable": false,
+  "comparison": null,
+  "suggestions": [],
+  "pending_question": null
+ },
+ "diagnostics": {
+  "kernel": {
+   "gaps": [],
+   "plan": {
+    "family": null,
+    "executor": "search",
+    "depends_on": null,
+    "product_ids": [],
+    "search_args": {
+     "brand": null,
+     "limit": 6,
+     "query": "ulei pentru varfuri",
+     "prefer": {},
+     "exclude": {},
+     "category": "par",
+     "concerns": null,
+     "features": null,
+     "price_max": null,
+     "sort_mode": "relevance",
+     "price_band": null,
+     "rank_terms": [],
+     "product_name": null,
+     "in_stock_only": false,
+     "variant_label": null
+    }
+   },
+   "plans": [
+    {
+     "family": null,
+     "executor": "search",
+     "depends_on": null,
+     "product_ids": [],
+     "search_args": {
+      "brand": null,
+      "limit": 6,
+      "query": "ulei pentru varfuri",
+      "prefer": {},
+      "exclude": {},
+      "category": "par",
+      "concerns": null,
+      "features": null,
+      "price_max": null,
+      "sort_mode": "relevance",
+      "price_band": null,
+      "rank_terms": [],
+      "product_name": null,
+      "in_stock_only": false,
+      "variant_label": null
+     }
+    }
+   ],
+   "executor": "none",
+   "rejected": [],
+   "ambiguity": {
+    "reason": "clear",
+    "verdict": "act",
+    "question": null
+   },
+   "proposals": [
+    {
+     "op": "set_topic",
+     "key": "par"
+    }
+   ],
+   "truncated": false,
+   "disclosures": [],
+   "gate_memory": null,
+   "state_after": {
+    "needs": [],
+    "shown": [
+     "4512d696-1297-4eb2-a0b3-7654c7e42ee5",
+     "b1df43ad-4164-4d30-b6ab-6217a3557af4",
+     "f8a8f535-2373-448a-9d98-e9ae3536ec8e"
+    ],
+    "topic": "par"
+   },
+   "dropped_acts": 0,
+   "state_before": {
+    "needs": [],
+    "shown": [
+     "4512d696-1297-4eb2-a0b3-7654c7e42ee5",
+     "b1df43ad-4164-4d30-b6ab-6217a3557af4",
+     "f8a8f535-2373-448a-9d98-e9ae3536ec8e"
+    ],
+    "topic": "par"
+   },
+   "answer_policy": null,
+   "resolved_refs": [],
+   "delta_counters": {
+    "ranking": 0,
+    "proposals": 1,
+    "unchanged": 1,
+    "reducer_rejected": 0,
+    "rejected_changes": 0
+   },
+   "interpretation": {
+    "acts": [
+     {
+      "kind": "find",
+      "query": "un ulei pentru varfuri",
+      "targets": []
+     }
+    ],
+    "thread": "continue",
+    "changes": [
+     {
+      "op": "set",
+      "unit": null,
+      "quote": "un ulei pentru varfuri",
+      "value": "par",
+      "number": null,
+      "target": null,
+      "relation": "eq",
+      "dimension": "category",
+      "relative_to": null
+     }
+    ],
+    "references": [],
+    "ambiguities": [],
+    "corrects_previous_turn": false
+   },
+   "checked_changes": [
+    {
+     "change": {
+      "op": "set",
+      "unit": null,
+      "quote": "un ulei pentru varfuri",
+      "value": "par",
+      "number": null,
+      "target": null,
+      "relation": "eq",
+      "dimension": "category",
+      "relative_to": null
+     },
+     "matched": [],
+     "rejected": null,
+     "strength": "soft",
+     "umbrella": [],
+     "dimension": "category",
+     "provenance": "implicit",
+     "canonical_value": "par"
+    }
+   ],
+   "contract_version": "kernel.v6.0",
+   "vocabulary_snapshot": "dc5ae9f2612ea9ab"
+  },
+  "model_io": {
+   "v": 2,
+   "calls": [
+    {
+     "i": 0,
+     "ok": true,
+     "shape": null,
+     "tools": [],
+     "schema": null,
+     "purpose": null,
+     "endpoint": "moderations",
+     "response": {
+      "id": "modr-9546",
+      "model": "omni-moderation-latest",
+      "results": [
+       {
+        "flagged": false,
+        "categories": {
+         "hate": false,
+         "sexual": false,
+         "illicit": false,
+         "violence": false,
+         "self-harm": false,
+         "harassment": false,
+         "sexual/minors": false,
+         "illicit/violent": false,
+         "hate/threatening": false,
+         "self-harm/intent": false,
+         "violence/graphic": false,
+         "harassment/threatening": false,
+         "self-harm/instructions": false
+        },
+        "category_scores": {
+         "hate": 1.177445922838707e-05,
+         "sexual": 0.00010005044009099887,
+         "illicit": 0.007620575194545292,
+         "violence": 0.0011780402186782639,
+         "self-harm": 0.000588558381085324,
+         "harassment": 5.571117181506888e-05,
+         "sexual/minors": 4.53978687024344e-06,
+         "illicit/violent": 0.0001254594479971798,
+         "hate/threatening": 2.1444948420913954e-06,
+         "self-harm/intent": 0.0002763292760766304,
+         "violence/graphic": 1.3982207564732913e-05,
+         "harassment/threatening": 1.5598027633743823e-05,
+         "self-harm/instructions": 0.0002292575353938512
+        },
+        "category_applied_input_types": {
+         "hate": [
+          "text"
+         ],
+         "sexual": [
+          "text"
+         ],
+         "illicit": [
+          "text"
+         ],
+         "violence": [
+          "text"
+         ],
+         "self-harm": [
+          "text"
+         ],
+         "harassment": [
+          "text"
+         ],
+         "sexual/minors": [
+          "text"
+         ],
+         "illicit/violent": [
+          "text"
+         ],
+         "hate/threatening": [
+          "text"
+         ],
+         "self-harm/intent": [
+          "text"
+         ],
+         "violence/graphic": [
+          "text"
+         ],
+         "harassment/threatening": [
+          "text"
+         ],
+         "self-harm/instructions": [
+          "text"
+         ]
+        }
+       }
+      ]
+     },
+     "input_sha": "672b7431c2a73b40"
+    },
+    {
+     "i": 1,
+     "ok": true,
+     "shape": "schema",
+     "tools": [],
+     "schema": "turn_interpretation",
+     "purpose": "interpret",
+     "endpoint": "chat.completions",
+     "response": {
+      "id": "chatcmpl-EU5RrZNvA43SCS3XetZGK9nNOwjJV",
+      "model": "gpt-6-luna",
+      "usage": {
+       "total_tokens": 3777,
+       "prompt_tokens": 3681,
+       "completion_tokens": 96,
+       "prompt_tokens_details": {
+        "audio_tokens": 0,
+        "cached_tokens": 2913,
+        "cache_write_tokens": 765
+       },
+       "completion_tokens_details": {
+        "audio_tokens": 0,
+        "reasoning_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+       }
+      },
+      "object": "chat.completion",
+      "choices": [
+       {
+        "index": 0,
+        "message": {
+         "role": "assistant",
+         "audio": null,
+         "content": "{\"thread\":\"continue\",\"acts\":[{\"kind\":\"find\",\"targets\":[],\"query\":\"un ulei pentru varfuri\"}],\"changes\":[{\"op\":\"set\",\"target\":null,\"dimension\":\"category\",\"relation\":\"eq\",\"value\":\"par\",\"number\":null,\"unit\":null,\"relative_to\":null,\"quote\":\"un ulei pentru varfuri\"}],\"references\":[],\"ambiguities\":[],\"corrects_previous_turn\":false}",
+         "refusal": null,
+         "tool_calls": null,
+         "annotations": [],
+         "function_call": null
+        },
+        "logprobs": null,
+        "finish_reason": "stop"
+       }
+      ],
+      "created": 1790839491,
+      "moderation": null,
+      "service_tier": "default",
+      "system_fingerprint": null
+     },
+     "input_sha": "8447643a7bde54a1"
+    },
+    {
+     "i": 2,
+     "ok": true,
+     "shape": "tools",
+     "tools": [
+      "cart_add",
+      "check_order",
+      "checkout_link",
+      "compare_products",
+      "faq_lookup",
+      "get_product_details",
+      "reorder",
+      "search_products",
+      "subscribe_back_in_stock"
+     ],
+     "schema": null,
+     "purpose": null,
+     "endpoint": "chat.completions",
+     "response": {
+      "id": "chatcmpl-EU5RuquV5PZLUTJe1xjh5yBLCHAHD",
+      "model": "gpt-6-luna",
+      "usage": {
+       "total_tokens": 6369,
+       "prompt_tokens": 6294,
+       "completion_tokens": 75,
+       "prompt_tokens_details": {
+        "audio_tokens": 0,
+        "cached_tokens": 5031,
+        "cache_write_tokens": 1260
+       },
+       "completion_tokens_details": {
+        "audio_tokens": 0,
+        "reasoning_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+       }
+      },
+      "object": "chat.completion",
+      "choices": [
+       {
+        "index": 0,
+        "message": {
+         "role": "assistant",
+         "audio": null,
+         "content": null,
+         "refusal": null,
+         "tool_calls": [
+          {
+           "id": "call_oXydtxd68WoGEwoYBVJUkxuy",
+           "type": "function",
+           "function": {
+            "name": "search_products",
+            "arguments": "{\"query\":\"ulei pentru vârfuri\",\"price_max\":null,\"category\":\"par\",\"brand\":null,\"concerns\":[\"vârfuri\"],\"features\":null,\"limit\":6,\"sort_mode\":\"relevance\",\"in_stock_only\":false,\"product_name\":null,\"variant_label\":null}"
+           }
+          }
+         ],
+         "annotations": [],
+         "function_call": null
+        },
+        "logprobs": null,
+        "finish_reason": "tool_calls"
+       }
+      ],
+      "created": 1790839494,
+      "moderation": null,
+      "service_tier": "default",
+      "system_fingerprint": null
+     },
+     "input_sha": "82e66f39b259a4cf"
+    },
+    {
+     "i": 3,
+     "ok": true,
+     "shape": "schema",
+     "tools": [],
+     "schema": "sales_recommendation",
+     "purpose": null,
+     "endpoint": "chat.completions",
+     "response": {
+      "id": "chatcmpl-EU5Rv8EGBALdVckbYRMyUOrlsGBxU",
+      "model": "gpt-6-luna",
+      "usage": {
+       "total_tokens": 7275,
+       "prompt_tokens": 6791,
+       "completion_tokens": 484,
+       "prompt_tokens_details": {
+        "audio_tokens": 0,
+        "cached_tokens": 4658,
+        "cache_write_tokens": 2130
+       },
+       "completion_tokens_details": {
+        "audio_tokens": 0,
+        "reasoning_tokens": 223,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0
+       }
+      },
+      "object": "chat.completion",
+      "choices": [
+       {
+        "index": 0,
+        "message": {
+         "role": "assistant",
+         "audio": null,
+         "content": "{\"intro\":\"Pentru vârfuri, LEE STAFFORD Argan Oil from Morocco Nourishing Miracle Oil combină uleiul de argan și cel de cocos pentru părul uscat sau deteriorat, iar IUNIK Argan Nourishing pune accent pe hidratare și strălucire.\",\"items\":[{\"product_id\":\"P1\",\"pro_index\":0,\"fit_clause\":\"Potrivit pentru păr uscat sau deteriorat, cu ulei de argan și cocos pentru îngrijirea vârfurilor.\"},{\"product_id\":\"P2\",\"pro_index\":1,\"fit_clause\":\"Alege-l dacă vrei hidratare și păr mai ușor de coafat, cu uleiuri botanice.\"}],\"pick\":{\"product_id\":\"P1\",\"justification\":\"Are ulei de argan și cocos și este formulat pentru părul uscat și deteriorat.\"},\"education\":\"\",\"suggestions\":[\"Compară cele două uleiuri pentru vârfuri\",\"Cum se aplică uleiul LEE STAFFORD?\",\"Arată-mi uleiuri pentru păr uscat\",\"Ai un ulei pentru vârfuri mai accesibil?\"]}",
+         "refusal": null,
+         "tool_calls": null,
+         "annotations": [],
+         "function_call": null
+        },
+        "logprobs": null,
+        "finish_reason": "stop"
+       }
+      ],
+      "created": 1790839495,
+      "moderation": null,
+      "service_tier": "default",
+      "system_fingerprint": null
+     },
+     "input_sha": "184b74f5938844c6"
+    }
+   ],
+   "replayable": true,
+   "unreplayable": []
+  },
+  "rich_raw": {
+   "pick": {
+    "product_id": "P1",
+    "justification": "Are ulei de argan și cocos și este formulat pentru părul uscat și deteriorat."
+   },
+   "intro": "Pentru vârfuri, LEE STAFFORD Argan Oil from Morocco Nourishing Miracle Oil combină uleiul de argan și cel de cocos pentru părul uscat sau deteriorat, iar IUNIK Argan Nourishing pune accent pe hidratare și strălucire.",
+   "items": [
+    {
+     "pro_index": 0,
+     "fit_clause": "Potrivit pentru păr uscat sau deteriorat, cu ulei de argan și cocos pentru îngrijirea vârfurilor.",
+     "product_id": "P1"
+    },
+    {
+     "pro_index": 1,
+     "fit_clause": "Alege-l dacă vrei hidratare și păr mai ușor de coafat, cu uleiuri botanice.",
+     "product_id": "P2"
+    }
+   ],
+   "education": "",
+   "suggestions": [
+    "Compară cele două uleiuri pentru vârfuri",
+    "Cum se aplică uleiul LEE STAFFORD?",
+    "Arată-mi uleiuri pentru păr uscat",
+    "Ai un ulei pentru vârfuri mai accesibil?"
+   ]
+  },
+  "turn_input": {
+   "v": 2,
+   "env": {
+    "catalog": {
+     "06851099-1e97-48b2-b75f-5e7c31511f58": [
+      160.0,
+      null,
+      "in_stock",
+      "2026-08-27 15:38:13.001635+00:00"
+     ],
+     "464cab25-e87a-491f-9b29-911c4215d9ef": [
+      45.0,
+      null,
+      "in_stock",
+      "2026-08-27 15:34:59.698251+00:00"
+     ],
+     "82400971-7e88-4f4a-a869-adb1890ee7d2": [
+      70.0,
+      null,
+      null,
+      null
+     ],
+     "85c5dfe5-5a25-446f-9c36-8b9582c7d209": [
+      110.0,
+      null,
+      null,
+      null
+     ],
+     "b5f887c7-cb90-432f-ac49-d27809ab7eb3": [
+      55.17,
+      null,
+      "out_of_stock",
+      "2026-08-27 15:51:54.302867+00:00"
+     ],
+     "e7c2fabb-b447-4890-a30d-2979c5829081": [
+      280.0,
+      null,
+      "in_stock",
+      "2026-08-27 15:40:38.027990+00:00"
+     ]
+    },
+    "release": "6b383adf3742c9b514d23532bb812d6fa84c750e",
+    "pack_sha": "ad4006d65445390fb9a75a031714cb599b79cc3f5819e697837deda995586df0",
+    "settings": {
+     "env": "prod",
+     "log_level": "INFO",
+     "card_slots": 6,
+     "chip_slots": 5,
+     "faq_enabled": true,
+     "model_agent": "gpt-6-luna",
+     "model_embed": "text-embedding-3-small",
+     "release_sha": "6b383adf3742c9b514d23532bb812d6fa84c750e",
+     "web_enabled": true,
+     "max_per_type": 2,
+     "model_vision": "gpt-5.6-terra",
+     "service_name": "nativx-assistant",
+     "alias_enabled": true,
+     "cache_enabled": true,
+     "llm_retry_max": 2,
+     "llm_timeout_s": 30.0,
+     "release_track": "champion",
+     "cache_tau_high": 0.92,
+     "cost_agent_usd": 0.003,
+     "rate_limit_max": 20,
+     "vision_enabled": true,
+     "cost_vision_usd": 0.003,
+     "db_bot_pool_max": 10,
+     "llm_call_cap_ms": 8000,
+     "routine_enabled": true,
+     "summary_enabled": true,
+     "welcome_enabled": true,
+     "embed_timeout_ms": 800,
+     "llm_pricing_json": "",
+     "model_moderation": "omni-moderation-latest",
+     "turn_lock_ttl_ms": 15000,
+     "vision_max_bytes": 5000000,
+     "web_action_ttl_s": 1800,
+     "web_backlog_size": 20,
+     "web_cors_origins": "https://demo.nativextech.com",
+     "welcome_bot_name": "Native",
+     "admission_enabled": true,
+     "checkout_base_url": "",
+     "conv_lock_enabled": true,
+     "db_admin_pool_max": 10,
+     "embed_job_enabled": true,
+     "memory_v2_enabled": true,
+     "need_menu_enabled": false,
+     "proactive_enabled": true,
+     "reply_split_chars": 200,
+     "summary_max_chars": 600,
+     "summary_threshold": 20,
+     "web_backlog_ttl_s": 300,
+     "web_session_ttl_s": 43200,
+     "attr_query_enabled": true,
+     "chip_moves_enabled": true,
+     "cost_guard_enabled": true,
+     "cross_sell_enabled": true,
+     "daily_cost_cap_usd": 5.0,
+     "lifecycle_hour_utc": 2,
+     "moderation_enabled": true,
+     "rate_limit_enabled": true,
+     "web_max_body_bytes": 16384,
+     "web_turn_sse_max_s": 600.0,
+     "answer_plan_enabled": false,
+     "brain_chips_enabled": false,
+     "card_badges_enabled": true,
+     "card_coupon_enabled": true,
+     "db_isolation_assert": "strict",
+     "domain_pack_enabled": true,
+     "link_intent_enabled": true,
+     "model_agent_complex": "",
+     "release_environment": "",
+     "rich_facets_enabled": true,
+     "summary_regen_delta": 12,
+     "web_actions_enabled": false,
+     "web_context_enabled": false,
+     "web_sse_heartbeat_s": 15.0,
+     "web_turn_deadline_s": 120,
+     "web_turn_v2_enabled": false,
+     "answer_shape_enabled": true,
+     "clarify_max_attempts": 2,
+     "clarify_menu_enabled": true,
+     "clarify_tool_enabled": false,
+     "commerce_facts_sla_s": 86400,
+     "facet_search_enabled": true,
+     "lifecycle_churn_days": 30,
+     "llm_call_total_cap_s": 90.0,
+     "llm_max_tokens_agent": 0,
+     "llm_sampling_enabled": true,
+     "moderation_timeout_s": 3.0,
+     "pool_metrics_enabled": true,
+     "proactive_batch_size": 20,
+     "single_brain_enabled": false,
+     "turn_budget_enforced": false,
+     "turn_budget_exact_ms": 3000,
+     "turn_cost_budget_usd": 0.01,
+     "web_feedback_enabled": false,
+     "web_identity_enabled": false,
+     "web_turn_claim_batch": 8,
+     "web_turn_heartbeat_s": 60.0,
+     "web_turn_lease_ttl_s": 300,
+     "web_turn_sse_enabled": false,
+     "web_turn_sse_poll_ms": 1000,
+     "web_turns_stale_days": 7,
+     "admission_web_wait_ms": 1500,
+     "aftercare_deadline_ms": 20000,
+     "ai_disclaimer_enabled": false,
+     "cache_ttl_static_days": 7,
+     "chip_moves_v1_enabled": true,
+     "chip_moves_v2_enabled": false,
+     "conv_lock_ttl_seconds": 30,
+     "db_op_metrics_enabled": true,
+     "decision_axes_enabled": true,
+     "demand_rollup_enabled": true,
+     "detail_intent_enabled": true,
+     "dispatcher_batch_size": 10,
+     "faq_grounding_enabled": true,
+     "lifecycle_job_enabled": true,
+     "llm_retry_after_max_s": 10.0,
+     "llm_temperature_agent": 0.7,
+     "observability_enabled": false,
+     "partition_job_enabled": true,
+     "relevance_mask_facets": "",
+     "retrieval_deadline_ms": 0,
+     "review_intent_enabled": true,
+     "rich_pick_web_enabled": false,
+     "search_shadow_enabled": false,
+     "turn_deadline_enabled": false,
+     "turn_hard_deadline_ms": 15000,
+     "turn_lock_wait_max_ms": 10000,
+     "turn_profiles_enabled": false,
+     "web_admission_enabled": true,
+     "web_identity_leeway_s": 30,
+     "web_rate_limit_max_ip": 40,
+     "web_turn_lock_enabled": true,
+     "web_turn_max_attempts": 3,
+     "admission_lease_ttl_ms": 120000,
+     "admission_max_inflight": 24,
+     "cheaper_intent_enabled": true,
+     "checkout_link_ttl_days": 7,
+     "chip_drop_dead_enabled": true,
+     "compare_intent_enabled": true,
+     "conv_lock_max_requeues": 10,
+     "framing_labels_enabled": true,
+     "input_pii_mask_enabled": true,
+     "needs_retained_enabled": true,
+     "observability_exporter": "",
+     "partition_months_ahead": 1,
+     "proactive_idle_sleep_s": 5.0,
+     "relation_graph_enabled": false,
+     "relevance_mask_enabled": false,
+     "response_style_enabled": true,
+     "trace_model_io_enabled": true,
+     "turn_budget_complex_ms": 10000,
+     "turn_latency_budget_ms": 5000,
+     "web_demo_access_issuer": "",
+     "web_session_v2_enabled": false,
+     "web_turn_poll_after_ms": 1000,
+     "web_turn_view_contract": "web-chat.v1",
+     "webhook_max_body_bytes": 262144,
+     "answer_plan_max_quality": false,
+     "db_query_timing_enabled": false,
+     "dispatcher_idle_sleep_s": 0.5,
+     "fast_path_exact_enabled": false,
+     "lead_score_hint_enabled": true,
+     "lexical_rank_v2_enabled": false,
+     "llm_retry_min_budget_ms": 600,
+     "llm_timeout_reasoning_s": 75.0,
+     "observability_queue_max": 2048,
+     "ops_heartbeat_max_age_s": 90.0,
+     "relations_first_enabled": true,
+     "retrieval_decision_path": "reports/nx238/decision.json",
+     "rich_from_facts_enabled": true,
+     "search_semantic_enabled": false,
+     "search_sessions_enabled": true,
+     "short_ack_guard_enabled": true,
+     "turn_budget_mutation_ms": 8000,
+     "web_action_clock_skew_s": 60,
+     "web_demo_access_enabled": false,
+     "web_rate_limit_window_s": 60,
+     "web_session_v2_required": false,
+     "web_turn_ledger_enabled": false,
+     "brain_rich_reply_enabled": true,
+     "comparison_focus_enabled": true,
+     "injection_screen_enabled": false,
+     "interpreted_turn_enabled": false,
+     "interpreted_turn_tenants": "sole-ro",
+     "lexical_query_v2_enabled": true,
+     "llm_wait_bounded_enabled": true,
+     "refinement_guard_enabled": true,
+     "release_policy_refresh_s": 15.0,
+     "rich_schema_slim_enabled": false,
+     "search_diversify_enabled": true,
+     "search_sort_mode_enabled": true,
+     "validator_claims_enabled": true,
+     "web_demo_access_audience": "",
+     "web_demo_access_leeway_s": 30,
+     "web_legacy_async_enabled": true,
+     "web_session_secret_ttl_s": 60.0,
+     "web_turn_executor_poll_s": 2.0,
+     "cache_ttl_dynamic_minutes": 30,
+     "comparison_facets_enabled": true,
+     "conversation_cart_enabled": false,
+     "guidance_required_enabled": false,
+     "lead_score_high_threshold": 70.0,
+     "llm_call_cap_reasoning_ms": 60000,
+     "llm_temperature_interpret": 0.2,
+     "match_gate_shadow_enabled": false,
+     "query_spec_shadow_enabled": false,
+     "rate_limit_window_seconds": 60,
+     "rich_item_handles_enabled": true,
+     "routine_evidence_required": true,
+     "scheduler_rollup_hour_utc": 0,
+     "tool_field_errors_enabled": true,
+     "typed_constraints_enabled": false,
+     "web_turn_executor_enabled": false,
+     "web_turn_recovery_enabled": false,
+     "web_turn_shutdown_grace_s": 10.0,
+     "web_turn_sweep_interval_s": 30.0,
+     "web_turns_retention_hours": 168,
+     "admission_max_per_business": 0,
+     "admission_requeue_delay_ms": 200,
+     "answer_plan_critic_enabled": false,
+     "comparison_axes_v2_enabled": false,
+     "contact_daily_cost_cap_usd": 0.0,
+     "conv_lock_requeue_delay_ms": 150,
+     "conversation_facts_enabled": true,
+     "conversation_trace_enabled": true,
+     "history_shown_max_products": 6,
+     "howto_from_catalog_enabled": false,
+     "llm_reasoning_effort_agent": "low",
+     "llm_temperature_background": 0.2,
+     "moderation_block_threshold": 3,
+     "narrowing_question_enabled": false,
+     "observability_export_batch": 256,
+     "observability_otlp_headers": "",
+     "observability_sample_ratio": 0.05,
+     "proactive_initiators_batch": 200,
+     "profile_extraction_enabled": true,
+     "relation_traversal_enabled": false,
+     "release_controller_enabled": false,
+     "response_telemetry_enabled": true,
+     "retrieval_pipeline_version": "retrieval.v1",
+     "rich_review_anchor_enabled": false,
+     "skin_type_anti_fit_enabled": false,
+     "structured_history_enabled": true,
+     "topic_switch_reset_enabled": true,
+     "turn_budget_alerts_enabled": true,
+     "turn_latency_spans_enabled": true,
+     "unique_name_prefix_enabled": true,
+     "web_context_prompt_enabled": false,
+     "web_rate_limit_max_visitor": 15,
+     "web_session_origin_binding": false,
+     "comparison_lead_llm_enabled": true,
+     "faq_locale_fallback_enabled": false,
+     "memory_canonicalize_enabled": true,
+     "memory_open_capture_enabled": true,
+     "observability_otlp_endpoint": "",
+     "prompt_cache_layout_enabled": false,
+     "replay_store_prompt_enabled": false,
+     "retrieval_candidate_enabled": false,
+     "rich_card_reconcile_enabled": true,
+     "search_blended_rank_enabled": true,
+     "set_relative_badges_enabled": true,
+     "turn_parallel_reads_enabled": false,
+     "web_context_freshness_sla_s": 86400,
+     "abandoned_cart_after_seconds": 3600,
+     "admission_acquire_timeout_ms": 2000,
+     "admission_local_fallback_max": 4,
+     "admission_requeue_warn_every": 20,
+     "catalog_reason_codes_enabled": true,
+     "compare_with_similar_enabled": true,
+     "comparison_narrative_enabled": true,
+     "conversation_subject_enabled": true,
+     "observability_traces_enabled": true,
+     "observed_constraints_enabled": true,
+     "proactive_initiators_enabled": true,
+     "search_category_hard_enabled": true,
+     "search_category_menu_enabled": true,
+     "search_category_tree_enabled": true,
+     "spec_digits_grounded_enabled": true,
+     "tool_loop_skip_prose_enabled": true,
+     "web_aftercare_max_concurrent": 8,
+     "web_bootstrap_rate_limit_max": 10,
+     "web_context_pipeline_version": "web-chat.v1",
+     "web_cost_cap_per_visitor_usd": 0.5,
+     "admission_distributed_enabled": true,
+     "catalog_projection_v2_enabled": true,
+     "cheapest_alternatives_enabled": true,
+     "content_status_filter_enabled": true,
+     "conversation_state_v2_enabled": true,
+     "dispatcher_global_concurrency": 16,
+     "dispatcher_tenant_concurrency": 4,
+     "interpreted_turn_dark_enabled": true,
+     "memory_safe_injection_enabled": true,
+     "observability_metrics_enabled": true,
+     "observability_otlp_timeout_ms": 2000,
+     "speculative_retrieval_enabled": false,
+     "turn_budget_recommendation_ms": 6000,
+     "web_view_v2_projector_enabled": false,
+     "abandoned_cart_max_age_seconds": 604800,
+     "llm_reasoning_effort_interpret": "none",
+     "named_shortcut_targets_enabled": true,
+     "no_result_alternatives_enabled": true,
+     "observability_flush_timeout_ms": 2000,
+     "price_bound_unit_aware_enabled": true,
+     "rich_pick_relevance_cosine_max": 0.6,
+     "routine_arg_provenance_enabled": true,
+     "routine_dense_ordinals_enabled": true,
+     "search_guessed_filter_min_rows": 5,
+     "validator_bare_numbers_enabled": true,
+     "validator_stock_claims_enabled": false,
+     "clarification_policy_v2_enabled": false,
+     "compare_coherence_guard_enabled": true,
+     "interpreted_turn_canary_percent": 100,
+     "interpreted_turn_dark_timeout_s": 5.0,
+     "llm_call_budget_by_role_enabled": true,
+     "proactive_initiators_interval_s": 900,
+     "reference_precedence_v2_enabled": false,
+     "retrieval_candidate_rollout_pct": 0,
+     "rich_pick_deterministic_enabled": true,
+     "search_guessed_filter_min_share": 0.1,
+     "checkout_intent_fallback_enabled": true,
+     "plan_server_owned_fields_enabled": false,
+     "rich_pick_relevance_gate_enabled": true,
+     "safety_contraindications_enabled": true,
+     "safety_medical_guardrail_enabled": true,
+     "scheduler_embed_interval_seconds": 3600,
+     "search_offcategory_guard_enabled": true,
+     "web_context_hydration_timeout_ms": 1500,
+     "conversation_trace_retention_days": 30,
+     "scheduler_dedupe_interval_seconds": 21600,
+     "aside_keeps_search_session_enabled": true,
+     "clarification_min_information_gain": 0.3,
+     "labeled_quantity_grounding_enabled": true,
+     "search_one_card_per_family_enabled": true,
+     "search_relax_by_provenance_enabled": true,
+     "tool_loop_skip_prose_exact_enabled": true,
+     "conversation_state_v2_write_enabled": false,
+     "search_price_as_filter_only_enabled": true,
+     "web_chat_aftercare_detached_enabled": true,
+     "scheduler_partition_interval_seconds": 86400,
+     "scheduler_web_turns_interval_seconds": 21600,
+     "search_filters_only_fallback_enabled": true,
+     "search_guessed_filter_rescue_enabled": true,
+     "answer_plan_critic_coverage_threshold": 0.99,
+     "conversation_sensitive_memory_enabled": false,
+     "search_price_bound_provenance_enabled": true,
+     "admission_max_per_business_distributed": 6,
+     "search_diversify_subject_aware_enabled": true,
+     "reference_resolver_v2_shortcuts_enabled": true,
+     "search_fill_from_subject_filter_enabled": true,
+     "search_guessed_filter_coherence_enabled": true,
+     "search_subshelf_homograph_guard_enabled": true,
+     "search_text_gate_when_redundant_enabled": true
+    },
+    "config_revision": "e361af6a5ac8"
+   },
+   "event": {
+    "action": null,
+    "media_id": null,
+    "verified": false,
+    "channel_id": "ae254f0f-c60b-4ab4-b281-dd8a8490e82b",
+    "channel_kind": "webchat",
+    "content_type": "text",
+    "page_context": null,
+    "channel_account_id": "pub_b738dd1aa2ff2e0535b491792cc789d9"
+   },
+   "snapshot": {
+    "facts": [],
+    "state": {
+     "constraints": {},
+     "active_search": {
+      "fp": "527b96db2ea2172f",
+      "page": 0,
+      "pool": [
+       "df3b8f02-d8ab-49f8-96c0-63441890ce6b",
+       "661b2de9-38f9-4c8a-8cf9-08ef8b819cf8",
+       "4512d696-1297-4eb2-a0b3-7654c7e42ee5",
+       "b1df43ad-4164-4d30-b6ab-6217a3557af4",
+       "2f4ea3a1-4817-4b45-af03-1d8b747644e5",
+       "5e10b4eb-301f-4daa-9198-91a2637a3fd7",
+       "f8a8f535-2373-448a-9d98-e9ae3536ec8e",
+       "1d88296a-61a6-4fbe-a493-c58129ce7b10",
+       "e2579478-1738-44ba-8d80-343fae57fe8e",
+       "07352860-dce6-4a1d-8686-c0f8cc1ba1b7",
+       "f15bc6fa-51de-489a-a14c-12d86ad0eea6",
+       "229cd6c4-ce3a-4311-b4bf-69bb35b3af0d"
+      ],
+      "cursor": 7,
+      "filters": {
+       "brand": null,
+       "query": "perie pentru păr",
+       "category": "par",
+       "concerns": null,
+       "features": null,
+       "price_max": null,
+       "sort_mode": "relevance",
+       "product_name": null,
+       "in_stock_only": false,
+       "variant_label": null
+      }
+     },
+     "asked_intents": [],
+     "offered_chips": [
+      "compare:81202328-30a0-41c7-b331-b1756bf649f8:6aac7b4a-77e4-4a52-90b2-bac78131b889",
+      "link:661b2de9-38f9-4c8a-8cf9-08ef8b819cf8",
+      "pivot_shelf:category:par",
+      "detail:661b2de9-38f9-4c8a-8cf9-08ef8b819cf8",
+      "link:6aac7b4a-77e4-4a52-90b2-bac78131b889",
+      "detail:4512d696-1297-4eb2-a0b3-7654c7e42ee5",
+      "link:4512d696-1297-4eb2-a0b3-7654c7e42ee5",
+      "pivot_shelf:category:par-ingrijirea-parului",
+      "reviews:4512d696-1297-4eb2-a0b3-7654c7e42ee5",
+      "link:b1df43ad-4164-4d30-b6ab-6217a3557af4"
+     ],
+     "pending_question": null,
+     "displayed_products": [
+      {
+       "name": "LEE STAFFORD Smooth and Polish Paddle Brush",
+       "price": 65.0,
+       "product_id": "4512d696-1297-4eb2-a0b3-7654c7e42ee5"
+      },
+      {
+       "name": "LEE STAFFORD Coco Loco Blow Out Radial Brush",
+       "price": 70.0,
+       "product_id": "b1df43ad-4164-4d30-b6ab-6217a3557af4"
+      },
+      {
+       "name": "LEE STAFFORD Coco Loco Handbag- Paddle Brush",
+       "price": 55.0,
+       "product_id": "f8a8f535-2373-448a-9d98-e9ae3536ec8e"
+      }
+     ],
+     "search_constraints": {
+      "concerns": [
+       "perie pentru păr"
+      ],
+      "category_key": "par"
+     }
+    },
+    "locale": "ro",
+    "contact": {
+     "id": "9b7e692c-1d0c-42b6-a1c2-fc9d74d7acb1",
+     "locale": null,
+     "consent": {},
+     "profile": {},
+     "lifecycle": "new",
+     "lead_score": 20.0,
+     "business_id": "99fe1292-f9ed-469e-8183-f994ea5b59c0"
+    },
+    "history": [
+     {
+      "id": null,
+      "body": "aveti uscator de par?",
+      "author": "contact",
+      "payload": {
+       "turn_id": "aef00d07-519b-436f-8faa-6d25758c5dac",
+       "fragment_index": 0
+      },
+      "direction": "inbound",
+      "created_at": "2026-10-01T07:24:18.843859+00:00",
+      "content_type": "text"
+     },
+     {
+      "id": null,
+      "body": "Uscător de păr nu apare în produsele disponibile. Sunt însă produse pentru coafare fără căldură și pentru protejarea părului când folosești aparate termice.\n\n1. GLOV Cool Curl, 100,00 lei  ⭐5.0\n   Pentru bucle fără căldură, seara, cu cordeluță reutilizabilă și lavabilă.\n2. UNOVE Heat Guard Leave In Treatment, 135,00 lei  ⭐5.0\n   Potrivită pentru păr uscat sau deteriorat, lasă părul moale și ușor de coafat.\n3. EVY TECHNOLOGY UV/ Heat Hair Mousse, 150,00 lei  ⭐4.9\n   Dacă părul e deteriorat ori vopsit, spuma ajută la protecția termică și la menținerea strălucirii.\n4. COLOR WOW Dream Coat Spray sigilant pentru par, 320,00 lei  ⭐5.0\n   Pentru netezire și efect anti-frizz, spray-ul oferă și protecție termică.\n\nDacă vrei, putem continua cu: Compara GLOV Cool Curl cu UNOVE Heat Guard Leave In · Trimite-mi linkul la COLOR WOW Dream Coat Spray sigilant · Arata-mi ce ai la Par · Spune-mi mai multe despre COLOR WOW Dream Coat Spray · Trimite-mi linkul la UNOVE Heat Guard Leave In Treatment",
+      "author": "bot",
+      "payload": {
+       "shown": [
+        {
+         "name": "GLOV Cool Curl",
+         "price": 100.0,
+         "product_id": "81202328-30a0-41c7-b331-b1756bf649f8"
+        },
+        {
+         "name": "UNOVE Heat Guard Leave In Treatment",
+         "price": 135.0,
+         "product_id": "6aac7b4a-77e4-4a52-90b2-bac78131b889"
+        },
+        {
+         "name": "EVY TECHNOLOGY UV/ Heat Hair Mousse",
+         "price": 150.0,
+         "product_id": "dd67adc2-d143-4380-a251-d3691ad1722c"
+        },
+        {
+         "name": "COLOR WOW Dream Coat Spray sigilant pentru par",
+         "price": 320.0,
+         "product_id": "661b2de9-38f9-4c8a-8cf9-08ef8b819cf8"
+        }
+       ],
+       "turn_id": "aef00d07-519b-436f-8faa-6d25758c5dac",
+       "fragment_index": 0
+      },
+      "direction": "outbound",
+      "created_at": "2026-10-01T07:24:34.112307+00:00",
+      "content_type": "text"
+     },
+     {
+      "id": null,
+      "body": "dar o perie pentru par?",
+      "author": "contact",
+      "payload": {
+       "turn_id": "98f0982f-b736-45ea-90f4-d2c38be4d305",
+       "fragment_index": 0
+      },
+      "direction": "inbound",
+      "created_at": "2026-10-01T07:24:34.894724+00:00",
+      "content_type": "text"
+     },
+     {
+      "id": null,
+      "body": "Da, am găsit perii pentru păr: una cu peri flexibili din nylon și pernă cu aer pentru descurcare, una pentru coafare netedă și una pentru retușuri rapide. Au și ulei de cocos variantele Coco Loco.\n\n1. LEE STAFFORD Smooth and Polish Paddle Brush, 65,00 lei  ⭐4.8\n   Pentru descurcarea părului umed sau uscat, cu peri flexibili din nylon și pernă cu aer.\n2. LEE STAFFORD Coco Loco Blow Out Radial Brush, 70,00 lei  ⭐5.0\n   Când coafezi părul și vrei un finisaj neted, cu ulei de cocos și peri din nailon.\n3. LEE STAFFORD Coco Loco Handbag- Paddle Brush, 55,00 lei  ⭐4.9\n\nDacă vrei să descurci părul umed sau uscat, alege LEE STAFFORD Smooth and Polish Paddle Brush. Pentru coafare netedă, mergi pe Coco Loco Blow Out Radial Brush, iar pentru retușuri rapide, pe Coco Loco Handbag-Paddle Brush.\n\nSau, dacă preferi: Spune-mi mai multe despre LEE STAFFORD Smooth and Polish · Trimite-mi linkul la LEE STAFFORD Smooth and Polish · Arata-mi ce ai la Ingrijirea parului · Ce spun recenziile despre LEE STAFFORD Smooth and Polish · Trimite-mi linkul la LEE STAFFORD Coco Loco Blow Out",
+      "author": "bot",
+      "payload": {
+       "shown": [
+        {
+         "name": "LEE STAFFORD Smooth and Polish Paddle Brush",
+         "price": 65.0,
+         "product_id": "4512d696-1297-4eb2-a0b3-7654c7e42ee5"
+        },
+        {
+         "name": "LEE STAFFORD Coco Loco Blow Out Radial Brush",
+         "price": 70.0,
+         "product_id": "b1df43ad-4164-4d30-b6ab-6217a3557af4"
+        },
+        {
+         "name": "LEE STAFFORD Coco Loco Handbag- Paddle Brush",
+         "price": 55.0,
+         "product_id": "f8a8f535-2373-448a-9d98-e9ae3536ec8e"
+        }
+       ],
+       "turn_id": "98f0982f-b736-45ea-90f4-d2c38be4d305",
+       "fragment_index": 0
+      },
+      "direction": "outbound",
+      "created_at": "2026-10-01T07:24:49.193872+00:00",
+      "content_type": "text"
+     },
+     {
+      "id": null,
+      "body": "ok atunci un ulei pentru varfuri",
+      "author": "contact",
+      "payload": {
+       "turn_id": "980466bd-957c-4f77-a145-ea7982e5a497",
+       "fragment_index": 0
+      },
+      "direction": "inbound",
+      "created_at": "2026-10-01T07:24:49.924218+00:00",
+      "content_type": "text"
+     }
+    ],
+    "summary": null,
+    "bot_active": true,
+    "shadow_mode": false,
+    "state_version": 2,
+    "inbound_msg_id": "f333c606-0830-47b6-89d2-e7c9afa7a251",
+    "conversation_id": "47ac5619-5348-4cd0-bc29-ec1c7b0aee88"
+   }
+  },
+  "kernel_dark": {
+   "ms": 661.5,
+   "error": null,
+   "plans": 1,
+   "truth": {
+    "needs": [],
+    "shelf": "par",
+    "types": [],
+    "type_learned": false
+   },
+   "executor": "search",
+   "searched": true,
+   "kernel_ids": [
+    "82400971-7e88-4f4a-a869-adb1890ee7d2",
+    "85c5dfe5-5a25-446f-9c36-8b9582c7d209",
+    "06851099-1e97-48b2-b75f-5e7c31511f58",
+    "464cab25-e87a-491f-9b29-911c4215d9ef",
+    "b5f887c7-cb90-432f-ac49-d27809ab7eb3",
+    "e7c2fabb-b447-4890-a30d-2979c5829081"
+   ],
+   "lexical_step": "strict",
+   "state_v2_write": false
+  },
+  "rich_handles": {
+   "P1": "82400971-7e88-4f4a-a869-adb1890ee7d2",
+   "P2": "85c5dfe5-5a25-446f-9c36-8b9582c7d209",
+   "P3": "06851099-1e97-48b2-b75f-5e7c31511f58",
+   "P4": "464cab25-e87a-491f-9b29-911c4215d9ef",
+   "P5": "b5f887c7-cb90-432f-ac49-d27809ab7eb3",
+   "P6": "e7c2fabb-b447-4890-a30d-2979c5829081"
+  }
+ }
+}
