@@ -1397,6 +1397,14 @@ picat ⇒ ancora ecranului. Pe drum: `RoutineSpec.moment_key` rezolvă „seara"
 nu mai cere SPF). Flag `CHEAPER_NAMED_ANCHOR_ENABLED` (ON). Card:
 [`tasks/stage1/NX-371.md`](tasks/stage1/NX-371.md); probă: `pytest tests/test_nx371_cheaper_named_item.py -q`.
 
+**NX-376 — un raft numit prin cheia lui nu mai pierde în fața unui subraft cu aceeași etichetă.** Setul
+`kernel-live-2026-10-01` (clasa A4): «de corp» ⇒ `category = corp`, iar `vocabulary.resolve` (cheile
+și etichetele în același index, nodul cel mai adânc câștigă) alegea subraftul «Ingrijire personala >
+Corp» (un produs) în locul rădăcinii `corp` (cremele de mâini și de corp). Acum, pe potrivirea exactă,
+cheia bate eticheta; între etichete regula rămâne. Pe vocabularul real se schimbă 2 termeni din 830
+(«corp», «Corp»). Card: [`tasks/stage1/NX-376.md`](tasks/stage1/NX-376.md); probă:
+`pytest tests/test_nx376_shelf_key_beats_label.py -q`.
+
 **NX-360 — stocul și prețurile SOLE se resincronizează din paginile live.** Catalogul era o fotografie
 din 2026-08-28: cele 391 de produse `out_of_stock` aveau prețul voucherului WELCOME15 drept preț de
 listă (scraperul cădea pe `offers.price` din JSON-LD când pagina epuizată nu arăta rândul de preț), iar

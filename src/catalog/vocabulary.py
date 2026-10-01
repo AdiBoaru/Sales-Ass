@@ -545,7 +545,13 @@ def resolve(
     idx = _index(entries)
 
     if hits := idx.get(norm):
-        return _from_hits(_best(hits), norm, dimension, "exact")
+        # NX-376: o potrivire pe CHEIE bate una pe ETICHETĂ. Cheia identifică nodul; eticheta nu
+        # (pe `sole-ro` 21 din 45 de etichete de raft se repetă). Rularea din 2026-10-01: «de corp»
+        # ⇒ `corp` (rădăcina, cheie exactă) pierdea în fața subraftului «Ingrijire personala > Corp»
+        # (aceeași etichetă, dar mai adânc, un singur produs), iar cremele de corp nu se mai găseau.
+        # Doar între etichete rămâne regula de azi: cel mai specific, ambiguu la aceeași adâncime.
+        by_key = [e for e in hits if _norm(e.key) == norm]
+        return _from_hits(_best(by_key or hits), norm, dimension, "exact")
 
     if overlay:
         target = overlay.get(norm)
