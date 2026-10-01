@@ -38,6 +38,8 @@ DEFAULT_REFERENCE_DIMENSIONS: tuple[str, ...] = ("brand", "product_type")
 #: dar niciuna nu s-a putut servi ca răspuns, deci fraza nu afirmă că lipsește),
 #: `store_info_unavailable` (toate citirile au picat) și `store_info_rest_unconfirmed` (după
 #: regulile servite, pentru restul întrebării).
+#: `need_unverifiable` (NX-374, `kernel.v6.1`): o nevoie spusă pe care catalogul nu o poate
+#: verifica.
 KERNEL_SENTENCE_CODES: frozenset[str] = frozenset(
     {
         "not_exact_match",
@@ -55,6 +57,7 @@ KERNEL_SENTENCE_CODES: frozenset[str] = frozenset(
         "store_info_unconfirmed",
         "store_info_unavailable",
         "store_info_rest_unconfirmed",
+        "need_unverifiable",
     }
 )
 #: Singurele coduri cu un marcator, fiecare exact o dată (loaderul respinge orice alt marcator):

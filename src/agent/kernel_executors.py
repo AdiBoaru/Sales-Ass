@@ -162,12 +162,16 @@ def _required_sentence(ctx: TurnContext, code: str) -> str:
     return phrase
 
 
-def _disclosure_text(ctx: TurnContext, planned: PlannedTurn) -> str:
-    """Frazele dezvăluirilor planului, în ordine, fiecare o singură dată. Fail-open."""
+def _disclosure_text(
+    ctx: TurnContext, planned: PlannedTurn, skip: frozenset[int] = frozenset()
+) -> str:
+    """Frazele dezvăluirilor planului, în ordine, fiecare o singură dată. Fail-open. `skip` =
+    planurile care n-au servit: dezvăluirile lor nu descriu răspunsul (NX-374, recenzia: pe un coș
+    picat, căutarea dependentă nu rulează, deci „n-am ținut cont la alegere" ar fi fals)."""
     pack = getattr(ctx.business, "domain_pack", None)
     out: list[str] = []
-    for _index, code in planned.disclosures:
-        if code in _REQUIRED:
+    for index, code in planned.disclosures:
+        if code in _REQUIRED or index in skip:
             continue
         phrase = kernel_sentence(pack, ctx.language, code)
         if phrase is None:
@@ -657,7 +661,8 @@ async def _serve_mutation_then(
     no_results = (
         second.executor == "search" and ctx.retrieval is not None and not ctx.retrieval.products
     )
-    disclosure = "" if no_results else _disclosure_text(ctx, planned)
+    unserved = frozenset() if served and ctx.reply is not None else frozenset({1})
+    disclosure = "" if no_results else _disclosure_text(ctx, planned, unserved)
     if served and ctx.reply is not None:
         # ordinea citită de client: mutația, apoi dezvăluirile, apoi răspunsul celui de-al doilea
         _prefix(ctx, disclosure)

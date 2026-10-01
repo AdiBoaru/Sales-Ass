@@ -89,6 +89,9 @@ DISCLOSURES: tuple[str, ...] = (
     "invalid_target",  # actul a fost scos de regula 0 a porții (țintă nedeclarată / proprietate)
     "dropped_act",  # al treilea act al turului, raportat ca nefăcut
     "no_target",  # un act care cere o țintă a rămas fără niciuna
+    # `kernel.v6.1` (NX-374): o nevoie SPUSĂ în tur (`explicit`) pe care nicio fațetă a catalogului
+    # nu o poate verifica (golul `unsupported_need`): clientul află că n-a contat la alegere.
+    "need_unverifiable",
 )
 #: Vocabularul ÎNCHIS al lui `PlannedTurn.gaps`: ce n-a putut purta `SearchArgs`, plus coborârile
 #: care nu sunt tăcere (P6): o întrebare fără text, o căutare fără cuvinte, un subiect lipsă.
@@ -391,6 +394,40 @@ class _Planner:
         if index == TURN_LEVEL or (index, code) not in self.disclosures:
             self.disclosures.append((index, code))
 
+    def _unsupported(self, need: Need, index: int) -> None:
+        """NX-374 (`kernel.v6.1`): golul `unsupported_need`, plus dezvăluirea `need_unverifiable`
+        pe planul `index` când nevoia a fost SPUSĂ chiar în acest tur. Rularea din 2026-10-01: «să
+        fie și fără parfum» a ajuns în stare, plannerul a scris golul, iar clientul a primit șase
+        creme fără să afle că cerința nu se putea verifica. Dezvăluirea e a PLANULUI care caută
+        (recenzia: pe un coș picat, căutarea dependentă nu rulează, deci nimic n-a fost ales), iar o
+        nevoie din ture anterioare nu se re-dezvăluie."""
+        self._gap("unsupported_need")
+        if self._spoken_now(need):
+            self._disclose(index, "need_unverifiable")
+
+    def _spoken_now(self, need: Need) -> bool:
+        """Nevoia a fost scrisă de reducer în ACEST tur (`updated_revision`), dintr-o schimbare
+        ACCEPTATĂ, `explicit`, constructivă (`set`/`add`/`replace`) pe dimensiunea ei. O nevoie
+        relaxată la `false` nu e o cerință de verificat. Fără `checked` (teste, sonde vechi),
+        schimbările brute ale turului."""
+        if need.normalized_value is False or need.updated_revision != self.state.revision:
+            return False
+        key = need.key
+        dimension = self.needs.dimension_of(key) or key
+        constructive = ("set", "add", "replace")
+        if self.checked is None:
+            return any(
+                ch.dimension in (key, dimension) and ch.op in constructive
+                for ch in self.interp.changes
+            )
+        return any(
+            c.rejected is None
+            and c.provenance == "explicit"
+            and c.change.op in constructive
+            and c.dimension in (key, dimension)
+            for c in self.checked
+        )
+
     def _refs_of(self, act: Act) -> list[ResolvedRef]:
         return [self.resolved[t] for t in act.targets if t in self.resolved]
 
@@ -631,10 +668,10 @@ class _Planner:
             return self._plan("cart", list(dict.fromkeys(ids)))
         # `bundle`: executorul îl declară pachetul (SOLE: `routine_plan`); fără el, o căutare.
         if bundle_executor(self.state, pack=self.pack, vocab=self.vocab) is not None:
-            return self._bundle(act)
+            return self._bundle(act, index)
         return self._search(act, index)
 
-    def _bundle(self, act: Act) -> TurnPlan:
+    def _bundle(self, act: Act, index: int) -> TurnPlan:
         """`bundle` (D3, `kernel.v2.1`): familia rutinei din subiect și pachet
         (`routine_family`), argumentele din STARE ca la căutare (nevoile dure, bugetul dur,
         preferințele; I2, I7) și ancora = prima țintă `exact` a actului. Fără familie declarată,
@@ -647,7 +684,7 @@ class _Planner:
         # Rutina NU relaxează filtrele pe pași (`routine_tools`), deci o nevoie spusă, dar
         # ne-`enforce_ready`, rămâne ordonare aici (recenzia NX-352: «rutina de seară» ar fi exclus
         # produsele `am_pm` din fiecare pas).
-        args = self._search_args(phrase, act, product_name=None, relaxable=False)
+        args = self._search_args(phrase, act, product_name=None, relaxable=False, index=index)
         if args.price_max is not None and not self._sum_asked_this_turn():
             # bugetul conversației (al unui produs, «o cremă sub 50») nu plafonează suma rutinei
             args = args.model_copy(update={"price_max": None})
@@ -740,8 +777,11 @@ class _Planner:
         # Argumentele întâi: ele spun ce dimensiuni intră CHIAR în căutare (`carried`), deci ce
         # cuvinte ale cererii sunt deja purtate de un filtru sau de o preferință.
         before = list(self.gaps)
+        disclosed = list(self.disclosures)
         carried: dict[str, str] = {}
-        args = self._search_args(_PENDING, act, product_name=product_name, carried=carried)
+        args = self._search_args(
+            _PENDING, act, product_name=product_name, carried=carried, index=index
+        )
         subject = self._subject_label()
         topic = self.state.topic
         shelf_label = self._shelf_label()
@@ -775,6 +815,7 @@ class _Planner:
             phrase = self._filter_label(args)
         if not phrase:
             self.gaps[:] = before  # fără căutare, golurile argumentelor nu spun nimic
+            self.disclosures[:] = disclosed  # nici dezvăluirile lor (NX-374)
             self._gap("no_query")
             return self._plan("reply_only")
         return self._plan("search", (), args.model_copy(update={"query": phrase}))
@@ -815,6 +856,7 @@ class _Planner:
         product_name: str | None,
         carried: dict[str, str] | None = None,
         relaxable: bool = True,
+        index: int = 0,
     ) -> SearchArgs:
         """SINGURUL constructor de `SearchArgs` din kernel (I2). Totul vine din starea redusă și din
         semnalele turului; ce nu are câmp merge în `gaps`. `carried` (NX-352) primește, pe fiecare
@@ -865,7 +907,7 @@ class _Planner:
                 if isinstance(value, str) and value and value not in rank:
                     rank.append(value)
             elif not isinstance(value, str) or not value:
-                self._gap("unsupported_need")
+                self._unsupported(need, index)
             elif dimension == BRAND_DIMENSION:
                 if self._hard(need, dimension):
                     brand = value
@@ -885,7 +927,7 @@ class _Planner:
                     if self._on_attributes(dimension):
                         _prefer(dimension, value)
                     else:
-                        self._gap("unsupported_need")
+                        self._unsupported(need, index)
                 elif dimension in self.searchable or self._source_key(dimension) in self.searchable:
                     features.append(value)
                     carried[dimension] = "filter"
@@ -893,7 +935,7 @@ class _Planner:
                     concerns.append(value)
                     carried[dimension] = "filter"
             else:
-                self._gap("unsupported_need")
+                self._unsupported(need, index)
 
         for signal in self.ranking:
             value = signal.value
