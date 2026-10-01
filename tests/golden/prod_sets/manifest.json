@@ -9,5 +9,11 @@
   "conversations": 10,
   "messages": 42,
   "frozen": "2026-10-01, scris de un agent fără acces la analiza setului prod-2026-10-01; nu se citește și nu se rulează până la verdictul final"
+ },
+ "kernel-live-2026-10-01.json": {
+  "sha256": "01db25e140c08c6e2a19410421c1e0777b431ed73e875bc7cf64691bccb48c1a",
+  "conversations": 14,
+  "messages": 54,
+  "about": "seturi complexe pe mecanismele kernelului (kernel.v6.0), scrise pe 2026-10-01 dupa aprinderea kernelului 100% pe sole-ro; rulat pe productie"
  }
 }
