@@ -173,3 +173,118 @@ def test_turn_keeps_everything_any_evaluation_kept():
 def test_registry_blocks_retinoates_not_lookalikes(name, ingredients, blocked):
     p = {"id": "x", "name": name, "attributes": {"key_ingredients": ingredients}}
     assert (ci.check_product(p, frozenset({"pregnancy"})) is not None) is blocked
+
+
+# --- Recenzia adversarială ---------------------------------------------------------------------
+
+
+def _comparison(intro: str, closing: list[str] | None = None):
+    from src.models import Comparison, ComparisonColumn
+
+    return Comparison(
+        columns=[
+            ComparisonColumn(product_id="p1", name="SOME BY MI Yuja Niacin", price=110.0),
+            ComparisonColumn(product_id="p2", name="By Wishtrend Vitamin", price=95.0),
+        ],
+        rows=[],
+        intro=intro,
+        closing=list(closing or []),
+    )
+
+
+def test_comparison_reply_shows_the_sentence_on_web():
+    """P0: pe web, o comparație randează DOAR `comparison.intro`; fraza scrisă în `reply.text`
+    nu ajungea la client."""
+    from src.channels.web.render import render_web
+
+    kept = [{"id": "p1", "name": "SOME BY MI Yuja Niacin"}]
+    cmp = _comparison("Iată diferențele.", ["Dacă vrei hidratare, ia primul."])
+    ctx = _Ctx(Reply(text="Iată diferențele.", comparison=cmp), _decision(kept=kept))
+    enforce(ctx)
+    content = render_web(ctx.reply, "ro")["content"]
+    assert _sentence() in content
+    enforce(ctx)
+    assert render_web(ctx.reply, "ro")["content"].count(_sentence()) == 1
+
+
+def test_emptied_turn_keeps_a_faq_answer():
+    """P1: turul a citit și o regulă a magazinului (FAQ). Răspunsul nu se înlocuiește: fraza intră
+    în față, iar regula de livrare rămâne."""
+    from src.models import RetrievalResult
+
+    text = "Livrarea e gratuită peste 199 lei. Pentru retinol nu am găsit nimic potrivit."
+    ctx = _Ctx(Reply(text=text), _decision())
+    ctx.retrieval = RetrievalResult(products=[], read_beyond_catalog=True)
+    enforce(ctx)
+    assert ctx.reply.text.startswith(_sentence())
+    assert "Livrarea e gratuită peste 199 lei." in ctx.reply.text
+    assert ctx.events[-1][1]["outcome"] == "prepended"
+
+
+def test_emptied_turn_without_other_reads_is_still_replaced():
+    from src.models import RetrievalResult
+
+    ctx = _Ctx(Reply(text=C6_MODEL_TEXT), _decision())
+    ctx.retrieval = RetrievalResult(products=[], read_beyond_catalog=False)
+    enforce(ctx)
+    assert ctx.events[-1][1]["outcome"] == "replaced"
+
+
+def test_tool_run_reports_reads_beyond_the_catalog():
+    from src.agent.tool_executor import ToolRun
+
+    run = ToolRun(ctx=None, deps=None)  # type: ignore[arg-type]
+    run.called = ["search_products"]
+    assert run.read_beyond_catalog is False
+    run.called.append("faq_lookup")
+    assert run.read_beyond_catalog is True
+
+
+@pytest.mark.parametrize(
+    "card, text, survives",
+    [
+        # (a) o marcă de două litere numește cardul
+        ("VT Cica Cream", "VT Cica Cream e blândă, dar verifică cu farmacistul.", True),
+        # (d) „ser” ca subșir al lui „Observ” nu numește nimic
+        ("Ser Bakuchiol", "Observ că întrebi de retinol, întreabă farmacistul.", False),
+    ],
+)
+def test_referral_keep_test_is_on_whole_words(card, text, survives):
+    kept = [{"id": "p1", "name": card}]
+    ctx = _Ctx(Reply(text=text, products=kept), _decision(kept=kept))
+    enforce(ctx)
+    assert (text in ctx.reply.text) is survives
+    assert ctx.reply.text.count("farmacist") == 1 + int(survives)
+
+
+def test_referral_after_a_number_is_split_off():
+    """(b) fraza de după „SPF 50.” e o propoziție separată: se scoate doar trimiterea."""
+    kept = [{"id": "p1", "name": "SOME BY MI Yuja Niacin"}]
+    text = "SOME BY MI Yuja Niacin merge ziua cu SPF 50. Întreabă și farmacistul."
+    ctx = _Ctx(Reply(text=text, products=kept), _decision(kept=kept))
+    enforce(ctx)
+    assert "SOME BY MI Yuja Niacin merge ziua cu SPF 50." in ctx.reply.text
+    assert "Întreabă și farmacistul" not in ctx.reply.text
+
+
+def test_numbered_list_is_never_cut():
+    """(c) o trimitere într-un element de listă numerotată rămâne: scoaterea ar lăsa o gaură în
+    numerotare."""
+    kept = [{"id": "p1", "name": "SOME BY MI Yuja Niacin"}]
+    text = "Rutina ta:\n1. Curățare blândă.\n2. Întreabă medicul sau farmacistul.\n3. Cremă."
+    ctx = _Ctx(Reply(text=text, products=kept), _decision(kept=kept))
+    enforce(ctx)
+    assert "1. Curățare blândă.\n2. Întreabă medicul sau farmacistul.\n3. Cremă." in ctx.reply.text
+
+
+def test_sentence_event_is_emitted_once_per_turn():
+    """P3: runnerul cheamă `enforce` de două ori pe un tur cu ieșire timpurie."""
+    kept = [{"id": "p1", "name": "SOME BY MI Yuja Niacin"}]
+    ctx = _Ctx(Reply(text="SOME BY MI e bun.", products=kept), _decision(kept=kept))
+    enforce(ctx)
+    enforce(ctx)
+    assert [k for k, _ in ctx.events].count("safety_sentence_enforced") == 1
+    ctx2 = _Ctx(Reply(text=C6_MODEL_TEXT), _decision())
+    enforce(ctx2)
+    enforce(ctx2)
+    assert [k for k, _ in ctx2.events].count("safety_sentence_enforced") == 1

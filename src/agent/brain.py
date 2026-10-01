@@ -1405,7 +1405,11 @@ async def run_main_brain(
     run.retrieved[:] = SafetyPolicy.for_turn(ctx).gate(
         ctx, run.retrieved, purpose="retrieval_final"
     )[0]
-    ctx.retrieval = RetrievalResult(products=list(run.retrieved), source="tools")
+    ctx.retrieval = RetrievalResult(
+        products=list(run.retrieved),
+        source="tools",
+        read_beyond_catalog=run.read_beyond_catalog,
+    )
 
     context = build_answer_plan_context(
         business_id=ctx.business.id,

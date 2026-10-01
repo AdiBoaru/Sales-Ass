@@ -19,6 +19,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from src.catalog.render_text import display_name, name_keys, unique_prefixes
 from src.safety import messages
 
 # Amprenta frazei garantate → detectăm idempotent dacă trimiterea la medic e DEJA în text (a
@@ -83,13 +84,15 @@ def safety_sentence_for(decision: Any, locale: str) -> str:
 
 
 def enforce(ctx: Any) -> None:
-    """Aplică contractul pe reply-ul final. Chemat de runner, o singură dată pe tur.
+    """Aplică contractul pe reply-ul final. Chemat de runner (de două ori pe un tur cu ieșire
+    timpurie: idempotent, cu UN singur eveniment).
 
     Face DOUĂ lucruri, în ordine:
       1. **scrub**: dacă un produs blocat a ajuns totuși în cardurile reply-ului (cale nouă care a
          uitat gate-ul), îl scoatem — clientul nu-l vede, chiar dacă un bug l-a adus până aici;
       2. **garanția**: prepend-ăm fraza de siguranță (recunoaștere + ce s-a omis + medic), o
-         singură dată, localizată. Fără ea, contractul ar depinde de ce a scris modelul.
+         singură dată, localizată, în FIECARE câmp pe care îl randează un canal (`text`,
+         `rich.intro`, `comparison.intro`). Fără ea, contractul ar depinde de ce a scris modelul.
     """
     decision = getattr(ctx, "safety_decision", None)
     reply = getattr(ctx, "reply", None)
@@ -105,13 +108,20 @@ def enforce(ctx: Any) -> None:
     if not sentence:
         return
     rich = getattr(reply, "rich", None)
-    # „Golit" = excluderea a lăsat setul turului GOL (nimic păstrat) și nu e niciun card. Un răspuns
-    # doar text care recomandă un produs păstrat nu e golit (`test_enforce_prepends_sentence...`).
+    cmp = getattr(reply, "comparison", None)
+    if _already_enforced(reply, rich, cmp, sentence):
+        # A doua trecere a runnerului (ieșire timpurie): nimic de adăugat, nimic de raportat.
+        return
+    # „Golit" = excluderea a lăsat setul turului GOL (nimic păstrat), nu e niciun card, nicio
+    # întrebare deschisă, iar turul n-a citit nimic în afara catalogului (o regulă a magazinului,
+    # o comandă): atunci proza modelului vorbește doar despre un set golit de noi.
+    retrieval = getattr(ctx, "retrieval", None)
     emptied = (
         bool(getattr(decision, "blocked", None))
         and not getattr(decision, "kept", None)
         and not _has_cards(reply)
         and not getattr(reply, "pending_question", None)
+        and not getattr(retrieval, "read_beyond_catalog", False)
     )
     if emptied:
         # NX-367: excluderea a golit setul, deci proza modelului vorbește despre un set golit de
@@ -124,7 +134,7 @@ def enforce(ctx: Any) -> None:
                 rich.education = None
         outcome = "replaced"
     else:
-        names = _card_brands(reply)
+        names = _card_names(reply, locale)
         reply.text = _with_sentence(reply.text, sentence, names)
         if rich is not None and hasattr(rich, "intro"):
             # Intro-ul rich e ce vede clientul sus pe canalele bogate; `text` e aplatizarea. Fraza
@@ -133,6 +143,14 @@ def enforce(ctx: Any) -> None:
             rich.intro = _with_sentence(rich.intro, sentence, names)
             if getattr(rich, "education", None):
                 rich.education = _without_referrals(rich.education, names) or None
+        if cmp is not None and hasattr(cmp, "intro"):
+            # Recenzia NX-367 (P0): pe web o comparație randează DOAR `comparison.intro` (plus
+            # tabelul), nu `reply.text`, deci fraza nu ajungea la client.
+            cmp.intro = _with_sentence(cmp.intro, sentence, names)
+            if getattr(cmp, "subtitle", None):
+                cmp.subtitle = _without_referrals(cmp.subtitle, names) or None
+            if getattr(cmp, "closing", None):
+                cmp.closing = [c for c in (_without_referrals(p, names) for p in cmp.closing) if c]
         outcome = "prepended"
     ctx.emit(
         "safety_sentence_enforced",
@@ -143,45 +161,101 @@ def enforce(ctx: Any) -> None:
     )
 
 
-#: Granița de propoziție, cu ordinalele de listă exceptate („1. Curățare"), ca `compose._sentences`.
-_SENTENCE_SPLIT = re.compile(r"(?<![0-9].)(?<=[.!?])\s+")
+def _already_enforced(reply: Any, rich: Any, cmp: Any, sentence: str) -> bool:
+    """Fraza NOASTRĂ e deja în fiecare câmp randat (a doua trecere a runnerului, retry)."""
+    fields = [reply.text]
+    if rich is not None and hasattr(rich, "intro"):
+        fields.append(rich.intro)
+    if cmp is not None and hasattr(cmp, "intro"):
+        fields.append(cmp.intro)
+    return all(f and sentence in f for f in fields)
+
+
+#: Granița de propoziție. NU `worker.compose._sentences`: acolo orice punct după o cifră e
+#: excepție (pentru „1. Curățare"), deci „…cu SPF 50. Întreabă și farmacistul." rămânea o singură
+#: propoziție și se scotea cu tot cu recomandare. Aici se taie peste tot, iar un ordinal de listă
+#: (cifra singură sau după „:", „,", „(") se lipește înapoi de ce urmează (`_sentences`).
+_SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+")
+_ORDINAL_TAIL = re.compile(r"(?:^|[:,(]\s*)\d{1,3}[.)]$")
+#: Element de listă numerotată: nimic nu se scoate din el, altfel numerotarea rămâne cu o gaură.
+_NUMBERED = re.compile(r"^\s*\d{1,3}[.)]\s")
+
+
+def _sentences(line: str) -> list[str]:
+    out: list[str] = []
+    for part in _SENTENCE_SPLIT.split(line):
+        if out and _ORDINAL_TAIL.search(out[-1]):
+            out[-1] = f"{out[-1]} {part}"
+        else:
+            out.append(part)
+    return out
 
 
 def _has_cards(reply: Any) -> bool:
     rich = getattr(reply, "rich", None)
-    return bool(getattr(reply, "products", None)) or bool(getattr(rich, "items", None))
+    cmp = getattr(reply, "comparison", None)
+    return (
+        bool(getattr(reply, "products", None))
+        or bool(getattr(rich, "items", None))
+        or bool(getattr(cmp, "columns", None))
+    )
 
 
-def _card_brands(reply: Any) -> tuple[str, ...]:
-    """Primul cuvânt din numele fiecărui card (marca, pe catalogul real), ca o propoziție care
-    numește un produs să nu fie scoasă doar fiindcă pomenește și medicul."""
-    out = []
-    for p in getattr(reply, "products", None) or []:
-        first = str(p.get("name") or "").split(" ", 1)[0].strip().lower()
-        if len(first) >= 3:
-            out.append(first)
-    return tuple(out)
+def _card_names(reply: Any, locale: str | None) -> tuple[tuple[str, ...], ...]:
+    """Cheile de cuvinte (NX-318) prin care o propoziție NUMEȘTE un card de pe ecran, ca să nu fie
+    scoasă doar fiindcă pomenește și medicul.
+
+    Per card, cel mai scurt prefix al numelui scurt care nu e cuvânt gol pe locale
+    (`unique_prefixes` pe un singur nume): aici întrebarea e DACĂ propoziția numește un card, nu
+    CARE, deci două carduri SOME BY MI nu fac „SOME BY MI e bun" anonim. Potrivirea e pe cuvinte
+    întregi (`name_keys`), nu pe subșir: „ser" nu numește nimic în „Observ"."""
+    products = getattr(reply, "products", None) or []
+    names: list[str] = [str((p or {}).get("name") or "") for p in products]
+    rich = getattr(reply, "rich", None)
+    names += [str(getattr(it, "name", "") or "") for it in (getattr(rich, "items", None) or [])]
+    cmp = getattr(reply, "comparison", None)
+    names += [str(getattr(c, "name", "") or "") for c in (getattr(cmp, "columns", None) or [])]
+    out: set[tuple[str, ...]] = set()
+    for name in names:
+        prefix = unique_prefixes({"_": display_name(name)}, locale=locale).get("_")
+        if prefix:
+            out.add(prefix)
+    return tuple(sorted(out))
 
 
-def _without_referrals(text: str | None, keep_if_names: tuple[str, ...] = ()) -> str:
+def _names_a_card(sentence: str, names: tuple[tuple[str, ...], ...]) -> bool:
+    words = name_keys(sentence)
+    return any(
+        words[i : i + len(prefix)] == prefix
+        for prefix in names
+        for i in range(len(words) - len(prefix) + 1)
+    )
+
+
+def _without_referrals(text: str | None, keep_if_names: tuple[tuple[str, ...], ...] = ()) -> str:
     """Scoate propozițiile cu trimitere la medic scrise de model (contractul i le interzice: o
-    scrie codul, o dată). O propoziție care numește și un produs de pe ecran rămâne: pierderea unei
-    recomandări ar costa mai mult decât o trimitere în plus (declarat)."""
+    scrie codul, o dată). Rămân: o propoziție care numește un produs de pe ecran (pierderea unei
+    recomandări ar costa mai mult decât o trimitere în plus, declarat) și orice element de listă
+    numerotată (o gaură în numerotare ar strica rutina)."""
     if not text:
         return ""
     lines = []
     for line in text.split("\n"):
-        kept = []
-        for sent in _SENTENCE_SPLIT.split(line):
-            low = sent.lower()
-            if already_has_sentence(sent) and not any(n in low for n in keep_if_names):
-                continue
-            kept.append(sent)
+        if not already_has_sentence(line) or _NUMBERED.match(line):
+            lines.append(line)
+            continue
+        kept = [
+            sent
+            for sent in _sentences(line)
+            if not already_has_sentence(sent)
+            or _NUMBERED.match(sent)
+            or _names_a_card(sent, keep_if_names)
+        ]
         lines.append(" ".join(kept).strip())
     return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
 
 
-def _with_sentence(text: str | None, sentence: str, names: tuple[str, ...] = ()) -> str:
+def _with_sentence(text: str | None, sentence: str, names: tuple[tuple[str, ...], ...] = ()) -> str:
     """Textul cu fraza garantată în față, o singură dată. Idempotent pe fraza NOASTRĂ (retry,
     re-render); trimiterile modelului se scot, ca avertismentul să nu apară de două ori."""
     if text and sentence in text:
