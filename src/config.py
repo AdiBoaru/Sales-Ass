@@ -634,6 +634,26 @@ class Settings(BaseSettings):
     search_resume_excludes_subject_seen_enabled: bool = Field(
         default=True, validation_alias="SEARCH_RESUME_EXCLUDES_SUBJECT_SEEN_ENABLED"
     )
+    # NX-372 — un tur care a chemat DOAR unelte de reguli ale magazinului (`STORE_READ_TOOLS`, azi
+    # `faq_lookup`; nicio unealtă de catalog) și n-a putut răspunde din ele nu mai primește
+    # „Momentan n-am găsit produse potrivite": nu a căutat niciun produs. Primește o frază a
+    # pachetului (`kernel_sentences.store_info_*`) care spune ce s-a citit de fapt: nicio regulă,
+    # reguli care nu s-au putut servi, sau o citire picată; după reguli servite parțial, fraza
+    # pentru rest, fără mesajul de produse. Rularea pe producție din 2026-10-01: «livrați și în
+    # Republica Moldova?» și «cât fac toate în coș?». ON (defect măsurat); OFF = mesajul de
+    # produse, byte-identic.
+    store_info_fallback_enabled: bool = Field(
+        default=True, validation_alias="STORE_INFO_FALLBACK_ENABLED"
+    )
+    # NX-373 — pe un tur MIXT (produse + o regulă a magazinului citită prin `faq_lookup`), regulile
+    # pe care proza modelului le redă și pe care clientul le-a întrebat se adaugă în cuvintele
+    # magazinului după compunerea bogată, iar compunerea primește nota că partea de magazin nu e a
+    # ei. Rularea din 2026-10-01: proza avea regula de livrare corectă, compunerea bogată (care nu
+    # vede regulile) a scris „Nu am informații despre costul livrării". ON (defect măsurat); OFF =
+    # compunerea de dinainte, byte-identic.
+    mixed_turn_store_rules_enabled: bool = Field(
+        default=True, validation_alias="MIXED_TURN_STORE_RULES_ENABLED"
+    )
     # NX-118: afirmație POZITIVĂ de stoc/disponibilitate („pe stoc", „in stock") validată
     # AVAILABILITY-aware — drop (rich) / invalid+retry+fallback (proză) DOAR dacă niciun produs
     # retrievat nu e pe stoc (in_stock/low_stock). `has_stock_claim` sare peste negat/viitor

@@ -77,7 +77,14 @@ from src.tools.catalog_tools import SearchArgs
 #: valoare de catalog (o singură fațetă) e filtru (`SearchArgs.exclude`), nu doar gol; (4) o limită
 #: de preț fără număr e o BANDĂ a turului (`price_band`), nu `unmapped`. Poarta de replay e
 #: DEROGATĂ, ca la v2.0-v5.0: niciun tur interpretat servit. Schema scrisă de model neschimbată.
-KERNEL_CONTRACT_VERSION = "kernel.v6.0"
+#: `kernel.v6.1` (NX-374, MINOR): o dezvăluire nouă a plannerului, `need_unverifiable`: o nevoie
+#: SPUSĂ în tur (`explicit`) pe care nicio fațetă nu o poate verifica (golul `unsupported_need`) se
+#: spune clientului, o dată. Vocabular închis aditiv; schema scrisă de model neschimbată.
+#: `kernel.v6.2` (NX-375, MINOR): un rând nou în tabelul plannerului. Un act `find` care numește un
+#: produs (o țintă `name`, sau o referință `name` nefolosită de altceva) e servit după resolver:
+#: `exact` ⇒ `detail` pe id-ul recitit, `ambiguous` pe ≤ 3 candidați ⇒ `detail` pe toți, altfel
+#: căutarea pe NUMELE ei, doar cu filtrele turului (golul `name_unscoped`). Schema neschimbată.
+KERNEL_CONTRACT_VERSION = "kernel.v6.2"
 
 # --- scrise de model ----------------------------------------------------------------------------
 

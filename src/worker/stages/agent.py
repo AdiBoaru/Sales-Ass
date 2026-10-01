@@ -720,23 +720,32 @@ class _ProseRoundGate:
     Profilul se calculează o singură dată, cu ACELAȘI selector ca NX-304/NX-315
     (`turn_profile.name_for_turn`), deci bucla, compunerea și raportul de formă nu pot numi turul
     în două feluri. Se ține minte ULTIMA decizie: dacă runda 1 n-a adus produse și runda 2 le aduce,
-    turul contează ca `search_only` (s-a sărit runda 3)."""
+    turul contează ca `search_only` (s-a sărit runda 3).
+
+    NX-373 (recenzia F2): uneltele se judecă pe TOT turul, nu pe ultima rundă. Cu `faq_lookup` în
+    runda 1 și `search_products` în runda 2, decizia pe rundă sărea proza, deși doar ea poartă ce a
+    citit runda 1 (compunerea bogată primește doar produsele), iar regula magazinului se pierdea.
+    „Turul a chemat doar căutarea" e o proprietate a turului. Cu `MIXED_TURN_STORE_RULES_ENABLED`
+    stins, decizia rămâne pe rundă (byte-identic)."""
 
     def __init__(self, ctx: TurnContext, run: ToolRun, *, is_order: bool) -> None:
         self._ctx = ctx
         self._run = run
         self._is_order = is_order
         self._profile: str | None = None
+        self._called: list[str] = []
         self.skipped = False
         self.reason = "no_tools"
 
     def __call__(self, called: list[str]) -> bool:
         if self._profile is None:
             self._profile = turn_profile.name_for_turn(self._ctx)
+        self._called.extend(called)
+        whole_turn = get_settings().mixed_turn_store_rules_enabled
         self.skipped, self.reason = _prose_round_redundant(
             is_order=self._is_order,
             profile=self._profile,
-            called=list(called),
+            called=list(self._called if whole_turn else called),
             has_products=bool(self._run.retrieved),
             search_ends=(
                 turn_profile.search_ends_turn_names()

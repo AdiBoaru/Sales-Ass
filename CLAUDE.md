@@ -63,7 +63,7 @@ gate-ul NX-210**. Direcția aprobată către care migrăm:
 
 **Înghețate până la GO-ul de la NX-210:** enforcement-ul QuerySpec/Match Gate (NX-188, NX-189).
 
-**Kernelul conversațional — contractul `kernel.v1.0` (înghețat 2026-09-25, NORMATIV; azi `kernel.v6.0`: MAJOR la v2.0, NX-336 PR B, sensul lui I5; minor la v2.1, NX-336 D3, `TurnPlan.family`; MAJOR la v3.0, NX-348, sensul unei schimbări de subiect; MAJOR la v4.0, NX-350, un tip spus vag devine umbrelă, nu tipul subiectului; MAJOR la v5.0, NX-352, nevoia spusă e filtru relaxabil, căutarea se compune din ce a validat kernelul, «mai ieftin» ambiguu = mediana; minor la v5.1, NX-349, fațetele da/nu; MAJOR la v6.0, NX-364, ordinalul după detaliu, flexiunea în proveniență, excluderea și banda de preț; porțile de replay derogate de Adi).**
+**Kernelul conversațional — contractul `kernel.v1.0` (înghețat 2026-09-25, NORMATIV; azi `kernel.v6.2`: MAJOR la v2.0, NX-336 PR B, sensul lui I5; minor la v2.1, NX-336 D3, `TurnPlan.family`; MAJOR la v3.0, NX-348, sensul unei schimbări de subiect; MAJOR la v4.0, NX-350, un tip spus vag devine umbrelă, nu tipul subiectului; MAJOR la v5.0, NX-352, nevoia spusă e filtru relaxabil, căutarea se compune din ce a validat kernelul, «mai ieftin» ambiguu = mediana; minor la v5.1, NX-349, fațetele da/nu; MAJOR la v6.0, NX-364, ordinalul după detaliu, flexiunea în proveniență, excluderea și banda de preț; minor la v6.1, NX-374, dezvăluirea `need_unverifiable`; minor la v6.2, NX-375, `find` caută pe numele produsului numit; porțile de replay derogate de Adi).**
 Sursa: [`docs/KERNEL-CONTRACT-v1.md`](docs/KERNEL-CONTRACT-v1.md); designul din care vine, ca
 referință: [`docs/KERNEL-DESIGN.md`](docs/KERNEL-DESIGN.md). Modelul scrie O interpretare a turului
 (`TurnInterpretation`: acte, schimbări de stare adresate prin handle, referințe, ambiguități); codul
@@ -579,6 +579,32 @@ pool-ului cererii; pe v5.1 cobora pe `unmapped` și ordona după „ft scump”.
 implicit (I16). Declarat: «par gras» n-are frază în pachet (date), calea v1 rămâne cu transcrierea în
 `concerns` (reparația ei e meniul NX-322). Card: [`tasks/stage1/NX-364.md`](tasks/stage1/NX-364.md);
 probă: `pytest tests/test_nx364_kernel_v6.py tests/test_kernel_references.py tests/test_kernel_planner.py -q`.
+
+**NX-374 — `kernel.v6.1` (minor): o cerință spusă pe care catalogul nu o poate verifica se spune
+clientului.** Setul `kernel-live-2026-10-01` (clasa D1): «să fie și fără parfum» ajungea în stare,
+plannerul scria golul `unsupported_need`, iar clientul primea șase creme fără să afle că cerința n-a
+contat. Golurile nu devin text; acum o nevoie SPUSĂ de client (sursa `user_explicit`) care cade în
+`unsupported_need` aduce și dezvăluirea `need_unverifiable`, cu fraza pachetului, înaintea
+răspunsului, pe PRIMA căutare care o poartă (spusă pe un tur fără căutare, se spune la următoarea),
+o singură dată pe conversație: memoria e `note_asked unverifiable:<cheie>` în `asked_questions`,
+scrisă de orchestrator doar dacă fraza a ajuns în răspuns. Golul apare doar unde `SearchArgs` n-are
+câmp pentru nevoie (fanion da/nu, fațetă fără atribut), deci fraza e adevărată prin construcție. O
+nevoie descrisă (`implicit`) sau inferată rămâne doar gol; o căutare abandonată (`no_query`) își
+scoate și dezvăluirea. Card:
+[`tasks/stage1/NX-374.md`](tasks/stage1/NX-374.md); probă: `pytest tests/test_nx374_need_unverifiable.py -q`.
+
+**NX-375 — `kernel.v6.2` (minor): un produs numit într-o cerere `find` e ce caută clientul.** Setul
+`kernel-live-2026-10-01` (clasa A3): «aveți ANUA Heartleaf 77 toner?» avea referința `name` declarată,
+dar `find.targets` gol; plannerul citea numele doar printre ținte, a căutat „toner", produsul (fără tip
+în catalog) n-a intrat în pool, iar clientul a aflat că „nu apare" (e în stoc la 30 de lei). Acum un
+`find` care numește un produs (o țintă `name` sau o referință `name` nefolosită de nimic altceva,
+aleasă de `references.find_name_reference`, comună cu poarta) e servit după resolver: `exact` ⇒
+`detail` pe id-ul recitit, `ambiguous` pe ≤ 3 candidați ⇒ `detail` pe toți, altfel căutarea pe
+numele lui, ca `detail`/`compare` pe un nume negăsit. Căutarea pe nume poartă doar filtrele spuse în
+tur (raftul, bugetul, nevoile și tipul vechi ies, cu golul `name_unscoped`), iar un nume singur e
+subiect pentru poartă. Declarat: o descriere etichetată `name` de model e căutată ca nume (niciun
+semnal structural n-o deosebește de un nume scris parțial). Card:
+[`tasks/stage1/NX-375.md`](tasks/stage1/NX-375.md); probă: `pytest tests/test_nx375_find_named_product.py -q`.
 
 **NX-238 — retrievalul trece printr-un PORT, iar candidatul e inert (verdict `NOT-READY`).**
 `src/retrieval/` e contractul stabil pe care îl consumă NX-239: `RetrievalPort` + `RetrievalBundle`
@@ -1373,6 +1399,22 @@ nu pornește pe un tur care a citit regulile. Replay-ul are statusul `shortened`
 prefix al înregistrării). Card: [`tasks/stage1/NX-369.md`](tasks/stage1/NX-369.md); probă:
 `pytest tests/test_nx369_text_paths.py -q`.
 
+**NX-373 — pe un tur mixt, partea de magazin e a codului, nu a compunerii bogate.** Setul
+`kernel-live-2026-10-01` (clasa A2): «arată-mi un cushion pentru ten gras și spune-mi cât costă
+livrarea» a citit produsele și regula de livrare, proza rundei 2 o avea corectă, iar compunerea
+bogată (care primește doar produsele) a scris „Nu am informații despre costul livrării", servit
+clientului. Acum regulile pe care proza le redă și pe care clientul le-a întrebat (testul NX-369, pe
+SUBIECTUL regulii: cuvintele comune întrebării și răspunsului ei, deci «cât costă un cushion» nu
+întreabă de livrare) se adaugă în cuvintele magazinului (pe compunerea bogată, pe recuperarea din
+catalog NX-302 și pe proză), înaintea unei întrebări finale despărțite sigur, niciodată înaintea
+textului de produs. Fără proză, regula întrebată se alege din sursele turului (`asked_rule`), iar
+runda de proză NX-312 se judecă pe uneltele întregului tur (un tur care a citit regulile nu e „doar
+căutare"). Propozițiile compunerii care sunt ale magazinului (peste jumătate din cuvinte, fără sume,
+în regulile servite, măcar unul din textul regulii, fără un produs numit sau prețul lui:
+`store_rules.drop_store_sentences`, date, nu o listă de cuvinte) ies pe loc, iar compunerea primește
+nota că partea de magazin nu e a ei. Flag `MIXED_TURN_STORE_RULES_ENABLED` (ON). Card:
+[`tasks/stage1/NX-373.md`](tasks/stage1/NX-373.md); probă: `pytest tests/test_nx373_mixed_turn_store_rules.py -q`.
+
 **NX-370 — o rafinare nu mai pierde produsul de pe ecran care o împlinește.** Pe c8 («fără
 sulfați» după un șampon fără sulfați afișat) modelul a cerut `features=["sulfate_free"]` (cod inventat,
 0 produse); relaxat ULTIMUL, el ținea pagina goală până ce scara arunca nevoia reală și raftul, iar
@@ -1427,6 +1469,22 @@ un context de siguranță apărut la mijlocul conversației, în loc de „sesiu
 `SEARCH_RESUME_EXCLUDES_SUBJECT_SEEN_ENABLED` (ON; stinse toate, pagina e cea de pe `main`). Carduri: [`tasks/stage1/NX-378.md`](tasks/stage1/NX-378.md),
 [`tasks/stage1/NX-377.md`](tasks/stage1/NX-377.md); probă: `pytest tests/test_nx377_unknown_facet_fill.py
 tests/test_nx378_resume_and_pool.py -q`.
+
+**NX-372 — un tur care a citit doar regulile magazinului nu mai spune „n-am găsit produse".** Setul
+`kernel-live-2026-10-01` (rulat pe producție, analiza în
+[`tasks/stage1/KERNEL-LIVE-2026-10-01.md`](tasks/stage1/KERNEL-LIVE-2026-10-01.md), clasa A1): la
+«livrați și în Republica Moldova?» și «cât fac toate în coș?» modelul a răspuns onest, validatorul a
+respins corect fraza, iar rezerva comună a vânzării fără produse („Momentan n-am găsit produse
+potrivite…") vorbea despre o căutare care nu avusese loc. Regula e structurală: un tur care n-a citit
+catalogul (`catalog_read`, NX-326) și a chemat DOAR unelte de reguli (`tools.base.STORE_READ_TOOLS`,
+azi `faq_lookup`; `RetrievalResult.store_only`) primește o frază a pachetului care spune ce s-a citit
+de fapt: `store_info_unconfirmed` când s-au citit reguli (fără să afirme că informația lipsește din
+ele), `store_info_unknown` când citirea n-a adus nicio regulă, `store_info_unavailable` când toate
+citirile au picat (`store_read_ok`); după reguli servite parțial (NX-369), regulile plus
+`store_info_rest_unconfirmed`, fără mesajul de produse. Fără chips de produse, pe ambele căi
+(executorii `faq`/`delegate` compun prin `finalize.render`). `kernel_sentence` locuiește acum în
+`src/domain/pack.py`. Flag `STORE_INFO_FALLBACK_ENABLED` (ON). Card:
+[`tasks/stage1/NX-372.md`](tasks/stage1/NX-372.md); probă: `pytest tests/test_nx372_store_info_fallback.py -q`.
 
 **NX-360 — stocul și prețurile SOLE se resincronizează din paginile live.** Catalogul era o fotografie
 din 2026-08-28: cele 391 de produse `out_of_stock` aveau prețul voucherului WELCOME15 drept preț de

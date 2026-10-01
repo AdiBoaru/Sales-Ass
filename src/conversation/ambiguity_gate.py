@@ -64,6 +64,7 @@ from src.conversation.references import (
     MUTATING_ACTS,
     ProductFacts,
     ReferenceFacts,
+    find_name_reference,
     gate_act_targets,
 )
 from src.conversation.state_reducer import StateUpdateProposal
@@ -675,6 +676,11 @@ class _Gate:
         if topic.has_subject:  # NX-350: o umbrelă e subiect
             return None
         if read_query(primary, pack=self.pack, locale=self.locale).has_words:
+            return None
+        # NX-375 (recenzia B6): un produs NUMIT e subiectul cererii; plannerul îl caută sau îl
+        # arată (același proprietar al alegerii, `find_name_reference`), deci nu se întreabă raftul.
+        accepted = [c.change for c in self.checked if c.rejected is None]
+        if find_name_reference(self.interp, primary, self.resolved, accepted) is not None:
             return None
         facet_keys = {
             getattr(f, "key", None)
