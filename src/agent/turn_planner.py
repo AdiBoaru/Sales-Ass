@@ -42,7 +42,7 @@ from src.catalog.vocabulary import (
     CatalogVocabulary,
     topic_root_of,
 )
-from src.conversation.ambiguity_gate import GateOutcome, target_question_key
+from src.conversation.ambiguity_gate import MAX_ACT_BOTH, GateOutcome, target_question_key
 from src.conversation.answer_policy import read_query
 from src.conversation.delta import RankingSignal
 from src.conversation.interpretation import (
@@ -71,6 +71,7 @@ from src.conversation.references import (
     MUTATING_ACTS,
     RATING_DIMENSION,
     VARIANT_DIMENSION,
+    find_name_reference,
 )
 from src.conversation.state_reducer import StateUpdateProposal
 from src.conversation.state_v2 import HARD_CAPABLE_SOURCES, ConversationStateV2, Need, Topic
@@ -113,6 +114,9 @@ GAPS: tuple[str, ...] = (
     "routine_budget",
     # D3: un câmp al cererii fără corespondent într-o rutină (sortare, termeni nemapați)
     "routine_field",
+    # `kernel.v6.2` (NX-375, recenzia B3/B4): căutarea pe NUMELE unui produs n-a moștenit raftul,
+    # bugetul, nevoile sau tipul subiectului de dinainte (doar ce spune turul)
+    "name_unscoped",
 )
 
 #: Uneltele buclei delegate (actul `other`): toate, fără cele care citesc catalogul și fără
@@ -140,6 +144,8 @@ _SEARCHING: frozenset[str] = frozenset({"search", "bundle"})
 WILDCARD = "*"
 #: Dimensiunea tipului de produs (`Topic.product_type`), eticheta subiectului fără raft.
 PRODUCT_TYPE = "product_type"
+#: Dimensiunea raftului (`Topic.category_key`).
+CATEGORY = "category"
 _BUDGET_MIN, _BUDGET_MAX = PRICE_BOUNDS
 
 
@@ -718,19 +724,10 @@ class _Planner:
         )
 
     def _find(self, act: Act, index: int) -> TurnPlan:
-        # `kernel.v6.2` (NX-375): un produs NUMIT în cerere e ce caută clientul. Căutarea
-        # aproximativă după nume e a plannerului (resolverul găsește doar un nume scris întreg),
-        # deci textul căutării e numele, ca la `detail`/`compare` pe un nume negăsit.
-        named = self._untargeted_name()
+        # `kernel.v6.2` (NX-375): un produs NUMIT în cerere e ce caută clientul.
+        named = self._named_product(act, index)
         if named is not None:
-            plan = self._search(act, index, name=named)
-            if plan.search_args is None:
-                return plan
-            # Recenzia: clientul cere produsul pe NUME, deci raftul unui subiect vechi și bugetul
-            # conversației nu-l mai filtrează (altfel unealta i-ar spune că produsul „nu există
-            # ca atare" doar fiindcă stă pe alt raft sau peste un buget de acum câteva ture).
-            unscoped = plan.search_args.model_copy(update={"category": None, "price_max": None})
-            return self._plan("search", (), unscoped)
+            return named
         words = read_query(act, pack=self.pack, locale=self.locale).has_words
         nothing = not (words or self._facet_needs() or self._missing_name(act))
         if not self._subject() and nothing:
@@ -740,37 +737,39 @@ class _Planner:
             return self._plan("reply_only")
         return self._search(act, index)
 
-    def _untargeted_name(self) -> str | None:
-        """NX-375: numele unei referințe `name` a turului pe care n-o folosește nimic altceva: nu e
-        țintă a niciunui act și nu e ancoră a unei schimbări (`relative_to`: «ceva ca X, mai
-        ieftin» caută ALTCEVA decât X). Rularea din 2026-10-01: «aveți ANUA Heartleaf 77 toner?»
-        avea referința declarată, dar `find.targets` gol, deci căutarea a rulat pe „toner", fără
-        produsul numit (fără tip în catalog), iar clientul a primit „nu apare". Prima, în ordinea
-        declarării; o referință pe care resolverul a găsit-o `stale` nu mai e în catalog."""
-        # Recenzia (interpretări reale stocate, d32/e34): «ai ceva mai ieftin decât Aurelia?» vine
-        # uneori cu limita relativă de preț FĂRĂ `relative_to`. O limită de preț fără număr are o
-        # ancoră, iar singura ancoră posibilă e numele: clientul vrea ALTCEVA decât el.
-        if any(
-            c.dimension == PRICE_DIMENSION and c.relation in ("lte", "gte") and c.number is None
-            for c in self.interp.changes
-        ):
+    def _accepted(self) -> list[StateChange]:
+        """Schimbările turului pe care nici validatorul, nici delta nu le-au respins (`checked`
+        = `delta.accepted_changes`); fără ele (teste, sonde vechi), schimbările brute."""
+        if self.checked is None:
+            return list(self.interp.changes)
+        return [c.change for c in self.checked if c.rejected is None]
+
+    def _named_product(self, act: Act, index: int) -> TurnPlan | None:
+        """NX-375 (`kernel.v6.2`): planul unui `find` care numește un produs, sau None. Referința o
+        alege `references.find_name_reference` (o țintă `name` a actului sau una nefolosită de
+        nimic altceva; un singur proprietar cu poarta, recenzia B6). Recenzia B1: ce a găsit
+        resolverul nu se aruncă.
+
+        - `exact`: produsul e răspunsul, ca rândul `detail` pe o țintă `exact` (id-ul e recitit din
+          catalog în tur, I1);
+        - `ambiguous` pe cel mult `MAX_ACT_BOTH` candidați: răspunsul despre toți, ca `act_both` pe
+          o citire (`detail` cu ≥ 2 candidați);
+        - altfel (`not_found`, sau prea mulți candidați): căutarea aproximativă după nume, care e a
+          plannerului (resolverul găsește doar un nume scris întreg), ca `detail`/`compare` pe un
+          nume negăsit, cu filtrele DOAR ale acestui tur (`_search(name_only=True)`, B3/B4)."""
+        ref = find_name_reference(self.interp, act, self.resolved, self._accepted())
+        if ref is None:
             return None
-        used = {t for a in self.interp.acts for t in a.targets}
-        used |= {c.relative_to for c in self.interp.changes if c.relative_to}
-        names: list[str] = []
-        for ref in self.interp.references:
-            if ref.kind != "name" or ref.id in used:
-                continue
-            resolved = self.resolved.get(ref.id)
-            # `stale` = nu mai e în catalog; reclasificată de resolver (un „nume" care numește o
-            # proprietate, «linkul la roșeață», I24) = nu e un nume de produs
-            if resolved is not None and (resolved.outcome == "stale" or resolved.kind != "name"):
-                continue
-            name = self._name(ref.id)
-            if name is not None and name not in names:
-                names.append(name)
-        # Două nume nefolosite («X sau Y?»): nu ghicim pe care; căutarea compusă rămâne.
-        return names[0] if len(names) == 1 else None
+        hit = self.resolved.get(ref.id)
+        ids = list(dict.fromkeys(hit.product_ids)) if hit is not None else []
+        if hit is not None and hit.outcome == "exact" and ids:
+            return self._plan("detail", ids[:1])
+        if hit is not None and hit.outcome == "ambiguous" and 2 <= len(ids) <= MAX_ACT_BOTH:
+            return self._plan("detail", ids)
+        name = self._name(ref.id)
+        if name is None:
+            return None
+        return self._search(act, index, name=name, name_only=True)
 
     def _show_more(self, act: Act, index: int) -> TurnPlan:
         if not self.changed and self.state.active_search:
@@ -819,7 +818,13 @@ class _Planner:
     # --- `SearchArgs` -----------------------------------------------------------------------------
 
     def _search(
-        self, act: Act, index: int, *, name: str | None = None, subject_first: bool = False
+        self,
+        act: Act,
+        index: int,
+        *,
+        name: str | None = None,
+        subject_first: bool = False,
+        name_only: bool = False,
     ) -> TurnPlan:
         words = read_query(act, pack=self.pack, locale=self.locale).has_words
         product_name = name or self._missing_name(act)
@@ -830,7 +835,12 @@ class _Planner:
         told = list(self.disclosed_needs)
         carried: dict[str, str] = {}
         args = self._search_args(
-            _PENDING, act, product_name=product_name, carried=carried, index=index
+            _PENDING,
+            act,
+            product_name=product_name,
+            carried=carried,
+            index=index,
+            this_turn_only=name_only,
         )
         subject = self._subject_label()
         topic = self.state.topic
@@ -908,13 +918,20 @@ class _Planner:
         carried: dict[str, str] | None = None,
         relaxable: bool = True,
         index: int = 0,
+        this_turn_only: bool = False,
     ) -> SearchArgs:
         """SINGURUL constructor de `SearchArgs` din kernel (I2). Totul vine din starea redusă și din
         semnalele turului; ce nu are câmp merge în `gaps`. `carried` (NX-352) primește, pe fiecare
         dimensiune care intră chiar în argumente, `filter` sau `prefer`. `relaxable=False` (rutina):
         o nevoie spusă, dar ne-`enforce_ready`, rămâne preferință, fiindcă rutina NU relaxează
-        filtrele (recenzia NX-352)."""
+        filtrele (recenzia NX-352). `this_turn_only` (NX-375, recenzia B3/B4): căutarea pe NUMELE
+        unui produs poartă doar ce spune ACEST tur (nevoile scrise acum dintr-o schimbare acceptată,
+        raftul și tipul numite acum, semnalele turului); restul subiectului vechi (raft, buget,
+        nevoi, excluderi, tipul) ar ascunde produsul cerut pe nume, iar unealta ar spune că „nu
+        există ca atare". Ce se scoate nu dispare în tăcere: golul `name_unscoped`."""
         carried = {} if carried is None else carried
+        said = self._dimensions_said() if this_turn_only else frozenset()
+        unscoped = False
         price_max: float | None = None
         brand: str | None = None
         concerns: list[str] = []
@@ -936,6 +953,11 @@ class _Planner:
             key, value = need.key, need.normalized_value
             dimension = self.needs.dimension_of(key)
             spec = self.needs.spec_for(key)
+            if this_turn_only and not (
+                need.updated_revision == self.state.revision and ({key, dimension} & said)
+            ):
+                unscoped = True
+                continue
             if key == _BUDGET_MAX:
                 if self._hard(need, PRICE_DIMENSION) and _usable_amount(value):
                     price_max = float(value)  # type: ignore[arg-type]
@@ -1018,16 +1040,23 @@ class _Planner:
         # NX-314 pe calea interpretată: tipul subiectului ORDONEAZĂ (fațeta nu e `enforce_ready`),
         # deci „cremă de față" pe un raft de 900 de produse urcă cremele, fără să scoată restul.
         kinds = subject_kinds(self.state.topic)
+        if kinds and this_turn_only and PRODUCT_TYPE not in said:
+            unscoped, kinds = True, ()
         if kinds and self._on_attributes(PRODUCT_TYPE):
             for kind in kinds:
                 _prefer(PRODUCT_TYPE, kind)
         elif kinds:
             self._gap("subject_type")
 
+        category = self.state.topic.category_key
+        if category and this_turn_only and CATEGORY not in said:
+            unscoped, category = True, None
+        if unscoped:
+            self._gap("name_unscoped")
         return SearchArgs(
             query=phrase,
             price_max=price_max,
-            category=self.state.topic.category_key,
+            category=category,
             brand=brand,
             concerns=list(dict.fromkeys(concerns)) or None,
             features=list(dict.fromkeys(features)) or None,
@@ -1038,6 +1067,13 @@ class _Planner:
             exclude=exclude,
             price_band=price_band,
         )
+
+    def _dimensions_said(self) -> frozenset[str]:
+        """Dimensiunile schimbărilor ACCEPTATE ale turului (după re-rezolvarea validatorului). O
+        limită de preț e pe `price`, dimensiunea nevoilor `budget_*`."""
+        if self.checked is None:
+            return frozenset(c.dimension for c in self.interp.changes if c.dimension)
+        return frozenset(c.dimension for c in self.checked if c.rejected is None and c.dimension)
 
     def _sort_mode(self, act: Act) -> str:
         """O referință `extreme` pe preț sau rating ordonează căutarea; altfel `relevance`. Aceeași

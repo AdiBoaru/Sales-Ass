@@ -11,10 +11,15 @@ găsește doar un nume scris întreg și că o căutare aproximativă după nume
 
 from __future__ import annotations
 
+import dataclasses
+
 import pytest
 
-from src.conversation.interpretation import ResolvedRef
-from tests.test_kernel_planner import _interp, _plan, _search, _state
+from src.agent.turn_planner import plan_turn
+from src.conversation.interpretation import CheckedChange, ResolvedRef
+from src.conversation.state_v2 import ConversationStateV2
+from tests.kernel import fixture_catalog as fc
+from tests.test_kernel_planner import _gate, _interp, _need, _plan, _search, _state
 
 ANUA = "ANUA Heartleaf 77 toner"
 
@@ -177,3 +182,172 @@ def test_a_name_search_ignores_an_old_shelf_and_budget():
     args = _search(planned)
     assert args.product_name == "Samsung Galaxy S24"
     assert args.category is None and args.price_max is None
+
+
+# --- recenzia PR-ului (#537, verificator independent) -------------------------------------------
+
+
+def _hit(outcome: str, ids: list[str], rid: str = "r1") -> ResolvedRef:
+    reason = {"exact": "named", "ambiguous": "catalog_tie"}.get(outcome, "name_not_found")
+    return ResolvedRef(
+        ref_id=rid, kind="name", outcome=outcome, product_ids=ids, source="catalog", reason=reason
+    )
+
+
+def _find_named(*, targeted: bool, query: str | None = None, changes=()) -> object:
+    act: dict = {"kind": "find", **({"query": query} if query else {})}
+    if targeted:
+        act["targets"] = ["r1"]
+    return _interp(acts=[act], references=[_name_ref()], changes=list(changes))
+
+
+@pytest.mark.parametrize("targeted", [True, False], ids=["in_targets", "untargeted"])
+def test_b1_a_name_not_found_searches_on_it_wherever_the_model_put_it(targeted):
+    """B1: cu referința în `find.targets` (resolverul `not_found`), căutarea rula pe „toner", cu
+    `product_name` setat, dar textul NU era numele."""
+    interp = _find_named(targeted=targeted, query="aveti ANUA Heartleaf 77 toner?")
+    args = _search(
+        _plan("sole-ro", interp, _state(product_type="toner de fata"), resolved=(_resolved(),))
+    )
+    assert (args.query, args.product_name) == (ANUA, ANUA)
+
+
+@pytest.mark.parametrize("targeted", [True, False], ids=["in_targets", "untargeted"])
+def test_b1_an_exact_name_reaches_the_client_as_the_product(targeted):
+    """B1: `exact` ⇒ produsul găsit de resolver (id-ul recitit din catalog, I1) e răspunsul: planul
+    `detail` pe el, ca rândul `detail` pe o țintă `exact`. Pe codul vechi id-ul se pierdea."""
+    planned = _plan(
+        "sole-ro",
+        _find_named(targeted=targeted),
+        _state(product_type="toner de fata"),
+        resolved=(_hit("exact", ["p-anua"]),),
+    )
+    plan = planned.plans[planned.primary]
+    assert (plan.executor, plan.product_ids) == ("detail", ["p-anua"])
+
+
+@pytest.mark.parametrize("targeted", [True, False], ids=["in_targets", "untargeted"])
+def test_b1_an_ambiguous_name_answers_about_all_candidates(targeted):
+    """B1: `ambiguous` pe cel mult trei candidați (mărimile aceluiași produs) ⇒ răspunsul despre
+    toți, ca `act_both` pe o citire (`detail` cu ≥ 2 candidați). Peste trei, lista o dă căutarea pe
+    nume (o citire ar întreba; o cerere `find` primește lista)."""
+    ids = ["p-250", "p-500", "p-pad"]
+    planned = _plan(
+        "sole-ro",
+        _find_named(targeted=targeted),
+        _state(product_type="toner de fata"),
+        resolved=(_hit("ambiguous", ids),),
+    )
+    plan = planned.plans[planned.primary]
+    assert (plan.executor, plan.product_ids) == ("detail", ids)
+    many = _plan(
+        "sole-ro",
+        _find_named(targeted=targeted),
+        _state(product_type="toner de fata"),
+        resolved=(_hit("ambiguous", [*ids, "p-mini"]),),
+    )
+    assert _search(many).product_name == ANUA
+
+
+def test_b1_the_full_chain_on_electronics_serves_the_named_phone():
+    """B1 pe lanțul complet (validator, resolver pe catalogul fixture-ului, reducer, poartă,
+    planner): «aveti Apple Phone 2 256 GB?» cu referința în `find.targets` ⇒ resolverul `exact`
+    pe el-02; pe codul vechi planul era `search('Telefoane', product_name=None)`."""
+    said = "aveti Apple Phone 2 256 GB?"
+    interp = _interp(
+        acts=[{"kind": "find", "targets": ["r1"], "query": said}],
+        references=[_name_ref(name="Apple Phone 2 256 GB")],
+    )
+    step = fc.kernel_step("electronics", _state("telefoane"), interp, said)
+    hit = next(r for r in step.resolved if r.ref_id == "r1")
+    assert (hit.outcome, hit.product_ids) == ("exact", ["el-02"])
+    plan = step.planned.plans[step.planned.primary]
+    assert (plan.executor, plan.product_ids) == ("detail", ["el-02"])
+
+
+def test_b3_the_name_search_inherits_no_old_subject_filter():
+    """B3: pe modă o restricție veche (poliester) ajungea `exclude`, pe electronice o culoare veche
+    ajungea filtru. Căutarea pe nume poartă doar ce spune ACEST tur."""
+    fashion = _plan(
+        "fashion",
+        _find_named(targeted=False),
+        _state("rochii", needs=(_need("restriction", "poliester"),)),
+        resolved=(_resolved(),),
+    )
+    args = _search(fashion)
+    assert not args.exclude and args.category is None
+    electronics = _plan(
+        "electronics",
+        _find_named(targeted=False),
+        _state("telefoane", needs=(_need("color", "negru"),)),
+        resolved=(_resolved(),),
+    )
+    args = _search(electronics)
+    assert not args.concerns and not args.features and not args.prefer and args.brand is None
+    assert "name_unscoped" in electronics.gaps
+
+
+def test_b4_a_budget_said_this_turn_still_applies_and_the_old_one_is_a_gap():
+    """B4: «aveti Apple Phone 2 sub 500 lei?»: bugetul spus ACUM rămâne filtru; cel vechi se scoate,
+    dar nu în tăcere (golul `name_unscoped`)."""
+    now = dataclasses.replace(_need("budget_max", 500.0, strength="hard"), updated_revision=1)
+    said = {"op": "set", "dimension": "price", "relation": "lte", "number": 500, "quote": "sub 500"}
+    planned = _plan(
+        "electronics",
+        _find_named(targeted=False, changes=[said]),
+        _state("telefoane", needs=(now,)),
+        resolved=(_resolved(),),
+    )
+    assert _search(planned).price_max == 500.0
+    assert "name_unscoped" in planned.gaps  # raftul vechi „telefoane" a fost scos
+    old = _plan(
+        "electronics",
+        _find_named(targeted=False),
+        _state(needs=(_need("budget_max", 500.0, strength="hard"),)),
+        resolved=(_resolved(),),
+    )
+    assert _search(old).price_max is None and "name_unscoped" in old.gaps
+
+
+def test_b6_a_name_alone_is_a_subject_for_the_gate():
+    """B6: un `find` fără cuvinte de cerere și fără subiect, doar cu un nume, primea întrebarea de
+    raft a porții. Numele e subiectul: căutarea rulează pe el."""
+    said = "Samsung Galaxy S24"
+    interp = _interp(acts=[{"kind": "find"}], references=[_name_ref(name=said)])
+    step = fc.kernel_step("electronics", ConversationStateV2(), interp, said)
+    assert step.outcome.decision.reason != "no_subject"
+    assert _search(step.planned).product_name == said
+
+
+@pytest.mark.parametrize("rejected", [None, "unknown_reference"])
+def test_b8_the_relative_price_guard_reads_accepted_changes(rejected):
+    """B8: o limită relativă de preț RESPINSĂ (validator sau delta) nu mai face din nume ancora."""
+    raw = _cheaper()
+    interp = _interp(
+        acts=[{"kind": "find", "query": "ceva ca Aurelia"}],
+        references=[_name_ref(name="Aurelia")],
+        changes=[raw],
+    )
+    checked = CheckedChange(
+        change=interp.changes[0],
+        dimension="price",
+        canonical_value=None,
+        provenance="explicit",
+        strength="soft",
+        rejected=rejected,
+    )
+    accepted = [checked] if rejected is None else []
+    planned = plan_turn(
+        interp,
+        _state(product_type="ser de fata"),
+        (),
+        (_resolved(),),
+        _gate(),
+        changed=False,
+        pack=fc.pack("sole-ro"),
+        vocab=fc.vocabulary("sole-ro"),
+        locale="ro",
+        checked=accepted,
+    )
+    name = _search(planned).product_name
+    assert name == (None if rejected is None else "Aurelia")

@@ -596,11 +596,15 @@ scoate și dezvăluirea. Card:
 **NX-375 — `kernel.v6.2` (minor): un produs numit într-o cerere `find` e ce caută clientul.** Setul
 `kernel-live-2026-10-01` (clasa A3): «aveți ANUA Heartleaf 77 toner?» avea referința `name` declarată,
 dar `find.targets` gol; plannerul citea numele doar printre ținte, a căutat „toner", produsul (fără tip
-în catalog) n-a intrat în pool, iar clientul a aflat că „nu apare" (e în stoc la 30 de lei). Acum o
-referință `name` nefolosită de nimic altceva (nu e țintă, nu e ancoră `relative_to`) face căutarea pe
-numele ei, ca `detail`/`compare` pe un nume negăsit: căutarea aproximativă după nume e a plannerului,
-resolverul rămâne pe numele întreg. Card: [`tasks/stage1/NX-375.md`](tasks/stage1/NX-375.md); probă:
-`pytest tests/test_nx375_find_named_product.py -q`.
+în catalog) n-a intrat în pool, iar clientul a aflat că „nu apare" (e în stoc la 30 de lei). Acum un
+`find` care numește un produs (o țintă `name` sau o referință `name` nefolosită de nimic altceva,
+aleasă de `references.find_name_reference`, comună cu poarta) e servit după resolver: `exact` ⇒
+`detail` pe id-ul recitit, `ambiguous` pe ≤ 3 candidați ⇒ `detail` pe toți, altfel căutarea pe
+numele lui, ca `detail`/`compare` pe un nume negăsit. Căutarea pe nume poartă doar filtrele spuse în
+tur (raftul, bugetul, nevoile și tipul vechi ies, cu golul `name_unscoped`), iar un nume singur e
+subiect pentru poartă. Declarat: o descriere etichetată `name` de model e căutată ca nume (niciun
+semnal structural n-o deosebește de un nume scris parțial). Card:
+[`tasks/stage1/NX-375.md`](tasks/stage1/NX-375.md); probă: `pytest tests/test_nx375_find_named_product.py -q`.
 
 **NX-238 — retrievalul trece printr-un PORT, iar candidatul e inert (verdict `NOT-READY`).**
 `src/retrieval/` e contractul stabil pe care îl consumă NX-239: `RetrievalPort` + `RetrievalBundle`

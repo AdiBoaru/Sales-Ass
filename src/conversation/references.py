@@ -41,7 +41,13 @@ from src.catalog.vocabulary import (
     resolve,
     resolve_any,
 )
-from src.conversation.interpretation import Act, Reference, ResolvedRef
+from src.conversation.interpretation import (
+    Act,
+    Reference,
+    ResolvedRef,
+    StateChange,
+    TurnInterpretation,
+)
 from src.domain.pack import DEFAULT_REFERENCE_DIMENSIONS
 
 if TYPE_CHECKING:
@@ -957,6 +963,43 @@ def gate_act_targets(acts: Sequence[Act], resolved: Sequence[ResolvedRef]) -> li
     return out
 
 
+def find_name_reference(
+    interp: TurnInterpretation,
+    act: Act,
+    resolved: Mapping[str, ResolvedRef],
+    accepted: Sequence[StateChange],
+) -> Reference | None:
+    """NX-375 (`kernel.v6.2`): referința `name` pe care o cere un act `find`, sau None. PUR; un
+    singur proprietar pentru planner (căutarea pe nume) și poartă (un nume e subiect, recenzia B6).
+
+    Candidatele: o țintă `name` a actului `find` (recenzia B1: modelul o pune uneori în
+    `find.targets`) sau o referință `name` pe care n-o folosește nimic altceva (nu e țintă a altui
+    act, nu e ancoră `relative_to` a unei schimbări). Nu se aplică: o referință pe care resolverul
+    a reclasificat-o (un „nume" care numește o proprietate, I24) sau a găsit-o `stale`; un tur cu o
+    limită de preț fără număr printre schimbările ACCEPTATE (recenzia B8: «mai ieftin decât X» fără
+    `relative_to` face din nume ancora, deci clientul vrea ALTCEVA); două nume diferite («X sau Y?»:
+    nu ghicim). `accepted` = schimbările turului pe care nici validatorul, nici delta nu le-au
+    respins (fără ele, apelantul trece schimbările brute)."""
+    if any(
+        c.dimension == PRICE_DIMENSION and c.relation in ("lte", "gte") and c.number is None
+        for c in accepted
+    ):
+        return None
+    own = set(act.targets)
+    used = {t for a in interp.acts if a is not act for t in a.targets} - own
+    used |= {c.relative_to for c in interp.changes if c.relative_to}
+    found: list[Reference] = []
+    for ref in interp.references:
+        if ref.kind != "name" or ref.id in used or not (ref.name or "").strip():
+            continue
+        hit = resolved.get(ref.id)
+        if hit is not None and (hit.outcome == "stale" or hit.kind != "name"):
+            continue
+        if all((ref.name or "").strip() != (f.name or "").strip() for f in found):
+            found.append(ref)
+    return found[0] if len(found) == 1 else None
+
+
 __all__ = [
     "MUTATING_ACTS",
     "REASONS",
@@ -967,6 +1010,7 @@ __all__ = [
     "ReferenceSources",
     "ShownItem",
     "TargetCheck",
+    "find_name_reference",
     "gate_act_targets",
     "match_name_in_set",
     "name_key",
