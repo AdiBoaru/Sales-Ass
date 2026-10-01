@@ -246,13 +246,14 @@ def _attach_model_io(ctx: TurnContext, acc: model_io.ModelIOAccumulator | None) 
     conținut (P12)."""
     if acc is None:
         return
-    ctx.trace["model_io"] = acc.as_trace()
+    doc = acc.as_trace()
+    ctx.trace["model_io"] = doc
     ctx.emit(
         "model_io_captured",
         calls=len(acc.calls),
         bytes_bucket=model_io.bytes_bucket(acc.bytes),
-        truncated=acc.truncated,
-        replayable=not acc.truncated and not acc.failed,
+        replayable=doc["replayable"],
+        unreplayable=doc["unreplayable"],  # vocabular închis (`ModelIOAccumulator.unreplayable`)
     )
 
 

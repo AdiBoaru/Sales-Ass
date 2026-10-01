@@ -156,8 +156,9 @@ async def _produce(provider: _Provider, stages) -> dict[str, Any]:
         channel_kind="webchat",
         verified_customer_ref=None,
     )
+    pending = turn_capture.begin_turn_input(snap, event, business, channel_id="ch1", verified=False)
     await run_pipeline(ctx, PipelineDeps(db=db, redis=None, llm=llm), stages)
-    turn_capture.record_turn_input(ctx, snap, event, business, channel_id="ch1")
+    turn_capture.finish_turn_input(ctx, pending)
     return {
         "turn_id": "t1",
         "business_id": BIZ,
@@ -249,13 +250,19 @@ async def test_a_failed_statement_in_a_checkout_is_reported(capture_on):
 
 
 async def test_rows_without_capture_are_not_replayable():
+    v_in, v_io = turn_capture.FORMAT_VERSION, trace_replay.model_io.FORMAT_VERSION
     for diag, reason in [
         ({}, "no_turn_input"),
-        ({"turn_input": {"v": 1, "error": True}}, "turn_input_unusable"),
-        ({"turn_input": {"v": 1}}, "no_model_io"),
+        ({"turn_input": {"v": v_in, "error": "oversize"}}, "turn_input_unusable"),
+        ({"turn_input": {"v": v_in - 1}}, "turn_input_unusable"),
+        ({"turn_input": {"v": v_in}}, "no_model_io"),
+        ({"turn_input": {"v": v_in}, "model_io": {"v": v_io - 1}}, "model_io_unknown_version"),
         (
-            {"turn_input": {"v": 1}, "model_io": {"v": 1, "replayable": False}},
-            "model_io_incomplete",
+            {
+                "turn_input": {"v": v_in},
+                "model_io": {"v": v_io, "replayable": False, "unreplayable": ["concurrent"]},
+            },
+            "model_io_concurrent",
         ),
     ]:
         res = await trace_replay.replay_turn(
@@ -279,6 +286,20 @@ def test_recorded_settings_apply_and_restore(capture_on):
     with trace_replay.settings_profile({"card_slots": before + 1, "gone_flag": True}):
         assert s.card_slots == before + 1 and s.llm_retry_max == 0
     assert s.card_slots == before
+
+
+def test_a_setting_missing_from_the_recording_takes_the_code_default_not_the_local_env(
+    capture_on, monkeypatch
+):
+    """Recenzia: un `.env` local (creierul unic aprins) nu are voie să schimbe calea rejucată."""
+    s = get_settings()
+    default = type(s).model_fields["single_brain_enabled"].default
+    monkeypatch.setattr(s, "single_brain_enabled", not default)  # ce ar pune `.env`-ul local
+    with trace_replay.settings_profile({}):
+        assert s.single_brain_enabled is default
+    assert s.single_brain_enabled is (not default)
+    with trace_replay.settings_profile(None):  # `--flags current` = profilul local
+        assert s.single_brain_enabled is (not default)
 
 
 def _moderation(flagged: bool):
@@ -328,8 +349,9 @@ async def _produce_moderated(flagged: bool) -> dict[str, Any]:
         channel_kind="webchat",
         verified_customer_ref=None,
     )
+    pending = turn_capture.begin_turn_input(snap, {}, business, channel_id="", verified=False)
     await run_pipeline(ctx, PipelineDeps(db=db, redis=None, llm=llm), [_moderation_stage])
-    turn_capture.record_turn_input(ctx, snap, {}, business)
+    turn_capture.finish_turn_input(ctx, pending)
     return {
         "turn_id": "t2",
         "business_id": BIZ,
@@ -383,7 +405,87 @@ async def test_capture_off_leaves_the_turn_untouched(monkeypatch):
         channel_kind="webchat",
         verified_customer_ref=None,
     )
+    pending = turn_capture.begin_turn_input(snap, {}, business, channel_id="", verified=False)
     await run_pipeline(ctx, PipelineDeps(db=db, redis=None, llm=llm), [_schema_stage])
-    turn_capture.record_turn_input(ctx, snap, {}, business)
+    turn_capture.finish_turn_input(ctx, pending)
     assert "model_io" not in ctx.trace and "turn_input" not in ctx.trace
     assert not [e for e in ctx.events if e.type == "model_io_captured"]
+
+
+async def test_a_changed_model_input_is_reported_not_hidden(capture_on):
+    """Recenzia: același fel de cerere peste altă intrare (alt prompt, alt set de produse) juca
+    răspunsul înregistrat peste altă întrebare, fără să spună."""
+    row = await _produce(_Provider(_completion('{"text": "Uite"}')), [_schema_stage])
+
+    async def other_prompt(ctx, deps):
+        ctx.message.body = "altă întrebare"
+        await _schema_stage(ctx, deps)
+
+    res = await trace_replay.replay_turn(
+        row, db=_db(_Conn()), business=_business(), stages=[other_prompt]
+    )
+    assert res.status == "replayed" and res.inputs_changed == [0]
+    same = await trace_replay.replay_turn(
+        row, db=_db(_Conn()), business=_business(), stages=[_schema_stage]
+    )
+    assert same.inputs_changed == []
+
+
+async def test_recorded_error_comes_back_with_the_same_class(capture_on):
+    """Recenzia: o clasă generică schimba `failure_cause` și evenimentele turului."""
+    seen: list[str] = []
+
+    async def remember(ctx, deps):
+        try:
+            await deps.llm.complete_schema_raw("s", ctx.message.body, {"name": "rich_reply"})
+        except Exception as exc:  # noqa: BLE001
+            seen.append(type(exc).__name__)
+        ctx.set_reply("x")
+
+    row = await _produce(_Provider(TimeoutError("lent")), [remember])
+    await trace_replay.replay_turn(row, db=_db(_Conn()), business=_business(), stages=[remember])
+    assert seen == ["TimeoutError", "TimeoutError"]
+
+
+def test_status_errors_and_cancellations_are_rebuilt():
+    import openai  # noqa: PLC0415
+
+    err = trace_replay.rebuild_error({"error": "RateLimitError", "status": 429})
+    assert isinstance(err, openai.RateLimitError) and err.status_code == 429
+    assert isinstance(
+        trace_replay.rebuild_error({"error": "APITimeoutError"}), openai.APITimeoutError
+    )
+    assert isinstance(
+        trace_replay.rebuild_error({"error": "CancelledError", "cancelled": True}), TimeoutError
+    )
+    assert isinstance(
+        trace_replay.rebuild_error({"error": "Weird"}), trace_replay.ReplayedProviderError
+    )
+
+
+class _ReadOnlyError(Exception):
+    sqlstate = "25006"
+
+
+class _WritingConn(_Conn):
+    async def execute(self, sql: str, *args: Any) -> Any:
+        raise _ReadOnlyError("cannot execute INSERT in a read-only transaction")
+
+
+async def test_a_swallowed_write_is_reported_even_inside_a_savepoint(capture_on):
+    """Recenzia: printr-un `db_tx` scrierea rulează într-un SAVEPOINT; rollback-ul lui lasă
+    tranzacția exterioară sănătoasă, deci sonda de final nu vedea nimic."""
+    row = await _produce(_Provider(_completion('{"text": "Uite"}')), [_schema_stage])
+
+    async def writes(ctx, deps):
+        async with deps.db("cart_add") as conn:
+            try:
+                await conn.execute("insert into conversation_carts default values")
+            except Exception:  # noqa: BLE001 — apelantul înghite, ca `CartService`
+                pass
+        await _schema_stage(ctx, deps)
+
+    res = await trace_replay.replay_turn(
+        row, db=_db(_WritingConn()), business=_business(), stages=[writes]
+    )
+    assert res.status == "wrote"

@@ -50,8 +50,22 @@ _RESPONSE_TYPES: dict[str, Any] = {
 #: joacă o dată (fără retry și backoff), iar proxy-ul de cronometrare nu învelește conexiunea.
 _REPLAY_FORCED = {"llm_retry_max": 0, "db_query_timing_enabled": False}
 
-#: Statusurile unui replay. Vocabular ÎNCHIS.
-STATUSES = ("replayed", "diverged", "db_aborted", "not_replayable")
+#: Setările care rămân ale MAȘINII care rulează replay-ul: identitatea mediului și capacitatea
+#: poolurilor (`env=prod` ar porni gărzi de producție, iar poolurile sunt deja deschise).
+_LOCAL_ONLY = frozenset(
+    {
+        "env",
+        "release_sha",
+        "release_track",
+        "db_admin_pool_max",
+        "db_bot_pool_max",
+        "db_session_budget",
+    }
+)
+
+#: Statusurile unui replay. Vocabular ÎNCHIS. `wrote` = codul a încercat o scriere (refuzată de
+#: tranzacția READ ONLY), deci turul de producție a avut un efect pe care replay-ul nu-l are.
+STATUSES = ("replayed", "diverged", "wrote", "db_aborted", "not_replayable")
 
 
 class ReplayDivergence(Exception):
@@ -65,7 +79,42 @@ class ReplayDivergence(Exception):
 
 
 class ReplayedProviderError(Exception):
-    """Eroarea de furnizor înregistrată (doar clasa ei), jucată ca atare."""
+    """O eroare înregistrată a cărei clasă nu se poate reconstrui (rezerva lui `rebuild_error`)."""
+
+
+def rebuild_error(rec: Mapping[str, Any]) -> BaseException:
+    """Eroarea înregistrată, cu ACEEAȘI clasă: codul turului ramifică pe ea (`failure_cause`,
+    `_TRANSIENT_ERRORS`, `rich_error`), deci o clasă generică ar schimba evenimentele și traceul.
+    O anulare (interpretarea dark tăiată de `wait_for`) se joacă drept `TimeoutError`, exact ce
+    vede apelantul lui `wait_for`."""
+    import builtins  # noqa: PLC0415
+
+    import httpx  # noqa: PLC0415
+    import openai  # noqa: PLC0415
+
+    from src.runtime.deadline import DeadlineExhausted  # noqa: PLC0415
+
+    name = str(rec.get("error") or "")
+    if rec.get("cancelled") or name in ("TimeoutError", "CancelledError"):
+        return TimeoutError()
+    if name == "DeadlineExhausted":
+        return DeadlineExhausted("replay")
+    request = httpx.Request("POST", "https://replay.invalid/v1")
+    cls = getattr(openai, name, None)
+    if isinstance(cls, type) and issubclass(cls, openai.APIStatusError):
+        status = int(rec.get("status") or 500)
+        return cls("replay", response=httpx.Response(status, request=request), body=None)
+    if cls is openai.APITimeoutError:
+        return openai.APITimeoutError(request=request)
+    if cls is openai.APIConnectionError:
+        return openai.APIConnectionError(request=request)
+    builtin = getattr(builtins, name, None)
+    if isinstance(builtin, type) and issubclass(builtin, Exception):
+        try:
+            return builtin()
+        except Exception:  # noqa: BLE001
+            pass
+    return ReplayedProviderError(name or "unknown")
 
 
 class _Endpoint:
@@ -84,6 +133,10 @@ class RecordedModel:
         self._calls = list(calls)
         self.cursor = 0
         self.divergence: ReplayDivergence | None = None
+        #: Indicii apelurilor servite peste o intrare DIFERITĂ de cea înregistrată (alt prompt, alt
+        #: set de produse, alt istoric). Nu e divergență (o reparație poate schimba promptul), dar
+        #: răspunsul înregistrat a fost jucat peste altă întrebare, iar raportul trebuie s-o spună.
+        self.inputs_changed: list[int] = []
         self.chat = NS(completions=_Endpoint(self, "chat.completions"))
         self.responses = _Endpoint(self, "responses")
         self.moderations = _Endpoint(self, "moderations")
@@ -100,9 +153,11 @@ class RecordedModel:
         rec = self._calls[self.cursor]
         if {k: rec.get(k) for k in wanted} != wanted:
             return self._diverge(wanted, rec)
+        if rec.get("input_sha") != model_io.input_sha(_input_kwargs(endpoint, kwargs)):
+            self.inputs_changed.append(self.cursor)
         self.cursor += 1
         if not rec.get("ok"):
-            raise ReplayedProviderError(str(rec.get("error") or "unknown"))
+            raise rebuild_error(rec)
         try:
             return _RESPONSE_TYPES[endpoint].model_validate(rec["response"])
         except Exception:  # noqa: BLE001 — înregistrarea nu se poate reface: instrumentul e defect
@@ -121,12 +176,47 @@ class RecordedModel:
         raise err
 
 
+def _input_kwargs(endpoint: str, kwargs: dict[str, Any]) -> dict[str, Any]:
+    """Aceeași parte a cererii pe care a amprentat-o captura (`llm.py` dă moderării și
+    embeddingului doar `input`, iar Vision doar `messages`)."""
+    if endpoint in ("moderations", "embeddings"):
+        return {"input": kwargs.get("input")}
+    return kwargs
+
+
+class _GuardedConn:
+    """Conexiunea de replay: numără fiecare scriere refuzată (SQLSTATE 25006), chiar dacă apelantul
+    o înghite. Sonda de la finalul checkout-ului nu ajunge: o scriere făcută printr-un `db_tx`
+    rulează într-un SAVEPOINT, al cărui rollback lasă tranzacția exterioară sănătoasă."""
+
+    _QUERY_METHODS = frozenset({"execute", "executemany", "fetch", "fetchrow", "fetchval"})
+
+    def __init__(self, conn: Any, state: dict[str, int]) -> None:
+        self._conn = conn
+        self._state = state
+
+    def __getattr__(self, name: str) -> Any:
+        attr = getattr(self._conn, name)
+        if name not in self._QUERY_METHODS:
+            return attr
+
+        async def guarded(*args: Any, **kwargs: Any) -> Any:
+            try:
+                return await attr(*args, **kwargs)
+            except Exception as exc:
+                if getattr(exc, "sqlstate", None) == "25006":
+                    self._state["wrote"] += 1
+                raise
+
+        return guarded
+
+
 def readonly_db(business_id: str, base: DbProvider | None = None) -> DbProvider:
-    """Providerul de replay: fiecare checkout e o tranzacție `READ ONLY` anulată la final. O
-    instrucțiune eșuată înăuntru (o scriere refuzată, o eroare de query) lasă tranzacția anulată;
-    sonda de la final o vede și o numără în `aborted`, chiar dacă codul a înghițit excepția."""
+    """Providerul de replay: fiecare checkout e o tranzacție `READ ONLY` anulată la final. O scriere
+    refuzată se numără în `wrote` (vezi `_GuardedConn`); orice altă instrucțiune eșuată care lasă
+    tranzacția anulată se vede la sonda finală și se numără în `aborted`."""
     inner = base or tenant_db(business_id)
-    state = {"aborted": 0}
+    state = {"aborted": 0, "wrote": 0}
 
     @asynccontextmanager
     async def _cm(operation: str = "unlabeled") -> AsyncIterator[Any]:
@@ -134,7 +224,7 @@ def readonly_db(business_id: str, base: DbProvider | None = None) -> DbProvider:
             tx = conn.transaction(readonly=True)
             await tx.start()
             try:
-                yield conn
+                yield _GuardedConn(conn, state)
             finally:
                 try:
                     await conn.fetchval("select 1")
@@ -147,19 +237,40 @@ def readonly_db(business_id: str, base: DbProvider | None = None) -> DbProvider:
     return _cm
 
 
+def _scalar_fields(settings: Any) -> dict[str, Any]:
+    from src.ops.build_info import is_secret_field  # noqa: PLC0415
+
+    out: dict[str, Any] = {}
+    for name, f in type(settings).model_fields.items():
+        if is_secret_field(name) or name in _LOCAL_ONLY:
+            continue
+        if isinstance(getattr(settings, name, None), (bool, int, float, str)):
+            out[name] = f
+    return out
+
+
 @contextmanager
-def settings_profile(overrides: Mapping[str, Any]) -> Iterator[None]:
-    """Aplică setările înregistrate (doar câmpurile pe care codul de acum le are) + cele impuse de
-    replay, și le restaurează la ieșire. Un câmp dispărut din cod se ignoră (declarat în
-    rezultat, `ignored_settings`)."""
+def settings_profile(recorded: Mapping[str, Any] | None) -> Iterator[None]:
+    """Profilul turului: fiecare setare scalară ne-secretă ia valoarea ÎNREGISTRATĂ, iar una pe care
+    înregistrarea n-o are (câmp nou, adus de codul testat) ia IMPLICITUL CODULUI, nu valoarea din
+    `.env`-ul mașinii. `None` = profilul local (`--flags current`). Restaurat la ieșire."""
     s = get_settings()
-    fields = type(s).model_fields
     saved: dict[str, Any] = {}
     try:
-        for name, value in {**overrides, **_REPLAY_FORCED}.items():
-            if name in fields:
+        if recorded is not None:
+            for name, f in _scalar_fields(s).items():
+                if name in recorded:
+                    value = recorded[name]
+                else:
+                    value = f.get_default(call_default_factory=True)
+                    if not isinstance(value, (bool, int, float, str)):
+                        continue
                 saved[name] = getattr(s, name)
                 setattr(s, name, value)
+        for name, value in _REPLAY_FORCED.items():
+            if name in type(s).model_fields and name not in saved:
+                saved[name] = getattr(s, name)
+            setattr(s, name, value)
         yield
     finally:
         for name, value in saved.items():
@@ -250,6 +361,8 @@ class ReplayResult:
     new_state: dict[str, Any] | None = None
     divergence: dict[str, Any] | None = None
     unused_calls: int = 0
+    #: Apelurile servite peste altă intrare decât cea înregistrată (`RecordedModel.inputs_changed`).
+    inputs_changed: list[int] = field(default_factory=list)
     ignored_settings: list[str] = field(default_factory=list)
     drift: dict[str, Any] = field(default_factory=dict)
 
@@ -266,7 +379,8 @@ def not_replayable_reason(diagnostics: Mapping[str, Any]) -> str | None:
     if mio.get("v") != model_io.FORMAT_VERSION:
         return "model_io_unknown_version"
     if not mio.get("replayable"):
-        return "model_io_incomplete"
+        reasons = mio.get("unreplayable") or ["incomplete"]
+        return "model_io_" + "+".join(str(r) for r in reasons)
     return None
 
 
@@ -303,9 +417,9 @@ async def replay_turn(
     if business is None or str(business.id) != business_id:
         return ReplayResult(turn_id, "not_replayable", reason="business_not_found")
 
-    recorded_settings = dict(ti["env"].get("settings") or {}) if flags == "recorded" else {}
+    recorded_settings = dict(ti["env"].get("settings") or {}) if flags == "recorded" else None
     fields = type(get_settings()).model_fields
-    ignored = sorted(k for k in recorded_settings if k not in fields)
+    ignored = sorted(k for k in recorded_settings or {} if k not in fields)
     snap = snapshot_from(ti["snapshot"])
     ev = ti["event"]
     event = {
@@ -354,10 +468,13 @@ async def replay_turn(
                 has_products=bool(ctx.reply.products),
             )
 
+    db_state = provider.state  # type: ignore[attr-defined]
     status = "replayed"
     if player.divergence is not None or player.unused:
         status = "diverged"
-    elif provider.state["aborted"]:  # type: ignore[attr-defined]
+    elif db_state["wrote"]:
+        status = "wrote"
+    elif db_state["aborted"]:
         status = "db_aborted"
     drift = {"pack": turn_capture.pack_sha(business) != ti["env"].get("pack_sha")}
     return ReplayResult(
@@ -377,6 +494,7 @@ async def replay_turn(
             else None
         ),
         unused_calls=player.unused,
+        inputs_changed=list(player.inputs_changed),
         ignored_settings=ignored,
         drift=drift,
     )

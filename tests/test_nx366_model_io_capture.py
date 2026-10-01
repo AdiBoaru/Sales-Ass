@@ -146,20 +146,57 @@ def test_ok_and_error_rows_in_call_order():
         "purpose": None,
         "schema": None,
         "tools": [],
+        "input_sha": None,
         "ok": False,
         "error": "TimeoutError",
         "i": 1,
     }
-    assert doc["replayable"] is True
+    assert doc["replayable"] is True and doc["unreplayable"] == []
 
 
-def test_cancellation_is_not_a_provider_answer():
+def test_cancellation_is_recorded_as_such():
+    """Recenzia: interpretarea dark tăiată de `wait_for` nu lăsa niciun rând, deci replay-ul cerea
+    un apel care „nu există" și fiecare astfel de tur ieșea divergent."""
     acc, tok = model_io.push()
     try:
         model_io.record_error("chat.completions", {}, asyncio.CancelledError())
     finally:
         model_io.pop(tok)
-    assert acc.calls == []
+    (row,) = acc.calls
+    assert row["error"] == "CancelledError" and row["cancelled"] is True
+
+
+def test_concurrent_calls_make_the_turn_unreplayable():
+    """Înregistrarea urmează ordinea în care s-au TERMINAT apelurile, replay-ul pe cea în care s-au
+    CERUT: două apeluri deodată s-ar putea inversa. Azi nu există pe drumul turului; garda spune."""
+
+    async def two_at_once():
+        async def one():
+            with model_io.in_flight():
+                await asyncio.sleep(0)
+
+        await asyncio.gather(one(), one())
+
+    acc, tok = model_io.push()
+    try:
+        asyncio.run(two_at_once())
+    finally:
+        model_io.pop(tok)
+    assert acc.as_trace()["unreplayable"] == ["concurrent"]
+
+
+def test_sequential_calls_stay_replayable():
+    async def in_turn():
+        for _ in range(3):
+            with model_io.in_flight():
+                await asyncio.sleep(0)
+
+    acc, tok = model_io.push()
+    try:
+        asyncio.run(in_turn())
+    finally:
+        model_io.pop(tok)
+    assert acc.as_trace()["replayable"] is True
 
 
 def test_oversized_response_is_marked_not_cut():
@@ -170,7 +207,7 @@ def test_oversized_response_is_marked_not_cut():
         model_io.pop(tok)
     doc = acc.as_trace()
     assert doc["calls"][0]["response"]["truncated"] is True
-    assert doc["replayable"] is False and doc["truncated"] is True
+    assert doc["replayable"] is False and doc["unreplayable"] == ["truncated"]
 
 
 def test_turn_cap_marks_turn_not_replayable():
@@ -195,9 +232,34 @@ def test_phone_in_tool_args_is_redacted_product_ids_are_not():
         )
     finally:
         model_io.pop(tok)
-    raw = json.dumps(acc.as_trace(), ensure_ascii=False)
+    doc = acc.as_trace()
+    raw = json.dumps(doc, ensure_ascii=False)
     assert "0722123456" not in raw
     assert pid in raw
+    # Recenzia: redactarea a schimbat ce a scris modelul, deci replay-ul ar juca alt argument decât
+    # cel pe care l-a citit codul. Turul se declară nerejucabil, nu se rejoacă pe un text fals.
+    assert doc["unreplayable"] == ["redacted"] and doc["calls"][0]["redacted"] is True
+
+
+def test_provider_ids_are_never_redacted():
+    """`chatcmpl-…` are cifre pe care detectorul de telefon le-ar citi ca număr; un id tehnic nu e
+    vocea nimănui, iar a-l modifica ar marca nerejucabile ture perfect bune."""
+    resp = _completion("salut").model_copy(update={"id": "chatcmpl-0722123456789"})
+    acc, tok = model_io.push()
+    try:
+        model_io.record_ok("chat.completions", {"model": "m"}, resp)
+    finally:
+        model_io.pop(tok)
+    doc = acc.as_trace()
+    assert doc["calls"][0]["response"]["id"] == "chatcmpl-0722123456789"
+    assert doc["replayable"] is True
+
+
+def test_input_fingerprint_follows_what_the_model_reads():
+    base = {"model": "m", "messages": [{"role": "user", "content": "a"}]}
+    assert model_io.input_sha(base) == model_io.input_sha({**base, "model": "alt", "timeout": 3})
+    other = {**base, "messages": [{"role": "user", "content": "b"}]}
+    assert model_io.input_sha(base) != model_io.input_sha(other)
 
 
 # --- prin clientul real ------------------------------------------------------------------------

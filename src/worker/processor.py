@@ -1005,10 +1005,14 @@ async def _run_turn(  # noqa: PLR0913 — o fază, mulți parametri deja valida�
     # Stagiile primesc DOAR providerul: fiecare operație își ia conexiunea și o dă înapoi. Între
     # ele (triaj nano, agent mini, tool loop, embed) poolul e liber (NX-231).
     deps = PipelineDeps(db=db, redis=redis, llm=llm, media=media, stage_hook=stage_hook)
+    # NX-366: cu ce a pornit turul, înghețat ÎNAINTE de pipeline (stagiile mută starea pe loc), plus
+    # catalogul turului după el. Împreună cu ieșirile modelului puse de runner, turul se rejoacă
+    # fără model (`scripts/trace_replay.py`).
+    pending_input = turn_capture.begin_turn_input(
+        snap, event, business, channel_id=channel_id, verified=bool(verified_customer_ref)
+    )
     runtime = await run_pipeline(ctx, deps, stages)
-    # NX-366: cu ce a pornit turul (snapshotul + amprentele), lângă ieșirile modelului pe care le-a
-    # pus runner-ul. Împreună fac turul rejucabil fără model (`scripts/trace_replay.py`).
-    turn_capture.record_turn_input(ctx, snap, event, business, channel_id=channel_id)
+    turn_capture.finish_turn_input(ctx, pending_input)
     await persist_events(db, business.id, conversation_id, contact.id, ctx.events)
     # Evenimentele emise de aici încolo (metrici DB, conflict de stare, reply_split) apar DUPĂ
     # persistarea principală → coada listei se scrie separat, o singură dată, la final.

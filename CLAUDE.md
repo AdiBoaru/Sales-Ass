@@ -1324,8 +1324,13 @@ cerere de alt fel, un apel în plus sau în minus, ori o înregistrare care nu s
 dacă o instrucțiune pică). `scripts/trace_replay.py --business <slug> (--turn|--conversation|--since)
 [--fidelity]` raportează statusul, ce vede clientul (identic sau nu), driftul de catalog și detectorii
 NX-363 înainte/după (`fixed`). `--fidelity` e poarta INSTRUMENTULUI (≥ 95% identic pe release-ul care a
-produs turele). Probat pe pipeline-ul real (DB real, furnizor fals): 3 din 3 ture identice; proba a
-prins că moderarea (câmpuri cu alias) nu se reconstruia și cădea tăcut pe fail-open. Seturile de test:
+produs turele, verificat pe `HEAD`; divergențele și scrierile intră în numitor ca eșec). Recenzia
+adversarială a găsit 14 găuri ale INSTRUMENTULUI (detectori fără date de catalog ieșeau „reparați”,
+`.env`-ul local intra în profil, scrierile prin savepoint scăpau, o intrare de model schimbată era
+invizibilă), toate reparate și testate; profilul înregistrat are TOATE setările ne-secrete, iar
+fiecare apel are amprenta intrării (`input_sha`). Pe pipeline-ul real (DB real, furnizor fals): 3/3
+ture identice, cu intrarea fiecărui apel identică byte cu byte (test de integrare
+`tests/test_nx366_replay_db.py`). Seturile de test:
 `tests/golden/prod_sets/` (`prod-2026-10-01`, plus `heldout-2026-10-01`, scris de un agent fără acces
 la analiză și ÎNGHEȚAT pe SHA-256 până la verdictul final); `scripts/sim/prod_set_run.py --set … --yes`
 le rulează pe API ca widgetul (credite, îl pornește Adi). Card:

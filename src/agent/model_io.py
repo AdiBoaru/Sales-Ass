@@ -10,16 +10,30 @@ retry, nu pe încercare); runner-ul deschide acumulatorul pe durata calculului t
 și îl pune în `ctx.trace["model_io"]`. Stagiile nu știu că sunt înregistrate. Aftercare-ul nu e
 înregistrat: nu face parte din tur.
 
+Ce face un tur NErejucabil (`replayable: false`, cu motivele în `unreplayable`), fiindcă replay-ul
+ar servi altceva decât a primit codul în producție:
+  • `truncated` — un răspuns peste plafon (înlocuit cu un marcaj, nu tăiat la mijloc);
+  • `failed` — un răspuns care n-a putut fi serializat;
+  • `concurrent` — două apeluri în zbor deodată: înregistrarea urmează ordinea în care s-au
+    TERMINAT, replay-ul pe cea în care s-au CERUT, deci două cereri de aceeași formă s-ar inversa;
+  • `redaction_degraded` — frontiera NX-230 a pus un substituent în locul unui text;
+  • `redacted` — frontiera a schimbat CONȚINUTUL scris de model (un telefon într-un argument sau
+    într-un citat): replay-ul ar juca alt text decât cel pe care l-a citit codul.
+
 Ce NU face: nu intră în analytics (P12). Rândul stă în `conversation_traces` (retenție 30 de zile,
-GDPR prin `delete_traces_for_contact`), iar textele trec prin frontiera NX-230 (`make_safe`), ca
-restul traceului. Id-urile de produs (UUID) nu sunt atinse de redactare (verificat în test).
+GDPR prin `delete_traces_for_contact`). Promptul nu se înregistrează: doar o amprentă a lui
+(`input_sha`), ca replay-ul să vadă când codul de acum îi dă modelului altă intrare.
 """
 
 from __future__ import annotations
 
+import asyncio
 import contextvars
+import hashlib
 import json
 import logging
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -40,7 +54,19 @@ MAX_TURN_BYTES = 256 * 1024
 ENDPOINTS = ("chat.completions", "responses", "moderations", "embeddings")
 
 #: Versiunea formei înregistrate. Replay-ul refuză o formă pe care n-o cunoaște (`not_replayable`).
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2
+
+#: Ce din cerere intră în amprenta intrării (`input_sha`): exact ce citește modelul. Fără `model`
+#: (configurație), fără `timeout` / `prompt_cache_key` (ale gărzilor).
+_INPUT_KEYS = ("messages", "input", "tools", "response_format", "instructions")
+
+#: Cheile care poartă TEXT SCRIS DE MODEL. O redactare care schimbă un astfel de text face turul
+#: nerejucabil; pe restul (id-uri de răspuns, metadate) redactarea e inofensivă.
+_CONTENT_KEYS = frozenset({"content", "arguments", "refusal", "text", "output_text"})
+
+#: Cheile care nu se redactează deloc: identificatori tehnici ai furnizorului, nu vocea cuiva.
+#: `chatcmpl-…` conține cifre pe care detectorul de telefon le-ar citi ca număr.
+_NEVER_REDACT = frozenset({"id", "call_id", "system_fingerprint", "model", "object"})
 
 
 @dataclass
@@ -50,14 +76,28 @@ class ModelIOAccumulator:
     truncated: bool = False
     #: Apeluri care n-au putut fi serializate: turul nu mai e rejucabil, dar nu se pierde tăcut.
     failed: int = 0
+    redaction_degraded: int = 0
+    redacted: int = 0
+    concurrent: bool = False
+    inflight: int = 0
+
+    def unreplayable(self) -> list[str]:
+        reasons = [
+            ("truncated", self.truncated),
+            ("failed", self.failed),
+            ("concurrent", self.concurrent),
+            ("redaction_degraded", self.redaction_degraded),
+            ("redacted", self.redacted),
+        ]
+        return [name for name, hit in reasons if hit]
 
     def as_trace(self) -> dict[str, Any]:
+        reasons = self.unreplayable()
         return {
             "v": FORMAT_VERSION,
             "calls": self.calls,
-            "replayable": not self.truncated and not self.failed,
-            "truncated": self.truncated,
-            "failed": self.failed,
+            "replayable": not reasons,
+            "unreplayable": reasons,
         }
 
 
@@ -77,6 +117,23 @@ def pop(token: contextvars.Token) -> None:
 
 def current() -> ModelIOAccumulator | None:
     return _current.get()
+
+
+@contextmanager
+def in_flight() -> Iterator[None]:
+    """Marchează un apel în zbor. Două deodată fac turul nerejucabil (vezi docstring-ul modulului):
+    azi nu există apeluri concurente pe drumul turului, iar asta e garda care o spune dacă apar."""
+    acc = _current.get()
+    if acc is None:
+        yield
+        return
+    acc.inflight += 1
+    if acc.inflight > 1:
+        acc.concurrent = True
+    try:
+        yield
+    finally:
+        acc.inflight -= 1
 
 
 def endpoint_for(kwargs: dict[str, Any]) -> str:
@@ -110,22 +167,34 @@ def request_key(endpoint: str, kwargs: dict[str, Any] | None) -> dict[str, Any]:
     }
 
 
-def _redacted(value: Any, degraded: list[bool]) -> Any:
-    """Frontiera NX-230 pe fiecare text al răspunsului. O redactare degradată (detector picat,
-    text peste plafonul de scanare) pune un substituent în locul textului: răspunsul înregistrat
-    nu mai e cel al modelului, deci turul nu mai e rejucabil (`degraded` o spune apelantului).
-    Import leneș: cu flagul stins modulul de privacy nu costă nimic."""
+def input_sha(kwargs: dict[str, Any] | None) -> str | None:
+    """Amprenta a ce citește modelul (mesaje, unelte, schemă), fără conținut. Replay-ul o compară:
+    aceeași cerere cu altă intrare (alt prompt, alt set de produse, alt istoric) înseamnă că
+    răspunsul înregistrat e jucat peste altă întrebare, iar raportul trebuie s-o spună."""
+    if not kwargs:
+        return None
+    doc = {k: kwargs[k] for k in _INPUT_KEYS if k in kwargs}
+    raw = json.dumps(doc, sort_keys=True, ensure_ascii=False, separators=(",", ":"), default=str)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+
+
+def _redacted(value: Any, marks: dict[str, int], key: str | None = None) -> Any:
+    """Frontiera NX-230 pe textele răspunsului. Import leneș: cu flagul stins nu costă nimic."""
     from src.privacy.boundary import make_safe  # noqa: PLC0415
 
     if isinstance(value, str):
+        if key in _NEVER_REDACT:
+            return value
         safe = make_safe(value)
         if safe.degraded:
-            degraded.append(True)
+            marks["degraded"] += 1
+        elif safe.text != value and key in _CONTENT_KEYS:
+            marks["content"] += 1
         return safe.text
     if isinstance(value, dict):
-        return {k: _redacted(v, degraded) for k, v in value.items()}
+        return {k: _redacted(v, marks, k) for k, v in value.items()}
     if isinstance(value, list):
-        return [_redacted(v, degraded) for v in value]
+        return [_redacted(v, marks, key) for v in value]
     return value
 
 
@@ -144,13 +213,25 @@ def _append(acc: ModelIOAccumulator, row: dict[str, Any]) -> None:
         acc.truncated = True
         size = _size(row)
     elif "response" in row:
-        degraded: list[bool] = []
-        row["response"] = _redacted(row["response"], degraded)
-        if degraded:
-            acc.failed += 1
+        marks = {"degraded": 0, "content": 0}
+        row["response"] = _redacted(row["response"], marks)
+        if marks["degraded"]:
+            acc.redaction_degraded += 1
             row["redaction_degraded"] = True
+        if marks["content"]:
+            acc.redacted += 1
+            row["redacted"] = True
     acc.bytes += size
     acc.calls.append(row)
+
+
+def _row(endpoint: str, kwargs: dict[str, Any] | None, ok: bool) -> dict[str, Any]:
+    return {
+        "endpoint": endpoint,
+        **request_key(endpoint, kwargs),
+        "input_sha": input_sha(kwargs),
+        "ok": ok,
+    }
 
 
 def record_ok(endpoint: str, kwargs: dict[str, Any] | None, resp: Any) -> None:
@@ -162,7 +243,7 @@ def record_ok(endpoint: str, kwargs: dict[str, Any] | None, resp: Any) -> None:
         # `by_alias`: unele răspunsuri au câmpuri cu alias (moderarea: „sexual/minors"), iar fără
         # alias `model_validate` nu le mai poate reface la replay.
         dump = resp.model_dump(mode="json", by_alias=True) if hasattr(resp, "model_dump") else resp
-        row = {"endpoint": endpoint, **request_key(endpoint, kwargs), "ok": True}
+        row = _row(endpoint, kwargs, True)
         row["response"] = dump
         _append(acc, row)
     except Exception:  # noqa: BLE001 — captura nu are voie să rupă turul
@@ -171,15 +252,22 @@ def record_ok(endpoint: str, kwargs: dict[str, Any] | None, resp: Any) -> None:
 
 
 def record_error(endpoint: str, kwargs: dict[str, Any] | None, exc: BaseException) -> None:
-    """Un apel eșuat definitiv (după retry): doar CLASA erorii, nu mesajul (poate purta conținut).
-    Replay-ul îl joacă drept eroare, ca turul să treacă prin același fallback."""
+    """Un apel eșuat definitiv (după retry): CLASA erorii și, unde există, codul HTTP, nu mesajul
+    (poate purta conținut). O anulare se înregistrează și ea (`cancelled`): interpretarea dark
+    tăiată de `wait_for` (NX-353) n-ar lăsa altfel niciun rând, iar replay-ul ar cere un apel
+    inexistent.
+    Replay-ul joacă eroarea cu aceeași clasă, ca turul să treacă prin același fallback."""
     acc = _current.get()
-    if acc is None or not isinstance(exc, Exception):
-        # O anulare (deadline, client deconectat) nu e un răspuns al furnizorului.
+    if acc is None:
         return
     try:
-        row = {"endpoint": endpoint, **request_key(endpoint, kwargs), "ok": False}
+        row = _row(endpoint, kwargs, False)
         row["error"] = type(exc).__name__
+        status = getattr(exc, "status_code", None)
+        if isinstance(status, int):
+            row["status"] = status
+        if isinstance(exc, asyncio.CancelledError):
+            row["cancelled"] = True
         _append(acc, row)
     except Exception:  # noqa: BLE001
         acc.failed += 1

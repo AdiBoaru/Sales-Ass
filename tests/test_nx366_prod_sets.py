@@ -52,3 +52,10 @@ def test_runner_is_dry_by_default(capsys):
     assert prod_set_run.main(["--set", str(SETS / "prod-2026-10-01.json")]) == 0
     out = capsys.readouterr().out
     assert "dry-run" in out and "10 conversații" in out and "36 ture" in out
+
+
+def test_heldout_cannot_run_without_final(capsys):
+    """Setul nevăzut nu se rulează în timpul reparațiilor (nici măcar în dry-run fără `--final`)."""
+    with pytest.raises(SystemExit):
+        prod_set_run.main(["--set", str(SETS / "heldout-2026-10-01.json")])
+    assert "--final" in capsys.readouterr().err

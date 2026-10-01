@@ -56,7 +56,11 @@ def _run_conversation(base: str, token: str, conv: dict[str, Any]) -> dict[str, 
     headers = {"Origin": ORIGIN, "Content-Type": "application/json"}
     turns: list[dict[str, Any]] = []
     with httpx.Client(timeout=200) as c:
-        s = c.get(f"{base}/web/bootstrap", params={"token": token}, headers=headers).json()
+        try:
+            s = c.get(f"{base}/web/bootstrap", params={"token": token}, headers=headers).json()
+            s["token"], s["visitor_id"], s["sig"]  # noqa: B018 — forma sesiunii, verificată aici
+        except Exception as e:  # noqa: BLE001 — conversația pică, setul continuă și se raportează
+            return {"visitor_id": None, "error": f"bootstrap: {type(e).__name__}", "turns": []}
         for t in conv["turns"]:
             started = datetime.now(UTC).isoformat()
             t0 = time.monotonic()
@@ -133,7 +137,17 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--token", default=TOKEN)
     p.add_argument("--parallel", type=int, default=3)
     p.add_argument("--yes", action="store_true", help="rulează pe producție (consumă credite)")
+    p.add_argument(
+        "--final",
+        action="store_true",
+        help="permite rularea unui set nevăzut (heldout-*), o singură dată, pentru verdictul final",
+    )
     args = p.parse_args(argv)
+    if args.set.name.startswith("heldout-") and not args.final:
+        p.error(
+            f"{args.set.name} e setul nevăzut: se rulează o singură dată, la verdictul final "
+            "(--final), nu în timpul reparațiilor"
+        )
     doc = load_set(args.set)
     convs = doc["conversations"]
     n_turns = sum(len(c["turns"]) for c in convs)
@@ -144,28 +158,39 @@ def main(argv: list[str] | None = None) -> int:
     started = datetime.now(UTC).isoformat()
     results: dict[str, Any] = {}
     lock = threading.Lock()
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    path = OUT_DIR / f"set-{doc.get('version')}-{stamp}.json"
+    report: dict[str, Any] = {
+        "set": doc.get("version"),
+        "base": args.base,
+        "window": {"started": started, "ended": None},
+        "conversations": results,
+    }
+
+    def save() -> None:
+        # Scris după FIECARE conversație: o rulare întreruptă păstrează ce s-a plătit deja.
+        path.write_text(
+            json.dumps(report, ensure_ascii=False, indent=1, default=str), encoding="utf-8"
+        )
 
     def one(conv: dict[str, Any]) -> None:
-        res = _run_conversation(args.base, args.token, conv)
+        try:
+            res = _run_conversation(args.base, args.token, conv)
+        except Exception as e:  # noqa: BLE001 — o conversație picată nu oprește setul
+            res = {"visitor_id": None, "error": type(e).__name__, "turns": []}
         with lock:
             results[conv["id"]] = res
+            save()
 
     with ThreadPoolExecutor(max_workers=max(1, args.parallel)) as ex:
         list(ex.map(one, convs))
     ended = datetime.now(UTC).isoformat()
-    visitors = {k: v["visitor_id"] for k, v in results.items()}
+    report["window"]["ended"] = ended
+    visitors = {k: v["visitor_id"] for k, v in results.items() if v.get("visitor_id")}
     for conv_id, cid in asyncio.run(_resolve_conversations(args.business, visitors)).items():
         results[conv_id]["conversation_id"] = cid
-    report = {
-        "set": doc.get("version"),
-        "base": args.base,
-        "window": {"started": started, "ended": ended},
-        "conversations": results,
-    }
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-    path = OUT_DIR / f"set-{doc.get('version')}-{stamp}.json"
-    path.write_text(json.dumps(report, ensure_ascii=False, indent=1, default=str), encoding="utf-8")
+    save()
     print(f"fereastra: {started} → {ended}")
     print(f"raport local: {path.relative_to(ROOT)}")
     return 0
