@@ -65,7 +65,10 @@ _LOCAL_ONLY = frozenset(
 
 #: Statusurile unui replay. Vocabular ÎNCHIS. `wrote` = codul a încercat o scriere (refuzată de
 #: tranzacția READ ONLY), deci turul de producție a avut un efect pe care replay-ul nu-l are.
-STATUSES = ("replayed", "diverged", "wrote", "db_aborted", "not_replayable")
+#: `shortened` = codul de acum s-a oprit mai devreme și a folosit doar un PREFIX al înregistrării
+#: (o reparație care scoate un apel). Rezultatul e determinat integral de ieșirile înregistrate,
+#: deci se poate judeca, dar nu e „identic" pentru poarta de fidelitate.
+STATUSES = ("replayed", "shortened", "diverged", "wrote", "db_aborted", "not_replayable")
 
 
 class ReplayDivergence(Exception):
@@ -470,8 +473,10 @@ async def replay_turn(
 
     db_state = provider.state  # type: ignore[attr-defined]
     status = "replayed"
-    if player.divergence is not None or player.unused:
+    if player.divergence is not None:
         status = "diverged"
+    elif player.unused:
+        status = "shortened"
     elif db_state["wrote"]:
         status = "wrote"
     elif db_state["aborted"]:

@@ -826,6 +826,10 @@ async def build_plan(
         and not cheaper_intent
         and not show_more
         and ctx.state.displayed_products
+        # NX-369: un tur care a citit regulile magazinului (FAQ) e despre MAGAZIN; textul lui
+        # respins e o regulă parafrazată, nu un follow-up pe cardurile vechi (c7, livrarea servită
+        # cu cele trei carduri de dinainte dedesubt). Îl tratează ramura fără produse din finalize.
+        and not run.grounded_sources
         and not (
             final
             and _valid(

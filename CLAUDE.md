@@ -1336,6 +1336,17 @@ la analiză și ÎNGHEȚAT pe SHA-256 până la verdictul final); `scripts/sim/p
 le rulează pe API ca widgetul (credite, îl pornește Adi). Card:
 [`tasks/stage1/NX-366.md`](tasks/stage1/NX-366.md); probă: `pytest tests/test_nx366_*.py -q`.
 
+**NX-369 — textul modelului nu se mai pierde.** Pe c5 modelul scria handle-urile de card în
+proză („P1 are SPF 50…, P2 și P6 sunt…"), scrub-ul arunca propozițiile pentru „1", iar trei
+carduri rămâneau fără niciun cuvânt; acum `_resolve_handles` le traduce în numele scurte de pe card,
+iar rezerva de încadrare coboară la un tip când e singura frază. Pe c14 („pot returna?") proza
+corectă, dar parafrazată, pica la NX-346 și clientul primea „n-am găsit produse"; pe c7 același
+eșec reîncărca cardurile vechi sub regula de livrare. Acum `store_rules.quoted_rules` leagă fiecare
+propoziție respinsă de regula pe care o redă și servește textul magazinului, cuvânt cu cuvânt, iar R3
+nu pornește pe un tur care a citit regulile. Replay-ul are statusul `shortened` (codul folosește un
+prefix al înregistrării). Card: [`tasks/stage1/NX-369.md`](tasks/stage1/NX-369.md); probă:
+`pytest tests/test_nx369_text_paths.py -q`.
+
 **NX-360 — stocul și prețurile SOLE se resincronizează din paginile live.** Catalogul era o fotografie
 din 2026-08-28: cele 391 de produse `out_of_stock` aveau prețul voucherului WELCOME15 drept preț de
 listă (scraperul cădea pe `offers.price` din JSON-LD când pagina epuizată nu arăta rândul de preț), iar

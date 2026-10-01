@@ -221,7 +221,7 @@ async def test_a_different_request_kind_is_divergence(capture_on):
     assert res.divergence["recorded"]["schema"] == "rich_reply"
 
 
-async def test_fewer_calls_than_recorded_is_divergence(capture_on):
+async def test_fewer_calls_than_recorded_is_shortened_not_identical(capture_on):
     row = await _produce(_Provider(_completion('{"text": "Uite"}')), [_schema_stage])
 
     async def no_model(ctx, deps):
@@ -230,7 +230,7 @@ async def test_fewer_calls_than_recorded_is_divergence(capture_on):
     res = await trace_replay.replay_turn(
         row, db=_db(_Conn()), business=_business(), stages=[no_model]
     )
-    assert res.status == "diverged" and res.unused_calls == 1
+    assert res.status == "shortened" and res.unused_calls == 1
 
 
 async def test_a_failed_statement_in_a_checkout_is_reported(capture_on):
