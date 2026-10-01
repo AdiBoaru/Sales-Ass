@@ -30,6 +30,11 @@ FORMAT_VERSION = 2
 #: ~12 KB pe `sole-ro`. Peste plafon turul e nerejucabil, cu motiv, nu trunchiat.
 MAX_INPUT_BYTES = 128 * 1024
 
+#: Setări care nu sunt secrete după NUME (`is_secret_field`), dar sunt chei după ROST: salt-ul de
+#: asignare NX-249 e cheia HMAC care face bucketul necalculabil din afară. Gol azi în producție;
+#: setat mâine, ar ajunge în traceuri și în cazurile exportate în repo.
+_NEVER_RECORD = frozenset({"release_assignment_salt"})
+
 #: Câmpurile contactului care intră. `display_name` nu: e PII și nimic din tur nu decide pe el.
 _CONTACT_KEYS = ("id", "business_id", "locale", "profile", "lead_score", "lifecycle", "consent")
 
@@ -53,7 +58,7 @@ def settings_profile(settings: Any) -> dict[str, Any]:
         names = sorted(k for k in vars(settings) if not k.startswith("_"))
     out: dict[str, Any] = {}
     for name in names:
-        if is_secret_field(name):
+        if is_secret_field(name) or name in _NEVER_RECORD:
             continue
         value = getattr(settings, name, None)
         if isinstance(value, (bool, int, float, str)):

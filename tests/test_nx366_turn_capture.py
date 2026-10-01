@@ -130,6 +130,7 @@ def test_settings_profile_is_complete_and_has_no_secrets(capture_on):
     profile = _capture(_snap()).trace["turn_input"]["env"]["settings"]
     assert "card_slots" in profile and "single_brain_enabled" in profile  # și cele implicite
     assert "openai_api_key" not in profile and "database_url" not in profile
+    assert "release_assignment_salt" not in profile  # cheie după rost, nu după nume
     assert all(isinstance(v, (bool, int, float, str)) for v in profile.values())
 
 
