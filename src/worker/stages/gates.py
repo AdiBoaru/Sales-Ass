@@ -47,7 +47,12 @@ NEUTRAL_MSG = (
 
 # NX-368: categoriile de moderare (numele câmpurilor din `Categories` ale furnizorului) care au
 # răspuns propriu. Restul flag-urilor sunt doar telemetrie (vezi `_moderation_blocked`).
-_SELF_HARM = frozenset({"self_harm", "self_harm_intent", "self_harm_instructions"})
+#: Intenția sau instrucțiunile de auto-vătămare încheie turul cu mesajul de sprijin. `self_harm`
+#: SINGUR nu: pe română clasificatorul o citește și pe vorbirea despre piele (c13, «mă mănâncă» a
+#: ieșit 0,12 pe `self-harm`), deci un fals pozitiv ar înlocui iar răspunsul la produs. Acolo
+#: agentul răspunde, iar fraza de sprijin se pune ÎNAINTEA răspunsului (`apply_moderation_notice`).
+_SELF_HARM_STOP = frozenset({"self_harm_intent", "self_harm_instructions"})
+_SELF_HARM_NOTE = frozenset({"self_harm"})
 _MINORS = frozenset({"sexual_minors"})
 #: Abuzul îndreptat spre bot primește în continuare răspunsul neutru. Categoriile care se aprind
 #: pe vorbirea despre corp și produse (`violence`: „mă mănâncă", „arde"; `sexual`: produse intime;
@@ -375,7 +380,7 @@ async def _moderation_blocked(ctx: TurnContext, deps: PipelineDeps) -> bool:
     # spre bot răspunsul neutru, iar restul e telemetrie: turul îl răspunde agentul.
     # NICIODATĂ corpul în analytics (principiul 12): doar categoriile și acțiunea.
     categories = set(res.categories)
-    if categories & _SELF_HARM:
+    if categories & _SELF_HARM_STOP:
         action = "support"
         ctx.set_reply(_localized(_SUPPORT_MSG, ctx.language), cacheable=False)
     elif categories & _MINORS:
@@ -385,10 +390,31 @@ async def _moderation_blocked(ctx: TurnContext, deps: PipelineDeps) -> bool:
         # Abuzul îndreptat spre bot e motivul porții (NX-15): răspuns neutru, fără blocare.
         action = "neutral"
         ctx.set_reply(NEUTRAL_MSG, cacheable=False)
+    elif categories & _SELF_HARM_NOTE:
+        action = "support_notice"
+        ctx.moderation_notice = _localized(_SUPPORT_MSG, ctx.language)
     else:
         action = "observed"
+    # Un mesaj semnalat care ajunge la agent nu intră în memoria clientului și nici în cache-ul
+    # partajat (aftercare citește flagul): înainte, ieșirea timpurie le ocolea pe amândouă.
+    ctx.moderation_flagged = True
     ctx.emit("message_moderated", categories=res.categories, action=action)
-    return action != "observed"
+    return action not in ("observed", "support_notice")
+
+
+def apply_moderation_notice(ctx: TurnContext) -> None:
+    """NX-368: pune fraza de sprijin ÎNAINTEA răspunsului agentului, o dată. Chemată de runner pe
+    reply-ul final, lângă fraza de siguranță NX-173 (același loc prin care trec toate căile)."""
+    notice = getattr(ctx, "moderation_notice", None)
+    reply = ctx.reply
+    if not notice or reply is None:
+        return
+    reply.cacheable = False
+    if notice not in (reply.text or ""):
+        reply.text = f"{notice}\n\n{reply.text}".strip() if reply.text else notice
+    rich = getattr(reply, "rich", None)
+    if rich is not None and hasattr(rich, "intro") and notice not in (rich.intro or ""):
+        rich.intro = f"{notice}\n\n{rich.intro}".strip() if rich.intro else notice
 
 
 async def _charge_vision_cost(ctx: TurnContext, deps: PipelineDeps) -> None:
@@ -473,7 +499,8 @@ async def gates_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     if await _rate_limited(ctx, deps):
         return
 
-    # 4. moderare (NX-15): mesaj toxic → răspuns neutru, NU ajunge la triaj/agent.
+    # 4. moderare (NX-15, NX-368): abuz spre bot → răspuns neutru; intenție de auto-vătămare →
+    #    sprijin; conținut sexual cu minori → refuz; restul flag-urilor ajung la agent (telemetrie).
     if await _moderation_blocked(ctx, deps):
         return
 

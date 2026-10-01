@@ -201,7 +201,7 @@ sunt măsurate (principiul 10).
 2. `contact.is_blocked` → `halt_silent("contact_blocked")` (NX-15).
 3. `handoff_until > now()` → `halt_silent("handoff_active")` (un om a preluat).
 4. `_rate_limited` (G2c) → throttle (contor Redis).
-5. `_moderation_blocked` (NX-15) → `deps.llm.moderate` → răspuns neutru.
+5. `_moderation_blocked` (NX-15, NX-368) → `deps.llm.moderate` → abuz spre bot: răspuns neutru; intenție de auto-vătămare: sprijin (112); minori: refuz; `self_harm` simplu: agentul răspunde, cu fraza de sprijin înainte; restul: telemetrie, turul continuă. Nicio blocare automată.
 6. `detect_risk(body)` → `request_human` + mesaj de tranziție.
 
 **Triaj** ([`stages/triage.py:65`](../src/worker/stages/triage.py)) — `llm=None`

@@ -88,8 +88,53 @@ async def test_self_harm_gets_support_not_a_reprimand(no_block):
 
 
 async def test_self_harm_support_is_localized(no_block):
-    ctx = await _run("x", ["self_harm"], language="en")
+    ctx = await _run("x", ["self_harm_intent"], language="en")
     assert ctx.reply.text.startswith("I'm really sorry")
+
+
+async def test_plain_self_harm_keeps_the_answer_and_adds_the_support_sentence(no_block):
+    """Pe c13 «mă mănâncă» a ieșit 0,12 pe `self-harm`: `self_harm` fără intenție nu înlocuiește
+    răspunsul la produs. Agentul răspunde, iar runner-ul pune fraza de sprijin înainte, o dată."""
+    from src.models import Reply  # noqa: PLC0415
+
+    ctx = await _run("ma zgarii pana la sange, ce crema ajuta?", ["self_harm"])
+    assert ctx.reply is None and ctx.halt is False
+    assert _moderated(ctx)[0]["action"] == "support_notice"
+    ctx.reply = Reply(text="Uite trei creme calmante.")
+    gates.apply_moderation_notice(ctx)
+    gates.apply_moderation_notice(ctx)  # runner-ul o poate chema de două ori pe early exit
+    assert ctx.reply.text.count("112") == 1
+    assert ctx.reply.text.endswith("Uite trei creme calmante.")
+    assert ctx.reply.cacheable is False
+
+
+async def test_a_flagged_turn_that_reaches_the_agent_is_marked_for_aftercare(no_block):
+    ctx = await _run("se descuameaza si ma mananca", ["violence"])
+    assert ctx.moderation_flagged is True
+    clean = _ctx("o crema pentru ten uscat")
+    assert clean.moderation_flagged is False
+
+
+async def test_a_flagged_message_is_not_cached_nor_remembered(no_block, monkeypatch):
+    from src.models import Reply, RouteDecision  # noqa: PLC0415
+    from src.worker import aftercare  # noqa: PLC0415
+
+    monkeypatch.setattr(get_settings(), "cache_enabled", True)
+    monkeypatch.setattr(get_settings(), "profile_extraction_enabled", True)
+    ctx = await _run("se descuameaza si ma mananca", ["violence"])
+    ctx.reply = Reply(text="Pentru descuamare îți recomand o cremă calmantă blândă.")
+    ctx.route = RouteDecision(route="sales")
+
+    def _no_db(op):  # nimic nu are voie să ajungă la DB
+        raise AssertionError(op)
+
+    await aftercare._cache_writeback(_no_db, None, "biz-1", "ro", "x", ctx)
+    await aftercare._extract_profile_and_score(_no_db, None, ctx, object(), shadow_mode=False)
+    skipped = {e.type: e.properties.get("reason") for e in ctx.events if "skipped" in e.type}
+    assert skipped == {
+        "cache_write_skipped": "moderated",
+        "profile_extraction_skipped": "moderated",
+    }
 
 
 async def test_minors_and_abuse_get_the_neutral_reply_without_blocking(no_block):
@@ -101,7 +146,7 @@ async def test_minors_and_abuse_get_the_neutral_reply_without_blocking(no_block)
 
 
 async def test_self_harm_wins_over_other_categories(no_block):
-    ctx = await _run("x", ["violence", "self_harm"])
+    ctx = await _run("x", ["violence", "self_harm_intent"])
     assert _moderated(ctx)[0]["action"] == "support"
 
 

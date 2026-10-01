@@ -1339,10 +1339,12 @@ le rulează pe API ca widgetul (credite, îl pornește Adi). Card:
 **NX-368 — moderarea nu mai reduce la tăcere o întrebare despre corp (P0).** „se descuamează și
 mă mănâncă" ieșea `violence`, clientul primea „Hai să păstrăm conversația respectuoasă", iar al
 treilea flag în 24 h îl bloca definitiv; singurul flag din tot istoricul `sole-ro` a fost acest fals
-pozitiv. Acum acțiunea depinde de categorie: auto-vătămarea primește un mesaj de sprijin cu 112,
-`sexual_minors` un refuz, abuzul spre bot (`harassment*`, `hate*`) răspunsul neutru, iar
-`violence*`/`illicit*`/`sexual` sunt telemetrie (`message_moderated{action}`) și turul îl răspunde
-agentul. Nimeni nu mai e blocat automat de un clasificator. Flag `MODERATION_FLAG_TELEMETRY_ENABLED`
+pozitiv. Acum acțiunea depinde de categorie: intenția sau instrucțiunile de auto-vătămare primesc un
+mesaj de sprijin cu 112, `self_harm` singur (aprins și de vorbirea despre piele) lasă agentul să
+răspundă cu fraza de sprijin înainte, `sexual_minors` un refuz, abuzul spre bot (`harassment*`,
+`hate*`) răspunsul neutru, iar `violence*`/`illicit*`/`sexual` sunt telemetrie
+(`message_moderated{action}`) și turul îl răspunde agentul. Un mesaj semnalat care ajunge la agent nu
+intră în cache și nici în memoria clientului. Nimeni nu mai e blocat automat de un clasificator. Flag `MODERATION_FLAG_TELEMETRY_ENABLED`
 (ON; OFF = calea veche). Card: [`tasks/stage1/NX-368.md`](tasks/stage1/NX-368.md); probă:
 `pytest tests/test_nx368_moderation.py -q`.
 

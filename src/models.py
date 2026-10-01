@@ -662,6 +662,12 @@ class TurnContext:
     # nu importăm src.safety în models (ciclu: safety → config → …).
     safety_decision: Any = None
     halt: bool = False  # owner: Gates (tăcere intenționată — early exit fără reply)
+    # NX-368, owner: Gates. Mesajul a fost semnalat de moderare, dar turul continuă la agent: nu
+    # intră în cache-ul partajat și nici în memoria clientului (aftercare).
+    moderation_flagged: bool = False
+    # NX-368, owner: Gates. Fraza de sprijin pusă de runner înaintea răspunsului (`self_harm` fără
+    # intenție declarată: răspunsul la produs rămâne, fraza se adaugă).
+    moderation_notice: str | None = None
     from_cache: bool = False  # owner: Cache (G5b) — reply servit din cache
     # owner: processor (seed din conversation_summaries, G6-2 felia 2). Rezumatul rolling al
     # conversației lungi (acoperă mesajele de dinaintea ultimelor 8). Citit de context_blocks.
