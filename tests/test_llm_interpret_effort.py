@@ -109,8 +109,8 @@ async def test_interpret_effort_none_sends_none_and_the_interpret_temperature():
     assert sent["timeout"] == 30.0
 
 
-async def test_interpret_effort_default_is_low_and_drops_the_temperature():
-    """2026-10-07: interpretarea raționează la `low` (măsurat pe `fresh-2026-10-07`). Cu
+async def test_interpret_effort_default_is_medium_and_drops_the_temperature():
+    """2026-10-07: interpretarea raționează la `medium` (decis pe `fresh-2026-10-07`). Cu
     raționamentul pornit furnizorul refuză o temperatură ≠ 1, deci ea nu pleacă, iar ceasul e
     al unui apel care raționează (NX-311), nu cei 30 s ai rundei fără raționament."""
     s = get_settings()
@@ -124,8 +124,8 @@ async def test_interpret_effort_default_is_low_and_drops_the_temperature():
         temperature=s.llm_temperature_interpret,
     )
     sent = completions.kwargs[0]
-    assert s.llm_reasoning_effort_interpret == "low"
-    assert sent["reasoning_effort"] == "low"
+    assert s.llm_reasoning_effort_interpret == "medium"
+    assert sent["reasoning_effort"] == "medium"
     assert "temperature" not in sent
     assert sent["timeout"] > 30.0
 

@@ -192,7 +192,7 @@ async def test_the_call_uses_the_interpret_effort_temperature_and_cache_key():
     fake = FakeLLM(_reply(_interp()))
     await ti.interpret_turn(fake, _input("fashion"), business_id="b-x")
     call = fake.calls[0]
-    assert call["effort"] == s.llm_reasoning_effort_interpret == "low"
+    assert call["effort"] == s.llm_reasoning_effort_interpret == "medium"
     assert call["temperature"] == s.llm_temperature_interpret
     assert call["cache_key"] == f"b-x:{ic.INTERPRET_PROMPT_VERSION}"
 
