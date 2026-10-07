@@ -1447,6 +1447,29 @@ cheia bate eticheta; între etichete regula rămâne. Pe vocabularul real se sch
 («corp», «Corp»). Card: [`tasks/stage1/NX-376.md`](tasks/stage1/NX-376.md); probă:
 `pytest tests/test_nx376_shelf_key_beats_label.py -q`.
 
+**NX-378 (cu NX-377) — după o reluare, «mai arată-mi altele» arată ALTELE din subiectul reluat.** Setul
+`kernel-live-2026-10-01` (k1): «înapoi la seruri, mai arată-mi altele» primea zero carduri. Replay-ul a
+corectat analiza inițială (C3) și a găsit trei cauze: (1) căutarea planificată excludea ecranul v1
+(șampoanele), nu ecranul subiectului reluat; acum executorul trimite uneltei ce a văzut clientul
+după starea porții (`seen_extra`), scos și din pool-ul sesiunii; (2) restul rândurilor completării
+NX-298 se arunca, deci pool-ul paginării era cât pagina; acum intră în coada pool-ului; (3) după
+puținele potriviri, NX-298 punea produse fără textul cererii, deși existau seruri pentru pete cu tip
+de ten necunoscut: NX-377 (D7: o fațetă `partitioning` neauditată nu exclude un produs fără atribut)
+completează ÎNAINTEA lui NX-298, doar cu potriviri STRICTE de text, marcate `facet_unknown` pentru
+model. Pe replay: 5 seruri noi pentru pete în loc de 0 carduri; pe toate turele din 2026-10-01
+completarea aduce produse doar pe k1. Cozile pool-ului (NX-303, necunoscutele, restul NX-298) urcă pe
+prima pagină când un rând al ei e scos, deci trec la îmbinare prin aceleași porți ca pagina
+(`_merge_pool_tail`): poarta de siguranță NX-173 FĂRĂ flag (recenzia a găsit un retinoid din coadă
+servit în sarcină, iar gaura exista pe `main` pe coada NX-303), constrângerile numerice, excluderile
+și banda; decizia turului (NX-367) numără excluderile cozii o dată pe produs, iar rândurile ei intră
+în `kept` doar când se servesc (`count_kept=False` + `count_served`, altfel un set golit de noi ar fi
+păstrat proza modelului). Pe drum: paginarea (`continue_search_session`) reumple pagina golită de
+un context de siguranță apărut la mijlocul conversației, în loc de „sesiune epuizată". Flaguri
+`SEARCH_UNKNOWN_FILL_ENABLED`, `SEARCH_POOL_FROM_FILTER_FILL_ENABLED`,
+`SEARCH_RESUME_EXCLUDES_SUBJECT_SEEN_ENABLED` (ON; stinse toate, pagina e cea de pe `main`). Carduri: [`tasks/stage1/NX-378.md`](tasks/stage1/NX-378.md),
+[`tasks/stage1/NX-377.md`](tasks/stage1/NX-377.md); probă: `pytest tests/test_nx377_unknown_facet_fill.py
+tests/test_nx378_resume_and_pool.py -q`.
+
 **NX-372 — un tur care a citit doar regulile magazinului nu mai spune „n-am găsit produse".** Setul
 `kernel-live-2026-10-01` (rulat pe producție, analiza în
 [`tasks/stage1/KERNEL-LIVE-2026-10-01.md`](tasks/stage1/KERNEL-LIVE-2026-10-01.md), clasa A1): la
