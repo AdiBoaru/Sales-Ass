@@ -99,15 +99,35 @@ async def test_interpret_effort_none_sends_none_and_the_interpret_temperature():
         "S",
         "U",
         {"name": "turn_interpretation", "strict": True, "schema": {}},
-        reasoning_effort=s.llm_reasoning_effort_interpret,
+        reasoning_effort="none",
         temperature=s.llm_temperature_interpret,
     )
     sent = completions.kwargs[0]
-    assert s.llm_reasoning_effort_interpret == "none"
     assert s.llm_temperature_interpret == 0.2
     assert sent["reasoning_effort"] == "none"
     assert sent["temperature"] == 0.2
     assert sent["timeout"] == 30.0
+
+
+async def test_interpret_effort_default_is_low_and_drops_the_temperature():
+    """2026-10-07: interpretarea raționează la `low` (măsurat pe `fresh-2026-10-07`). Cu
+    raționamentul pornit furnizorul refuză o temperatură ≠ 1, deci ea nu pleacă, iar ceasul e
+    al unui apel care raționează (NX-311), nu cei 30 s ai rundei fără raționament."""
+    s = get_settings()
+    completions = _Completions()
+    llm = _client(completions)
+    await llm.complete_schema_raw(
+        "S",
+        "U",
+        {"name": "turn_interpretation", "strict": True, "schema": {}},
+        reasoning_effort=s.llm_reasoning_effort_interpret,
+        temperature=s.llm_temperature_interpret,
+    )
+    sent = completions.kwargs[0]
+    assert s.llm_reasoning_effort_interpret == "low"
+    assert sent["reasoning_effort"] == "low"
+    assert "temperature" not in sent
+    assert sent["timeout"] > 30.0
 
 
 def test_sampling_without_overrides_is_the_agent_sampling():

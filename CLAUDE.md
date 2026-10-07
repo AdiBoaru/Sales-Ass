@@ -294,9 +294,9 @@ exacte, fără exponent) și evenimentul `turn_interpretation` (I18: versiunea
 contractului pe toate cele șapte `outcome`, vocabular închis, zero text de client). Clientul:
 `complete_schema_raw` întoarce `SchemaReply{content, refusal, finish_reason}` (refuz ≠ tăiere ≠ gol),
 `complete_schema` e un strat peste el cu cererea BYTE-IDENTICĂ (test pe kwargs capturate pe `main`);
-`_chat`/`_sampling` primesc `effort`/`temperature` PER APEL (`LLM_REASONING_EFFORT_INTERPRET=none`,
-vocabular ÎNCHIS `config.InterpretEffort`, deci gol sau necunoscut pică la boot, iar
-`LLM_TEMPERATURE_INTERPRET=0.2`, deci ceasul NX-311 de 30 s); `llm_usage.per_call[].purpose =
+`_chat`/`_sampling` primesc `effort`/`temperature` PER APEL (`LLM_REASONING_EFFORT_INTERPRET`, `low`
+din 2026-10-07, vezi nota de mai jos; vocabular ÎNCHIS `config.InterpretEffort`, deci gol sau
+necunoscut pică la boot; `LLM_TEMPERATURE_INTERPRET=0.2` pleacă doar pe `none`); `llm_usage.per_call[].purpose =
 "interpret"` DERIVAT din numele schemei (`usage.request_purpose`), absent pe apelurile de azi. Felia
 5c: `scripts/nx335_interpret_smoke.py` (`--message` obligatoriu, `--yes` = UN apel, îl rulează Adi) și
 `scripts/nx335_interpret_replay.py` (`--snapshot` = instantaneul LOCAL, gitignored, al celor 127 de ture
@@ -1490,6 +1490,18 @@ citirile au picat (`store_read_ok`); după reguli servite parțial (NX-369), reg
 (executorii `faq`/`delegate` compun prin `finalize.render`). `kernel_sentence` locuiește acum în
 `src/domain/pack.py`. Flag `STORE_INFO_FALLBACK_ENABLED` (ON). Card:
 [`tasks/stage1/NX-372.md`](tasks/stage1/NX-372.md); probă: `pytest tests/test_nx372_store_info_fallback.py -q`.
+
+**Interpretarea raționează la `low` (2026-10-07, decis de Adi).** Setul nevăzut `fresh-2026-10-07`
+(`tests/golden/prod_sets/`, 12 conversații, `expect` per tur) rulat pe producție a dat 19/49 de ture
+corecte, 18 parțiale, 12 greșite: cam jumătate din greșeli sunt etichete greșite ale interpretării
+(«cat costa» ca referință pe nume, «care din astea…» ca detaliu ambiguu), cealaltă jumătate sunt ture
+cu eticheta corectă pe care executorii, planul sau o poartă le strică (SPF/nuanță/recenzii răspunse cu
+fișa standard, rutina fără raft devenită căutare, FAQ pe două reguli aruncat). `scripts/sim/
+interpret_effort_probe.py` rejoacă turele (NX-366, 0 $), capturează cererea de interpretare a
+producției și o retrimite pe alt efort: pe `none` eticheta se schimbă între două eșantioane pe ~1/3
+din ture (din 11 greșite, 4 se repară doar retrimițând), `low` repară ~9, `medium` ~8 și e mai lent.
+Prețul lui `low`: p50 1,8 → 4,4 s, p90 2,4 → 7,4 s, iar pe ~5 ture modelul lasă deoparte o nevoie
+spusă («tata» → Bărbați, «vopsit»). Efortul NU repară jumătatea a doua.
 
 **NX-360 — stocul și prețurile SOLE se resincronizează din paginile live.** Catalogul era o fotografie
 din 2026-08-28: cele 391 de produse `out_of_stock` aveau prețul voucherului WELCOME15 drept preț de

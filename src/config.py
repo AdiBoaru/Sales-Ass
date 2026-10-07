@@ -1657,8 +1657,14 @@ class Settings(BaseSettings):
     # Vocabular ÎNCHIS (recenzia NX-335): un `LLM_REASONING_EFFORT_INTERPRET=` gol ar omite
     # parametrul, iar pe `gpt-6-luna` absența înseamnă raționament PORNIT implicit (vezi
     # `llm._MODEL_PROFILES`), adică exact decizia amânată. Gol sau necunoscut ⇒ pică la boot.
+    # 2026-10-07 (decis de Adi): `low`. Măsurat pe setul `fresh-2026-10-07` (47 de cereri de
+    # interpretare reale, `scripts/sim/interpret_effort_probe.py`): din 11 etichete greșite pe
+    # `none`, `low` repară ~9, `medium` ~8; `none` retrimis repară 4 doar din zgomot. Prețul:
+    # p50 1,8 → 4,4 s, p90 2,4 → 7,4 s (`medium`: 6,8 / 11,1 s) și ~5 ture pe care modelul lasă
+    # deoparte o nevoie spusă. Temperatura nu mai pleacă (raționament pornit). Plafonul dark
+    # (`interpreted_turn_dark_timeout_s`, 5 s) e sub p90-ul lui `low`: doar pentru modul dark.
     llm_reasoning_effort_interpret: InterpretEffort = Field(
-        default="none", validation_alias="LLM_REASONING_EFFORT_INTERPRET"
+        default="low", validation_alias="LLM_REASONING_EFFORT_INTERPRET"
     )
     llm_temperature_interpret: float = Field(
         default=0.2, validation_alias="LLM_TEMPERATURE_INTERPRET"
