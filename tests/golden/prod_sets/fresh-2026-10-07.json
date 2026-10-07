@@ -1,0 +1,274 @@
+{
+ "version": "fresh-2026-10-07",
+ "note": "scris de un agent fără acces la cod, analize sau rezultatele seturilor anterioare",
+ "conversations": [
+  {
+   "id": "f1_crema_rafinata",
+   "covers": "nevoie de piele spusă vag, rafinată pe rând cu tipul de ten, bugetul și o excludere de ingredient",
+   "turns": [
+    {
+     "message": "salut, as vrea o crema de fata ca imi simt pielea cam ciudat in ultima vreme",
+     "expect": "nu ghicește o problemă anume, pune o singură întrebare scurtă despre tipul de ten sau arată câteva creme de față variate și întreabă"
+    },
+    {
+     "message": "am tenul mixt, gras pe zona t si normal in rest",
+     "expect": "arată creme de față potrivite pentru ten mixt, rămânând pe creme, nu pe alte tipuri de produse"
+    },
+    {
+     "message": "pana in 80 lei daca se poate",
+     "expect": "păstrează crema de față pentru ten mixt și arată doar produse de cel mult 80 de lei"
+    },
+    {
+     "message": "si fara parfum va rog, am mai avut iritatii",
+     "expect": "păstrează tenul mixt și bugetul de 80 de lei și arată doar creme fără parfum, iar dacă nu știe sigur spune asta"
+    },
+    {
+     "message": "care din astea e cea mai usoara ca textura?",
+     "expect": "alege dintre cremele deja arătate pe cea cu textura cea mai lejeră și explică pe scurt de ce, fără să caute altele"
+    }
+   ]
+  },
+  {
+   "id": "f2_comparatie_pt_mine",
+   "covers": "comparație între două produse arătate și alegerea pe baza unei informații spuse la începutul conversației",
+   "turns": [
+    {
+     "message": "buna, am tenul sensibil si cu roseata pe obraji, caut un ser calmant",
+     "expect": "arată seruri calmante potrivite pentru ten sensibil cu roșeață"
+    },
+    {
+     "message": "compara primul cu al doilea",
+     "expect": "compară exact primul și al doilea ser arătat, pe criterii utile precum ingrediente, textură și preț"
+    },
+    {
+     "message": "care e mai bun pt mine?",
+     "expect": "alege unul dintre cele două ținând cont de tenul sensibil cu roșeață spus la început, sau spune onest dacă datele nu decid"
+    },
+    {
+     "message": "ok, da-mi linkul la el",
+     "expect": "trimite linkul doar pentru serul recomandat la mesajul anterior, nu pentru toate produsele"
+    }
+   ]
+  },
+  {
+   "id": "f3_nume_exact",
+   "covers": "produs cerut pe nume exact, apoi preț, stoc, link și o alternativă mai ieftină",
+   "turns": [
+    {
+     "message": "aveti beauty of joseon relief sun?",
+     "expect": "găsește exact produsul numit și îl arată, iar dacă nu există spune clar și oferă ceva apropiat"
+    },
+    {
+     "message": "cat costa si e pe stoc?",
+     "expect": "spune prețul și disponibilitatea pentru exact acel produs, fără să inventeze cifre"
+    },
+    {
+     "message": "trimite mi linkul",
+     "expect": "trimite linkul produsului cerut pe nume, doar pe acela"
+    },
+    {
+     "message": "ai ceva asemanator dar mai ieftin?",
+     "expect": "arată protecții solare de față similare, cu preț mai mic decât produsul discutat, nu alte tipuri de produse"
+    }
+   ]
+  },
+  {
+   "id": "f4_schimbare_si_revenire",
+   "covers": "schimbare de subiect spre seruri și revenire la creme, cu cererea de altele și un buget",
+   "turns": [
+    {
+     "message": "vreau o crema hidratanta pt ten uscat",
+     "expect": "arată creme hidratante pentru ten uscat"
+    },
+    {
+     "message": "las-o, arata-mi niste seruri cu vitamina c",
+     "expect": "trece la seruri cu vitamina C, fără să rămână pe creme"
+    },
+    {
+     "message": "inapoi la creme, mai arata-mi",
+     "expect": "revine la cremele hidratante pentru ten uscat și arată altele decât cele deja arătate"
+    },
+    {
+     "message": "si una sub 60 lei ai?",
+     "expect": "păstrează crema hidratantă pentru ten uscat și arată doar variante sub 60 de lei, fără să se întoarcă la seruri"
+    }
+   ]
+  },
+  {
+   "id": "f5_rutina_buget",
+   "covers": "rutină completă cu buget total și moment al zilei, apoi înlocuirea unui pas și rutina pentru celălalt moment",
+   "turns": [
+    {
+     "message": "fa-mi o rutina de seara pt ten gras cu porii dilatati, maxim 200 lei tot",
+     "expect": "propune o rutină de seară pe pași pentru ten gras cu pori dilatați, cu totalul de cel mult 200 de lei și fără protecție solară"
+    },
+    {
+     "message": "demachiantul e cam scump, ai ceva mai ieftin in loc?",
+     "expect": "înlocuiește doar pasul de curățare cu o variantă mai ieftină și păstrează restul rutinei, bugetul și momentul de seară"
+    },
+    {
+     "message": "si dimineata ce sa folosesc?",
+     "expect": "propune o rutină de dimineață pentru același ten gras, care include protecție solară"
+    }
+   ]
+  },
+  {
+   "id": "f6_sarcina",
+   "covers": "sarcină cu cerere de retinol și acid salicilic, apoi o cerere normală care păstrează contextul",
+   "turns": [
+    {
+     "message": "sunt insarcinata in luna 4 si as vrea un ser cu retinol pt riduri fine",
+     "expect": "nu recomandă retinol, spune pe scurt că în sarcină e bine de întrebat medicul sau farmacistul și oferă alternative mai blânde fără să dea sfat medical"
+    },
+    {
+     "message": "dar acid salicilic pot? am cosuri pe barbie",
+     "expect": "rămâne prudent, nu afirmă că e sigur în sarcină, trimite la medic sau farmacist și arată eventual opțiuni fără ingrediente riscante"
+    },
+    {
+     "message": "ok atunci arata-mi o crema hidratanta simpla, fara parfum",
+     "expect": "arată creme hidratante fără parfum și ține minte în continuare sarcina, fără produse cu retinoizi"
+    },
+    {
+     "message": "cat costa prima?",
+     "expect": "spune prețul primei creme arătate la mesajul anterior"
+    }
+   ]
+  },
+  {
+   "id": "f7_intrebare_magazin",
+   "covers": "întrebări despre livrare, plată ramburs și retur la mijlocul unei căutări, apoi continuarea căutării",
+   "turns": [
+    {
+     "message": "caut un sampon pt par vopsit, sa nu-mi spele culoarea",
+     "expect": "arată șampoane pentru păr vopsit care protejează culoarea"
+    },
+    {
+     "message": "cat dureaza livrarea in cluj? si se poate plati ramburs?",
+     "expect": "răspunde din regulile magazinului despre livrare și plata ramburs, fără să inventeze termene, și nu mută căutarea"
+    },
+    {
+     "message": "si daca nu-mi place pot sa-l returnez?",
+     "expect": "spune politica de retur a magazinului așa cum e, fără să promită ceva ce nu scrie în reguli"
+    },
+    {
+     "message": "ok, mai arata-mi",
+     "expect": "continuă căutarea de șampoane pentru păr vopsit și arată altele decât cele de la început"
+    }
+   ]
+  },
+  {
+   "id": "f8_nu_vinde",
+   "covers": "produs pe care magazinul nu îl vinde, apoi o nevoie vecină pe care o vinde",
+   "turns": [
+    {
+     "message": "aveti uscator de par? al meu s-a stricat",
+     "expect": "spune clar că nu vinde uscătoare de păr, fără să arate produse fără legătură, și poate oferi ce are pentru păr"
+    },
+    {
+     "message": "ok atunci ceva care sa-mi protejeze parul de caldura cand il usuc",
+     "expect": "arată produse de protecție termică sau îngrijire a părului înainte de uscare"
+    },
+    {
+     "message": "e pt par fin, sa nu-l ingreuneze",
+     "expect": "păstrează protecția termică și restrânge la produse ușoare potrivite pentru păr fin"
+    },
+    {
+     "message": "cel mai ieftin dintre ele cum se aplica?",
+     "expect": "identifică cel mai ieftin produs dintre cele arătate și explică modul de aplicare din informațiile magazinului"
+    }
+   ]
+  },
+  {
+   "id": "f9_par_complex",
+   "covers": "păr gras la rădăcină, uscat la vârfuri, cu mătreață și vopsit, cu întrebare despre modul de folosire",
+   "turns": [
+    {
+     "message": "am par gras la radacina si uscat la varfuri, plus un pic de matreata. ce sampon imi recomanzi?",
+     "expect": "arată șampoane pentru scalp gras cu mătreață care să nu usuce lungimile, și poate spune de ce"
+    },
+    {
+     "message": "al doilea cum se foloseste? de cate ori pe saptamana?",
+     "expect": "explică modul de folosire și frecvența pentru exact al doilea șampon arătat, din informațiile produsului"
+    },
+    {
+     "message": "si un balsam doar pt varfuri?",
+     "expect": "arată balsamuri sau măști pentru vârfuri uscate care să nu îngreuneze rădăcina grasă"
+    },
+    {
+     "message": "parul e si vopsit, conteaza?",
+     "expect": "ține cont că părul e vopsit și spune dacă produsele discutate sunt potrivite sau arată variante pentru păr vopsit"
+    }
+   ]
+  },
+  {
+   "id": "f10_cadou",
+   "covers": "cadou pentru altcineva cu buget, apoi un set și un cadou pentru bărbați",
+   "turns": [
+    {
+     "message": "vreau un cadou pt mama, are 55 de ani, buget pana in 150 lei",
+     "expect": "arată idei de cadou potrivite pentru o femeie de 55 de ani, de cel mult 150 de lei, sau întreabă scurt ce îi place"
+    },
+    {
+     "message": "ai si un set? ceva dragut de oferit",
+     "expect": "arată seturi cadou în același buget de 150 de lei, iar dacă nu are seturi spune asta"
+    },
+    {
+     "message": "si ceva pt tata, cam 100 lei",
+     "expect": "trece la cadouri pentru bărbați în jur de 100 de lei, fără să rămână pe bugetul sau produsele pentru mama"
+    },
+    {
+     "message": "care din astea are cele mai bune recenzii?",
+     "expect": "alege dintre produsele pentru tată arătate pe cel cu cele mai bune recenzii, folosind datele reale"
+    }
+   ]
+  },
+  {
+   "id": "f11_machiaj",
+   "covers": "machiaj pentru ten sensibil cu acoperire și nuanță, apoi întrebarea despre SPF și o nuanță mai închisă",
+   "turns": [
+    {
+     "message": "caut un cushion pt ten sensibil, acoperire medie, sunt destul de deschisa la culoare",
+     "expect": "arată cushion-uri cu acoperire medie, potrivite pentru ten sensibil și cu nuanțe deschise"
+    },
+    {
+     "message": "are spf vreunul din ele?",
+     "expect": "spune pentru cushion-urile arătate care au SPF și cât, iar unde nu știe spune că nu știe, fără să afirme că nu au"
+    },
+    {
+     "message": "si un corector care sa se potriveasca?",
+     "expect": "arată corectoare cu nuanțe deschise potrivite pentru ten sensibil"
+    },
+    {
+     "message": "primul cushion are si nuanta mai inchisa? e pt sora mea care e mai bronzata",
+     "expect": "verifică nuanțele disponibile pentru primul cushion arătat și spune dacă există una mai închisă"
+    }
+   ]
+  },
+  {
+   "id": "f12_simptome_vorbaret",
+   "covers": "client nehotărât care descrie simptome fără să numească produse, apoi cere o recomandare",
+   "turns": [
+    {
+     "message": "buna! deci nu stiu exact ce caut, de vreo luna ma strange pielea dupa ce ma spal pe fata si parca e si mai lucioasa pe la pranz, nu inteleg",
+     "expect": "ascultă, explică scurt că pielea poate fi deshidratată și grasă în același timp și pune cel mult o întrebare"
+    },
+    {
+     "message": "si imi apar si puncte negre pe nas, am incercat plasturi d-aia dar nu prea merg",
+     "expect": "adaugă punctele negre la ce știe deja despre ten și nu reofere plasturi ca soluție principală"
+    },
+    {
+     "message": "ma spal cu sapun obisnuit dimineata si seara daca conteaza",
+     "expect": "observă că săpunul obișnuit poate usca pielea și sugerează un gel de curățare blând"
+    },
+    {
+     "message": "tu ce mi-ai recomanda? nu vreau sa cheltui o avere",
+     "expect": "recomandă câteva produse accesibile care acoperă strângerea după spălare, luciul și punctele negre, explicând pe scurt de ce"
+    },
+    {
+     "message": "ala cu acid... cum ii zice, ala pt puncte negre, il pot folosi zilnic?",
+     "expect": "identifică produsul cu acid pentru puncte negre dintre cele arătate și spune frecvența de folosire din informațiile produsului"
+    }
+   ]
+  }
+ ]
+}
