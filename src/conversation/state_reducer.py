@@ -112,6 +112,7 @@ EXECUTOR_OPS: frozenset[str] = frozenset({"set_references", "set_active_search"}
 
 #: Motivele de tombstone care blochează reactivarea unei nevoi parcate la `resume` (I6): clientul
 #: (sau politica) a retras cheia DUPĂ ce subiectul a fost parcat. `topic_reset` e chiar parcarea.
+#: NX-379: tot ele marchează o RETRAGERE (ținută pe valoare, `_displaced`) față de o mișcare de cod.
 _RESUME_BLOCKING_REASONS: frozenset[str] = frozenset({"user_explicit", "policy", "correction"})
 
 # Motivele de respingere — vocabular ÎNCHIS (intră în `need_update_rejected{reason}`, deci trebuie
@@ -337,13 +338,47 @@ def _matches(need: Need, key: str, value: Any, *, list_like: bool) -> bool:
     return need.normalized_value == value if list_like else True
 
 
+def _client_retraction(revocation: Revocation) -> bool:
+    """Tombstone-ul unei RETRAGERI (clientul, politica, o corecție), nu al unei mișcări de cod
+    (`topic_reset` la parcare, `superseded` la înlocuire). Doar el oprește o reînviere (I6)."""
+    return revocation.reason_code in _RESUME_BLOCKING_REASONS
+
+
+def _covers(revocation: Revocation, fingerprint: str | None) -> bool:
+    """Retragerea atinge valoarea cu amprenta dată: fie e pe toată cheia (`None`), fie pe ea."""
+    return revocation.prior_value_fingerprint in (None, fingerprint)
+
+
+def _displaced(old: Revocation, new: Revocation) -> bool:
+    """NX-379: ce înlocuiește un tombstone nou. O mișcare de cod rămâne „ultimul pe cheie", ca
+    înainte. O RETRAGERE a clientului e însă a unei NEVOI (cheie + valoare): cade doar sub o altă
+    retragere care o acoperă. Altfel parcarea (`topic_reset`), o înlocuire (`superseded`) sau
+    retragerea altei valori pe aceeași cheie ștergeau tăcut amintirea ei, iar valoarea retrasă
+    revenea fără dovadă explicită."""
+    if old.key != new.key:
+        return False
+    if not _client_retraction(old):
+        return True
+    return _client_retraction(new) and _covers(new, old.prior_value_fingerprint)
+
+
 def _tombstone(
     revocations: Iterable[Revocation], new: Revocation, *, drop_keys: frozenset[str] = frozenset()
 ) -> tuple[Revocation, ...]:
-    """Adaugă un tombstone, curățând întâi cele pe aceeași cheie (nu ținem istoricul retragerilor,
-    ci faptul că ultima e valabilă) și pe cele explicit eliminate (re-afirmare de client)."""
-    kept = [r for r in revocations if r.key != new.key and r.key not in drop_keys]
+    """Adaugă un tombstone, curățând întâi cele pe care le înlocuiește (`_displaced`: nu ținem
+    istoricul mișcărilor de cod, dar ținem fiecare nevoie retrasă de client) și pe cele explicit
+    eliminate (re-afirmare de client)."""
+    kept = [r for r in revocations if not _displaced(r, new) and r.key not in drop_keys]
     return tuple(kept + [new])[-MAX_REVOCATIONS:]
+
+
+def _retracted_value(revocations: Iterable[Revocation], key: str, value: Any) -> bool:
+    """NX-379: clientul a retras ACEASTĂ valoare a cheii (sau toată cheia). Poarta lui I6 pe
+    valoare: pe o cheie de listă, o valoare-soră activă nu redeschide valoarea retrasă."""
+    fingerprint = value_fingerprint(value)
+    return any(
+        r.key == key and _client_retraction(r) and _covers(r, fingerprint) for r in revocations
+    )
 
 
 def _handle_set_need(
@@ -363,8 +398,16 @@ def _handle_set_need(
 
     revoked = state.revoked_keys()
     forced = proposal.op == "supersede"
-    if key in revoked and proposal.source not in REVIVE_CAPABLE_SOURCES:
+    if proposal.source not in REVIVE_CAPABLE_SOURCES and (
+        key in revoked
+        or (
+            normalized.value is not None
+            and _retracted_value(state.revocations, key, normalized.value)
+        )
+    ):
         # AICI se închide bucla: rezumatul/istoricul/modelul nu pot reînvia un fapt retras.
+        # NX-379: și pe valoare, nu doar pe cheie: «fără pliabil» rămâne retras chiar dacă
+        # «rezistent la apă» e încă activ pe aceeași cheie de listă.
         return RejectedUpdate("set_need", "revoked_key", key, proposal.source)
 
     list_like = normalized.operator == "contains"
@@ -432,7 +475,11 @@ def _handle_set_need(
             for n in state.needs
         )
         return (
-            replace(state, needs=needs, revocations=_drop_revocations(state, key, proposal)),
+            replace(
+                state,
+                needs=needs,
+                revocations=_drop_revocations(state, key, normalized.value, proposal),
+            ),
             Applied("set_need", key, strength, proposal.source, "unchanged"),
         )
 
@@ -442,7 +489,7 @@ def _handle_set_need(
         # poate înlocui un `explicit`), exact ca pe aceeași cheie.
         return RejectedUpdate("set_need", "hard_downgrade", key, proposal.source)
 
-    revocations = _drop_revocations(state, key, proposal)
+    revocations = _drop_revocations(state, key, normalized.value, proposal)
     outcome = "applied"
     records: tuple[Applied, ...] = ()
     if crossing is not None:
@@ -562,13 +609,22 @@ def _evict_oldest_unmapped(state: ConversationStateV2, scope: str | None) -> Con
 
 
 def _drop_revocations(
-    state: ConversationStateV2, key: str, proposal: StateUpdateProposal
+    state: ConversationStateV2, key: str, value: Any, proposal: StateUpdateProposal
 ) -> tuple[Revocation, ...]:
     """Clientul reafirmă explicit o cheie retrasă → tombstone-ul ei dispare (altfel n-ar mai putea
-    reveni niciodată la un fapt pe care l-a retras din greșeală)."""
+    reveni niciodată la un fapt pe care l-a retras din greșeală).
+
+    NX-379: reafirmă o VALOARE, deci ridică doar retragerea ei (și pe cea a întregii chei). O altă
+    valoare retrasă pe aceeași cheie rămâne retrasă: «vreau Apple» nu e dovadă pentru Samsung, pe
+    care clientul a retras-o pe telefoane, iar `resume` nu are voie s-o readucă."""
     if proposal.source not in REVIVE_CAPABLE_SOURCES:
         return state.revocations
-    return tuple(r for r in state.revocations if r.key != key)
+    fingerprint = value_fingerprint(value) if value is not None else None
+    return tuple(
+        r
+        for r in state.revocations
+        if not (r.key == key and (not _client_retraction(r) or _covers(r, fingerprint)))
+    )
 
 
 def _handle_supersede(
@@ -615,28 +671,8 @@ def _handle_revoke(
     key = norm_key(proposal.key)
     if not key:
         return RejectedUpdate("revoke", "unknown_key", None, proposal.source)
-    targets = [n for n in state.needs if n.is_active and n.key == key]
+    targets, parked_targets = _revoke_targets(state, key, proposal, policy)
     listed = _list_value(proposal, policy)
-    if listed is not None:
-        # NX-331: pe o cheie de LISTĂ o valoare numește O nevoie („remove c2" = `pores`, nu toate
-        # nevoile de ten). Fără valoare, retragerea rămâne pe toată cheia, ca înainte.
-        targets = [n for n in targets if n.normalized_value == listed]
-
-    # NX-337: ordinea contractului parchează SUBIECTUL înaintea retragerii (`_handle_set_topic` →
-    # `_retire_topic`), deci o retragere pe o nevoie a subiectului tocmai părăsit, ÎN ACELAȘI TUR,
-    # nu mai găsește nimic ACTIV — nevoia trăiește deja doar în slotul parcat. O căutăm și acolo,
-    # dar NUMAI când parcarea s-a întâmplat chiar în turul curent (`parked_at_revision ==
-    # state.revision`): o parcare mai veche rămâne comportamentul de azi, apărat de
-    # `_retracted_since_parking` la `resume`.
-    parked_targets: list[Need] = []
-    if (
-        not targets
-        and state.parked is not None
-        and state.parked.parked_at_revision == state.revision
-    ):
-        parked_targets = [n for n in state.parked.needs if n.key == key]
-        if listed is not None:
-            parked_targets = [n for n in parked_targets if n.normalized_value == listed]
 
     found = targets or parked_targets
     if any(_is_protected(n) for n in found) and not (
@@ -659,17 +695,23 @@ def _handle_revoke(
         return RejectedUpdate("revoke", "unsupported_revoke", key, proposal.source)
 
     if found:
-        # Ținta găsită (activă sau tocmai parcată) identifică valoarea REALĂ; propunerea poartă
-        # doar valoarea din DELTA, care poate fi alta (cardul NX-337: 100 vs nevoia parcată, 200).
-        prior = found[0].normalized_value
+        # Ținta găsită (activă sau parcată) identifică valoarea REALĂ; propunerea poartă doar
+        # valoarea din DELTA, care poate fi alta (cardul NX-337: 100 vs nevoia parcată, 200).
+        # NX-379: câte un tombstone pe FIECARE nevoie retrasă (o retragere fără valoare pe o cheie
+        # de listă atinge toate valorile ei), ca o reafirmare ulterioară a uneia să nu le ridice
+        # și pe celelalte.
+        priors: list[Any] = []
+        for need in found:
+            if need.normalized_value not in priors:
+                priors.append(need.normalized_value)
     elif listed is not None:
         # Cheie de LISTĂ fără nicio țintă nicăieri: valoarea cerută tot deosebește (marca X ≠
         # marca Y), deci amprenta rămâne pe ea.
-        prior = listed
+        priors = [listed]
     else:
         # Cheie scalară fără nicio țintă nicăieri: nimic n-o identifică — tombstone pe toată
         # cheia (`None` = fără amprentă), nu pe o valoare inventată din propunere (principiul 6).
-        prior = None
+        priors = [None]
 
     needs = tuple(
         replace(n, status="revoked", updated_revision=state.revision)
@@ -691,20 +733,68 @@ def _handle_revoke(
         if proposal.reason_code in {"user_explicit", "policy", "correction"}
         else "user_explicit"
     )
-    revocations = _tombstone(
-        state.revocations,
-        Revocation(
-            key=key,
-            prior_value_fingerprint=value_fingerprint(prior) if prior is not None else None,
-            source_turn_id=proposal.turn_id,
-            revision=state.revision,
-            reason_code=reason,
-        ),
-    )
+    revocations = state.revocations
+    for prior in priors:
+        revocations = _tombstone(
+            revocations,
+            Revocation(
+                key=key,
+                prior_value_fingerprint=value_fingerprint(prior) if prior is not None else None,
+                source_turn_id=proposal.turn_id,
+                revision=state.revision,
+                reason_code=reason,
+            ),
+        )
     return (
         replace(state, needs=needs, revocations=revocations, parked=parked),
         Applied("revoke", key, SOFT, proposal.source, "revoked"),
     )
+
+
+def _revoke_targets(
+    state: ConversationStateV2, key: str, proposal: StateUpdateProposal, policy: ReducerPolicy
+) -> tuple[list[Need], list[Need]]:
+    """Nevoia pe care o numește o retragere: (active, parcate).
+
+    Retragerea vine dintr-un `remove cN`, iar handle-ul `cN` e calculat pe starea DE DINAINTEA
+    turului, deci valoarea propunerii e chiar valoarea nevoii numite. În tur, însă, subiectul se
+    mută ÎNAINTEA retragerii (ordinea contractului): nevoia numită poate sta acum în parcat, iar
+    pe o reluare sau pe un schimb spre subiectul parcat (NX-348) pe aceeași cheie e ACTIVĂ nevoia
+    subiectului care revine. NX-379: valoarea decide întâi (activă, apoi parcată), și abia apoi,
+    pe o cheie scalară, orice nevoie activă sau parcată pe cheie, cum era înainte. Pe o cheie de
+    LISTĂ (NX-331) valoarea e singura identitate: „remove c2" = `pores`, nu toate nevoile de ten;
+    fără valoare, retragerea e pe toată cheia.
+
+    Parcatul se caută pe orice tur, nu doar pe cel care a parcat (NX-337 îl limita la acesta): o
+    retragere scrisă doar ca tombstone se pierdea când clientul spunea apoi altă valoare pe
+    aceeași cheie, iar `resume` readucea nevoia retrasă."""
+    active = [n for n in state.needs if n.is_active and n.key == key]
+    parked = [n for n in (state.parked.needs if state.parked is not None else ()) if n.key == key]
+    listed = _list_value(proposal, policy)
+    if listed is not None:
+        on_value = [n for n in active if n.normalized_value == listed]
+        if on_value:
+            return on_value, []
+        return [], [n for n in parked if n.normalized_value == listed]
+    named = _named_value(proposal, policy)
+    if named is not None:
+        on_value = [n for n in active if n.normalized_value == named]
+        if on_value:
+            return on_value, []
+        parked_on_value = [n for n in parked if n.normalized_value == named]
+        if parked_on_value:
+            return [], parked_on_value
+    if active:
+        return active, []
+    return [], parked
+
+
+def _named_value(proposal: StateUpdateProposal, policy: ReducerPolicy) -> Any:
+    """Valoarea canonică pe care o numește o propunere (orice fel de cheie), sau None."""
+    if proposal.value is None:
+        return None
+    normalized = normalize_need(proposal.key, proposal.value, policy.vocabulary)
+    return None if normalized is None else normalized.value
 
 
 def _list_value(proposal: StateUpdateProposal, policy: ReducerPolicy) -> Any:
@@ -1093,9 +1183,41 @@ def _handle_clear_all(
     if proposal.source not in REVIVE_CAPABLE_SOURCES:
         return RejectedUpdate("clear_all", "unsupported_revoke", None, proposal.source)
     retired = [n for n in state.needs if n.is_active and not _is_protected(n)]
-    state = _supersede_all(state, retired, proposal.turn_id, "user_explicit")
+    parked = tuple(
+        n for n in (state.parked.needs if state.parked is not None else ()) if not _is_protected(n)
+    )
+    needs = tuple(
+        replace(n, status="superseded", updated_revision=state.revision)
+        if any(n is r for r in retired)
+        else n
+        for n in state.needs
+    )
+    # NX-379: câte o retragere pe fiecare NEVOIE (cheie + valoare), și pe cele parcate, nu una pe
+    # toată cheia: o retragere pe cheie o ridica orice valoare spusă apoi de client pe aceeași
+    # cheie, deci o valoare uitată la cerere revenea apoi dintr-o inferență. Parcatele întâi,
+    # ca plafonul să le piardă pe ele înaintea celor ale subiectului curent.
+    revocations = state.revocations
+    for need in (*parked, *retired):
+        revocations = _tombstone(
+            revocations,
+            Revocation(
+                key=need.key,
+                prior_value_fingerprint=value_fingerprint(need.normalized_value)
+                if need.normalized_value is not None
+                else None,
+                source_turn_id=proposal.turn_id,
+                revision=state.revision,
+                reason_code="user_explicit",
+            ),
+        )
     return (
-        replace(state, pending_clarification=None, parked=None),
+        replace(
+            state,
+            needs=needs,
+            revocations=revocations,
+            pending_clarification=None,
+            parked=None,
+        ),
         Applied("clear_all", None, SOFT, proposal.source, "reset"),
     )
 

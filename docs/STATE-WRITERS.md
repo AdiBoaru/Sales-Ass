@@ -5,11 +5,11 @@
 
 Fiecare loc din `src/**/*.py` care scrie starea conversației (v1 sau v2), derivat MECANIC prin `ast` (nu grep). Pregătește I3/I20 din [`docs/KERNEL-CONTRACT-v1.md`](KERNEL-CONTRACT-v1.md): pasul 3 nu poate face din reducer singurul scriitor peste o stare pe care o mai scriu și alții, fără să știe cine sunt aceia.
 
-**Totaluri:** 165 scriitori găsiți, 105 intrări de soartă declarate, 8 `unresolved`.
+**Totaluri:** 167 scriitori găsiți, 105 intrări de soartă declarate, 8 `unresolved`.
 - `becomes_proposal`: 0
 - `executor_output`: 9
 - `retired`: 16
-- `stays`: 140
+- `stays`: 142
 
 ## `needs_topic` -- nevoi + subiect/raft
 
@@ -55,7 +55,9 @@ Fiecare loc din `src/**/*.py` care scrie starea conversației (v1 sau v2), deriv
 | `src/conversation/state_reducer.py:_apply_correction` | v2 | `dataclasses_replace` | `revocations` | NX-331: reducerul e SINGURUL scriitor al starii v2 (I3); functia e un pas pur al lui (rol `reducer` in tests/kernel_modules.json). Regula de corectie (I21): retrage cu `correction` nevoile implicite scrise de turul anterior pe dimensiunea contrazisa. | `stays` |
 | `src/conversation/state_reducer.py:_apply_umbrella` | v2 | `dataclasses_replace` | `topic` | NX-350 (kernel.v4.0): umbrela unui tip spus vag. Cand ce spune clientul nu se suprapune cu ce spusese (tip spus clar in afara umbrelei, umbrele disjuncte), cere alt fel de produs: subiect nou pe acelasi raft, iar nevoile subiectului se parcheaza (aceeasi regula ca orice schimbare de subiect). Scris DOAR de reducer. | `stays` |
 | `src/conversation/state_reducer.py:_evict_oldest_unmapped` | v2 | `dataclasses_replace` | `needs` | NX-331: reducerul e SINGURUL scriitor al starii v2 (I3); functia e un pas pur al lui (rol `reducer` in tests/kernel_modules.json). Plafonul `unmapped` (I25): al patrulea semnal pe subiect il inlocuieste pe cel mai vechi. | `stays` |
+| `src/conversation/state_reducer.py:_handle_clear_all` | v2 | `dataclasses_replace` | `needs` | NX-331: reducerul e SINGURUL scriitor al starii v2 (I3); functia e un pas pur al lui (rol `reducer` in tests/kernel_modules.json). `clear all`: toate nevoile neprotejate se retrag, iar slotul parcat se goleste. | `stays` |
 | `src/conversation/state_reducer.py:_handle_clear_all` | v2 | `dataclasses_replace` | `parked` | NX-331: reducerul e SINGURUL scriitor al starii v2 (I3); functia e un pas pur al lui (rol `reducer` in tests/kernel_modules.json). `clear all`: toate nevoile neprotejate se retrag, iar slotul parcat se goleste. | `stays` |
+| `src/conversation/state_reducer.py:_handle_clear_all` | v2 | `dataclasses_replace` | `revocations` | NX-331: reducerul e SINGURUL scriitor al starii v2 (I3); functia e un pas pur al lui (rol `reducer` in tests/kernel_modules.json). `clear all`: toate nevoile neprotejate se retrag, iar slotul parcat se goleste. | `stays` |
 | `src/conversation/state_reducer.py:_handle_confirm` | v2 | `dataclasses_replace` | `needs` | Handler intern al reducerului (NX-235) -- `state_reducer.py` E deja implementarea invariantei I3 ("SINGURUL loc care are voie sa schimbe starea", cf. docstring-ul modulului). Pasul 3 al kernelului EXTINDE acest modul (provenance checker, delta mapper, park/resume), nu il inlocuieste -- fiecare handler ramane exact aici. | `stays` |
 | `src/conversation/state_reducer.py:_handle_prune_products` | v2 | `dataclasses_replace` | `parked` | NX-336 PR B (kernel.v2.0, I5): handler intern al reducerului pentru eliminarea produselor blocate; atinge `parked` doar ca sa scoata blocatele din setul parcat (nevoile si subiectul parcat raman neatinse). Vezi `_handle_confirm`. | `stays` |
 | `src/conversation/state_reducer.py:_handle_revoke` | v2 | `dataclasses_replace` | `needs` | Handler intern al reducerului -- vezi `_handle_confirm`. | `stays` |

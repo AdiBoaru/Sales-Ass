@@ -11,7 +11,7 @@ DB.
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from types import SimpleNamespace
 
 import pytest
@@ -27,7 +27,12 @@ from src.conversation.interpretation import (
     StateChange,
     TurnInterpretation,
 )
-from src.conversation.needs import MAX_UNMAPPED_PER_TOPIC, NeedVocabulary, value_fingerprint
+from src.conversation.needs import (
+    MAX_UNMAPPED_PER_TOPIC,
+    NeedVocabulary,
+    normalize_need,
+    value_fingerprint,
+)
 from src.conversation.provenance import need_handles
 from src.conversation.references import (
     MAX_LOOKUP_IDS,
@@ -762,6 +767,224 @@ def test_revoke_of_a_key_that_exists_nowhere_tombstones_without_inventing_a_fing
     assert outcomes(reduced, "revoke") == ["revoked"]
 
 
+# NX-379 — I6 pe NEVOIE (cheie + valoare), nu pe cheie. Contraexemplul salvat de Hypothesis pe
+# 2026-09-29 (`sole-ro`) nu era un defect al reducerului, ci al oracolului: clientul retrage `acne`
+# (absentă), iar `anti_aging`, parcată și neretrasă, revine la reluare, exact ce cer NX-331 și
+# NX-337. Oracolul corectat (pe nevoie) a găsit însă defecte reale ale aceleiași clase, toate cu o
+# cauză: reducerul ținea minte retragerea pe CHEIE (un tombstone per cheie, șters de orice mișcare
+# ulterioară pe cheie), deși o judeca pe nevoie.
+_I6_OTHER_VALUE_SCRIPT = [
+    ("continue", [("topic", "c2"), ("set", ("concerns", "anti_aging"), "user_explicit")], []),
+    ("continue", [("topic", "c1"), ("remove", ("concerns", "acne"))], []),
+    ("resume", [], []),
+]
+_I6_SIBLING_IMPLICIT_SCRIPT = [
+    (
+        "continue",
+        [
+            ("topic", "c1"),
+            ("set", ("concerns", "alfa"), "user_explicit"),
+            ("set", ("concerns", "beta"), "user_explicit"),
+        ],
+        [],
+    ),
+    ("continue", [("remove", ("concerns", "beta"))], []),
+    ("continue", [("set", ("concerns", "beta"), "user_implicit")], []),
+]
+_I6_SIBLING_AFTER_PARK_SCRIPT = [
+    *_I6_SIBLING_IMPLICIT_SCRIPT[:2],
+    ("continue", [("topic", "c2")], []),
+    ("resume", [], []),
+    ("continue", [("set", ("concerns", "beta"), "user_implicit")], []),
+]
+_I6_OTHER_VALUE_REOPENS_SCRIPT = [
+    ("continue", [("topic", "c2"), ("set", ("brand", "apple"), "user_explicit")], []),
+    ("continue", [("topic", "c1")], []),
+    ("continue", [("remove", ("brand", "apple"))], []),
+    ("continue", [("set", ("brand", "asus"), "user_explicit")], []),
+    ("resume", [], []),
+]
+#: Găsit de oracolul corectat (`gifts`): `clear all` scria un tombstone pe toată CHEIA, pe care
+#: orice valoare spusă apoi îl ridica, deci valoarea uitată la cerere revenea dintr-o inferență.
+_I6_CLEAR_ALL_SCRIPT = [
+    (
+        "continue",
+        [
+            ("set", ("suitable_for", "alfa"), "user_explicit"),
+            ("clear", "clear_all"),
+            ("set", ("suitable_for", "beta"), "user_explicit"),
+        ],
+        [],
+    ),
+    ("continue", [("set", ("suitable_for", "alfa"), "user_implicit")], []),
+]
+
+
+def test_i6_retracting_an_absent_list_value_leaves_the_parked_sibling_alone():
+    """Contraexemplul salvat (NX-379), citit corect: `acne` nu era nicăieri, deci retragerea ei nu
+    atinge `anti_aging`, care revine la reluare. `acne` rămâne însă retrasă: o inferență ulterioară
+    n-o poate scrie."""
+    steps = list(_walk("sole-ro", _I6_OTHER_VALUE_SCRIPT))
+    resumed = steps[2][3].state
+    assert resumed.topic.category_key == "c2"
+    assert active(resumed) == {("concerns", "anti_aging")}
+    implicit = turn(
+        resumed,
+        said("set_need", key="concerns", value="acne", source="user_implicit"),
+        policy=steps[2][4],
+    )
+    assert [r.reason for r in implicit.rejected] == ["revoked_key"]
+
+
+def _concerns_waterproof_foldable() -> ConversationStateV2:
+    return turn(
+        ConversationStateV2(),
+        said("set_topic", category_key="telefoane"),
+        said("set_need", key="concerns", value="waterproof"),
+        said("set_need", key="concerns", value="foldable"),
+    ).state
+
+
+def test_i6_a_retracted_list_value_stays_retracted_while_a_sibling_is_active():
+    """Pe `main` poarta era pe CHEIE și tăcea cât timp o valoare-soră era activă: «fără pliabil»,
+    apoi o inferență pe «pliabil» îl readucea."""
+    state = turn(_concerns_waterproof_foldable(), said("revoke", key="concerns", value="foldable"))
+    again = turn(
+        state.state, said("set_need", key="concerns", value="foldable", source="user_implicit")
+    )
+    assert active(again.state) == {("concerns", "waterproof")}
+    assert [r.reason for r in again.rejected] == ["revoked_key"]
+    # Clientul o poate spune din nou, explicit.
+    said_again = turn(again.state, said("set_need", key="concerns", value="foldable"))
+    assert ("concerns", "foldable") in active(said_again.state)
+
+
+def test_i6_parking_does_not_erase_the_retraction_of_a_list_value():
+    """Pe `main`, tombstone-ul `topic_reset` al parcării înlocuia retragerea clientului (unul pe
+    cheie), iar reluarea scotea și `topic_reset`-ul: după reluare nu mai rămânea nicio urmă."""
+    state = turn(_concerns_waterproof_foldable(), said("revoke", key="concerns", value="foldable"))
+    parked = turn(state.state, said("set_topic", category_key="tablete")).state
+    resumed = turn(parked, thread="resume").state
+    assert active(resumed) == {("concerns", "waterproof")}
+    again = turn(
+        resumed, said("set_need", key="concerns", value="foldable", source="user_implicit")
+    )
+    assert active(again.state) == {("concerns", "waterproof")}
+    assert [r.reason for r in again.rejected] == ["revoked_key"]
+
+
+def test_i6_another_explicit_value_does_not_lift_the_retraction_of_the_parked_one():
+    """Retragerea mărcii parcate (nimic activ pe cheie) rămânea doar ca tombstone fără amprentă;
+    «vreau Asus» pe subiectul curent îl ridica, iar reluarea readucea Apple. Acum ținta e nevoia
+    parcată: iese din parcat, iar tombstone-ul îi poartă amprenta."""
+    steps = list(_walk("electronics", _I6_OTHER_VALUE_REOPENS_SCRIPT))
+    after_revoke = steps[2][3].state
+    assert [n.key for n in after_revoke.parked.needs] == []
+    resumed = steps[4][3].state
+    assert resumed.topic.category_key == "c2"
+    assert resumed.need_for("brand") is None
+
+
+def _apple_on_phones_then_asus_on_tablets() -> ConversationStateV2:
+    phones = turn(
+        ConversationStateV2(),
+        said("set_topic", category_key="telefoane"),
+        said("set_need", key="brand", value="apple"),
+    ).state
+    return turn(
+        phones,
+        said("set_topic", category_key="tablete"),
+        said("set_need", key="brand", value="asus"),
+    ).state
+
+
+@pytest.mark.parametrize(
+    "move",
+    [
+        {"thread": "resume"},
+        # NX-348: o schimbare de subiect SPRE subiectul parcat e un schimb, ca `resume`.
+        {"thread": "continue", "topic": "telefoane"},
+    ],
+    ids=["resume", "set_topic_to_parked"],
+)
+def test_i6_a_revoke_in_the_swap_turn_hits_the_need_its_handle_named(move):
+    """«Înapoi la telefoane, și lasă Asus»: handle-ul e calculat pe starea de DINAINTEA turului,
+    deci numește Asus (tabletele). Pe `main` retragerea lovea marca ACTIVĂ după schimb (Apple, a
+    telefoanelor), iar Asus rămânea parcat și revenea la întoarcerea pe tablete."""
+    state = _apple_on_phones_then_asus_on_tablets()
+    proposals = [said("revoke", key="brand", value="asus")]
+    if "topic" in move:
+        proposals.insert(0, said("set_topic", category_key=move["topic"]))
+    swapped = turn(state, *proposals, thread=move["thread"]).state
+    assert swapped.topic.category_key == "telefoane"
+    assert active(swapped) == {("brand", "apple")}
+    assert [n.key for n in swapped.parked.needs] == []
+    back = turn(swapped, thread="resume").state
+    assert back.topic.category_key == "tablete"
+    assert back.need_for("brand") is None
+
+
+def test_i6_clear_all_retracts_each_value_so_another_value_does_not_reopen_it():
+    steps = list(_walk("gifts", _I6_CLEAR_ALL_SCRIPT))
+    last = steps[1][3]
+    assert active(last.state) == {("suitable_for", "beta")}
+    assert [r.reason for r in last.rejected] == ["revoked_key"]
+
+
+def test_i6_clear_all_also_retracts_the_parked_needs():
+    """`clear all` golește parcatul; nevoile lui erau tot ale clientului, deci nu revin nici ele
+    dintr-o inferență, nici după ce clientul spune altă valoare pe aceeași cheie (pe `main`
+    parcatul pleca fără nicio retragere, iar `topic_reset`-ul cheii îl ridica orice valoare)."""
+    phones = turn(_concerns_waterproof_foldable(), said("revoke", key="concerns", value="foldable"))
+    tablets = turn(phones.state, said("set_topic", category_key="tablete")).state
+    cleared = turn(tablets, said("clear_all")).state
+    assert cleared.parked is None
+    other = turn(cleared, said("set_need", key="concerns", value="slim")).state
+    again = turn(
+        other, said("set_need", key="concerns", value="waterproof", source="user_implicit")
+    )
+    assert active(again.state) == {("concerns", "slim")}
+    assert [r.reason for r in again.rejected] == ["revoked_key"]
+
+
+def test_i6_a_whole_key_list_revoke_retracts_every_value_one_by_one():
+    """Fără valoare, retragerea pe o cheie de listă le atinge pe toate; pe `main` tombstone-ul purta
+    doar amprenta primei, deci reafirmarea ei le ridica pe toate."""
+    state = turn(_concerns_waterproof_foldable(), said("revoke", key="concerns")).state
+    assert {r.prior_value_fingerprint for r in state.revocations if r.key == "concerns"} == {
+        value_fingerprint("waterproof"),
+        value_fingerprint("foldable"),
+    }
+    one_back = turn(state, said("set_need", key="concerns", value="waterproof")).state
+    again = turn(
+        one_back, said("set_need", key="concerns", value="foldable", source="user_implicit")
+    )
+    assert active(again.state) == {("concerns", "waterproof")}
+
+
+def test_i6_a_retraction_before_parking_survives_two_parks():
+    """Retragere, apoi două schimbări de subiect (a doua evacuează slotul, I19): niciun tombstone
+    de cod nu înlocuiește retragerea clientului."""
+    state = turn(_concerns_waterproof_foldable(), said("revoke", key="concerns", value="foldable"))
+    state = turn(state.state, said("set_topic", category_key="tablete")).state
+    state = turn(state, said("set_topic", category_key="laptopuri")).state
+    again = turn(state, said("set_need", key="concerns", value="foldable", source="user_implicit"))
+    assert again.state.need_for("concerns") is None
+    retractions = [
+        r for r in state.revocations if r.key == "concerns" and r.reason_code == "user_explicit"
+    ]
+    assert [r.prior_value_fingerprint for r in retractions] == [value_fingerprint("foldable")]
+
+
+def test_i6_code_tombstones_still_keep_only_the_last_one_per_key():
+    """Mișcările de cod (`superseded`, `topic_reset`) rămân „ultimul pe cheie", ca înainte: o marcă
+    schimbată de trei ori nu umple plafonul de tombstone-uri."""
+    state = ConversationStateV2()
+    for brand in ("apple", "asus", "lenovo", "samsung"):
+        state = turn(state, said("set_need", key="brand", value=brand)).state
+    assert [r.reason_code for r in state.revocations if r.key == "brand"] == ["superseded"]
+
+
 def _full_state(name_chars: int) -> ConversationStateV2:
     """16 nevoi (8 dure), 8 produse pe ecran, parcat plin (8 nevoi dure + 8 produse), 2 seturi
     recente. Numele de produs de `name_chars` caractere (plafonul e `MAX_NAME_CHARS` = 80)."""
@@ -1051,40 +1274,114 @@ def test_i5_aside_and_i20_executors_never_move_needs_or_subject(name, data):
         assert twin.to_jsonb() == reduced.state.to_jsonb()
 
 
-#: NX-337: sentinelă care forțează contraexemplul PINUIT indiferent de ce nimerește căutarea
-#: aleatoare a lui Hypothesis — `@example` pe un test cu `data=st.data()` nu poate oferi un script
-#: gata desenat (`data.draw` e interactiv), deci fixăm `data` la sentinelă și testul recunoaște
-#: cazul special, ca CI-ul să-l ruleze la FIECARE rulare, nu doar când shrinking-ul îl regăsește.
-_I6_PARKED_REVOKE_EXAMPLE = object()
+@dataclass(frozen=True)
+class _Pinned:
+    """NX-337/NX-379: un contraexemplu PINUIT, forțat indiferent de ce nimerește căutarea aleatoare
+    a lui Hypothesis. `@example` pe un test cu `data=st.data()` nu poate oferi un script gata
+    desenat (`data.draw` e interactiv), deci fixăm `data` la o sentinelă care poartă pachetul și
+    scriptul, iar testul o recunoaște, ca CI-ul să-l ruleze la FIECARE rulare (CI nu păstrează
+    `.hypothesis`, deci un exemplu găsit doar local nu se mai repetă acolo)."""
+
+    pack: str
+    script: tuple
+
+
+_I6_PINNED = (
+    _Pinned("furniture", tuple(_I6_PARKED_REVOKE_SCRIPT)),
+    _Pinned("sole-ro", tuple(_I6_OTHER_VALUE_SCRIPT)),
+    _Pinned("electronics", tuple(_I6_SIBLING_IMPLICIT_SCRIPT)),
+    _Pinned("electronics", tuple(_I6_SIBLING_AFTER_PARK_SCRIPT)),
+    _Pinned("electronics", tuple(_I6_OTHER_VALUE_REOPENS_SCRIPT)),
+    _Pinned("gifts", tuple(_I6_CLEAR_ALL_SCRIPT)),
+)
+
+
+def _mark(need: Need) -> tuple[str, str]:
+    """Identitatea unei nevoi pentru I6: cheia + amprenta valorii (pe o cheie de listă, valori
+    diferite sunt nevoi diferite; pe una scalară, valori diferite sunt fapte diferite)."""
+    return (need.key, value_fingerprint(need.normalized_value))
+
+
+def _parked_marks(state: ConversationStateV2) -> set[tuple[str, str]]:
+    return {_mark(n) for n in (state.parked.needs if state.parked is not None else ())}
+
+
+def _client_retractions(
+    ledger: set[tuple[str, str]], before: ConversationStateV2, delta: TurnDelta, policy
+) -> set[tuple[str, str]]:
+    """Oracolul lui I6, independent de tombstone-urile reducerului (NX-379: ele erau chiar ce se
+    pierdea). Registrul ține NEVOILE retrase de client: ce a scos din activ sau din parcat o
+    retragere aplicată (reducerul alege ținta, oracolul verifică doar că ea nu mai revine), iar o
+    retragere fără nicio țintă atinge valoarea numită pe o cheie de listă, sau tot ce e parcat pe
+    cheie pe una scalară. `clear all` retrage tot ce e activ (în afara celor protejate) și tot ce e
+    parcat. Doar o reafirmare EXPLICITĂ a aceleiași valori scoate nevoia din registru. Turul se
+    reduce pe prefixe de propuneri, deci ordinea din tur contează („retrage, apoi spune iar")."""
+    ledger = set(ledger)
+    proposals = delta.proposals
+
+    def upto(i: int) -> ConversationStateV2:
+        prefix = TurnDelta(thread=delta.thread, proposals=proposals[:i])  # type: ignore[arg-type]
+        return reduce_turn(before, prefix, (), (), None, False, policy).state
+
+    prev = upto(0)
+    for i, proposal in enumerate(proposals, 1):
+        nxt = upto(i)
+        if proposal.op == "revoke" and nxt.revocations != prev.revocations:
+            gone = {_mark(n) for n in prev.active_needs()} - {_mark(n) for n in nxt.active_needs()}
+            gone |= _parked_marks(prev) - _parked_marks(nxt)
+            normalized = normalize_need(proposal.key, proposal.value, policy.vocabulary)
+            if not gone and normalized is not None:
+                if normalized.operator == "contains":
+                    gone = {(normalized.key, value_fingerprint(normalized.value))}
+                else:
+                    gone = {m for m in _parked_marks(prev) if m[0] == normalized.key}
+            ledger |= gone
+        elif proposal.op == "clear_all" and proposal.source in REVIVE_CAPABLE_SOURCES:
+            ledger |= {_mark(n) for n in prev.active_needs() if not _protected(n)}
+            ledger |= _parked_marks(prev)
+        elif proposal.op in ("set_need", "supersede") and proposal.source in REVIVE_CAPABLE_SOURCES:
+            normalized = normalize_need(proposal.key, proposal.value, policy.vocabulary)
+            if normalized is not None and normalized.value is not None:
+                ledger.discard((normalized.key, value_fingerprint(normalized.value)))
+        prev = nxt
+    return ledger
+
+
+def _protected(need: Need) -> bool:
+    return bool(need.sensitive_class) or need.source == "policy"
 
 
 @pytest.mark.parametrize("name", PACKS)
 @_PROPERTY
-@example(data=_I6_PARKED_REVOKE_EXAMPLE)
+@example(data=_I6_PINNED[0])
+@example(data=_I6_PINNED[1])
+@example(data=_I6_PINNED[2])
+@example(data=_I6_PINNED[3])
+@example(data=_I6_PINNED[4])
+@example(data=_I6_PINNED[5])
 @given(data=st.data())
 def test_i6_on_the_chain_a_client_revoked_key_returns_only_through_explicit_evidence(name, data):
-    if data is _I6_PARKED_REVOKE_EXAMPLE:
-        if name != "furniture":
-            # Contraexemplul e specific pachetului `furniture` (`width_min`): pe restul, sentinela
-            # n-are ce testa. `pytest.skip` ar sări TOT testul (căutarea aleatoare inclusă), deci
-            # ieșim tăcut din exemplul PINUIT și lăsăm căutarea normală să ruleze mai departe.
+    """I6 pe lanț: o nevoie retrasă de client nu redevine activă fără reafirmarea ei EXPLICITĂ.
+
+    NX-379: identitatea e NEVOIA (cheie + valoare), nu cheia. Oracolul pe cheie de dinainte
+    contrazicea două decizii scrise ale contractului (NX-331: retragerea mărcii tabletelor nu
+    atinge marca telefoanelor parcate; NX-337: retragerea unei valori de listă nu atinge cealaltă)
+    și, mai rău, nu vedea nimic cât timp altă valoare a cheii era activă."""
+    if isinstance(data, _Pinned):
+        if name != data.pack:
+            # Contraexemplul e al unui pachet anume; pe restul sentinela n-are ce testa.
+            # `pytest.skip` ar sări TOT testul (căutarea aleatoare inclusă), deci ieșim tăcut.
             return
-        script = _I6_PARKED_REVOKE_SCRIPT
+        script = list(data.script)
     else:
         script = data.draw(_turns(name))
-    for before, delta, _, reduced, _ in _walk(name, script):
-        revoked = {r.key for r in before.revocations if r.reason_code == "user_explicit"} - {
-            n.key for n in before.active_needs()
-        }
-        for need in reduced.state.active_needs():
-            if need.key not in revoked:
-                continue
-            assert any(
-                p.op in ("set_need", "supersede")
-                and p.key == need.key
-                and p.source in REVIVE_CAPABLE_SOURCES
-                for p in delta.proposals
-            ), f"cheie retrasă de client reînviată fără dovadă explicită: {need.key}"
+    ledger: set[tuple[str, str]] = set()
+    for before, delta, _, reduced, policy in _walk(name, script):
+        if delta.thread == "aside":
+            continue
+        ledger = _client_retractions(ledger, before, delta, policy)
+        back = sorted(n.key for n in reduced.state.active_needs() if _mark(n) in ledger)
+        assert not back, f"nevoie retrasă de client reînviată fără dovadă explicită: {back}"
 
 
 @pytest.mark.parametrize("name", PACKS)
