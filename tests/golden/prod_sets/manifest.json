@@ -33,5 +33,17 @@
   "conversations": 30,
   "messages": 110,
   "frozen": "2026-10-09, scris de un agent fără acces la cod, analize, carduri sau seturile anterioare (doar formatul); 30 de conversații amestecate, `expect` și `routine_target` per tur; ținta: release 3a870da (NX-390); nu se citește înaintea rulării"
+ },
+ "fresh-b-2026-10-07.json": {
+  "sha256": "cb7046333d93571dc2666772ef6e06eb4ae7b3ca71bcf23f866c2257a476915e",
+  "conversations": 12,
+  "messages": 48,
+  "frozen": "2026-10-07, scris de un agent fără acces la cod, analize sau seturile anterioare; situații diferite de fresh-2026-10-07; are `expect` per tur"
+ },
+ "combined-2026-10-07.json": {
+  "sha256": "dd4ecaf11b91dda0206b0db62e18a7a5c49e1475ce09c894249c44841fcd4189",
+  "conversations": 24,
+  "messages": 97,
+  "about": "fresh-2026-10-07 + fresh-b-2026-10-07, pentru o rulare comună"
  }
 }
