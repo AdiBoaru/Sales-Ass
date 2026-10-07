@@ -42,7 +42,7 @@ from src.catalog.vocabulary import (
     CatalogVocabulary,
     topic_root_of,
 )
-from src.conversation.ambiguity_gate import GateOutcome, target_question_key
+from src.conversation.ambiguity_gate import MAX_ACT_BOTH, GateOutcome, target_question_key
 from src.conversation.answer_policy import read_query
 from src.conversation.delta import RankingSignal
 from src.conversation.interpretation import (
@@ -71,7 +71,9 @@ from src.conversation.references import (
     MUTATING_ACTS,
     RATING_DIMENSION,
     VARIANT_DIMENSION,
+    find_name_reference,
 )
+from src.conversation.state_reducer import StateUpdateProposal
 from src.conversation.state_v2 import HARD_CAPABLE_SOURCES, ConversationStateV2, Need, Topic
 from src.domain.facets import FacetType
 from src.domain.routine_steps import SEP
@@ -89,6 +91,9 @@ DISCLOSURES: tuple[str, ...] = (
     "invalid_target",  # actul a fost scos de regula 0 a porții (țintă nedeclarată / proprietate)
     "dropped_act",  # al treilea act al turului, raportat ca nefăcut
     "no_target",  # un act care cere o țintă a rămas fără niciuna
+    # `kernel.v6.1` (NX-374): o nevoie SPUSĂ în tur (`explicit`) pe care nicio fațetă a catalogului
+    # nu o poate verifica (golul `unsupported_need`): clientul află că n-a contat la alegere.
+    "need_unverifiable",
 )
 #: Vocabularul ÎNCHIS al lui `PlannedTurn.gaps`: ce n-a putut purta `SearchArgs`, plus coborârile
 #: care nu sunt tăcere (P6): o întrebare fără text, o căutare fără cuvinte, un subiect lipsă.
@@ -109,6 +114,9 @@ GAPS: tuple[str, ...] = (
     "routine_budget",
     # D3: un câmp al cererii fără corespondent într-o rutină (sortare, termeni nemapați)
     "routine_field",
+    # `kernel.v6.2` (NX-375, recenzia B3/B4): căutarea pe NUMELE unui produs n-a moștenit raftul,
+    # bugetul, nevoile sau tipul subiectului de dinainte (doar ce spune turul)
+    "name_unscoped",
 )
 
 #: Uneltele buclei delegate (actul `other`): toate, fără cele care citesc catalogul și fără
@@ -136,6 +144,8 @@ _SEARCHING: frozenset[str] = frozenset({"search", "bundle"})
 WILDCARD = "*"
 #: Dimensiunea tipului de produs (`Topic.product_type`), eticheta subiectului fără raft.
 PRODUCT_TYPE = "product_type"
+#: Dimensiunea raftului (`Topic.category_key`).
+CATEGORY = "category"
 _BUDGET_MIN, _BUDGET_MAX = PRICE_BOUNDS
 
 
@@ -155,6 +165,9 @@ class PlannedTurn:
     disclosures: tuple[tuple[int, str], ...] = ()
     primary: int = 0
     excludes_shown: tuple[int, ...] = ()
+    #: NX-374 (recenzia A2): cheile nevoilor spuse de dezvăluirea `need_unverifiable` a turului.
+    #: Orchestratorul scrie memoria lor (`disclosure_memory`) doar dacă fraza a ajuns la client.
+    disclosed_needs: tuple[str, ...] = ()
 
 
 def _read_act_query(
@@ -378,6 +391,7 @@ class _Planner:
         )
         self.gaps: list[str] = []
         self.disclosures: list[tuple[int, str]] = []
+        self.disclosed_needs: list[str] = []
 
     # --- utilitare -------------------------------------------------------------------------------
 
@@ -390,6 +404,38 @@ class _Planner:
         poată număra; una a unui plan, o singură dată."""
         if index == TURN_LEVEL or (index, code) not in self.disclosures:
             self.disclosures.append((index, code))
+
+    def _unsupported(self, need: Need, index: int) -> None:
+        """NX-374 (`kernel.v6.1`): golul `unsupported_need`, plus dezvăluirea `need_unverifiable`
+        pe planul `index` când nevoia a fost SPUSĂ chiar în acest tur. Rularea din 2026-10-01: «să
+        fie și fără parfum» a ajuns în stare, plannerul a scris golul, iar clientul a primit șase
+        creme fără să afle că cerința nu se putea verifica. Dezvăluirea e a PLANULUI care caută
+        (recenzia: pe un coș picat, căutarea dependentă nu rulează, deci nimic n-a fost ales), iar o
+        nevoie deja spusă nu se re-dezvăluie.
+
+        Adevărat prin CONSTRUCȚIE (recenzia A7): metoda e chemată doar pe ramurile pe care
+        `SearchArgs` n-are niciun câmp care să poarte nevoia (nici filtru, nici preferință): o
+        valoare care nu e text (o fațetă da/nu: în SQL nu există filtru boolean), o fațetă care nu
+        e atribut al produselor, o cheie fără fațetă. Deci „nu o pot verifica" nu depinde de date:
+        nevoia chiar n-a contat la alegere. Un câmp nou care ar purta una dintre ele mută ramura
+        (testul A7 din `tests/test_nx374_need_unverifiable.py` fixează presupunerea)."""
+        self._gap("unsupported_need")
+        if self._to_disclose(need):
+            self._disclose(index, "need_unverifiable")
+            if need.key not in self.disclosed_needs:
+                self.disclosed_needs.append(need.key)
+
+    def _to_disclose(self, need: Need) -> bool:
+        """Recenzia A2: nevoia a fost SPUSĂ de client (sursa `user_explicit`, pe care delta o scrie
+        doar dintr-o schimbare `explicit`, iar `user_implicit` e o descriere) și n-a fost încă spusă
+        clientului ca neverificabilă (memoria `asked_questions[disclosed_need_key]`, scrisă de
+        orchestrator doar când fraza a ajuns în răspuns). Deci o cerință spusă pe un tur care n-a
+        căutat (o paranteză, o întrebare a porții, o căutare fără cuvinte) se spune pe PRIMA căutare
+        care o poartă, o singură dată per conversație, chiar dacă modelul o re-emite la fiecare tur
+        (reducerul o re-scrie idempotent). O nevoie relaxată la `false` nu e o cerință."""
+        if need.normalized_value is False or need.source != "user_explicit":
+            return False
+        return self.state.asked(disclosed_need_key(need.key)) is None
 
     def _refs_of(self, act: Act) -> list[ResolvedRef]:
         return [self.resolved[t] for t in act.targets if t in self.resolved]
@@ -555,6 +601,7 @@ class _Planner:
             disclosures=tuple(self.disclosures),
             primary=primary,
             excludes_shown=paging,
+            disclosed_needs=tuple(self.disclosed_needs),
         )
 
     def _ask(self, kept: list[tuple[int, Act]]) -> TurnPlan:
@@ -631,10 +678,10 @@ class _Planner:
             return self._plan("cart", list(dict.fromkeys(ids)))
         # `bundle`: executorul îl declară pachetul (SOLE: `routine_plan`); fără el, o căutare.
         if bundle_executor(self.state, pack=self.pack, vocab=self.vocab) is not None:
-            return self._bundle(act)
+            return self._bundle(act, index)
         return self._search(act, index)
 
-    def _bundle(self, act: Act) -> TurnPlan:
+    def _bundle(self, act: Act, index: int) -> TurnPlan:
         """`bundle` (D3, `kernel.v2.1`): familia rutinei din subiect și pachet
         (`routine_family`), argumentele din STARE ca la căutare (nevoile dure, bugetul dur,
         preferințele; I2, I7) și ancora = prima țintă `exact` a actului. Fără familie declarată,
@@ -647,7 +694,7 @@ class _Planner:
         # Rutina NU relaxează filtrele pe pași (`routine_tools`), deci o nevoie spusă, dar
         # ne-`enforce_ready`, rămâne ordonare aici (recenzia NX-352: «rutina de seară» ar fi exclus
         # produsele `am_pm` din fiecare pas).
-        args = self._search_args(phrase, act, product_name=None, relaxable=False)
+        args = self._search_args(phrase, act, product_name=None, relaxable=False, index=index)
         if args.price_max is not None and not self._sum_asked_this_turn():
             # bugetul conversației (al unui produs, «o cremă sub 50») nu plafonează suma rutinei
             args = args.model_copy(update={"price_max": None})
@@ -677,6 +724,10 @@ class _Planner:
         )
 
     def _find(self, act: Act, index: int) -> TurnPlan:
+        # `kernel.v6.2` (NX-375): un produs NUMIT în cerere e ce caută clientul.
+        named = self._named_product(act, index)
+        if named is not None:
+            return named
         words = read_query(act, pack=self.pack, locale=self.locale).has_words
         nothing = not (words or self._facet_needs() or self._missing_name(act))
         if not self._subject() and nothing:
@@ -685,6 +736,40 @@ class _Planner:
             self._gap("no_subject")
             return self._plan("reply_only")
         return self._search(act, index)
+
+    def _accepted(self) -> list[StateChange]:
+        """Schimbările turului pe care nici validatorul, nici delta nu le-au respins (`checked`
+        = `delta.accepted_changes`); fără ele (teste, sonde vechi), schimbările brute."""
+        if self.checked is None:
+            return list(self.interp.changes)
+        return [c.change for c in self.checked if c.rejected is None]
+
+    def _named_product(self, act: Act, index: int) -> TurnPlan | None:
+        """NX-375 (`kernel.v6.2`): planul unui `find` care numește un produs, sau None. Referința o
+        alege `references.find_name_reference` (o țintă `name` a actului sau una nefolosită de
+        nimic altceva; un singur proprietar cu poarta, recenzia B6). Recenzia B1: ce a găsit
+        resolverul nu se aruncă.
+
+        - `exact`: produsul e răspunsul, ca rândul `detail` pe o țintă `exact` (id-ul e recitit din
+          catalog în tur, I1);
+        - `ambiguous` pe cel mult `MAX_ACT_BOTH` candidați: răspunsul despre toți, ca `act_both` pe
+          o citire (`detail` cu ≥ 2 candidați);
+        - altfel (`not_found`, sau prea mulți candidați): căutarea aproximativă după nume, care e a
+          plannerului (resolverul găsește doar un nume scris întreg), ca `detail`/`compare` pe un
+          nume negăsit, cu filtrele DOAR ale acestui tur (`_search(name_only=True)`, B3/B4)."""
+        ref = find_name_reference(self.interp, act, self.resolved, self._accepted())
+        if ref is None:
+            return None
+        hit = self.resolved.get(ref.id)
+        ids = list(dict.fromkeys(hit.product_ids)) if hit is not None else []
+        if hit is not None and hit.outcome == "exact" and ids:
+            return self._plan("detail", ids[:1])
+        if hit is not None and hit.outcome == "ambiguous" and 2 <= len(ids) <= MAX_ACT_BOTH:
+            return self._plan("detail", ids)
+        name = self._name(ref.id)
+        if name is None:
+            return None
+        return self._search(act, index, name=name, name_only=True)
 
     def _show_more(self, act: Act, index: int) -> TurnPlan:
         if not self.changed and self.state.active_search:
@@ -733,15 +818,30 @@ class _Planner:
     # --- `SearchArgs` -----------------------------------------------------------------------------
 
     def _search(
-        self, act: Act, index: int, *, name: str | None = None, subject_first: bool = False
+        self,
+        act: Act,
+        index: int,
+        *,
+        name: str | None = None,
+        subject_first: bool = False,
+        name_only: bool = False,
     ) -> TurnPlan:
         words = read_query(act, pack=self.pack, locale=self.locale).has_words
         product_name = name or self._missing_name(act)
         # Argumentele întâi: ele spun ce dimensiuni intră CHIAR în căutare (`carried`), deci ce
         # cuvinte ale cererii sunt deja purtate de un filtru sau de o preferință.
         before = list(self.gaps)
+        disclosed = list(self.disclosures)
+        told = list(self.disclosed_needs)
         carried: dict[str, str] = {}
-        args = self._search_args(_PENDING, act, product_name=product_name, carried=carried)
+        args = self._search_args(
+            _PENDING,
+            act,
+            product_name=product_name,
+            carried=carried,
+            index=index,
+            this_turn_only=name_only,
+        )
         subject = self._subject_label()
         topic = self.state.topic
         shelf_label = self._shelf_label()
@@ -775,6 +875,8 @@ class _Planner:
             phrase = self._filter_label(args)
         if not phrase:
             self.gaps[:] = before  # fără căutare, golurile argumentelor nu spun nimic
+            self.disclosures[:] = disclosed  # nici dezvăluirile lor (NX-374)
+            self.disclosed_needs[:] = told
             self._gap("no_query")
             return self._plan("reply_only")
         return self._plan("search", (), args.model_copy(update={"query": phrase}))
@@ -815,13 +917,21 @@ class _Planner:
         product_name: str | None,
         carried: dict[str, str] | None = None,
         relaxable: bool = True,
+        index: int = 0,
+        this_turn_only: bool = False,
     ) -> SearchArgs:
         """SINGURUL constructor de `SearchArgs` din kernel (I2). Totul vine din starea redusă și din
         semnalele turului; ce nu are câmp merge în `gaps`. `carried` (NX-352) primește, pe fiecare
         dimensiune care intră chiar în argumente, `filter` sau `prefer`. `relaxable=False` (rutina):
         o nevoie spusă, dar ne-`enforce_ready`, rămâne preferință, fiindcă rutina NU relaxează
-        filtrele (recenzia NX-352)."""
+        filtrele (recenzia NX-352). `this_turn_only` (NX-375, recenzia B3/B4): căutarea pe NUMELE
+        unui produs poartă doar ce spune ACEST tur (nevoile scrise acum dintr-o schimbare acceptată,
+        raftul și tipul numite acum, semnalele turului); restul subiectului vechi (raft, buget,
+        nevoi, excluderi, tipul) ar ascunde produsul cerut pe nume, iar unealta ar spune că „nu
+        există ca atare". Ce se scoate nu dispare în tăcere: golul `name_unscoped`."""
         carried = {} if carried is None else carried
+        said = self._dimensions_said() if this_turn_only else frozenset()
+        unscoped = False
         price_max: float | None = None
         brand: str | None = None
         concerns: list[str] = []
@@ -843,6 +953,11 @@ class _Planner:
             key, value = need.key, need.normalized_value
             dimension = self.needs.dimension_of(key)
             spec = self.needs.spec_for(key)
+            if this_turn_only and not (
+                need.updated_revision == self.state.revision and ({key, dimension} & said)
+            ):
+                unscoped = True
+                continue
             if key == _BUDGET_MAX:
                 if self._hard(need, PRICE_DIMENSION) and _usable_amount(value):
                     price_max = float(value)  # type: ignore[arg-type]
@@ -865,7 +980,7 @@ class _Planner:
                 if isinstance(value, str) and value and value not in rank:
                     rank.append(value)
             elif not isinstance(value, str) or not value:
-                self._gap("unsupported_need")
+                self._unsupported(need, index)
             elif dimension == BRAND_DIMENSION:
                 if self._hard(need, dimension):
                     brand = value
@@ -885,7 +1000,7 @@ class _Planner:
                     if self._on_attributes(dimension):
                         _prefer(dimension, value)
                     else:
-                        self._gap("unsupported_need")
+                        self._unsupported(need, index)
                 elif dimension in self.searchable or self._source_key(dimension) in self.searchable:
                     features.append(value)
                     carried[dimension] = "filter"
@@ -893,7 +1008,7 @@ class _Planner:
                     concerns.append(value)
                     carried[dimension] = "filter"
             else:
-                self._gap("unsupported_need")
+                self._unsupported(need, index)
 
         for signal in self.ranking:
             value = signal.value
@@ -925,16 +1040,23 @@ class _Planner:
         # NX-314 pe calea interpretată: tipul subiectului ORDONEAZĂ (fațeta nu e `enforce_ready`),
         # deci „cremă de față" pe un raft de 900 de produse urcă cremele, fără să scoată restul.
         kinds = subject_kinds(self.state.topic)
+        if kinds and this_turn_only and PRODUCT_TYPE not in said:
+            unscoped, kinds = True, ()
         if kinds and self._on_attributes(PRODUCT_TYPE):
             for kind in kinds:
                 _prefer(PRODUCT_TYPE, kind)
         elif kinds:
             self._gap("subject_type")
 
+        category = self.state.topic.category_key
+        if category and this_turn_only and CATEGORY not in said:
+            unscoped, category = True, None
+        if unscoped:
+            self._gap("name_unscoped")
         return SearchArgs(
             query=phrase,
             price_max=price_max,
-            category=self.state.topic.category_key,
+            category=category,
             brand=brand,
             concerns=list(dict.fromkeys(concerns)) or None,
             features=list(dict.fromkeys(features)) or None,
@@ -945,6 +1067,13 @@ class _Planner:
             exclude=exclude,
             price_band=price_band,
         )
+
+    def _dimensions_said(self) -> frozenset[str]:
+        """Dimensiunile schimbărilor ACCEPTATE ale turului (după re-rezolvarea validatorului). O
+        limită de preț e pe `price`, dimensiunea nevoilor `budget_*`."""
+        if self.checked is None:
+            return frozenset(c.dimension for c in self.interp.changes if c.dimension)
+        return frozenset(c.dimension for c in self.checked if c.rejected is None and c.dimension)
 
     def _sort_mode(self, act: Act) -> str:
         """O referință `extreme` pe preț sau rating ordonează căutarea; altfel `relevance`. Aceeași
@@ -1021,6 +1150,31 @@ def plan_turn(
     ).run()
 
 
+#: NX-374 (recenzia A2): prefixul cheii cu care memoria anti-buclă a conversației
+#: (`ConversationStateV2.asked_questions`, op-ul `note_asked`) ține minte că o nevoie a fost deja
+#: spusă clientului ca neverificabilă. Prefixul o ține separată de cheile întrebărilor porții
+#: (o fațetă, `ref:<sha1>`), deci `asked(<fațetă>)` nu o vede.
+DISCLOSED_NEED_PREFIX = "unverifiable:"
+
+
+def disclosed_need_key(key: str) -> str:
+    """Cheia memoriei dezvăluirii pentru nevoia `key`."""
+    return f"{DISCLOSED_NEED_PREFIX}{key}"
+
+
+def disclosure_memory(planned: PlannedTurn, turn_id: str) -> tuple[StateUpdateProposal, ...]:
+    """NX-374 (recenzia A2): memoria dezvăluirilor `need_unverifiable` ale turului, ca propuneri
+    `note_asked` (op-ul memoriei porții, deci în mulțimea FIXĂ a celei de-a doua treceri a
+    commit-ului, fără op sau câmp nou de stare). PUR; orchestratorul le trimite doar dacă fraza a
+    ajuns chiar în răspuns (`interpreted_turn._disclosure_memory`)."""
+    return tuple(
+        StateUpdateProposal(
+            "note_asked", key=disclosed_need_key(key), source="policy", turn_id=turn_id
+        )
+        for key in planned.disclosed_needs
+    )
+
+
 def bundle_executor(
     state: ConversationStateV2, *, pack: object | None, vocab: CatalogVocabulary | None
 ) -> str | None:
@@ -1082,6 +1236,7 @@ def subject_kinds(topic: Topic) -> tuple[str, ...]:
 
 __all__ = [
     "DELEGATE_TOOLS",
+    "DISCLOSED_NEED_PREFIX",
     "DISCLOSURES",
     "GAPS",
     "MAX_PLANS",
@@ -1089,5 +1244,7 @@ __all__ = [
     "routine_family",
     "PlannedTurn",
     "bundle_executor",
+    "disclosed_need_key",
+    "disclosure_memory",
     "plan_turn",
 ]

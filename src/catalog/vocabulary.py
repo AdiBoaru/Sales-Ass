@@ -123,7 +123,8 @@ class VocabEntry:
     label: str
     count: int
     # Doar pentru categorii: calea materializată, ca rezolvarea să prefere nodul cel mai specific
-    # (o frunză bate o rădăcină la aceeași potrivire textuală). Gol pentru dimensiunile din
+    # (o frunză bate o rădăcină la aceeași potrivire pe ETICHETĂ; o potrivire pe CHEIE bate orice
+    # etichetă, NX-376). Gol pentru dimensiunile din
     # `attributes`, care sunt plate.
     path: str = ""
 
@@ -504,6 +505,15 @@ def category_on_menu(vocab: CatalogVocabulary, term: str | None) -> Resolution:
     )
 
 
+def _key_first(hits: list[VocabEntry], norm: str) -> list[VocabEntry]:
+    """NX-376: intrările a căror CHEIE e chiar termenul, dacă există; altfel toate potrivirile.
+
+    O singură regulă pentru ramura exactă și pentru overlay: un overlay care traduce în cheia unui
+    raft trebuie să ajungă la ACELAȘI nod ca termenul scris direct."""
+    by_key = [e for e in hits if _norm(e.key) == norm]
+    return by_key or hits
+
+
 def resolve(
     vocab: CatalogVocabulary,
     term: str,
@@ -545,13 +555,20 @@ def resolve(
     idx = _index(entries)
 
     if hits := idx.get(norm):
-        return _from_hits(_best(hits), norm, dimension, "exact")
+        # NX-376: o potrivire pe CHEIE bate una pe ETICHETĂ. Cheia identifică nodul; eticheta nu
+        # (pe `sole-ro` 21 din 45 de etichete de raft se repetă). Rularea din 2026-10-01: «de corp»
+        # ⇒ `corp` (rădăcina, cheie exactă) pierdea în fața subraftului «Ingrijire personala > Corp»
+        # (aceeași etichetă, dar mai adânc, un singur produs), iar cremele de corp nu se mai găseau.
+        # Doar între etichete rămâne regula de azi: cel mai specific, ambiguu la aceeași adâncime.
+        return _from_hits(_best(_key_first(hits, norm)), norm, dimension, "exact")
 
     if overlay:
         target = overlay.get(norm)
         if target is not None:
             if hits := idx.get(_norm(target)):
-                return _from_hits(_best(hits), norm, dimension, "overlay")
+                return _from_hits(
+                    _best(_key_first(hits, _norm(target))), norm, dimension, "overlay"
+                )
             # Harta traduce într-un cuvânt pe care catalogul nu-l are. Cinci săptămâni de tăcere
             # au început exact aici — de-asta e verdict raportabil, nu o cădere pe ramura „nimic".
             return Resolution(

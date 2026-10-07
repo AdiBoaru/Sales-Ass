@@ -39,7 +39,7 @@
       "bound_gte": "at least {value}"
     }
   },
-  "_kernel_sentences_note": "NX-336 PR C: frazele turului interpretat, locale -> cod -> fraza fara niciun marcator. Codurile sunt vocabular inchis (KERNEL_SENTENCE_CODES): dezvaluirile plannerului (not_exact_match, invalid_target, dropped_act, no_target) si raspunsul unei cautari fara rezultate (no_results), plus verdict_unknown si verdict_unknown_any: inchiderea unei comparatii pe care politica de raspuns nu o lasa sa aleaga (I12). verdict_unknown e singurul cod cu un marcator, {dimension} exact o data, completat de server cu eticheta de rand a fatetei, citata ca atare (o eticheta de rand nu e mereu substantiv); verdict_unknown_any e fraza fara eticheta (ratingul nu e o fateta). D2: cart_added ({product} = numele scurt al produsului adaugat, exact o data), cart_failed, iar mutation_unavailable si mutation_not_exact raspund unei mutatii refuzate de poarta fara intrebare. O dezvaluire lipsa inseamna turul fara ea; no_results lipsa inseamna ca turul fara rezultate nu e servit de kernel si raspunde calea v1. Fara liniuta de pauza si fara punct si virgula (P13), fara promisiuni pe care nu le onoreaza nimeni.",
+  "_kernel_sentences_note": "NX-336 PR C: frazele turului interpretat, locale -> cod -> fraza fara niciun marcator. Codurile sunt vocabular inchis (KERNEL_SENTENCE_CODES): dezvaluirile plannerului (not_exact_match, invalid_target, dropped_act, no_target) si raspunsul unei cautari fara rezultate (no_results), plus verdict_unknown si verdict_unknown_any: inchiderea unei comparatii pe care politica de raspuns nu o lasa sa aleaga (I12). verdict_unknown e singurul cod cu un marcator, {dimension} exact o data, completat de server cu eticheta de rand a fatetei, citata ca atare (o eticheta de rand nu e mereu substantiv); verdict_unknown_any e fraza fara eticheta (ratingul nu e o fateta). D2: cart_added ({product} = numele scurt al produsului adaugat, exact o data), cart_failed, iar mutation_unavailable si mutation_not_exact raspund unei mutatii refuzate de poarta fara intrebare. NX-372: raspunsul unui tur care a citit doar regulile magazinului si n-a putut raspunde din ele (si pe calea v1), in locul mesajului de cautare fara produse, dupa ce s-a citit de fapt: store_info_unknown cand citirea a mers si n-a adus nicio regula (singurul caz in care se poate spune ca regulile nu au informatia), store_info_unconfirmed cand s-au citit reguli dar niciuna nu s-a putut servi (fara sa afirme ca lipseste), store_info_unavailable cand toate citirile au picat, store_info_rest_unconfirmed dupa regulile servite, pentru restul intrebarii. NX-374 (kernel.v6.1): need_unverifiable spune ca o cerinta rostita in tur nu se poate verifica din datele produselor. O dezvaluire lipsa inseamna turul fara ea; no_results lipsa inseamna ca turul fara rezultate nu e servit de kernel si raspunde calea v1. Fara liniuta de pauza si fara punct si virgula (P13), fara promisiuni pe care nu le onoreaza nimeni.",
   "kernel_sentences": {
     "ro": {
       "not_exact_match": "Nu am găsit exact produsul pe care l-ai numit, așa că îți arăt ce am cel mai aproape.",
@@ -52,7 +52,12 @@
       "cart_added": "Am pus {product} în coș.",
       "cart_failed": "Nu am putut adăuga produsul în coș acum.",
       "mutation_unavailable": "Produsul nu mai e disponibil, așa că nu îl pot pune în coș.",
-      "mutation_not_exact": "Nu știu sigur ce produs să pun în coș. Spune-mi numele lui."
+      "mutation_not_exact": "Nu știu sigur ce produs să pun în coș. Spune-mi numele lui.",
+      "store_info_unknown": "Nu am informația asta în regulile magazinului, așa că nu ți-o pot confirma.",
+      "store_info_unconfirmed": "Nu pot să-ți confirm sigur asta acum. Îmi spui altfel ce vrei să afli?",
+      "store_info_unavailable": "Nu pot citi acum regulile magazinului, așa că nu ți-o pot confirma. Încearcă din nou peste puțin.",
+      "store_info_rest_unconfirmed": "Pentru restul întrebării nu am un răspuns sigur.",
+      "need_unverifiable": "Una dintre cerințele tale nu o pot verifica din datele produselor, așa că n-am putut ține cont de ea la alegere."
     },
     "en": {
       "not_exact_match": "I couldn't find the exact product you named, so here is what comes closest.",
@@ -65,7 +70,12 @@
       "cart_added": "I've added {product} to your cart.",
       "cart_failed": "I couldn't add the product to your cart right now.",
       "mutation_unavailable": "That product is no longer available, so I can't add it to your cart.",
-      "mutation_not_exact": "I'm not sure which product to add to your cart. Tell me its name."
+      "mutation_not_exact": "I'm not sure which product to add to your cart. Tell me its name.",
+      "store_info_unknown": "I don't have that in the store's rules, so I can't confirm it.",
+      "store_info_unconfirmed": "I can't confirm that for sure right now. Could you ask me another way?",
+      "store_info_unavailable": "I can't read the store's rules right now, so I can't confirm it. Please try again in a moment.",
+      "store_info_rest_unconfirmed": "For the rest of your question I don't have a sure answer.",
+      "need_unverifiable": "I can't check one of your requirements against the product data, so I couldn't take it into account."
     }
   },
   "_chip_templates_note": "NX-296: copy-ul chips-urilor, per mutare si per locale. Un chip e MESAJUL pe care clientul il retrimite la apasare, deci se scrie la persoana I, in vocea lui. {slot} se completeaza de server din catalog (fraza de meniu, nume scurt de produs, prag de pret), niciodata de model. Mutare fara sablon = mutare care nu se ofera (P11: limba e configuratie, nu constanta in cod). Moneda face parte din sablon fiindca e a tenantului.",

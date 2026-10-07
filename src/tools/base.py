@@ -147,6 +147,12 @@ CATALOG_READ_TOOLS: frozenset[str] = frozenset(
     }
 )
 
+#: NX-372: uneltele care CITESC regulile magazinului (nu catalogul, nu o comandă, nu coșul). Un tur
+#: care a chemat DOAR unelte de aici e o întrebare despre magazin: fără răspuns din reguli, spune că
+#: nu are informația, nu că n-a găsit produse. `check_order`, `clarify_options` și mutațiile nu sunt
+#: aici: pentru ele fraza „nu am informația în regulile magazinului" ar fi falsă (recenzia NX-372).
+STORE_READ_TOOLS: frozenset[str] = frozenset({"faq_lookup"})
+
 #: `ToolResult.error` pentru argumente respinse la validare (NX-326), distinct de o unealtă picată.
 ARGS_REJECTED = "ValidationError"
 

@@ -37,7 +37,7 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 
 from src.agent.deterministic import page_source
-from src.agent.turn_planner import PlannedTurn, plan_turn
+from src.agent.turn_planner import PlannedTurn, disclosure_memory, plan_turn
 from src.catalog.reference_facts import facts_from_row, fetch_reference_facts
 from src.catalog.subject_pairs import mark_pairs, needs_pairs, subject_type_pairs
 from src.catalog.vocabulary_cache import get_vocabulary
@@ -729,6 +729,22 @@ def _question_memory(ctx: TurnContext, outcome: GateOutcome) -> tuple[StateUpdat
     return (memory,) if asked else ()
 
 
+def _disclosure_memory(ctx: TurnContext, planned: PlannedTurn) -> tuple[StateUpdateProposal, ...]:
+    """NX-374 (recenzia A2): memoria dezvăluirii `need_unverifiable`, DOAR dacă fraza pachetului e
+    chiar în răspunsul trimis (ca memoria întrebării, `_asked_in_reply`). Un plan care n-a servit,
+    o căutare fără rezultate sau o frază lipsă din pachet lasă nevoia de spus pe următoarea căutare
+    care o poartă, în loc s-o marcheze spusă fără ca clientul s-o fi văzut."""
+    if not planned.disclosed_needs:
+        return ()
+    from src.agent.kernel_executors import kernel_sentence  # noqa: PLC0415 — ciclul agent
+
+    pack = getattr(ctx.business, "domain_pack", None)
+    sentence = kernel_sentence(pack, ctx.language, "need_unverifiable")
+    if not _asked_in_reply(ctx.reply, sentence):
+        return ()
+    return disclosure_memory(planned, ctx.turn_id)
+
+
 def _executor_added(ctx: TurnContext, saved: ContextSnapshot) -> tuple[StateUpdateProposal, ...]:
     """Propunerile adăugate de executori în `ctx.state_proposals` în tur (I20: trec prin commit ca
     propuneri de executor, deci ce nu e referință sau sesiune se respinge CU înregistrare)."""
@@ -751,7 +767,10 @@ def kernel_turn_of(chain: _Chain, ctx: TurnContext, saved: ContextSnapshot) -> K
         resolved=chain.resolved,
         primary=chain.primary,
         corrects_previous_turn=interp.corrects_previous_turn,
-        memory=_question_memory(ctx, chain.outcome),
+        memory=(
+            *_question_memory(ctx, chain.outcome),
+            *_disclosure_memory(ctx, chain.planned),
+        ),
         executor_proposals=_executor_added(ctx, saved),
     )
 
@@ -861,9 +880,13 @@ async def _dark_search(
     mark = len(ctx.events)
     started = perf_counter()
     paging = chain.planned.primary in chain.planned.excludes_shown  # NX-370
-    result = await run_planned_search(
-        ctx, deps, plan.search_args, **({"exclude_shown": True} if paging else {})
-    )
+    extra: dict[str, Any] = {"exclude_shown": True} if paging else {}
+    if paging and get_settings().search_resume_excludes_subject_seen_enabled:  # NX-378: ca servita
+        from src.agent.kernel_executors import seen_in_state  # noqa: PLC0415
+
+        if seen := seen_in_state(chain.reduced.state):
+            extra["seen_extra"] = seen
+    result = await run_planned_search(ctx, deps, plan.search_args, **extra)
     out["ms"] = round((perf_counter() - started) * 1000, 1)
     slots = int(getattr(get_settings(), "card_slots", 6))
     ids = [str(p.get("product_id") or p.get("id")) for p in (result.products or [])]

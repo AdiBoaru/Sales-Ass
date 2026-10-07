@@ -5,11 +5,11 @@
 
 Fiecare loc din `src/**/*.py` care scrie starea conversației (v1 sau v2), derivat MECANIC prin `ast` (nu grep). Pregătește I3/I20 din [`docs/KERNEL-CONTRACT-v1.md`](KERNEL-CONTRACT-v1.md): pasul 3 nu poate face din reducer singurul scriitor peste o stare pe care o mai scriu și alții, fără să știe cine sunt aceia.
 
-**Totaluri:** 166 scriitori găsiți, 104 intrări de soartă declarate, 8 `unresolved`.
+**Totaluri:** 167 scriitori găsiți, 105 intrări de soartă declarate, 8 `unresolved`.
 - `becomes_proposal`: 0
 - `executor_output`: 9
 - `retired`: 16
-- `stays`: 141
+- `stays`: 142
 
 ## `needs_topic` -- nevoi + subiect/raft
 
@@ -174,6 +174,7 @@ Fiecare loc din `src/**/*.py` care scrie starea conversației (v1 sau v2), deriv
 | `src/agent/brain.py:run_main_brain` | v2 | `proposal_call` | `_persist_clarification() -> set_pending_question` | Apel indirect catre `_persist_clarification` -- deja v2-only (vezi mai sus). | `stays` |
 | `src/agent/finalize.py:_apply_turn_shape` | v2 | `proposal_constructor` | `note_asked` | NX-331: `StateUpdateProposal("note_asked", key=fateta)` dupa intrebarea de ingustare NX-315 (reducerul o scrie in `asked_questions`). NX-331: propunerea e SURSA; vederea v1 se derivă din ea prin `worker/state_writes.apply_v1_view`, singurul scriitor al formei v1 pe siturile mutate. | `stays` |
 | `src/agent/finalize.py:_finalize_rich` | v2 | `proposal_call` | `_apply_turn_shape() -> note_asked` | Apel catre `_apply_turn_shape` (v2, `note_asked`), aceeasi soarta ca acolo. NX-331: propunerea e SURSA; vederea v1 se derivă din ea prin `worker/state_writes.apply_v1_view`, singurul scriitor al formei v1 pe siturile mutate. | `stays` |
+| `src/agent/turn_planner.py:disclosure_memory` | v2 | `proposal_constructor` | `note_asked` | NX-374 (recenzia A2): memoria dezvaluirii `need_unverifiable` (`note_asked unverifiable:<cheie>`), ca dezvaluirea sa se spuna o singura data, pe prima cautare care poarta nevoia. Propunere spre reducer; orchestratorul o trimite doar daca fraza e in raspuns, iar commit-ul o aplica in a doua trecere (MEMORY_OPS), ca memoria intrebarii. | `stays` |
 | `src/conversation/ambiguity_gate.py:memory_proposal` | v2 | `proposal_constructor` | `note_asked` | NX-336: memoria intrebarii portii (`set_pending_question` / `note_asked`), mutata din `fixture_catalog` ca sa aiba UN proprietar. Propunere spre reducer; commit-ul pasului 6 (PR B) o aplica in a doua trecere. | `stays` |
 | `src/conversation/ambiguity_gate.py:memory_proposal` | v2 | `proposal_constructor` | `set_pending_question` | NX-336: memoria intrebarii portii (`set_pending_question` / `note_asked`), mutata din `fixture_catalog` ca sa aiba UN proprietar. Propunere spre reducer; commit-ul pasului 6 (PR B) o aplica in a doua trecere. | `stays` |
 | `src/conversation/ambiguity_gate.py:question_answered` | v2 | `proposal_constructor` | `resolve_question` | NX-336 §1: pe turul interpretat o intrebare VIE se inchide (`resolve_question`) cand turul nu e paranteza, ca `clarify_resume` pe calea de azi. Propunere spre reducer; in PR A doar in starea portii (memorie), in PR B in commit. | `stays` |

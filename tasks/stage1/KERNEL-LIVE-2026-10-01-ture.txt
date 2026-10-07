@@ -1,0 +1,917 @@
+
+######## k3_ordinal_zoom  conv=9a829e44-57dc-467c-9ab3-21d19a73ae00  focus: NX-364 regula 1: ordinalul dupa un detaliu numara lista din care s-a intrat; cosul pe ordinal de lista intreaba (I10)
+
+--- T1 [18bffbf5-51b0-400d-a7f4-ab3c08954bca] «arata-mi niste tonere pentru pori dilatati»
+  EXPECT: tonere de fata (115 in stoc), nevoia pores
+  kernel_turn: {'plans': 1, 'served': True, 'turn_id': '18bffbf5-51b0-400d-a7f4-ab3c08954bca', 'executor': 'search', 'fallback_reason': None}
+  interpretation: outcome=ok prompt=interpret.v4.1
+  acts=[('find', 'arata-mi niste tonere pentru pori dilatati')] thread=continue
+  changes=[('set', 'product_type', 'eq', 'toner de fata', None, 'tonere'), ('set', 'concerns', 'eq', 'pores', None, 'pori dilatati')]
+  checked=[('product_type', 'toner de fata', 'implicit', 'soft', None), ('concerns', 'pores', 'explicit', 'soft', None)]
+  rejected=[]
+  state_after: {"needs": ["concerns contains pores"], "shown": [], "topic": null, "umbrella": ["toner de fata"]}
+  ambiguity=act reason=clear q=None
+  executor=search plans=[('search', 0, None)] args={"brand": null, "limit": 6, "query": "toner", "prefer": {"product_type": ["toner de fata"]}, "exclude": {}, "category": null, "concerns": null, "features": ["pores"], "price_max": null, "sort_mode": "relevance", "price_band": null, "rank_terms": [], "product_name": null, "in_stock_only": false, "variant_label": null}
+  gaps=[] disclosures=[] dropped=0
+  CARDS: [('BANILA CO Clean it Zero Green Peel Toner Pad', 140.0), ('TIRTIR Milk Skin Toner Toner Hidratant Lejer', 135.0), ('EQQUALBERRY Swimming pool Toner toner de fata', 126.0), ('EQQUALBERRY Swimming pool Toner', 86.0), ('ANUA Toner Exfoliant BHA 2%', 130.0), ('ROUND LAB 1025 Dokdo Toner tonic exfoliant pentru fata', 50.0)]
+  BOT: Toate sunt tonere potrivite pentru pori dilatați, cu variante pentru ten sensibil sau uscat și formule orientate spre exfoliere, hidratare ori calmare.  1. BANILA CO Clean it Zero Green Peel Toner Pad, 140,00 lei  ⭐4.8    Pentru ten sensibil, LHA și pantenolul ajută la îndepărtarea celulelor moarte și lasă pielea catifelată. 2. TIRTIR Milk Skin Toner Toner Hidratant Lejer, 135,00 lei  ⭐4.9  • Top Favorit    Când vrei hidratare și control al sebumului, niacinamida și ceramida NP susțin confortul pielii. 3. EQQUALBERRY Swimming pool Toner toner de fata, 126,00 lei  ⭐4.9    Potrivit pentru ten uscat, cu acid hialuronic și pantenol pentru hidratare. 4. EQQUALBERRY Swimming pool Toner, 86,00 lei  ⭐4.9    Pentru pori dilatați și ten tern, acidul hialuronic și enzima proteaza ajută la hidratare și netezire. 5. ANUA Toner Exfoliant BHA 2%, 130,00 lei  ⭐4.9  • Top Favorit    Dacă te preocupă și i…
+
+--- T2 [24fd4781-42d3-4485-8fbf-bc501b3f8567] «spune-mi mai multe despre al doilea»
+  EXPECT: detaliu pe tonerul 2 din lista
+  kernel_turn: None
+  (no kernel trace)
+  CARDS: [('TIRTIR Milk Skin Toner Toner Hidratant Lejer', 135.0)]
+  BOT: De ce ți-l recomand  Potrivit pentru ten gras, sensibil sau predispus la acnee, care are nevoie de controlul sebumului și o tonifiere lejeră după curățare.  Caracteristici principale  ✓ Moment din rutina: dimineata si seara ✓ Potrivit pentru: acnee si imperfectiuni, bariera cutanata, hidratare, pori dilatati ✓ Ingrediente cheie: niacinamida, extract de tarate de orez, ceramida np, extract de centella asiatica  Cum se folosește  Dupa curatarea tenului, aplica o cantitate potrivita de toner pe fata, folosind mainile sau o discheta de bumbac, si tapoteaza delicat pana la absorbtia completa. Utilizeaza zilnic in rutina de ingrijire a pielii pentru un ten luminos, hidratat si revigorat, evitand zona din jurul ochilor. Ideal pentru ten gras, sensibil sau predispus la acnee. Vezi mai multe detalii Ascunde  Ce spun clienții  Rezumatul recenziilor pentru TIRTIR Milk Skin Toner Toner Hidratant Lej…
+
+--- T3 [1ec9aac7-64f4-491a-b526-b0ca69955e6d] «compara-l cu al patrulea»
+  EXPECT: comparatie toner 2 vs toner 4 al LISTEI (ordinal_in_zoomed_list), nu ordinal_out_of_range
+  kernel_turn: {'plans': 1, 'served': True, 'turn_id': '1ec9aac7-64f4-491a-b526-b0ca69955e6d', 'executor': 'ask', 'fallback_reason': None}
+  interpretation: outcome=ok prompt=interpret.v4.1
+  acts=[('compare', None)] thread=continue
+  changes=[]
+  checked=[]
+  refs=[('deictic', 'exact', 'shown_now', 'single_in_set', 1), ('earlier', 'ambiguous', 'shown_earlier', 'earlier_unspecified', 6)]
+  rejected=[]
+  state_after: {"needs": ["concerns contains pores"], "shown": ["69f4d8be-9fa4-46c4-9fa0-b0d487e666b1"], "topic": null, "recent": [["5e38e893-e309-4356-aea5-058a37a76797", "69f4d8be-9fa4-46c4-9fa0-b0d487e666b1", "015e96d5-a8b3-40e3-be17-66fc81ec41c0", "d56e4cc6-56e0-4151-9428-50e9fb5f6d19", "0270be9f-4a2c-4eb1-a2ba-b3427ab52c6a", "2514105f-71b2-47b0-b0f2-80fef982222f"]], "selected": "69f4d8be-9fa4-46c4-9fa0-b0d487e666b1", "umbrella": ["toner de fata"]}
+  ambiguity=must_ask reason=ambiguous_too_many q=La care te referi dintre BANILA CO Clean it Zero Green Peel Toner Pad, TIRTIR Milk Skin Toner Toner Hidratant Lejer, EQQUALBERRY Swimming pool Toner toner de fata și EQQUALBERRY Swimming pool Toner?
+  executor=ask plans=[('ask', 6, None)] args=None
+  gaps=[] disclosures=[] dropped=0
+  CARDS: [('BANILA CO Clean it Zero Green Peel Toner Pad', 140.0), ('TIRTIR Milk Skin Toner Toner Hidratant Lejer', 135.0), ('EQQUALBERRY Swimming pool Toner toner de fata', 126.0), ('EQQUALBERRY Swimming pool Toner', 86.0), ('ANUA Toner Exfoliant BHA 2%', 130.0), ('ROUND LAB 1025 Dokdo Toner tonic exfoliant pentru fata', 50.0)]
+  BOT: La care te referi dintre BANILA CO Clean it Zero Green Peel Toner Pad, TIRTIR Milk Skin Toner Toner Hidratant Lejer, EQQUALBERRY Swimming pool Toner toner de fata și EQQUALBERRY Swimming pool Toner?
+
+--- T4 [7cda4cb4-767a-4031-b1c8-429d7cae0b72] «pune-l pe primul in cos»
+  EXPECT: tinta numarata pe lista dupa zoom: intrebare de confirmare (must_ask) sau tinta exacta; niciun produs gresit pus in cos
+  kernel_turn: {'plans': 1, 'served': True, 'turn_id': '7cda4cb4-767a-4031-b1c8-429d7cae0b72', 'executor': 'cart', 'fallback_reason': None}
+  interpretation: outcome=ok prompt=interpret.v4.1
+  acts=[('cart', None)] thread=continue
+  changes=[]
+  checked=[]
+  refs=[('ordinal', 'exact', 'shown_now', 'ordinal_in_set', 1)]
+  rejected=[]
+  state_after: {"needs": ["concerns contains pores"], "shown": ["5e38e893-e309-4356-aea5-058a37a76797", "69f4d8be-9fa4-46c4-9fa0-b0d487e666b1", "015e96d5-a8b3-40e3-be17-66fc81ec41c0", "d56e4cc6-56e0-4151-9428-50e9fb5f6d19", "0270be9f-4a2c-4eb1-a2ba-b3427ab52c6a", "2514105f-71b2-47b0-b0f2-80fef982222f"], "topic": null, "recent": [["69f4d8be-9fa4-46c4-9fa0-b0d487e666b1"]], "selected": "5e38e893-e309-4356-aea5-058a37a76797", "umbrella": ["toner de fata"]}
+  ambiguity=act reason=clear q=None
+  executor=cart plans=[('cart', 1, None)] args=None
+  gaps=[] disclosures=[] dropped=0
+  CARDS: [('BANILA CO Dear Hydration   Crystal Glow Essence', 150.0), ('BEAUTY OF JOSEON Revive', 95.0), ('BEAUTY OF JOSEON Relief Sun Aqua-fresh Rice + B5 SPF 50 PA++', 90.0)]
+  BOT: Am pus BANILA CO Clean it Zero Green Peel Toner Pad în coș.  Gata, am adăugat BANILA CO Clean it Zero Green Peel Toner Pad, toner de fata formulat cu LHA si pantenol, care contribuie la indepartarea celulelor moarte si la mentinerea senzatiei de prospetime si confort, 70 buc în coș 🛒 Iată ce merge bine cu el:  1. BANILA CO Dear Hydration   Crystal Glow Essence, 150,00 lei  ⭐5.0    Pentru hidratare și ten tern, acidul hialuronic ajută pielea să-și păstreze confortul după exfoliere. 2. BEAUTY OF JOSEON Revive, 95,00 lei  ⭐5.0    Seara, retinalul și ginsengul vizează ridurile și fermitatea în zona delicată a ochilor. 3. BEAUTY OF JOSEON Relief Sun Aqua-fresh Rice + B5 SPF 50 PA++++ 50 ml, 90,00 lei  ⭐5.0    Dimineața, pantenolul calmează, iar formula fără urme albe completează rutina cu protecție solară.  Îți mai pot arăta: Arată-mi seruri hidratante care merg după tonerul BANIL… · Cum se f…
+
+  HTTP: [(200, 18.0), (200, 2.1), (200, 7.3), (200, 11.0)]
+
+######## k2_retract_budget  conv=36e63653-3e3f-4b36-a31c-d1571f13c9e5  focus: retragerea unei nevoi (I6), extreme pe rating, fateta da/nu fara date (NX-349, unsupported_need)
+
+--- T1 [8e4b5d13-8d1b-4b67-86b9-f9435c2ac1f0] «vreau o crema de fata pentru ten uscat, sub 100 lei»
+  EXPECT: creme de fata <= 100 lei, ten uscat
+  kernel_turn: {'plans': 1, 'served': True, 'turn_id': '8e4b5d13-8d1b-4b67-86b9-f9435c2ac1f0', 'executor': 'search', 'fallback_reason': None}
+  interpretation: outcome=ok prompt=interpret.v4.1
+  acts=[('find', 'vreau o crema de fata pentru ten uscat, sub 100 lei')] thread=continue
+  changes=[('set', 'product_type', 'eq', 'crema de fata', None, 'crema de fata'), ('set', 'skin_type', 'eq', 'dry', None, 'ten uscat'), ('set', 'price', 'lte', None, 100.0, 'sub 100 lei')]
+  checked=[('product_type', 'crema de fata', 'explicit', 'soft', None), ('skin_type', 'dry', 'explicit', 'soft', None), ('price', 100.0, 'explicit', 'hard', None)]
+  rejected=[]
+  state_after: {"needs": ["budget_max lte 100", "skin_type eq dry"], "shown": [], "topic": null}
+  ambiguity=act reason=clear q=None
+  executor=search plans=[('search', 0, None)] args={"brand": null, "limit": 6, "query": "crema de fata", "prefer": {"product_type": ["crema de fata"]}, "exclude": {}, "category": null, "concerns": ["dry"], "features": null, "price_max": 100.0, "sort_mode": "relevance", "price_band": null, "rank_terms": [], "product_name": null, "in_stock_only": false, "variant_label": null}
+  gaps=[] disclosures=[] dropped=0
+  CARDS: [('MIZON Collagen Power crema pentru fata', 60.0), ("DR. KONOPKA'S LITTLE HERBAL COMPANY Age-Defying Activ Cream ", 30.0)]
+  BOT: Am selectat doar creme de față sub 100 lei. MIZON Collagen Power pune accent pe fermitate, iar DR. KONOPKA'S Age-Defying Activ pe hidratare cu extract de zmeură și ulei de lavandă, ambele sunt potrivite dimineața și seara.  1. MIZON Collagen Power crema pentru fata, 60,00 lei  ⭐5.0  • Top Favorit    Potrivită dacă vrei hidratare intensă și un plus de fermitate, cu colagen și acid hialuronic. 2. DR. KONOPKA'S LITTLE HERBAL COMPANY Age-Defying Activ Cream 50 ml, 30,00 lei  ⭐4.9    Pentru rutina de zi sau de seară, oferă hidratare pielii uscate cu extract de zmeură și ulei de lavandă.  Dacă te preocupă mai ales fermitatea, MIZON Collagen Power e alegerea potrivită, pentru hidratare cu extracte botanice, alege DR. KONOPKA'S Age-Defying Activ.  Sau, dacă preferi: Caut ceva pentru calmare · Arata-mi ce ai la Ten · Compara MIZON Collagen Power cu DR. KONOPKA'S LITTLE · Trimite-mi linkul la MIZO…
+
+--- T2 [38a0f5c8-35eb-4a18-8ca3-f0d864cfcea3] «de fapt bugetul nu conteaza, vreau cea mai bine cotata»
+  EXPECT: plafonul de 100 lei retras; sortare dupa rating; apar si creme peste 100 lei
+  kernel_turn: {'plans': 1, 'served': True, 'turn_id': '38a0f5c8-35eb-4a18-8ca3-f0d864cfcea3', 'executor': 'search', 'fallback_reason': None}
+  interpretation: outcome=ok prompt=interpret.v4.1
+  acts=[('find', 'cea mai bine cotata')] thread=continue
+  changes=[('clear', 'price', None, None, None, 'de fapt bugetul nu conteaza'), ('set', 'unmapped', 'eq', 'cea mai bine cotata', None, 'vreau cea mai bine cotata')]
+  checked=[('price', None, 'explicit', 'ranking', 'unknown_handle'), ('unmapped', 'cea mai bine cotata', 'implicit', 'soft', None)]
+  rejected=[]
+  state_after: {"needs": ["budget_max lte 100", "skin_type eq dry", "unmapped contains cea mai bine cotata"], "shown": ["2b21880b-e9c9-438c-8574-5ff6d7d9767b", "db333a91-e39d-4fb7-aa95-6025e66caed0"], "topic": null}
+  ambiguity=act reason=clear q=None
+  executor=search plans=[('search', 0, None)] args={"brand": null, "limit": 6, "query": "cremă de față", "prefer": {"product_type": ["crema de fata"]}, "exclude": {}, "category": null, "concerns": ["dry"], "features": null, "price_max": 100.0, "sort_mode": "relevance", "price_band": null, "rank_terms": ["cea mai bine cotata"], "product_name": null, "in_stock_only": false, "variant_label": null}
+  gaps=[] disclosures=[] dropped=0
+  CARDS: [('MIZON Collagen Power crema pentru fata', 60.0)]
+  BOT: Este potrivită și dacă vrei să pui accent pe fermitate.  1. MIZON Collagen Power crema pentru fata, 60,00 lei  ⭐5.0  • Top Favorit    Pentru ten uscat, cu colagen și acid hialuronic, pentru hidratare și fermitate.  Îți mai pot arăta: Caut ceva pentru hidratare · Arata-mi ce ai la Machiaj · Ce spun recenziile despre MIZON Collagen Power crema · Caut ceva pentru ten uscat · Caut ceva pentru crema de fata
+
+--- T3 [eb868b50-bd50-4552-a09e-a1df8721efd8] «sa fie si fara parfum»
+  EXPECT: nevoia ajunge in stare dar catalogul n-are atributul: dezvaluire onesta, niciun «fara parfum» afirmat; nu se cauta cuvantul «parfum»
+  kernel_turn: {'plans': 1, 'served': True, 'turn_id': 'eb868b50-bd50-4552-a09e-a1df8721efd8', 'executor': 'search', 'fallback_reason': None}
+  interpretation: outcome=ok prompt=interpret.v4.1
+  acts=[('find', 'sa fie si fara parfum')] thread=continue
+  changes=[('set', 'fragrance_free', 'eq', 'true', None, 'fara parfum')]
+  checked=[('fragrance_free', 'true', 'explicit', 'soft', None)]
+  rejected=[]
+  state_after: {"needs": ["budget_max lte 100", "fragrance_free eq True", "skin_type eq dry", "unmapped contains cea mai bine cotata"], "shown": ["2b21880b-e9c9-438c-8574-5ff6d7d9767b"], "topic": null, "recent": [["2b21880b-e9c9-438c-8574-5ff6d7d9767b", "db333a91-e39d-4fb7-aa95-6025e66caed0"]]}
+  ambiguity=act reason=clear q=None
+  executor=search plans=[('search', 0, None)] args={"brand": null, "limit": 6, "query": "cremă de față", "prefer": {"product_type": ["crema de fata"]}, "exclude": {}, "category": null, "concerns": ["dry"], "features": null, "price_max": 100.0, "sort_mode": "relevance", "price_band": null, "rank_terms": ["cea mai bine cotata"], "product_name": null, "in_stock_only": false, "variant_label": null}
+  gaps=['unsupported_need'] disclosures=[] dropped=0
+  CARDS: [('YADAH Cactus Sunscreen SPF 50', 70.0), ('MIZON Inout Watery Sheer Sunscreen SPF 50 PA++++', 100.0), ('BEAUTY OF JOSEON Dynasty', 93.41), ('EUBOS Urea Intensive Care 5% Urea Cream', 100.0), ('Dr. Althea Aqua Marine Watery Cream', 80.0), ('MIZON Collagen Power Firming Enriched Cream', 93.41)]
+  BOT: Ți-am ales cremă de față.  1. YADAH Cactus Sunscreen SPF 50, 70,00 lei  ⭐5.0 2. MIZON Inout Watery Sheer Sunscreen SPF 50 PA++++, 100,00 lei  ⭐5.0 3. BEAUTY OF JOSEON Dynasty, 93,41 lei  ⭐5.0 4. EUBOS Urea Intensive Care 5% Urea Cream, 100,00 lei  ⭐5.0 5. Dr. Althea Aqua Marine Watery Cream, 80,00 lei  ⭐5.0 6. MIZON Collagen Power Firming Enriched Cream, 93,41 lei  ⭐4.9  Îți mai pot arăta: Compara YADAH Cactus Sunscreen cu MIZON Inout Watery · Trimite-mi linkul la BEAUTY OF JOSEON Dynasty · Spune-mi mai multe despre BEAUTY OF JOSEON Dynasty · Trimite-mi linkul la MIZON Inout Watery Sheer Sunscreen · Ce spun recenziile despre BEAUTY OF JOSEON Dynasty
+
+--- T4 [c4a2a32f-1a29-4d41-a687-bc72a9cf99bd] «a doua cat costa?»
+  EXPECT: pretul cardului 2 de pe ecranul curent, citit din catalog
+  kernel_turn: {'plans': 1, 'served': True, 'turn_id': 'c4a2a32f-1a29-4d41-a687-bc72a9cf99bd', 'executor': 'detail', 'fallback_reason': None}
+  interpretation: outcome=ok prompt=interpret.v4.1
+  acts=[('detail', None)] thread=continue
+  changes=[]
+  checked=[]
+  refs=[('ordinal', 'exact', 'shown_now', 'ordinal_in_set', 1)]
+  rejected=[]
+  state_after: {"needs": ["budget_max lte 100", "fragrance_free eq True", "skin_type eq dry", "unmapped contains cea mai bine cotata"], "shown": ["49f89574-c4fe-4e84-8ada-0d86ba98efda", "45628a3b-e3d3-4f4e-9575-91dcfba0a570", "0d2afd4a-3153-42e8-95d5-8de4db82b57d", "8df480e6-2bd4-4de4-a294-e850303893f3", "f87e11c2-f3ed-4653-a791-7997746b03a5", "c934e168-dbbd-452c-b5f1-38cc52a35327"], "topic": null, "recent": [["2b21880b-e9c9-438c-8574-5ff6d7d9767b"], ["2b21880b-e9c9-438c-8574-5ff6d7d9767b", "db333a91-e39d-4fb7-aa95-6025e66caed0"]], "selected": "45628a3b-e3d3-4f4e-9575-91dcfba0a570"}
+  ambiguity=act reason=clear q=None
+  executor=detail plans=[('detail', 1, None)] args=None
+  gaps=[] disclosures=[] dropped=0
+  CARDS: [('MIZON Inout Watery Sheer Sunscreen SPF 50 PA++++', 100.0)]
+  BOT: De ce ți-l recomand  Pentru toate tipurile de ten, în special tenul uscat sau deshidratat, care are nevoie de protecție solară zilnică ridicată și hidratare într-o textură lejeră.  Caracteristici principale  ✓ Moment din rutina: dimineata ✓ Tip de ten: ten uscat ✓ Potrivit pentru: riduri si fermitate, bariera cutanata, hidratare, protectie solara ✓ Ingrediente cheie: colagen vegan ciuperca alba, complex de alge brune kelp seaweed sargassum, acid hialuronic, betaine ✓ SPF: 50  Cum se folosește  Aplica generos pe fata si gat ca ultim pas in rutina zilnica, cu cel putin 15 minute inainte de expunerea la soare. Reaplica produsul o data la doua ore sau dupa contactul cu apa, iar datorita texturii fluide, il poti utiliza inclusiv ca baza de machiaj. Vezi mai multe detalii Ascunde  Ce spun clienții  Rezumatul recenziilor pentru MIZON Inout Watery Sheer Sunscreen SPF 50 PA++++: Multe recenzii sp…
+
+  HTTP: [(200, 17.4), (200, 10.4), (200, 9.8), (200, 3.3)]
+
+######## k1_park_resume  conv=7efdd409-4967-4d11-9d6e-9484334c7c02  focus: I19/I6: subiect parcat si reluat cu nevoile lui; excluderea spusa (NX-364) supravietuieste parcarii
+
+--- T1 [3adabea0-0fbc-4a69-9e2c-5072a611a823] «caut un ser de fata pentru pete pigmentare, am tenul gras»
+  EXPECT: seruri de fata (ser de fata: 255 in stoc); nevoia hyperpigmentation; ten gras ca nevoie spusa
+  kernel_turn: {'plans': 1, 'served': True, 'turn_id': '3adabea0-0fbc-4a69-9e2c-5072a611a823', 'executor': 'search', 'fallback_reason': None}
+  interpretation: outcome=ok prompt=interpret.v4.1
+  acts=[('find', 'caut un ser de fata pentru pete pigmentare, am tenul gras')] thread=continue
+  changes=[('set', 'product_type', 'eq', 'ser de fata', None, 'un ser de fata'), ('set', 'concerns', 'eq', 'hyperpigmentation', None, 'pete pigmentare'), ('set', 'skin_type', 'eq', 'oily', None, 'am tenul gras')]
+  checked=[('product_type', 'ser de fata', 'explicit', 'soft', None), ('concerns', 'hyperpigmentation', 'explicit', 'soft', None), ('skin_type', 'oily', 'explicit', 'soft', None)]
+  rejected=[]
+  state_after: {"needs": ["concerns contains hyperpigmentation", "skin_type eq oily"], "shown": [], "topic": null}
+  ambiguity=act reason=clear q=None
+  executor=search plans=[('search', 0, None)] args={"brand": null, "limit": 6, "query": "ser de fata", "prefer": {"product_type": ["ser de fata"]}, "exclude": {}, "category": null, "concerns": ["oily"], "features": ["hyperpigmentation"], "price_max": null, "sort_mode": "relevance", "price_band": null, "rank_terms": [], "product_name": null, "in_stock_only": false, "variant_label": null}
+  gaps=[] disclosures=[] dropped=0
+  CARDS: [('TIRTIR Niacinamide 20%', 130.0), ('LUVUM Pore Reset Tightening Ampoule', 120.0), ('ALLIES OF SKIN Azelaic & Kojic Advanced Clarifying', 550.0)]
+  BOT: Pentru pete pigmentare și ten gras, TIRTIR pune accent pe niacinamidă și retinol, LUVUM combină niacinamida cu gluconolactona pentru pori, iar ALLIES OF SKIN vizează petele post-acnee cu acid azelaic și kojic.  1. TIRTIR Niacinamide 20%, 130,00 lei  ⭐5.0    Potrivit pentru ten gras, cu textură ușoară și niacinamidă, pentru rutina de dimineață sau seară. 2. LUVUM Pore Reset Tightening Ampoule, 120,00 lei  ⭐5.0    Bun dacă te preocupă și porii dilatați, cu niacinamidă și gluconolactonă. 3. ALLIES OF SKIN Azelaic & Kojic Advanced Clarifying, 550,00 lei  ⭐5.0  • Top Favorit    Pentru pete post-acnee și exces de sebum, cu acid azelaic și acid kojic.  Îți mai pot arăta: Caut ceva pentru hidratare · Arata-mi ce ai la Ten · Compara TIRTIR Niacinamide 20% cu LUVUM Pore Reset · Trimite-mi linkul la TIRTIR Niacinamide 20% · Vreau ceva sub 125 lei
+
+--- T2 [a5ec1a71-1e38-41be-bc55-d9dcc359bba2] «nu vreau cu acid hialuronic»
+  EXPECT: excludere spusa pe key_ingredients; niciun card cu acid hialuronic in ingrediente; subiectul ramane serul
+  kernel_turn: {'plans': 1, 'served': True, 'turn_id': 'a5ec1a71-1e38-41be-bc55-d9dcc359bba2', 'executor': 'search', 'fallback_reason': None}
+  interpretation: outcome=ok prompt=interpret.v4.1
+  acts=[('find', 'nu vreau cu acid hialuronic')] thread=continue
+  changes=[('add', 'key_ingredients', 'avoid', 'acid hialuronic', None, 'nu vreau cu acid hialuronic')]
+  checked=[('key_ingredients', 'acid hialuronic', 'explicit', 'soft', None)]
+  rejected=[]
+  state_after: {"needs": ["concerns contains hyperpigmentation", "restriction not_contains acid hialuronic", "skin_type eq oily"], "shown": ["384618ea-4a14-4a78-a009-94deacfc26eb", "54749b0c-e933-46cf-a5ed-8c97d5e08788", "f356eb92-2ff8-4cd5-9900-3a9378c72057"], "topic": null}
+  ambiguity=act reason=clear q=None
+  executor=search plans=[('search', 0, None)] args={"brand": null, "limit": 6, "query": "ser de față", "prefer": {"product_type": ["ser de fata"]}, "exclude": {"key_ingredients": ["acid hialuronic"]}, "category": null, "concerns": ["oily"], "features": ["hyperpigmentation"], "price_max": null, "sort_mode": "relevance", "price_band": null, "rank_terms": [], "product_name": null, "in_stock_only": false, "variant_label": null}
+  gaps=[] disclosures=[] dropped=0
+  CARDS: [('LUVUM Pore Reset Tightening Ampoule', 120.0), ('ALLIES OF SKIN Azelaic & Kojic Advanced Clarifying', 550.0), ('Dr.Jart+ Ctrl-A Teatreement Ser de fata calmant local', 100.0)]
+  BOT: Am restrâns căutarea la seruri pentru ten gras cu ingrediente-cheie diferite, dar nu pot confirma că sunt fără acid hialuronic: lista ingredientelor nu este completă. LUVUM vizează porii și petele, ALLIES OF SKIN și petele post-acnee, iar Dr.Jart+ este pentru imperfecțiuni.  1. LUVUM Pore Reset Tightening Ampoule, 120,00 lei  ⭐5.0    Potrivit pentru ten gras, cu niacinamidă și gluconolactonă, pentru pori dilatați și ton neuniform. 2. ALLIES OF SKIN Azelaic & Kojic Advanced Clarifying, 550,00 lei  ⭐5.0    Pentru pete post-acnee și exces de sebum, cu acid azelaic și acid kojic. 3. Dr.Jart+ Ctrl-A Teatreement Ser de fata calmant local, 100,00 lei  ⭐4.9    Alege-l pentru imperfecțiuni localizate, cu arbore de ceai și o textură care nu lasă senzație lipicioasă.  Pentru a evita acidul hialuronic, verifică lista completă de ingrediente de pe ambalaj sau cere confirmarea farmacistului înainte de…
+
+--- T3 [2e1d44e2-ee72-46a6-9147-8ac1cb921255] «intre timp am nevoie si de un sampon pentru matreata»
+  EXPECT: subiect nou (sampon + dandruff), serul se parcheaza; sampoane pe ecran, nu seruri
+  kernel_turn: {'plans': 1, 'served': True, 'turn_id': '2e1d44e2-ee72-46a6-9147-8ac1cb921255', 'executor': 'search', 'fallback_reason': None}
+  interpretation: outcome=ok prompt=interpret.v4.1
+  acts=[('find', 'un sampon pentru matreata')] thread=continue
+  changes=[('set', 'category', 'eq', 'par', None, 'un sampon'), ('set', 'product_type', 'eq', 'sampon', None, 'un sampon'), ('set', 'concerns', 'contains', 'matreata', None, 'pentru matreata')]
+  checked=[('category', 'par', 'explicit', 'ranking', 'semantic_mismatch'), ('product_type', 'sampon', 'explicit', 'soft', None), ('concerns', 'dandruff', 'explicit', 'soft', None)]
+  rejected=[]
+  state_after: {"needs": ["concerns contains dandruff", "restriction not_contains acid hialuronic"], "shown": ["54749b0c-e933-46cf-a5ed-8c97d5e08788", "f356eb92-2ff8-4cd5-9900-3a9378c72057", "29624108-f079-483e-b453-9ac29635570a"], "topic": null, "parked": {"needs": ["concerns contains hyperpigmentation", "skin_type eq oily"], "shown": ["54749b0c-e933-46cf-a5ed-8c97d5e08788", "f356eb92-2ff8-4cd5-9900-3a9378c72057", "29624108-f079-483e-b453-9ac29635570a"], "topic": null}, "recent": [["384618ea-4a14-4a78-a009-94deacfc26eb", "54749b0c-e933-46cf-a5ed-8c97d5e08788", "f356eb92-2ff8-4cd5-9900-3a9378c72057"]]}
+  ambiguity=act reason=clear q=None
+  executor=search plans=[('search', 0, None)] args={"brand": null, "limit": 6, "query": "sampon", "prefer": {"product_type": ["sampon"]}, "exclude": {"key_ingredients": ["acid hialuronic"]}, "category": null, "concerns": null, "features": ["dandruff"], "price_max": null, "sort_mode": "relevance", "price_band": null, "rank_terms": [], "product_name": null, "in_stock_only": false, "variant_label": null}
+  gaps=[] disclosures=[] dropped=0
+  CARDS: [("DR. KONOPKA'S LITTLE HERBAL COMPANY Anti-Dandruff Shampoo", 60.0), ('AYUNCHE Refreshing Shampoo', 160.0), ('SIMPLYO Refreshing Scalp Wild Flower', 119.0), ('SIMPLYO Refreshing Scalp', 119.0)]
+  BOT: Pentru mătreață, DR. KONOPKA’S Anti-Dandruff Shampoo e potrivit pentru scalp sensibil, iar AYUNCHE Refreshing Shampoo curăță în profunzime scalpul gras. SIMPLYO Refreshing Scalp Wild Flower și SIMPLYO Refreshing Scalp sunt variante pentru curățarea și îngrijirea scalpului sensibil.  1. DR. KONOPKA'S LITTLE HERBAL COMPANY Anti-Dandruff Shampoo, 60,00 lei  ⭐4.9    Potrivit pentru scalp sensibil, cu mușețel și sulfina galbenă pentru confortul scalpului. 2. AYUNCHE Refreshing Shampoo, 160,00 lei  ⭐4.9    Pentru scalp gras, cu agenți exfolianți care curăță sebumul și acumulările. 3. SIMPLYO Refreshing Scalp Wild Flower, 119,00 lei  ⭐4.9  • Top Favorit    Alege-l dacă vrei un șampon cu biotină și pantenol pentru scalp și păr. 4. SIMPLYO Refreshing Scalp, 119,00 lei  ⭐4.9  • Top Favorit    Bun pentru curățarea delicată a scalpului și părului, cu biotină și pantenol.  Dacă vrei, putem continua c…
+
+--- T4 [99aefb67-538a-48a8-b2f1-9b19f28ece9f] «ok, inapoi la seruri, mai arata-mi altele»
+  EXPECT: thread=resume: serurile pentru pete, ten gras, fara acid hialuronic; produse NOI fata de primul ecran de seruri
+  kernel_turn: {'plans': 1, 'served': True, 'turn_id': '99aefb67-538a-48a8-b2f1-9b19f28ece9f', 'executor': 'search', 'fallback_reason': None}
+  interpretation: outcome=ok prompt=interpret.v4.1
+  acts=[('show_more', None)] thread=resume
+  changes=[]
+  checked=[]
+  rejected=[]
+  state_after: {"needs": ["concerns contains hyperpigmentation", "restriction not_contains acid hialuronic", "skin_type eq oily"], "shown": ["54749b0c-e933-46cf-a5ed-8c97d5e08788", "f356eb92-2ff8-4cd5-9900-3a9378c72057", "29624108-f079-483e-b453-9ac29635570a"], "topic": null, "parked": {"needs": ["concerns contains dandruff"], "shown": ["66ebd4d7-fe43-4b29-bda1-11bd85403101", "a9e8e32f-948f-42a0-9d69-dcc200db8ed7", "817fe4ad-d1b3-4524-a8c1-35555d8ed0c3", "e8e625a3-8082-47e8-b723-426d419e9e31"], "topic": null}, "recent": [["384618ea-4a14-4a78-a009-94deacfc26eb", "54749b0c-e933-46cf-a5ed-8c97d5e08788", "f356eb92-2ff8-4cd5-9900-3a9378c72057"]]}
+  ambiguity=act reason=clear q=None
+  executor=search plans=[('search', 0, None)] args={"brand": null, "limit": 6, "query": "ser de față", "prefer": {"product_type": ["ser de fata"]}, "exclude": {"key_ingredients": ["acid hialuronic"]}, "category": null, "concerns": ["oily"], "features": ["hyperpigmentation"], "price_max": null, "sort_mode": "relevance", "price_band": null, "rank_terms": [], "product_name": null, "in_stock_only": false, "variant_label": null}
+  gaps=[] disclosures=[] dropped=0
+  CARDS: []
+  BOT: Dintre produsele disponibile, nu văd un alt ser față de cele deja afișate. A mai rămas o cremă pentru pete pigmentare și imperfecțiuni, nu un ser.
+
+--- T5 [c62da08d-fbe1-432c-b11c-eb64ffab33db] «compara primul cu al treilea»
+  EXPECT: comparatie intre cardurile 1 si 3 ale ecranului curent (nu ale ecranului de sampoane)
+  kernel_turn: None
+  (no kernel trace)
+  CARDS: [('LUVUM Pore Reset Tightening Ampoule', 120.0), ('Dr.Jart+ Ctrl-A Teatreement Ser de fata calmant local', 100.0)]
+  BOT: LUVUM pune accent pe pori dilatați și absorbție rapidă, iar Dr.Jart+ se adresează mai direct imperfecțiunilor și promite o folosire fără senzație lipicioasă.  Comparație: LUVUM Pore Reset Tightening Ampoule · Dr.Jart+ Ctrl-A Teatreement Ser de fata calmant local Ce te preocupă mai mult?: Vizează porii dilatați, pe lângă pete și roșeață. · Pune accent pe acnee și imperfecțiuni, alături de pete și roșeață. Cum se simte la folosire?: Se absoarbe rapid și are o textură ușoară și plăcută. · Nu lasă urme sau senzație lipicioasă și are o textură ușoară și plăcută. Preț: 120,00 lei · 100,00 lei
+
+  HTTP: [(200, 16.6), (200, 11.9), (200, 13.5), (200, 7.8), (200, 8.9)]
+
+######## k5_umbrella  conv=af5d6950-fc24-4d92-8e0b-20e60650c8a4  focus: NX-350: tipul spus vag tine minte umbrela; rafinarea in umbrela fara parcare; alt fel => subiect nou
+
+--- T1 [b01d9f16-f953-4dcd-9b21-7af67a075a10] «vreau o crema hidratanta»
+  EXPECT: umbrela crema (fata/corp/maini...), nu doar creme de fata impuse
+  kernel_turn: {'plans': 1, 'served': True, 'turn_id': 'b01d9f16-f953-4dcd-9b21-7af67a075a10', 'executor': 'search', 'fallback_reason': None}
+  interpretation: outcome=ok prompt=interpret.v4.1
+  acts=[('find', 'vreau o crema hidratanta')] thread=continue
+  changes=[('set', 'product_type', 'eq', 'crema de fata', None, 'crema'), ('set', 'concerns', 'eq', 'hydration', None, 'hidratanta')]
+  checked=[('product_type', 'crema de fata', 'implicit', 'soft', None), ('concerns', 'hydration', 'implicit', 'soft', None)]
+  rejected=[]
+  state_after: {"needs": ["concerns contains hydration"], "shown": [], "topic": null, "umbrella": ["crema de fata", "crema contur ochi", "crema coloranta de fata", "crema de corp", "crema de maini", "crema de ochi", "crema de par", "crema de curatare"]}
+  ambiguity=act reason=clear q=None
+  executor=search plans=[('search', 0, None)] args={"brand": null, "limit": 6, "query": "crema", "prefer": {"concerns": ["hydration"], "product_type": ["crema de fata", "crema contur ochi", "crema coloranta de fata", "crema de corp", "crema de maini", "crema de ochi", "crema de par", "crema de curatare"]}, "exclude": {}, "category": null, "concerns": null, "features": null, "price_max": null, "sort_mode": "relevance", "price_band": null, "rank_terms": [], "product_name": null, "in_stock_only": false, "variant_label": null}
+  gaps=[] disclosures=[] dropped=0
+  CARDS: [('COSRX Advanced Snail 92 All in one', 136.0), ('AXIS-Y Cera-Heart My Type Duo', 180.0)]
+  BOT: Ambele sunt creme hidratante pentru dimineață și seară: COSRX conține mucină de melc, iar AXIS-Y are ceramidă și heartleaf.  1. COSRX Advanced Snail 92 All in one, 136,00 lei  ⭐5.0  • Top Favorit    Potrivită pentru hidratarea feței, cu mucină de melc și textură care se absoarbe rapid. 2. AXIS-Y Cera-Heart My Type Duo, 180,00 lei  ⭐5.0  • Top Favorit    O variantă cu ceramidă și heartleaf, pentru hidratare și o textură ușoară.  Sau, dacă preferi: Caut ceva pentru calmare · Arata-mi ce ai la Ten · Compara COSRX Advanced Snail 92 cu AXIS-Y Cera-Heart My · Trimite-mi linkul la COSRX Advanced Snail 92 All in one · Caut ceva pentru ten uscat
+
+--- T2 [47acbc8f-9245-4087-affb-1d36ce614099] «pentru maini»
+  EXPECT: creme de maini (12 in stoc), rafinare fara parcare
+  kernel_turn: {'plans': 1, 'served': True, 'turn_id': '47acbc8f-9245-4087-affb-1d36ce614099', 'executor': 'search', 'fallback_reason': None}
+  interpretation: outcome=ok prompt=interpret.v4.1
+  acts=[('find', 'pentru maini')] thread=continue
+  changes=[('set', 'category', 'eq', 'corp', None, 'pentru maini'), ('set', 'product_type', 'eq', 'crema de maini', None, 'pentru maini')]
+  checked=[('category', 'ingrijire-personala-corp', 'implicit', 'soft', None), ('product_type', 'crema de maini', 'implicit', 'soft', None)]
+  rejected=[]
+  state_after: {"needs": ["concerns contains hydration"], "shown": ["2ac119f4-fd64-4587-9ada-5ced61696f9e", "6f53ae8b-effe-4ddd-942a-f2c9e7e2e62f"], "topic": "ingrijire-personala-corp", "umbrella": ["crema de maini"]}
+  ambiguity=act reason=clear q=None
+  executor=search plans=[('search', 0, None)] args={"brand": null, "limit": 6, "query": "crema", "prefer": {"concerns": ["hydration"], "product_type": ["crema de maini"]}, "exclude": {}, "category": "ingrijire-personala-corp", "concerns": null, "features": null, "price_max": null, "sort_mode": "relevance", "price_band": null, "rank_terms": [], "product_name": null, "in_stock_only": false, "variant_label": null}
+  gaps=[] disclosures=[] dropped=0
+  CARDS: []
+  BOT: Pentru mâini, produsele din lista aceasta nu se potrivesc: sunt creme pentru față și conturul ochilor.
+
+--- T3 [acd80479-0ffc-4b09-a770-a36bb20bca74] «si una de corp pentru piele foarte uscata»
+  EXPECT: creme/lotiuni de corp, piele uscata
+  kernel_turn: {'plans': 1, 'served': True, 'turn_id': 'acd80479-0ffc-4b09-a770-a36bb20bca74', 'executor': 'search', 'fallback_reason': None}
+  interpretation: outcome=ok prompt=interpret.v4.1
+  acts=[('find', 'si una de corp pentru piele foarte uscata')] thread=continue
+  changes=[('set', 'category', 'eq', 'corp', None, 'de corp'), ('set', 'concerns', 'contains', 'hydration', None, 'piele foarte uscata')]
+  checked=[('category', 'ingrijire-personala-corp', 'explicit', 'soft', None), ('concerns', 'hydration', 'implicit', 'soft', None)]
+  rejected=[]
+  state_after: {"needs": ["concerns contains hydration"], "shown": ["2ac119f4-fd64-4587-9ada-5ced61696f9e", "6f53ae8b-effe-4ddd-942a-f2c9e7e2e62f"], "topic": "ingrijire-personala-corp", "umbrella": ["crema de maini"]}
+  ambiguity=act reason=confirm_implicit q=Să înțeleg că e vorba de hidratare?
+  executor=search plans=[('search', 0, None)] args={"brand": null, "limit": 6, "query": "crema", "prefer": {"concerns": ["hydration"], "product_type": ["crema de maini"]}, "exclude": {}, "category": "ingrijire-personala-corp", "concerns": null, "features": null, "price_max": null, "sort_mode": "relevance", "price_band": null, "rank_terms": [], "product_name": null, "in_stock_only": false, "variant_label": null}
+  gaps=[] disclosures=[] dropped=0
+  CARDS: [('HOUSE OF HUR Phyto Brew Matcha Dual Cream and Gel', 140.0), ("DR. KONOPKA'S LITTLE HERBAL COMPANY Calming 50 ml", 30.0), ('PURITO Sea Buckthorn Vital 70', 112.0), ('CENTELLIAN24 Madeca Cream Time Reverse Zero', 40.0), ('BELIF The True Cream-Moisturizing Bomb', 210.0), ('Dear Klairs Midnight Blue Calming Cream', 140.0)]
+  BOT: Ți-am ales cremă de față.  1. HOUSE OF HUR Phyto Brew Matcha Dual Cream and Gel, 140,00 lei  ⭐5.0 2. DR. KONOPKA'S LITTLE HERBAL COMPANY Calming 50 ml, 30,00 lei  ⭐5.0 3. PURITO Sea Buckthorn Vital 70, 112,00 lei  ⭐5.0  • Top Favorit 4. CENTELLIAN24 Madeca Cream Time Reverse Zero, 40,00 lei  ⭐5.0 5. BELIF The True Cream-Moisturizing Bomb, 210,00 lei  ⭐5.0  • Top Favorit 6. Dear Klairs Midnight Blue Calming Cream, 140,00 lei  ⭐5.0  • Top Favorit  Sau, dacă preferi: Compara HOUSE OF HUR Phyto Brew cu DR. KONOPKA'S LITTLE · Trimite-mi linkul la HOUSE OF HUR Phyto Brew Matcha Dual · Arata-mi ce ai la Ingrijire personala · Spune-mi mai multe despre HOUSE OF HUR Phyto Brew Matcha · Trimite-mi linkul la BELIF The True Cream-Moisturizing  Să înțeleg că e vorba de hidratare?
+
+--- T4 [1728c25e-2faf-4cf0-a89a-2513551efc78] «care e cea mai ieftina dintre astea?»
+  EXPECT: cea mai ieftina de pe ecranul curent (corp), cu pretul ei
+  kernel_turn: {'plans': 1, 'served': True, 'turn_id': '1728c25e-2faf-4cf0-a89a-2513551efc78', 'executor': 'ask', 'fallback_reason': None}
+  interpretation: outcome=ok prompt=interpret.v4.1
+  acts=[('detail', None)] thread=continue
+  changes=[]
+  checked=[]
+  refs=[('deictic', 'ambiguous', 'shown_now', 'no_anchor', 6)]
+  rejected=[]
+  state_after: {"needs": ["concerns contains hydration"], "shown": ["0a1bce79-7ce2-44e7-a208-a89ad8112b5d", "fbf5f5eb-af2f-4223-b7d7-9f2e73a521d2", "1b3292e7-1930-4178-8b53-cf43b2f0bb45", "b300b12a-1446-4f92-8e2a-affa0ab32328", "152feee7-1a4b-469a-a9ea-f23c38af9b46", "3d242f78-b3d5-4765-baa2-faeaeb59c979"], "topic": "ingrijire-personala-corp", "recent": [["2ac119f4-fd64-4587-9ada-5ced61696f9e", "6f53ae8b-effe-4ddd-942a-f2c9e7e2e62f"]], "umbrella": ["crema de maini"]}
+  ambiguity=must_ask reason=ambiguous_too_many q=La care te referi dintre HOUSE OF HUR Phyto Brew Matcha Dual Cream and Gel, DR. KONOPKA'S LITTLE HERBAL COMPANY Calming 50 ml, PURITO Sea Buckthorn Vital 70 și CENTELLIAN24 Madeca Cream Time Reverse Zero?
+  executor=ask plans=[('ask', 6, None)] args=None
+  gaps=[] disclosures=[] dropped=0
+  CARDS: [('HOUSE OF HUR Phyto Brew Matcha Dual Cream and Gel', 140.0), ("DR. KONOPKA'S LITTLE HERBAL COMPANY Calming 50 ml", 30.0), ('PURITO Sea Buckthorn Vital 70', 112.0), ('CENTELLIAN24 Madeca Cream Time Reverse Zero', 40.0), ('BELIF The True Cream-Moisturizing Bomb', 210.0), ('Dear Klairs Midnight Blue Calming Cream', 140.0)]
+  BOT: La care te referi dintre HOUSE OF HUR Phyto Brew Matcha Dual Cream and Gel, DR. KONOPKA'S LITTLE HERBAL COMPANY Calming 50 ml, PURITO Sea Buckthorn Vital 70 și CENTELLIAN24 Madeca Cream Time Reverse Zero?
+
+  HTTP: [(200, 11.1), (200, 9.8), (200, 8.2), (200, 3.4)]
+
+######## k4_price_band  conv=f19efbbe-377e-442d-9a44-c2be70776722  focus: banda de pret fara numar (NX-364 regula 4), «mai ieftin» pe ecran (mediana), plafon numeric
+
+--- T1 [c1891793-0d40-43fb-a975-92bda360ca7e] «vreau o masca de par pentru par deteriorat»
+  EXPECT: masti de par (23 in stoc), hair_damage
+  kernel_turn: {'plans': 1, 'served': True, 'turn_id': 'c1891793-0d40-43fb-a975-92bda360ca7e', 'executor': 'search', 'fallback_reason': None}
+  interpretation: outcome=ok prompt=interpret.v4.1
+  acts=[('find', 'vreau o masca de par pentru par deteriorat')] thread=continue
+  changes=[('set', 'product_type', 'eq', 'masca de par', None, 'masca de par'), ('set', 'concerns', 'eq', 'hair_damage', None, 'par deteriorat')]
+  checked=[('product_type', 'masca de par', 'explicit', 'soft', None), ('concerns', 'hair_damage', 'explicit', 'soft', None)]
+  rejected=[]
+  state_after: {"needs": ["concerns contains hair_damage"], "shown": [], "topic": null}
+  ambiguity=act reason=clear q=None
+  executor=search plans=[('search', 0, None)] args={"brand": null, "limit": 6, "query": "masca de par", "prefer": {"product_type": ["masca de par"]}, "exclude": {}, "category": null, "concerns": null, "features": ["hair_damage"], "price_max": null, "sort_mode": "relevance", "price_band": null, "rank_terms": [], "product_name": null, "in_stock_only": false, "variant_label": null}
+  gaps=[] disclosures=[] dropped=0
+  CARDS: [('SKINLICK Hair Hero', 80.0), ('AYUNCHE Enrich Bonding Mask', 204.0), ('AYUNCHE Enhancing Silky Mask', 204.0)]
+  BOT: Pentru părul deteriorat, SKINLICK Hair Hero se potrivește și părului uscat, cu amodimethicone și alanină. AYUNCHE Enrich Bonding Mask vizează deteriorarea severă, iar Enhancing Silky Mask ajută la descurcare și netezire.  1. SKINLICK Hair Hero, 80,00 lei  ⭐5.0  • Top Favorit    Potrivită pentru păr deteriorat și uscat, cu amodimethicone și alanină, pentru coafare mai ușoară. 2. AYUNCHE Enrich Bonding Mask, 204,00 lei  ⭐4.9    Pentru păr sever deteriorat, cu acid maleic și biotină, fără să încarce părul. 3. AYUNCHE Enhancing Silky Mask, 204,00 lei  ⭐5.0    Alege-o dacă vrei să descurci și să netezești părul, cu proteine hidrolizate și pantenol.  Îți mai pot arăta: Caut ceva pentru hidratare · Arata-mi ce ai la Ten · Compara SKINLICK Hair Hero cu AYUNCHE Enrich Bonding · Trimite-mi linkul la SKINLICK Hair Hero · Vreau ceva sub 200 lei
+
+--- T2 [d6591d76-f77b-4203-817a-20d0167fd6f5] «ceva mai ieftin»
+  EXPECT: masti de par mai ieftine decat ecranul (mediana candidatilor sau primul), tot masti de par
+  kernel_turn: {'plans': 1, 'served': True, 'turn_id': 'd6591d76-f77b-4203-817a-20d0167fd6f5', 'executor': 'search', 'fallback_reason': None}
+  interpretation: outcome=ok prompt=interpret.v4.1
+  acts=[('find', 'ceva mai ieftin')] thread=continue
+  changes=[('set', 'price', 'lte', None, None, 'mai ieftin')]
+  checked=[('price', None, 'explicit', 'hard', None)]
+  refs=[('deictic', 'ambiguous', 'shown_now', 'no_anchor', 3)]
+  rejected=[]
+  state_after: {"needs": ["budget_max lte 204", "concerns contains hair_damage"], "shown": ["3642c8f8-cd7d-4609-b89c-f118d53dae8a", "d1a75f84-c8a8-44b8-84b7-959a1b7da35c", "9806a1de-f88e-4038-b994-158ff8451d09"], "topic": null}
+  ambiguity=act reason=clear q=None
+  executor=search plans=[('search', 0, None)] args={"brand": null, "limit": 6, "query": "mască de păr", "prefer": {"product_type": ["masca de par"]}, "exclude": {}, "category": null, "concerns": null, "features": ["hair_damage"], "price_max": 204.0, "sort_mode": "relevance", "price_band": null, "rank_terms": [], "product_name": null, "in_stock_only": false, "variant_label": null}
+  gaps=[] disclosures=[] dropped=0
+  CARDS: [('SKINLICK Hair Hero', 80.0)]
+  BOT: Ți-am ales mască de păr.  1. SKINLICK Hair Hero, 80,00 lei  ⭐5.0  • Top Favorit    Pentru păr deteriorat sau uscat, cu amodimethicone și alanină, ca să-l coafezi mai ușor.  Sau, dacă preferi: Ce spun recenziile despre SKINLICK Hair Hero · Arata-mi ce ai la Machiaj
+
+--- T3 [ebbaa635-acc0-4574-a39d-a194f6f31e78] «ceva ieftin dar care chiar functioneaza»
+  EXPECT: band:low (pana la mediana pool-ului), fara unmapped «ieftin»; tot masti de par
+  kernel_turn: {'plans': 1, 'served': True, 'turn_id': 'ebbaa635-acc0-4574-a39d-a194f6f31e78', 'executor': 'search', 'fallback_reason': None}
+  interpretation: outcome=ok prompt=interpret.v4.1
+  acts=[('find', 'ceva ieftin dar care chiar functioneaza')] thread=continue
+  changes=[]
+  checked=[]
+  rejected=[]
+  state_after: {"needs": ["budget_max lte 204", "concerns contains hair_damage"], "shown": ["3642c8f8-cd7d-4609-b89c-f118d53dae8a"], "topic": null, "recent": [["3642c8f8-cd7d-4609-b89c-f118d53dae8a", "d1a75f84-c8a8-44b8-84b7-959a1b7da35c", "9806a1de-f88e-4038-b994-158ff8451d09"]]}
+  ambiguity=act reason=clear q=None
+  executor=search plans=[('search', 0, None)] args={"brand": null, "limit": 6, "query": "mască de păr", "prefer": {"product_type": ["masca de par"]}, "exclude": {}, "category": null, "concerns": null, "features": ["hair_damage"], "price_max": 204.0, "sort_mode": "relevance", "price_band": null, "rank_terms": [], "product_name": null, "in_stock_only": false, "variant_label": null}
+  gaps=[] disclosures=[] dropped=0
+  CARDS: [('LEE STAFFORD Coco Loco Coconut Shine Mask', 75.0), ('LEE STAFFORD Grow Strong&Long Activation Treatment Mask', 75.0), ('LEE STAFFORD Argan Oil from Morocco Deep Nourishing Treatmen', 75.0), ('KUNDAL Honey & Macadamia Protein Treatment', 80.0), ('CURLY SHYLL Nutrition Support Daily Treatment For Damage Hai', 150.0), ('UNOVE Deep Damage Treatment Ex ( Tender Bloom)', 145.0)]
+  BOT: Am selectat măști accesibile pentru păr deteriorat, cu formule pentru hidratare și catifelare. Găsești variante cu cocos, miere și macadamia sau argan, iar LEE STAFFORD Grow Strong&Long include și ingrediente pentru scalp.  1. LEE STAFFORD Coco Loco Coconut Shine Mask, 75,00 lei  ⭐5.0    Pentru păr deteriorat și tern, uleiul de cocos contribuie la revitalizare. 2. LEE STAFFORD Grow Strong&Long Activation Treatment Mask, 75,00 lei  ⭐4.9    Potrivită când vrei și hidratarea scalpului, cu ingrediente pentru părul fragil. 3. LEE STAFFORD Argan Oil from Morocco Deep Nourishing Treatment Mask, 75,00 lei  ⭐5.0    Alege varianta cu ulei de argan pentru părul uscat și aspru. 4. KUNDAL Honey & Macadamia Protein Treatment, 80,00 lei  ⭐5.0    Dacă vrei hidratare profundă, mierea și uleiul de macadamia ajută la catifelare. 5. CURLY SHYLL Nutrition Support Daily Treatment For Damage Hair, 150,00 lei  …
+
+--- T4 [64c20e86-4e8b-4601-919c-c722d882b29b] «sub 50 de lei»
+  EXPECT: masti de par <= 50 lei, sau spune onest cate sunt
+  kernel_turn: {'plans': 1, 'served': True, 'turn_id': '64c20e86-4e8b-4601-919c-c722d882b29b', 'executor': 'search', 'fallback_reason': None}
+  interpretation: outcome=ok prompt=interpret.v4.1
+  acts=[('find', 'sub 50 de lei')] thread=continue
+  changes=[('replace', 'price', 'lte', None, 50.0, 'sub 50 de lei')]
+  checked=[('price', 50.0, 'explicit', 'hard', None)]
+  rejected=[]
+  state_after: {"needs": ["budget_max lte 50", "concerns contains hair_damage"], "shown": ["7782a93c-d65c-4460-a8e8-ec55cd0ee5f5", "daf891d8-8ebb-4c68-93bc-07d23a29fc34", "5673a286-d55b-4383-9da9-29d2bef43c7f", "2cd57ec1-4f8a-4131-bfb7-0bab42859042", "23b88809-a156-4b81-89a8-028146cd8c23", "bb73fc49-b18e-4310-ab25-8bf94898915b"], "topic": null, "recent": [["3642c8f8-cd7d-4609-b89c-f118d53dae8a"], ["3642c8f8-cd7d-4609-b89c-f118d53dae8a", "d1a75f84-c8a8-44b8-84b7-959a1b7da35c", "9806a1de-f88e-4038-b994-158ff8451d09"]]}
+  ambiguity=act reason=clear q=None
+  executor=search plans=[('search', 0, None)] args={"brand": null, "limit": 6, "query": "mască de păr", "prefer": {"product_type": ["masca de par"]}, "exclude": {}, "category": null, "concerns": null, "features": ["hair_damage"], "price_max": 50.0, "sort_mode": "relevance", "price_band": null, "rank_terms": [], "product_name": null, "in_stock_only": false, "variant_label": null}
+  gaps=[] disclosures=[] dropped=0
+  CARDS: [("DR. KONOPKA'S LITTLE HERBAL COMPANY No.138 Repairing", 35.0)]
+  BOT: Am găsit o mască de păr deteriorat sub 50 de lei: are ulei de argan și ulei de trandafir, pentru un aspect neted și strălucitor.  1. DR. KONOPKA'S LITTLE HERBAL COMPANY No.138 Repairing, 35,00 lei  ⭐4.9  • Top Favorit    Pentru păr deteriorat sau vopsit, cu uleiuri de argan și trandafir pentru un aspect neted.  Dacă vrei, putem continua cu: Ce spun recenziile despre DR. KONOPKA'S LITTLE HERBAL · Trimite-mi linkul la DR. KONOPKA'S LITTLE HERBAL COMPANY
+
+  HTTP: [(200, 10.9), (200, 10.2), (200, 14.0), (200, 9.9)]
+
+######## k6_named_cart  conv=9d759c3f-f794-4716-8464-19e12a0b12ec  focus: resolverul pe nume (NX-329), detaliu pe tinta exacta, coș pe tinta exacta (I10), «din aceeasi gama»
+
+--- T1 [3ed686d9-2102-4fb2-80de-a6e4c29a661e] «aveti ANUA Heartleaf 77 toner?»
+  EXPECT: gaseste tonerul ANUA Heartleaf 77% (in stoc)
+  kernel_turn: {'plans': 1, 'served': True, 'turn_id': '3ed686d9-2102-4fb2-80de-a6e4c29a661e', 'executor': 'search', 'fallback_reason': None}
+  interpretation: outcome=ok prompt=interpret.v4.1
+  acts=[('find', 'aveti ANUA Heartleaf 77 toner?')] thread=continue
+  changes=[('set', 'product_type', 'eq', 'toner de fata', None, 'toner')]
+  checked=[('product_type', 'toner de fata', 'implicit', 'soft', None)]
+  refs=[('name', 'not_found', 'shown_now', 'name_not_found', 0)]
+  rejected=[]
+  state_after: {"needs": [], "shown": [], "topic": null, "umbrella": ["toner de fata"]}
+  ambiguity=act reason=clear q=None
+  executor=search plans=[('search', 0, None)] args={"brand": null, "limit": 6, "query": "toner", "prefer": {"product_type": ["toner de fata"]}, "exclude": {}, "category": null, "concerns": null, "features": null, "price_max": null, "sort_mode": "relevance", "price_band": null, "rank_terms": [], "product_name": null, "in_stock_only": false, "variant_label": null}
+  gaps=[] disclosures=[] dropped=0
+  CARDS: [('BIODANCE First Synergy Toner', 130.0), ('REAL BARRIER Extreme Essence Toner Light', 90.0), ('TIRTIR Milk Skin Toner Toner Hidratant Lejer', 135.0), ('EQQUALBERRY Swimming pool Toner toner de fata', 126.0), ('REAL BARRIER Extreme Essence Toner Renewal Toner de fata hid', 120.0), ('HARUHARU WONDER Black Rice Hyaluronic Toner Free of Alcohol ', 45.0)]
+  BOT: ANUA Heartleaf nu apare în produsele disponibile. Ca alternative, găsești tonere pentru hidratare și calmare, susținerea barierei cutanate sau ten cu imperfecțiuni.  1. BIODANCE First Synergy Toner, 130,00 lei  ⭐5.0  • Top Favorit    Când vrei hidratare după curățare, cu pantenol și acid hialuronic. 2. REAL BARRIER Extreme Essence Toner Light, 90,00 lei  ⭐4.9    Pentru barieră cutanată sensibilă, cu tehnologia MLE și pantenol pentru hidratare și calmare. 3. TIRTIR Milk Skin Toner Toner Hidratant Lejer, 135,00 lei  ⭐4.9  • Top Favorit    Potrivit pentru ten cu imperfecțiuni, cu niacinamidă și ceramidă NP. 4. EQQUALBERRY Swimming pool Toner toner de fata, 126,00 lei  ⭐4.9    Pentru ten uscat și tern, cu acid hialuronic și pantenol. 5. REAL BARRIER Extreme Essence Toner Renewal Toner de fata hidratant, 120,00 lei  ⭐5.0  • Top Favorit    Alege-l dacă ai ten uscat și vrei hidratare intensă cu…
+
+--- T2 [92bcc0c1-8637-4e56-86fb-329e857592f0] «cat costa si ce volum are?»
+  EXPECT: pret si volum din catalog pentru exact produsul gasit
+  kernel_turn: {'plans': 1, 'served': True, 'turn_id': '92bcc0c1-8637-4e56-86fb-329e857592f0', 'executor': 'ask', 'fallback_reason': None}
+  interpretation: outcome=ok prompt=interpret.v4.1
+  acts=[('detail', None)] thread=continue
+  changes=[]
+  checked=[]
+  refs=[('deictic', 'ambiguous', 'shown_now', 'no_anchor', 6)]
+  rejected=[]
+  state_after: {"needs": [], "shown": ["267351e7-b1a7-4446-b5cc-235917b6c513", "ab3ba77b-2c8b-4b61-ba0a-6b0b3f7f4ff8", "69f4d8be-9fa4-46c4-9fa0-b0d487e666b1", "015e96d5-a8b3-40e3-be17-66fc81ec41c0", "23fbe880-a774-40e2-b621-68a0641fa320", "96651967-9119-4de5-a92f-703ca361b302"], "topic": null, "umbrella": ["toner de fata"]}
+  ambiguity=must_ask reason=ambiguous_too_many q=La care te referi dintre BIODANCE First Synergy Toner, REAL BARRIER Extreme Essence Toner Light, TIRTIR Milk Skin Toner Toner Hidratant Lejer și EQQUALBERRY Swimming pool Toner toner de fata?
+  executor=ask plans=[('ask', 6, None)] args=None
+  gaps=[] disclosures=[] dropped=0
+  CARDS: [('BIODANCE First Synergy Toner', 130.0), ('REAL BARRIER Extreme Essence Toner Light', 90.0), ('TIRTIR Milk Skin Toner Toner Hidratant Lejer', 135.0), ('EQQUALBERRY Swimming pool Toner toner de fata', 126.0), ('REAL BARRIER Extreme Essence Toner Renewal Toner de fata hid', 120.0), ('HARUHARU WONDER Black Rice Hyaluronic Toner Free of Alcohol ', 45.0)]
+  BOT: La care te referi dintre BIODANCE First Synergy Toner, REAL BARRIER Extreme Essence Toner Light, TIRTIR Milk Skin Toner Toner Hidratant Lejer și EQQUALBERRY Swimming pool Toner toner de fata?
+
+--- T3 [910b7bd1-9985-4c83-9954-0a72e4b551c6] «adauga-l in cos»
+  EXPECT: cart_add pe tinta exacta, fraza cart_added; fara intrebare inutila
+  kernel_turn: {'plans': 1, 'served': True, 'turn_id': '910b7bd1-9985-4c83-9954-0a72e4b551c6', 'executor': 'ask', 'fallback_reason': None}
+  interpretation: outcome=ok prompt=interpret.v4.1
+  acts=[('cart', None)] thread=continue
+  changes=[]
+  checked=[]
+  refs=[('deictic', 'ambiguous', 'shown_now', 'no_anchor', 6)]
+  rejected=[]
+  state_after: {"needs": [], "shown": ["267351e7-b1a7-4446-b5cc-235917b6c513", "ab3ba77b-2c8b-4b61-ba0a-6b0b3f7f4ff8", "69f4d8be-9fa4-46c4-9fa0-b0d487e666b1", "015e96d5-a8b3-40e3-be17-66fc81ec41c0", "23fbe880-a774-40e2-b621-68a0641fa320", "96651967-9119-4de5-a92f-703ca361b302"], "topic": null, "umbrella": ["toner de fata"]}
+  ambiguity=must_ask reason=mutation_not_exact q=La care te referi dintre BIODANCE First Synergy Toner, REAL BARRIER Extreme Essence Toner Light, TIRTIR Milk Skin Toner Toner Hidratant Lejer și EQQUALBERRY Swimming pool Toner toner de fata?
+  executor=ask plans=[('ask', 6, None)] args=None
+  gaps=[] disclosures=[] dropped=0
+  CARDS: [('BIODANCE First Synergy Toner', 130.0), ('REAL BARRIER Extreme Essence Toner Light', 90.0), ('TIRTIR Milk Skin Toner Toner Hidratant Lejer', 135.0), ('EQQUALBERRY Swimming pool Toner toner de fata', 126.0), ('REAL BARRIER Extreme Essence Toner Renewal Toner de fata hid', 120.0), ('HARUHARU WONDER Black Rice Hyaluronic Toner Free of Alcohol ', 45.0)]
+  BOT: La care te referi dintre BIODANCE First Synergy Toner, REAL BARRIER Extreme Essence Toner Light, TIRTIR Milk Skin Toner Toner Hidratant Lejer și EQQUALBERRY Swimming pool Toner toner de fata?
+
+--- T4 [375e1fa8-5932-4575-ad55-9f9787d3e1b4] «ai si o crema din aceeasi gama?»
+  EXPECT: creme ANUA (aceeasi marca/gama Heartleaf daca exista); nu tonere din nou
+  kernel_turn: {'plans': 1, 'served': True, 'turn_id': '375e1fa8-5932-4575-ad55-9f9787d3e1b4', 'executor': 'search', 'fallback_reason': None}
+  interpretation: outcome=ok prompt=interpret.v4.1
+  acts=[('find', 'ai si o crema din aceeasi gama?')] thread=continue
+  changes=[]
+  checked=[]
+  rejected=[]
+  state_after: {"needs": [], "shown": ["267351e7-b1a7-4446-b5cc-235917b6c513", "ab3ba77b-2c8b-4b61-ba0a-6b0b3f7f4ff8", "69f4d8be-9fa4-46c4-9fa0-b0d487e666b1", "015e96d5-a8b3-40e3-be17-66fc81ec41c0", "23fbe880-a774-40e2-b621-68a0641fa320", "96651967-9119-4de5-a92f-703ca361b302"], "topic": null, "umbrella": ["toner de fata"]}
+  ambiguity=act reason=clear q=None
+  executor=search plans=[('search', 0, None)] args={"brand": null, "limit": 6, "query": "toner", "prefer": {"product_type": ["toner de fata"]}, "exclude": {}, "category": null, "concerns": null, "features": null, "price_max": null, "sort_mode": "relevance", "price_band": null, "rank_terms": [], "product_name": null, "in_stock_only": false, "variant_label": null}
+  gaps=[] disclosures=[] dropped=0
+  CARDS: [('MIZON Cicaluronic Toner', 150.0), ('ROVECTIN Calming Lotus Toner', 140.0), ('CELIMAX Noni Moisture Balancing Toner', 120.0), ('SKIN1004 Madagascar Centella Toning Toner', 39.0), ('SKINFOOD Avocado Rich Toner', 120.0), ('Dear Klairs Supple Preparation Facial Toner', 120.0)]
+  BOT: Ți-am ales toner de față.  1. MIZON Cicaluronic Toner, 150,00 lei  ⭐4.9  • Top Favorit 2. ROVECTIN Calming Lotus Toner, 140,00 lei  ⭐5.0  • Voucher -48% 3. CELIMAX Noni Moisture Balancing Toner, 120,00 lei  ⭐5.0 4. SKIN1004 Madagascar Centella Toning Toner, 39,00 lei  ⭐4.9  • Top Favorit 5. SKINFOOD Avocado Rich Toner, 120,00 lei  ⭐4.9  • Voucher -49% 6. Dear Klairs Supple Preparation Facial Toner, 120,00 lei  ⭐5.0  • Top Favorit  Îți mai pot arăta: Compara MIZON Cicaluronic cu ROVECTIN Calming Lotus · Trimite-mi linkul la SKINFOOD Avocado Rich Toner · Arata-mi ce ai la Machiaj · Spune-mi mai multe despre SKINFOOD Avocado Rich Toner · Trimite-mi linkul la MIZON Cicaluronic Toner
+
+--- T5 [332b35c5-256a-4131-b8c6-56436a59807d] «ce am in cos acum?»
+  EXPECT: continutul cosului (tonerul ANUA); fara inventii
+  kernel_turn: {'plans': 1, 'served': True, 'turn_id': '332b35c5-256a-4131-b8c6-56436a59807d', 'executor': 'delegate', 'fallback_reason': None}
+  interpretation: outcome=ok prompt=interpret.v4.1
+  acts=[('other', None)] thread=continue
+  changes=[]
+  checked=[]
+  rejected=[]
+  state_after: {"needs": [], "shown": ["59112ee9-b3a1-4e10-9dd0-89829ad53ffc", "f343b516-a69e-4e1e-9685-33aa2ca168a5", "df389a4d-ffc6-4b0c-a9b7-d74c58b2769a", "fe8e5f9e-d827-429f-a880-ab4f8e3447ef", "0ad3f47a-0336-4e90-bac9-f57fb6533d38", "6260e53e-e6aa-4d01-89e2-08fdbeab8287"], "topic": null, "recent": [["267351e7-b1a7-4446-b5cc-235917b6c513", "ab3ba77b-2c8b-4b61-ba0a-6b0b3f7f4ff8", "69f4d8be-9fa4-46c4-9fa0-b0d487e666b1", "015e96d5-a8b3-40e3-be17-66fc81ec41c0", "23fbe880-a774-40e2-b621-68a0641fa320", "96651967-9119-4de5-a92f-703ca361b302"]], "umbrella": ["toner de fata"]}
+  ambiguity=act reason=clear q=None
+  executor=delegate plans=[('delegate', 0, None)] args=None
+  gaps=[] disclosures=[] dropped=0
+  CARDS: []
+  BOT: Nu pot vedea conținutul coșului în acest moment. Ai cerut mai devreme să adaug un produs, dar nu s-a confirmat că a fost pus în coș.
+
+  HTTP: [(200, 13.6), (200, 3.7), (200, 4.5), (200, 7.7), (200, 5.5)]
+
+######## k7_multi_act  conv=23520277-db02-4141-b130-563ba62c3fa1  focus: doua acte intr-un tur: find + faq (gol cunoscut: doua acte de citire => v1), cart + find dependent (§C.12)
+
+--- T1 [08b07b7c-c3f4-4c69-b948-9c4e3e8369cd] «arata-mi un cushion pentru ten gras si spune-mi cat costa livrarea»
+  EXPECT: cushion-uri (34 in stoc) SI regula de livrare a magazinului citata fidel; niciuna din jumatati pierduta
+  kernel_turn: {'plans': 2, 'served': False, 'turn_id': '08b07b7c-c3f4-4c69-b948-9c4e3e8369cd', 'executor': 'faq', 'fallback_reason': 'dark'}
+  interpretation: outcome=ok prompt=interpret.v4.1
+  acts=[('find', 'un cushion pentru ten gras'), ('store_info', 'cat costa livrarea')] thread=continue
+  changes=[('set', 'product_type', 'eq', 'cushion', None, 'un cushion'), ('set', 'skin_type', 'eq', 'oily', None, 'ten gras')]
+  checked=[('product_type', 'cushion', 'explicit', 'soft', None), ('skin_type', 'oily', 'explicit', 'soft', None)]
+  rejected=[]
+  state_after: {"needs": ["skin_type eq oily"], "shown": [], "topic": null}
+  ambiguity=act reason=clear q=None
+  executor=none plans=[('search', 0, None), ('faq', 0, None)] args=None
+  gaps=[] disclosures=[] dropped=0
+  CARDS: [('TIRTIR Mask Fit Red Cushion', 135.0), ('TIRTIR Mask Fit Red Cushion Fond de Ten Compact 17N Vanilla', 135.0), ('TIRTIR Mask Fit Red Cushion Kit', 30.0), ('TIRTIR Mask Fit Red Cushion', 135.0), ('MUZIGAE MANSION Sleek Matt Cushion', 190.0)]
+  BOT: Pentru ten gras, TIRTIR Mask Fit Red Cushion pune accent pe matifiere și acoperire, iar MUZIGAE MANSION Sleek Matt Cushion adaugă protecție solară. Nu am informații despre costul livrării.  1. TIRTIR Mask Fit Red Cushion, 135,00 lei  ⭐5.0    Potrivit dimineața pentru acnee și imperfecțiuni, cu pudră matifiantă și controlul sebumului. 2. TIRTIR Mask Fit Red Cushion Fond de Ten Compact 17N Vanilla, 135,00 lei  ⭐5.0    Alege-l pentru acoperirea cearcănelor și roșeții, cu finisaj natural. 3. TIRTIR Mask Fit Red Cushion Kit, 30,00 lei  ⭐4.9    Varianta mai accesibilă, cu pudră matifiantă pentru acoperirea imperfecțiunilor. 4. TIRTIR Mask Fit Red Cushion, 135,00 lei  ⭐5.0    Bun dacă vrei să-l folosești dimineața și seara, cu formulă pentru controlul sebumului. 5. MUZIGAE MANSION Sleek Matt Cushion, 190,00 lei  ⭐5.0  • Voucher -49%    Pentru pete pigmentare și protecție solară, are SPF 50+ PA+…
+
+--- T2 [4b995151-50c0-48d1-bc8b-351769676444] «pe primul pune-l in cos si arata-mi si o rezerva pentru el»
+  EXPECT: cosul primul, apoi cautarea dependenta; daca o rezerva nu exista, spune onest
+  kernel_turn: {'plans': 2, 'served': True, 'turn_id': '4b995151-50c0-48d1-bc8b-351769676444', 'executor': 'search', 'fallback_reason': None}
+  interpretation: outcome=ok prompt=interpret.v4.1
+  acts=[('cart', None), ('find', 'o rezerva pentru el')] thread=continue
+  changes=[]
+  checked=[]
+  refs=[('ordinal', 'exact', 'shown_now', 'ordinal_in_set', 1)]
+  rejected=[]
+  state_after: {"needs": ["skin_type eq oily"], "shown": ["0618faef-de16-4144-8420-5c675fc33f22", "3f4adb88-801a-4547-8722-5fae0787839c", "4eef5b59-c1d5-4a33-9947-0a58833d537d", "95434958-c63c-4690-9eef-57eb0cbd77c4", "b440a562-271e-406b-a45e-db22cf30f60b"], "topic": "machiaj-fata"}
+  ambiguity=act reason=clear q=None
+  executor=search plans=[('cart', 1, None), ('search', 0, None)] args={"brand": null, "limit": 6, "query": "fond de ten", "prefer": {"product_type": ["fond de ten"]}, "exclude": {}, "category": "machiaj-fata", "concerns": ["oily"], "features": null, "price_max": null, "sort_mode": "relevance", "price_band": null, "rank_terms": [], "product_name": null, "in_stock_only": false, "variant_label": null}
+  gaps=[] disclosures=[] dropped=0
+  CARDS: [('TIRTIR Mask Fit Red Cushion', 135.0), ('TIRTIR Mask Fit Red Cushion Fond de Ten Compact 17N Vanilla', 135.0)]
+  BOT: Am pus TIRTIR Mask Fit Red Cushion în coș.  Primul TIRTIR Mask Fit Red Cushion este varianta pentru dimineață și seară, ca rezervă, TIRTIR Mask Fit Red Cushion Fond de Ten Compact 17N Vanilla este pentru folosire dimineața.  1. TIRTIR Mask Fit Red Cushion, 135,00 lei  ⭐5.0  • Top Favorit    Potrivit pentru acnee și imperfecțiuni, cu pudră matifiantă fină și control al sebumului. 2. TIRTIR Mask Fit Red Cushion Fond de Ten Compact 17N Vanilla, 135,00 lei  ⭐5.0  • Top Favorit    Pentru rutina de dimineață, oferă acoperire ridicată și un finisaj satinat.  Dacă vrei, putem continua cu: Spune-mi mai multe despre TIRTIR Mask Fit Red Cushion · Trimite-mi linkul la TIRTIR Mask Fit Red Cushion · Arata-mi ce ai la Buze · Ce spun recenziile despre TIRTIR Mask Fit Red Cushion
+
+--- T3 [3af81035-7cb4-413d-a35d-b9e43fd7dee2] «cat fac toate in cos?»
+  EXPECT: totalul cosului calculat server-side
+  kernel_turn: {'plans': 1, 'served': True, 'turn_id': '3af81035-7cb4-413d-a35d-b9e43fd7dee2', 'executor': 'delegate', 'fallback_reason': None}
+  interpretation: outcome=ok prompt=interpret.v4.1
+  acts=[('other', None)] thread=continue
+  changes=[]
+  checked=[]
+  rejected=[]
+  state_after: {"needs": ["skin_type eq oily"], "shown": ["c99f0a56-0788-411e-a2df-045e89c445dc", "3f4adb88-801a-4547-8722-5fae0787839c"], "topic": "machiaj-fata", "recent": [["0618faef-de16-4144-8420-5c675fc33f22", "3f4adb88-801a-4547-8722-5fae0787839c", "4eef5b59-c1d5-4a33-9947-0a58833d537d", "95434958-c63c-4690-9eef-57eb0cbd77c4", "b440a562-271e-406b-a45e-db22cf30f60b"]]}
+  ambiguity=act reason=clear q=None
+  executor=delegate plans=[('delegate', 0, None)] args=None
+  gaps=[] disclosures=[] dropped=0
+  CARDS: []
+  BOT: Momentan n-am găsit produse potrivite. Îmi spui mai exact ce cauți (tip de produs, buget)?
+
+  HTTP: [(200, 18.2), (200, 12.5), (200, 9.4)]
+
+######## k9_aside_pagination  conv=feccc96a-92e3-4fae-ae0a-a5a8b4861c5d  focus: aside (I5) nu goleste sesiunea de cautare; paginarea continua; intrebare pe ingredient peste ecran (answer_policy)
+
+--- T1 [fa16280d-5130-4ca4-a755-b18eff6b00d7] «vreau o spuma de curatare pentru acnee»
+  EXPECT: spume de curatare (53 in stoc), acne
+  kernel_turn: {'plans': 1, 'served': True, 'turn_id': 'fa16280d-5130-4ca4-a755-b18eff6b00d7', 'executor': 'search', 'fallback_reason': None}
+  interpretation: outcome=ok prompt=interpret.v4.1
+  acts=[('find', 'vreau o spuma de curatare pentru acnee')] thread=continue
+  changes=[('set', 'product_type', 'eq', 'spuma de curatare', None, 'spuma de curatare'), ('set', 'concerns', 'eq', 'acne', None, 'acnee')]
+  checked=[('product_type', 'spuma de curatare', 'explicit', 'soft', None), ('concerns', 'acne', 'explicit', 'soft', None)]
+  rejected=[]
+  state_after: {"needs": ["concerns contains acne"], "shown": [], "topic": null}
+  ambiguity=act reason=clear q=None
+  executor=search plans=[('search', 0, None)] args={"brand": null, "limit": 6, "query": "spuma de curatare", "prefer": {"product_type": ["spuma de curatare"]}, "exclude": {}, "category": null, "concerns": null, "features": ["acne"], "price_max": null, "sort_mode": "relevance", "price_band": null, "rank_terms": [], "product_name": null, "in_stock_only": false, "variant_label": null}
+  gaps=[] disclosures=[] dropped=0
+  CARDS: [('SKIN1004 Madagascar Centella Tea-Trica Bha Foam', 80.0), ('ZEROID Pimprove Foaming Cleanser', 120.0), ('COSRX AC Collection Spuma de curatare pentru ten acneic', 78.0), ('Round Lab Pine Cica Spuma de Curatare Calmanta', 75.0)]
+  BOT: Toate sunt spume de curățare pentru ten cu tendință acneică, dar se diferențiază prin ingredientele-cheie și prin accentul pus pe hidratare, pori sau calmarea roșeții.  1. SKIN1004 Madagascar Centella Tea-Trica Bha Foam, 80,00 lei  ⭐5.0    Pentru acnee și pori dilatați, cu BHA și ulei din frunze de arbore de ceai. 2. ZEROID Pimprove Foaming Cleanser, 120,00 lei  ⭐4.9    Dacă ai ten sensibil, acidul salicilic și acidul hialuronic ajută la curățare și hidratare. 3. COSRX AC Collection Spuma de curatare pentru ten acneic, 78,00 lei  ⭐5.0    Pentru roșeață, oferă o curățare delicată și calmare pentru ten acneic. 4. Round Lab Pine Cica Spuma de Curatare Calmanta, 75,00 lei  ⭐5.0    Când vrei hidratare și calmare, combină acidul hialuronic cu centella asiatica.  Dacă vrei, putem continua cu: Caut ceva pentru hidratare · Arata-mi ce ai la Ten · Compara SKIN1004 Madagascar cu ZEROID Pimprove Foa…
+
+--- T2 [2c81ce76-7aa5-4ca3-a518-089192aa26c2] «livrati si in Republica Moldova?»
+  EXPECT: raspuns din regulile magazinului (faq) sau «nu stiu» onest; starea de cautare neatinsa
+  kernel_turn: {'plans': 1, 'served': True, 'turn_id': '2c81ce76-7aa5-4ca3-a518-089192aa26c2', 'executor': 'faq', 'fallback_reason': None}
+  interpretation: outcome=ok prompt=interpret.v4.1
+  acts=[('store_info', 'livrati si in Republica Moldova?')] thread=aside
+  changes=[]
+  checked=[]
+  rejected=[]
+  state_after: {"needs": ["concerns contains acne"], "shown": ["2ca8a107-15b7-4878-a1ca-65963446175e", "519a929e-c20a-40a8-bdd1-9ba16d9625ab", "56bc2020-1782-4361-a81d-dcabe8103064", "d855c39d-82b6-4907-9889-33115d4c7ddf"], "topic": null}
+  ambiguity=act reason=clear q=None
+  executor=faq plans=[('faq', 0, None)] args=None
+  gaps=[] disclosures=[] dropped=0
+  CARDS: []
+  BOT: Momentan n-am găsit produse potrivite. Îmi spui mai exact ce cauți (tip de produs, buget)?
+
+--- T3 [5030b51f-2d1d-4b8e-9798-5596c164e2d6] «mai arata-mi»
+  EXPECT: pagina 2 a ACELEIASI cautari (spume pentru acnee), produse noi
+  kernel_turn: None
+  (no kernel trace)
+  CARDS: [('MEDIHEAL Vitamin C Cleanser Pore Toning', 70.0), ('EVY TECHNOLOGY Renew Mousse Cleanser', 105.0), ('Dr. Althea Amino Acid Gentle Bubble Cleanser', 80.0), ('IUNIK Centella Mild', 60.0), ('ABIB Acne Foam Cleanser Heartleaf Foam', 70.0), ('JUMISO Pore-Purifying Salicylic Acid', 85.0)]
+  BOT: Pentru acnee, găsești spume cu accent pe pori și exfoliere, calmarea roșeții sau susținerea barierei cutanate. Am inclus și variante pentru ten gras, respectiv pentru curățarea excesului de sebum.  1. MEDIHEAL Vitamin C Cleanser Pore Toning, 70,00 lei  ⭐5.0    Pentru pori dilatați, vitamina C și betaina curăță pielea fără să-i lase senzația de uscăciune. 2. EVY TECHNOLOGY Renew Mousse Cleanser, 105,00 lei  ⭐5.0    Când vrei și exfoliere delicată, combină acidul salicilic cu acidul lactic. 3. Dr. Althea Amino Acid Gentle Bubble Cleanser, 80,00 lei  ⭐5.0  • Top Favorit    Dacă vrei să susții bariera cutanată, aminoacizii și acidul hialuronic ajută la menținerea hidratării. 4. IUNIK Centella Mild, 60,00 lei  ⭐5.0    Pentru roșeață și calmare, are extract de centella și acid salicilic. 5. ABIB Acne Foam Cleanser Heartleaf Foam, 70,00 lei  ⭐4.9  • Top Favorit    Potrivit pentru ten gras, cu a…
+
+--- T4 [aa3778a9-98c5-4148-af23-9b742264f593] «care din astea are BHA?»
+  EXPECT: doar cele cu BHA/acid salicilic in key_ingredients; necunoscut != «nu are»
+  kernel_turn: {'plans': 1, 'served': True, 'turn_id': 'aa3778a9-98c5-4148-af23-9b742264f593', 'executor': 'ask', 'fallback_reason': None}
+  interpretation: outcome=ok prompt=interpret.v4.1
+  acts=[('detail', None)] thread=continue
+  changes=[]
+  checked=[]
+  refs=[('deictic', 'ambiguous', 'shown_now', 'no_anchor', 6)]
+  rejected=[]
+  state_after: {"needs": ["concerns contains acne"], "shown": ["fb196541-55db-4a5b-b00a-d05dd58b7386", "4b3333da-9f81-4203-9236-148d14725130", "096ad861-07bb-4b1d-bf89-a5421a57933c", "102e5392-6620-48c3-9ac6-1a3947631792", "308d6738-377c-467d-a09f-1e3ba2fbac75", "d0735509-c686-45fe-8f5c-ecf62376519b"], "topic": null, "recent": [["2ca8a107-15b7-4878-a1ca-65963446175e", "519a929e-c20a-40a8-bdd1-9ba16d9625ab", "56bc2020-1782-4361-a81d-dcabe8103064", "d855c39d-82b6-4907-9889-33115d4c7ddf"]]}
+  ambiguity=must_ask reason=ambiguous_too_many q=La care te referi dintre MEDIHEAL Vitamin C Cleanser Pore Toning, EVY TECHNOLOGY Renew Mousse Cleanser, Dr. Althea Amino Acid Gentle Bubble Cleanser și IUNIK Centella Mild?
+  executor=ask plans=[('ask', 6, None)] args=None
+  gaps=[] disclosures=[] dropped=0
+  CARDS: [('MEDIHEAL Vitamin C Cleanser Pore Toning', 70.0), ('EVY TECHNOLOGY Renew Mousse Cleanser', 105.0), ('Dr. Althea Amino Acid Gentle Bubble Cleanser', 80.0), ('IUNIK Centella Mild', 60.0), ('ABIB Acne Foam Cleanser Heartleaf Foam', 70.0), ('JUMISO Pore-Purifying Salicylic Acid', 85.0)]
+  BOT: La care te referi dintre MEDIHEAL Vitamin C Cleanser Pore Toning, EVY TECHNOLOGY Renew Mousse Cleanser, Dr. Althea Amino Acid Gentle Bubble Cleanser și IUNIK Centella Mild?
+
+  HTTP: [(200, 12.8), (200, 5.4), (200, 10.9), (200, 3.3)]
+
+######## k8_correction  conv=e333f0a7-8be7-4ee3-945b-8a55c41ad66c  focus: corectia (I21): retrage doar ce contrazice turul anterior; variante (gap `variant`)
+
+--- T1 [d6aea7c2-8c93-4683-acec-3b966021dd06] «caut un ruj mat rosu»
+  EXPECT: rujuri (28 in stoc), finish mat, nuanta rosie daca exista atributul
+  kernel_turn: {'plans': 1, 'served': True, 'turn_id': 'd6aea7c2-8c93-4683-acec-3b966021dd06', 'executor': 'search', 'fallback_reason': None}
+  interpretation: outcome=ok prompt=interpret.v4.1
+  acts=[('find', 'caut un ruj mat rosu')] thread=continue
+  changes=[('set', 'category', 'eq', 'machiaj-buze', None, 'ruj'), ('set', 'product_type', 'eq', 'ruj', None, 'ruj'), ('set', 'finish', 'eq', 'matte', None, 'mat'), ('set', 'shade', 'eq', 'rosu', None, 'rosu')]
+  checked=[('category', 'machiaj-buze', 'explicit', 'ranking', 'semantic_mismatch'), ('product_type', 'ruj', 'explicit', 'soft', None), ('finish', 'matte', 'explicit', 'soft', None), ('key_ingredients', 'rosu', 'explicit', 'soft', None)]
+  rejected=[]
+  state_after: {"needs": ["finish eq matte", "key_ingredients contains rosu"], "shown": [], "topic": null}
+  ambiguity=act reason=clear q=None
+  executor=search plans=[('search', 0, None)] args={"brand": null, "limit": 6, "query": "ruj", "prefer": {"product_type": ["ruj"]}, "exclude": {}, "category": null, "concerns": ["matte"], "features": ["rosu"], "price_max": null, "sort_mode": "relevance", "price_band": null, "rank_terms": [], "product_name": null, "in_stock_only": false, "variant_label": null}
+  gaps=[] disclosures=[] dropped=0
+  CARDS: [('BODYOGRAPHY Lip Lava', 80.0), ('BLACK ROUGE Muddish Cushion Velvet Ruj Lichid MV01 Peach Pud', 65.0)]
+  BOT: Nu pot confirma din date că nuanțele sunt roșii. Dintre opțiunile mate, BODYOGRAPHY Lip Lava are finisaj mat luminos, iar BLACK ROUGE Muddish Cushion Velvet are finisaj mat catifelat și formulă hidratantă.  1. BODYOGRAPHY Lip Lava, 80,00 lei  ⭐5.0  • Voucher -49%    Pentru un look mat luminos și purtare îndelungată, are pigmenți intenși. 2. BLACK ROUGE Muddish Cushion Velvet Ruj Lichid MV01 Peach Pudding, 65,00 lei  ⭐4.9  • Top Favorit    Dacă vrei un mat catifelat, formula hidratantă ajută la confortul buzelor.  Sau, dacă preferi: Caut ceva pentru hidratare · Arata-mi ce ai la Ten · Compara BODYOGRAPHY Lip Lava cu BLACK ROUGE Muddish · Trimite-mi linkul la BLACK ROUGE Muddish Cushion Velvet · Caut ceva pentru calmare
+
+--- T2 [eeaae49e-8d2b-404f-8f72-04b7d3b33f38] «nu, nu rosu, nude am zis»
+  EXPECT: corectie pe nuanta: nude in loc de rosu; finish mat pastrat
+  kernel_turn: {'plans': 1, 'served': True, 'turn_id': 'eeaae49e-8d2b-404f-8f72-04b7d3b33f38', 'executor': 'search', 'fallback_reason': None}
+  interpretation: outcome=ok prompt=interpret.v4.1
+  acts=[('find', 'nude am zis')] thread=continue
+  changes=[('replace', 'key_ingredients', 'contains', 'nude am zis', None, 'nu, nu rosu, nude am zis')]
+  checked=[('unmapped', 'nude am zis', 'implicit', 'soft', None)]
+  rejected=[{'op': 'revoke', 'reason': 'unsupported_revoke'}]
+  state_after: {"needs": ["finish eq matte", "key_ingredients contains nude am zis", "key_ingredients contains rosu"], "shown": ["5e545b96-356b-480c-a83e-4167040583f4", "1d8a8674-8eb8-4c80-a3c6-019e484b0a5c"], "topic": null}
+  ambiguity=act reason=clear q=None
+  executor=search plans=[('search', 0, None)] args={"brand": null, "limit": 6, "query": "ruj", "prefer": {"product_type": ["ruj"], "key_ingredients": ["nude am zis"]}, "exclude": {}, "category": null, "concerns": ["matte"], "features": ["rosu"], "price_max": null, "sort_mode": "relevance", "price_band": null, "rank_terms": [], "product_name": null, "in_stock_only": false, "variant_label": null}
+  gaps=[] disclosures=[] dropped=0
+  CARDS: [('BODYOGRAPHY Lip Lava', 80.0), ('BLACK ROUGE Muddish Cushion Velvet Ruj Lichid MV01 Peach Pud', 65.0)]
+  BOT: Ai dreptate, nude, nu roșu. BODYOGRAPHY Lip Lava Stripped are finisaj mat luminos, iar BLACK ROUGE Muddish Cushion Velvet Peach Pudding are finisaj mat catifelat, dar datele nu confirmă că nuanțele sunt nude.  1. BODYOGRAPHY Lip Lava, 80,00 lei  ⭐5.0  • Voucher -49%    Pentru purtare îndelungată, are finisaj mat luminos și nu usucă buzele. 2. BLACK ROUGE Muddish Cushion Velvet Ruj Lichid MV01 Peach Pudding, 65,00 lei  ⭐4.9  • Top Favorit    Dacă preferi un mat catifelat, formula hidratantă ajută la confortul buzelor.  Îți mai pot arăta: Spune-mi mai multe despre BLACK ROUGE Muddish Cushion · Trimite-mi linkul la BODYOGRAPHY Lip Lava · Arata-mi ce ai la Machiaj · Ce spun recenziile despre BLACK ROUGE Muddish Cushion · Spune-mi mai multe despre BODYOGRAPHY Lip Lava
+
+--- T3 [f5ce3bb7-37e1-45ef-b6ee-047f53819e6b] «ceva care sa tina toata ziua»
+  EXPECT: aceleasi rujuri nude mate, ordonate dupa rezistenta (fara a pierde nude/mat)
+  kernel_turn: {'plans': 1, 'served': True, 'turn_id': 'f5ce3bb7-37e1-45ef-b6ee-047f53819e6b', 'executor': 'search', 'fallback_reason': None}
+  interpretation: outcome=ok prompt=interpret.v4.1
+  acts=[('find', 'ceva care sa tina toata ziua')] thread=continue
+  changes=[]
+  checked=[]
+  rejected=[]
+  state_after: {"needs": ["finish eq matte", "key_ingredients contains nude am zis", "key_ingredients contains rosu"], "shown": ["5e545b96-356b-480c-a83e-4167040583f4", "1d8a8674-8eb8-4c80-a3c6-019e484b0a5c"], "topic": null}
+  ambiguity=act reason=clear q=None
+  executor=search plans=[('search', 0, None)] args={"brand": null, "limit": 6, "query": "ruj", "prefer": {"product_type": ["ruj"], "key_ingredients": ["nude am zis"]}, "exclude": {}, "category": null, "concerns": ["matte"], "features": ["rosu"], "price_max": null, "sort_mode": "relevance", "price_band": null, "rank_terms": [], "product_name": null, "in_stock_only": false, "variant_label": null}
+  gaps=[] disclosures=[] dropped=0
+  CARDS: [('VILLAGE 11 FACTORY Velvet Fit Lip Tint', 65.0)]
+  BOT: Ai dreptate, cauți un ruj nude care să țină toată ziua. VILLAGE 11 FACTORY Velvet Fit Lip Tint este nuanța numită Rosy Nude și rezistă toată ziua, dar finisajul mat nu este precizat.  1. VILLAGE 11 FACTORY Velvet Fit Lip Tint, 65,00 lei  ⭐4.9  • Top Favorit    Pentru un nude de purtare îndelungată, are acid hialuronic și ajută la hidratarea buzelor.  Sau, dacă preferi: Ce spun recenziile despre VILLAGE 11 FACTORY Velvet Fit · Trimite-mi linkul la VILLAGE 11 FACTORY Velvet Fit Lip
+
+--- T4 [4ef628d9-2686-47a8-999a-35fd0d28ddfd] «primul il ai si in alta nuanta?»
+  EXPECT: variantele/nuantele primului ruj sau dezvaluire onesta ca nu stie; nimic inventat
+  kernel_turn: {'plans': 1, 'served': True, 'turn_id': '4ef628d9-2686-47a8-999a-35fd0d28ddfd', 'executor': 'detail', 'fallback_reason': None}
+  interpretation: outcome=ok prompt=interpret.v4.1
+  acts=[('detail', None)] thread=continue
+  changes=[]
+  checked=[]
+  refs=[('ordinal', 'exact', 'shown_now', 'ordinal_in_set', 1)]
+  rejected=[]
+  state_after: {"needs": ["finish eq matte", "key_ingredients contains nude am zis", "key_ingredients contains rosu"], "shown": ["3d84857f-a8f8-4904-a9ed-c8c9e2ba7ccf"], "topic": null, "recent": [["5e545b96-356b-480c-a83e-4167040583f4", "1d8a8674-8eb8-4c80-a3c6-019e484b0a5c"]], "selected": "3d84857f-a8f8-4904-a9ed-c8c9e2ba7ccf"}
+  ambiguity=act reason=clear q=None
+  executor=detail plans=[('detail', 1, None)] args=None
+  gaps=[] disclosures=[] dropped=0
+  CARDS: [('VILLAGE 11 FACTORY Velvet Fit Lip Tint', 65.0)]
+  BOT: De ce ți-l recomand  Potrivit pentru cei care își doresc un ruj lichid pentru buze cu finisaj mat, dar cu senzație confortabilă la purtare. VILLAGE 11 FACTORY Velvet Fit Lip Tint are o textură moale și pufoasă și o formulă îmbogățită cu trei tipuri de acid…  Caracteristici principale  ✓ Moment din rutina: dimineata si seara ✓ Tip de ten: ten uscat ✓ Potrivit pentru: hidratare  Cum se folosește  Pentru un efect gradient subtil, aplica produsul in centrul buzelor si estompeaza usor spre margini. Daca preferi un look intens, foloseste aplicatorul inclinat pentru a acoperi uniform toata suprafata buzelor, iar varful acestuia pentru conturare precisa. Bucura-te zilnic de buze matifiate si hidratate, cu aspect impecabil de lunga durata. Vezi mai multe detalii Ascunde  Ce spun clienții  Rezumatul recenziilor pentru VILLAGE 11 FACTORY Velvet Fit Lip Tint: Multe recenzii spun că nu usucă, rezistă…
+
+  HTTP: [(200, 13.2), (200, 11.7), (200, 14.3), (200, 3.7)]
+
+######## k10_routine  conv=62131d73-2924-47db-bfc6-0745e921978c  focus: bundle/rutina (NX-336 D3): familia din pachet, momentul din nevoi, excluderea unui pas, inlocuire cu buget
+
+--- T1 [a65edfa8-2e9c-4318-9326-b09540f93125] «fa-mi o rutina de dimineata pentru ten sensibil cu roseata»
+  EXPECT: rutina am (curatare, toner/ser, crema, SPF), nevoia redness
+  kernel_turn: {'plans': 1, 'served': True, 'turn_id': 'a65edfa8-2e9c-4318-9326-b09540f93125', 'executor': 'search', 'fallback_reason': None}
+  interpretation: outcome=ok prompt=interpret.v4.1
+  acts=[('bundle', None)] thread=continue
+  changes=[('set', 'routine_time', 'eq', 'am', None, 'de dimineata'), ('set', 'skin_type', 'eq', 'sensitive', None, 'ten sensibil'), ('set', 'concerns', 'eq', 'redness', None, 'roseata')]
+  checked=[('routine_time', 'am', 'explicit', 'soft', None), ('skin_type', 'sensitive', 'explicit', 'soft', None), ('concerns', 'redness', 'explicit', 'soft', None)]
+  rejected=[]
+  state_after: {"needs": ["concerns contains redness", "routine_time eq am", "skin_type eq sensitive"], "shown": [], "topic": null}
+  ambiguity=act reason=clear q=None
+  executor=search plans=[('search', 0, None)] args={"brand": null, "limit": 6, "query": "dimineata ten sensibil roseata", "prefer": {}, "exclude": {}, "category": null, "concerns": ["am", "sensitive"], "features": ["redness"], "price_max": null, "sort_mode": "relevance", "price_band": null, "rank_terms": [], "product_name": null, "in_stock_only": false, "variant_label": null}
+  gaps=[] disclosures=[] dropped=0
+  CARDS: [('IUNIK Centella Calming Daily Sunscreen SPF 50 PA++++ 60 ml', 80.0), ('Dear Klairs All-day Airy Crema de fata SPF 50', 120.0), ('PURITO Wonder Releaf Centella Daily Sun Lotion SPF 50+', 120.0), ('COSRX Aloe 54.2 Aqua Tone-up SPF50 PA++++', 94.0)]
+  BOT: Pentru dimineață, acestea acoperă pasul de protecție solară, nu o rutină completă. IUNIK pune accent pe calmare cu centella și beta-glucan, iar Dear Klairs și PURITO oferă hidratare ușoară cu aloe, respectiv centella.  1. IUNIK Centella Calming Daily Sunscreen SPF 50 PA++++ 60 ml, 80,00 lei  ⭐5.0    Potrivită când vrei să calmezi aspectul roșeții, cu centella și beta-glucan. 2. Dear Klairs All-day Airy Crema de fata SPF 50, 120,00 lei  ⭐5.0    Pentru hidratare ușoară, cu aloe și niacinamidă, într-o cremă pentru ten sensibil. 3. PURITO Wonder Releaf Centella Daily Sun Lotion SPF 50+, 120,00 lei  ⭐5.0    Alege-o dacă preferi centella și acid hialuronic pentru menținerea hidratării. 4. COSRX Aloe 54.2 Aqua Tone-up SPF50 PA++++, 94,00 lei  ⭐5.0    Bună dacă vrei aloe și niacinamidă, cu absorbție rapidă și finish natural.  Aplică protecția solară ca ultim pas al rutinei de dimineață, după cre…
+
+--- T2 [f90f61b3-c80b-4f66-9c5c-2b6510fc12c0] «fara spf, am deja unul»
+  EXPECT: rutina fara pasul de protectie solara
+  kernel_turn: {'plans': 1, 'served': True, 'turn_id': 'f90f61b3-c80b-4f66-9c5c-2b6510fc12c0', 'executor': 'search', 'fallback_reason': None}
+  interpretation: outcome=ok prompt=interpret.v4.1
+  acts=[('find', 'fara spf, am deja unul')] thread=continue
+  changes=[('add', 'concerns', 'avoid', 'protectie solara', None, 'fara spf'), ('add', 'product_type', 'avoid', 'protectie solara', None, 'fara spf')]
+  checked=[('concerns', 'sun_protection', 'explicit', 'soft', None), ('concerns', 'sun_protection', 'explicit', 'soft', None)]
+  rejected=[]
+  state_after: {"needs": ["concerns contains redness", "restriction not_contains sun_protection", "routine_time eq am", "skin_type eq sensitive"], "shown": ["989514ab-ee91-4873-97a8-59c8ada2671c", "05484dac-aa2b-4be7-9e5e-9435c5f62cd1", "e30bcba8-8e9e-4a79-a0ca-352f4a2cca82", "2e95c43f-8b1f-4a5c-8f6e-ae21d4b6e118"], "topic": null}
+  ambiguity=act reason=clear q=None
+  executor=search plans=[('search', 0, None)] args={"brand": null, "limit": 6, "query": "am deja unul", "prefer": {}, "exclude": {"concerns": ["sun_protection"]}, "category": null, "concerns": ["am", "sensitive"], "features": ["redness"], "price_max": null, "sort_mode": "relevance", "price_band": null, "rank_terms": [], "product_name": null, "in_stock_only": false, "variant_label": null}
+  gaps=[] disclosures=[] dropped=0
+  CARDS: []
+  BOT: Nu am găsit în catalog ce ai cerut. Spune-mi mai multe și caut altfel.
+
+--- T3 [b4c8dd51-d1ca-47e1-afe4-43ea7552ea44] «inlocuieste serul cu ceva sub 60 de lei»
+  EXPECT: un ser (redness) <= 60 lei; restul rutinei pastrat
+  kernel_turn: {'plans': 1, 'served': True, 'turn_id': 'b4c8dd51-d1ca-47e1-afe4-43ea7552ea44', 'executor': 'search', 'fallback_reason': None}
+  interpretation: outcome=ok prompt=interpret.v4.1
+  acts=[('find', 'ceva sub 60 de lei')] thread=continue
+  changes=[('set', 'price', 'lte', None, 60.0, 'sub 60 de lei')]
+  checked=[('price', 60.0, 'explicit', 'hard', None)]
+  refs=[('name', 'not_found', 'shown_now', 'name_not_found', 0)]
+  rejected=[]
+  state_after: {"needs": ["budget_max lte 60", "concerns contains redness", "restriction not_contains sun_protection", "routine_time eq am", "skin_type eq sensitive"], "shown": ["989514ab-ee91-4873-97a8-59c8ada2671c", "05484dac-aa2b-4be7-9e5e-9435c5f62cd1", "e30bcba8-8e9e-4a79-a0ca-352f4a2cca82", "2e95c43f-8b1f-4a5c-8f6e-ae21d4b6e118"], "topic": null}
+  ambiguity=act reason=clear q=None
+  executor=search plans=[('search', 0, None)] args={"brand": null, "limit": 6, "query": "ceva sub 60 de lei", "prefer": {}, "exclude": {"concerns": ["sun_protection"]}, "category": null, "concerns": ["am", "sensitive"], "features": ["redness"], "price_max": 60.0, "sort_mode": "relevance", "price_band": null, "rank_terms": [], "product_name": null, "in_stock_only": false, "variant_label": null}
+  gaps=[] disclosures=[] dropped=0
+  CARDS: [('ANUA Heartleaf 70 Soothing Collagen Mask', 26.0), ('PODL Barley Hyaluronic  Essence Pads 4 ml', 9.0)]
+  BOT: Am păstrat limita de sub 60 de lei, dar în produsele disponibile nu apare un ser. Pot înlocui pasul cu o mască de seară calmantă sau cu dischete hidratante pentru dimineață și seară.  1. ANUA Heartleaf 70 Soothing Collagen Mask, 26,00 lei  ⭐5.0    Pentru seară, apa de heartleaf și acidul hialuronic susțin calmarea și hidratarea pielii cu roșeață. 2. PODL Barley Hyaluronic  Essence Pads 4 ml, 9,00 lei  ⭐5.0    Bune dimineața și seara, cu acid hialuronic și centella pentru hidratare și calmarea roșeții.  Îți mai pot arăta: Compara ANUA Heartleaf 70 cu PODL Barley Hyaluronic · Trimite-mi linkul la PODL Barley Hyaluronic Essence Pads · Arata-mi ce ai la Machiaj · Spune-mi mai multe despre PODL Barley Hyaluronic Essence · Trimite-mi linkul la ANUA Heartleaf 70 Soothing Collagen
+
+  HTTP: [(200, 12.8), (200, 3.7), (200, 18.4)]
+
+######## k11_compare_verdict  conv=e7f0c062-01b8-4b6c-84db-78e6c51fab22  focus: comparatie pe nume (resolver), politica de raspuns I12: verdict doar pe dimensiune cunoscuta
+
+--- T1 [b5d8f973-dd29-4702-93ee-57c840b665f7] «compara SKIN1004 Madagascar Centella Ampoule cu Probio-Cica Intensive Ampoule»
+  EXPECT: comparatie intre cele doua seruri SKIN1004 (55 vs 50 lei), axe din date
+  kernel_turn: {'plans': 1, 'served': True, 'turn_id': 'b5d8f973-dd29-4702-93ee-57c840b665f7', 'executor': 'search', 'fallback_reason': None}
+  interpretation: outcome=ok prompt=interpret.v4.1
+  acts=[('compare', None)] thread=continue
+  changes=[]
+  checked=[]
+  refs=[('name', 'ambiguous', 'catalog', 'catalog_tie', 3), ('name', 'not_found', 'shown_now', 'name_not_found', 0)]
+  rejected=[]
+  state_after: {"needs": [], "shown": [], "topic": null}
+  ambiguity=act_both reason=ambiguous_read q=None
+  executor=search plans=[('search', 0, None)] args={"brand": null, "limit": 6, "query": "Probio-Cica Intensive Ampoule", "prefer": {}, "exclude": {}, "category": null, "concerns": null, "features": null, "price_max": null, "sort_mode": "relevance", "price_band": null, "rank_terms": [], "product_name": "Probio-Cica Intensive Ampoule", "in_stock_only": false, "variant_label": null}
+  gaps=[] disclosures=[[0, 'not_exact_match']] dropped=0
+  CARDS: [('SKIN1004 Madagascar Centella Probio-Cica Intensive Ampoule', 130.0), ('SKIN1004 Madagascar Centella Probio-Cica Intensive Ampoule', 50.0), ('SKIN1004 Madagascar Centella Probio-Cica Intensive Ampoule', 170.0)]
+  BOT: Nu am găsit exact produsul pe care l-ai numit, așa că îți arăt ce am cel mai aproape.  În lista disponibilă apare Probio-Cica Intensive Ampoule, nu varianta Madagascar Centella Ampoule simplă, așa că nu le pot compara direct. Pentru Probio-Cica ai variante de 30 ml, 50 ml și 95 ml, toate potrivite pentru dimineața și seara.  1. SKIN1004 Madagascar Centella Probio-Cica Intensive Ampoule, 130,00 lei  ⭐5.0    Pentru ten sensibil, cu probiotice, ceramide și extract de cica din Madagascar. 2. SKIN1004 Madagascar Centella Probio-Cica Intensive Ampoule, 50,00 lei  ⭐5.0    Varianta mai accesibilă, cu probiotice și ceramide pentru hidratare și calmare. 3. SKIN1004 Madagascar Centella Probio-Cica Intensive Ampoule, 170,00 lei  ⭐5.0    Alege formatul mai mare dacă folosești serul constant, dimineața și seara.  Dacă vrei, putem continua cu: Compara SKIN1004 Madagascar Centella Probio-Cica Intens… · …
+
+--- T2 [6ee24f8f-07e1-4d4d-b4f9-e7ea29e958b8] «care e mai buna pentru ten sensibil?»
+  EXPECT: verdict doar daca fisa stie; altfel verdict_unknown onest, niciun «nu are»
+  kernel_turn: {'plans': 1, 'served': True, 'turn_id': '6ee24f8f-07e1-4d4d-b4f9-e7ea29e958b8', 'executor': 'detail', 'fallback_reason': None}
+  interpretation: outcome=ok prompt=interpret.v4.1
+  acts=[('detail', None)] thread=continue
+  changes=[]
+  checked=[]
+  refs=[('name', 'ambiguous', 'shown_now', 'name_shared', 3)]
+  rejected=[]
+  state_after: {"needs": [], "shown": ["94c71841-f19a-42bd-a979-6125432b59cd", "97ca74ec-286c-4600-845f-60aec8c7c682", "2f2346dc-d1db-4361-b571-1c39bc6ed16f"], "topic": null}
+  ambiguity=act_both reason=ambiguous_read q=None
+  executor=detail plans=[('detail', 3, None)] args=None
+  gaps=[] disclosures=[] dropped=0
+  CARDS: [('SKIN1004 Madagascar Centella Probio-Cica Intensive Ampoule', 130.0), ('SKIN1004 Madagascar Centella Probio-Cica Intensive Ampoule', 50.0), ('SKIN1004 Madagascar Centella Probio-Cica Intensive Ampoule', 170.0)]
+  BOT: Pentru ten sensibil, primele și a treia variantă sunt indicate explicit pentru acest tip de ten. La varianta din mijloc, informația nu este precizată.  Comparație: SKIN1004 Madagascar Centella Probio-Cica Intensive Ampoule · SKIN1004 Madagascar Centella Probio-Cica Intensive Ampoule · SKIN1004 Madagascar Centella Probio-Cica Intensive Ampoule Care e indicată pentru ten sensibil?: Este indicată explicit pentru ten sensibil. ·, · Ce beneficiu pune în prim-plan?: Pe lângă hidratare și calmarea roșeții, vizează și bariera cutanată. · Se concentrează pe hidratare și calmarea roșeții. · Vizează hidratarea și calmarea roșeții. Cum se simte la folosire?: Are textură ușoară și se absoarbe rapid. · Are textură ușoară, se absoarbe rapid și hidratează bine. · Are textură ușoară și se absoarbe rapid. Preț: 130,00 lei · 50,00 lei · 170,00 lei
+
+--- T3 [40e5f960-0d52-4bbc-87f5-36693344daf9] «si care are recenzii mai bune?»
+  EXPECT: rating + numar de recenzii din catalog pentru ambele
+  kernel_turn: {'plans': 1, 'served': True, 'turn_id': '40e5f960-0d52-4bbc-87f5-36693344daf9', 'executor': 'compare', 'fallback_reason': None}
+  interpretation: outcome=ok prompt=interpret.v4.1
+  acts=[('compare', None)] thread=continue
+  changes=[]
+  checked=[]
+  refs=[('ordinal', 'exact', 'shown_now', 'ordinal_in_set', 1), ('ordinal', 'exact', 'shown_now', 'ordinal_in_set', 1), ('ordinal', 'exact', 'shown_now', 'ordinal_in_set', 1)]
+  rejected=[]
+  state_after: {"needs": [], "shown": ["94c71841-f19a-42bd-a979-6125432b59cd", "97ca74ec-286c-4600-845f-60aec8c7c682", "2f2346dc-d1db-4361-b571-1c39bc6ed16f"], "topic": null, "selected": "94c71841-f19a-42bd-a979-6125432b59cd"}
+  ambiguity=act reason=clear q=None
+  executor=compare plans=[('compare', 3, None)] args=None
+  gaps=[] disclosures=[] dropped=0
+  CARDS: [('SKIN1004 Madagascar Centella Probio-Cica Intensive Ampoule', 130.0), ('SKIN1004 Madagascar Centella Probio-Cica Intensive Ampoule', 50.0), ('SKIN1004 Madagascar Centella Probio-Cica Intensive Ampoule', 170.0)]
+  BOT: Iată diferențele principale, alege în funcție de ce contează pentru tine. La toate la fel: dimineata si seara, În stoc, SKIN1004. Cea mai accesibilă: SKIN1004 Madagascar Centella Probio-Cica Intensive Ampoule. Sunt cotate la fel.  Comparație: SKIN1004 Madagascar Centella Probio-Cica Intensive Ampoule · SKIN1004 Madagascar Centella Probio-Cica Intensive Ampoule · SKIN1004 Madagascar Centella Probio-Cica Intensive Ampoule Preț: 130,00 lei · 50,00 lei · 170,00 lei Tip de ten: ten sensibil ·, · ten sensibil Potrivit pentru: acnee si imperfectiuni, bariera cutanata, hidratare, roseata si calmare · acnee si imperfectiuni, hidratare, roseata si calmare · acnee si imperfectiuni, hidratare, roseata si calmare Ingrediente cheie: probiotice, ceramide, extract de cica din madagascar · probiotice, ceramide, extract de cica din madagascar · probiotice, ceramide, extract de cica Avantaje: se absoarbe r…
+
+  HTTP: [(200, 10.3), (200, 11.5), (200, 8.5)]
+
+######## k13_typos_eye  conv=456d7bec-0131-4744-bfac-f9021a78306a  focus: typo-uri si flexiune (NX-364 regula 2), schimbare de nevoie pe acelasi tip
+
+--- T1 [88ff3028-2d85-4bfd-a571-3123cbaedb85] «sall, vreu o crme pt ochi umflati dimineata»
+  EXPECT: creme contur ochi (23 in stoc) / creme de ochi; nu o clarificare inutila
+  kernel_turn: {'plans': 1, 'served': True, 'turn_id': '88ff3028-2d85-4bfd-a571-3123cbaedb85', 'executor': 'search', 'fallback_reason': None}
+  interpretation: outcome=ok prompt=interpret.v4.1
+  acts=[('find', 'sall, vreu o crme pt ochi umflati dimineata')] thread=continue
+  changes=[('set', 'product_type', 'eq', 'crema contur ochi', None, 'o crme pt ochi'), ('set', 'concerns', 'eq', 'cearcane', None, 'ochi umflati dimineata')]
+  checked=[('product_type', 'crema contur ochi', 'implicit', 'soft', None), ('concerns', 'dark_circles', 'explicit', 'ranking', 'semantic_mismatch')]
+  rejected=[]
+  state_after: {"needs": [], "shown": [], "topic": null, "umbrella": ["crema contur ochi"]}
+  ambiguity=act reason=clear q=None
+  executor=search plans=[('search', 0, None)] args={"brand": null, "limit": 6, "query": "crema", "prefer": {"product_type": ["crema contur ochi"]}, "exclude": {}, "category": null, "concerns": null, "features": null, "price_max": null, "sort_mode": "relevance", "price_band": null, "rank_terms": [], "product_name": null, "in_stock_only": false, "variant_label": null}
+  gaps=[] disclosures=[] dropped=0
+  CARDS: [('ALLIES OF SKIN Peptides and Omegas Firming', 480.0)]
+  BOT: Salut!  1. ALLIES OF SKIN Peptides and Omegas Firming, 480,00 lei  ⭐5.0  • Top Favorit    Pentru rutina de dimineață, cu Matrixyl și Bakuchiol pentru fermitatea zonei ochilor.  Dacă vrei, putem continua cu: Ce spun recenziile despre ALLIES OF SKIN Peptides and · Trimite-mi linkul la ALLIES OF SKIN Peptides and Omegas · Arata-mi ce ai la Ten · Arata-mi ce ai la Machiaj
+
+--- T2 [6e124eae-1120-406e-a293-722d6994f1c7] «si pentru cearcane?»
+  EXPECT: creme de ochi pentru dark_circles (109 produse cu nevoia)
+  kernel_turn: {'plans': 1, 'served': True, 'turn_id': '6e124eae-1120-406e-a293-722d6994f1c7', 'executor': 'detail', 'fallback_reason': None}
+  interpretation: outcome=ok prompt=interpret.v4.1
+  acts=[('detail', None)] thread=continue
+  changes=[('add', 'concerns', 'eq', 'dark_circles', None, 'cearcane')]
+  checked=[('concerns', 'dark_circles', 'explicit', 'soft', None)]
+  refs=[('deictic', 'exact', 'shown_now', 'single_in_set', 1)]
+  rejected=[]
+  state_after: {"needs": ["concerns contains dark_circles"], "shown": ["6cb6c8fc-32e4-4d0f-b9b9-2d903ba07951"], "topic": null, "selected": "6cb6c8fc-32e4-4d0f-b9b9-2d903ba07951", "umbrella": ["crema contur ochi"]}
+  ambiguity=act reason=clear q=None
+  executor=detail plans=[('detail', 1, None)] args=None
+  gaps=[] disclosures=[] dropped=0
+  CARDS: [('ALLIES OF SKIN Peptides and Omegas Firming', 480.0)]
+  BOT: De ce ți-l recomand  Potrivit pentru persoanele care vor o cremă pentru conturul ochilor orientată către fermitate și estomparea aspectului liniilor fine, precum picioarele de gâscă, ridurile din colțul interior și liniile de deshidratare.  Caracteristici principale  ✓ Moment din rutina: dimineata si seara ✓ Tip de ten: ten uscat ✓ Potrivit pentru: riduri si fermitate, ten tern, par uscat, hidratare ✓ Ingrediente cheie: matrixyl, morphomics, neodermyl, orchistem  Cum se folosește  Foloseste crema de doua ori pe zi, dimineata si seara, pe conturul ochilor. Aplica o pompita de produs cu degetul inelar, prin miscari delicate si usoare de tapotare, pana la absorbtia completa pentru a obtine rezultate optime. Include-o zilnic in rutina ta pentru o piele hidratata, ferma si vizibil mai luminoasa. Vezi mai multe detalii Ascunde  Ce spun clienții  Rezumatul recenziilor pentru ALLIES OF SKIN Pept…
+
+--- T3 [ea0771fc-af0e-4954-9096-122144f152a0] «care e cea mai ieftina?»
+  EXPECT: cea mai ieftina de pe ecran, cu pret
+  kernel_turn: {'plans': 1, 'served': True, 'turn_id': 'ea0771fc-af0e-4954-9096-122144f152a0', 'executor': 'search', 'fallback_reason': None}
+  interpretation: outcome=ok prompt=interpret.v4.1
+  acts=[('find', 'care e cea mai ieftina?')] thread=continue
+  changes=[]
+  checked=[]
+  refs=[('extreme', 'exact', 'shown_now', 'extreme', 1)]
+  rejected=[]
+  state_after: {"needs": ["concerns contains dark_circles"], "shown": ["6cb6c8fc-32e4-4d0f-b9b9-2d903ba07951"], "topic": null, "selected": "6cb6c8fc-32e4-4d0f-b9b9-2d903ba07951", "umbrella": ["crema contur ochi"]}
+  ambiguity=act reason=clear q=None
+  executor=search plans=[('search', 0, None)] args={"brand": null, "limit": 6, "query": "crema", "prefer": {"product_type": ["crema contur ochi"]}, "exclude": {}, "category": null, "concerns": null, "features": ["dark_circles"], "price_max": null, "sort_mode": "price_asc", "price_band": null, "rank_terms": [], "product_name": null, "in_stock_only": false, "variant_label": null}
+  gaps=[] disclosures=[] dropped=0
+  CARDS: [("DR. KONOPKA'S LITTLE HERBAL COMPANY Gel Anti-Puffiness 20 ml", 20.0)]
+  BOT: KONOPKA'S LITTLE HERBAL COMPANY, potrivit pentru cearcăne și hidratare.  1. DR. KONOPKA'S LITTLE HERBAL COMPANY Gel Anti-Puffiness 20 ml, 20,00 lei  ⭐4.9    Bun pentru diminețile cu ochi umflați, cu extract de mușețel și glicerină pentru hidratare.  Dacă vrei, putem continua cu: Ce spun recenziile despre DR. KONOPKA'S LITTLE HERBAL · Trimite-mi linkul la DR. KONOPKA'S LITTLE HERBAL COMPANY
+
+--- T4 [d68a5f15-94af-42bb-8331-ef7b6bb7809c] «mersi, asta e tot»
+  EXPECT: inchidere scurta, fara carduri noi (gol cunoscut: reply_only din chitchat ramane pe v1)
+  kernel_turn: {'plans': 1, 'served': False, 'turn_id': 'd68a5f15-94af-42bb-8331-ef7b6bb7809c', 'executor': 'reply_only', 'fallback_reason': 'dark'}
+  interpretation: outcome=ok prompt=interpret.v4.1
+  acts=[('chitchat', None)] thread=continue
+  changes=[]
+  checked=[]
+  rejected=[]
+  state_after: {"needs": ["concerns contains dark_circles"], "shown": ["e5bfd955-0b11-46f4-ac4e-9c9b3cb23537"], "topic": null, "recent": [["6cb6c8fc-32e4-4d0f-b9b9-2d903ba07951"]], "selected": "6cb6c8fc-32e4-4d0f-b9b9-2d903ba07951", "umbrella": ["crema contur ochi"]}
+  ambiguity=act reason=clear q=None
+  executor=none plans=[('reply_only', 0, None)] args=None
+  gaps=[] disclosures=[] dropped=0
+  CARDS: []
+  BOT: Cu drag!
+
+  HTTP: [(200, 13.4), (200, 4.3), (200, 8.5), (200, 4.4)]
+
+######## k12_vague_clarify  conv=e70d6d1e-4482-42cd-825d-d4a101f4c9f5  focus: poarta de ambiguitate: find fara subiect => intrebare pe rafturi; o singura intrebare; raspunsul la intrebare inchide bucla (I11)
+
+--- T1 [10fd579e-4667-4a0b-b0ad-51af9bf9062c] «vreau ceva pentru fata»
+  EXPECT: intrebare scurta (o singura) sau rafturi de ten; nu machiaj impus
+  kernel_turn: {'plans': 1, 'served': True, 'turn_id': '10fd579e-4667-4a0b-b0ad-51af9bf9062c', 'executor': 'search', 'fallback_reason': None}
+  interpretation: outcome=ok prompt=interpret.v4.1
+  acts=[('find', 'vreau ceva pentru fata')] thread=continue
+  changes=[]
+  checked=[]
+  rejected=[]
+  state_after: {"needs": [], "shown": [], "topic": null}
+  ambiguity=act reason=clear q=None
+  executor=search plans=[('search', 0, None)] args={"brand": null, "limit": 6, "query": "vreau ceva pentru fata", "prefer": {}, "exclude": {}, "category": null, "concerns": null, "features": null, "price_max": null, "sort_mode": "relevance", "price_band": null, "rank_terms": [], "product_name": null, "in_stock_only": false, "variant_label": null}
+  gaps=[] disclosures=[] dropped=0
+  CARDS: [('VILLAGE 11 FACTORY N Skin Formula Toner', 50.0), ('VILLAGE 11 FACTORY C Skin Formula Toner', 60.0), ('YADAH Daily Green Cactus Mask 25 ml', 15.0), ('YADAH Daily Green Natto Collagen', 15.0), ('KOCOSTAR Yellow Cream Patch', 120.0), ('ABIB Airy Sunstick Smoothing Bar SPF 50+ 23 gr', 149.0)]
+  BOT: Pentru față găsești tonere pentru rutina de dimineață și seară, măști pentru hidratare și un stick de protecție solară pentru dimineață. Setul acoperă hidratarea, calmarea roșeții, îngrijirea imperfecțiunilor și fermitatea.  1. VILLAGE 11 FACTORY N Skin Formula Toner, 50,00 lei  ⭐4.9  • Top Favorit    Pentru hidratare și fermitate, tonerul cu propolis și ginseng se folosește dimineața și seara. 2. VILLAGE 11 FACTORY C Skin Formula Toner, 60,00 lei  ⭐5.0  • Top Favorit    Când vrei să calmezi roșeața, cica și aloe completează rutina de dimineață și seară. 3. YADAH Daily Green Cactus Mask 25 ml, 15,00 lei  ⭐4.9    Masca cu cactus și vitamina E e potrivită pentru tenul uscat sau sensibil, când vrei hidratare. 4. YADAH Daily Green Natto Collagen, 15,00 lei  ⭐5.0    Pentru un plus de îngrijire a fermității, masca aduce natto colagen și vitaminele K. 5. KOCOSTAR Yellow Cream Patch, 120,00 lei …
+
+--- T2 [d34169aa-38b9-4cd8-84b1-d42b46afbd7f] «pentru pete»
+  EXPECT: produse de ingrijire pentru hyperpigmentation; nicio a doua intrebare pe aceeasi cheie
+  kernel_turn: {'plans': 1, 'served': True, 'turn_id': 'd34169aa-38b9-4cd8-84b1-d42b46afbd7f', 'executor': 'search', 'fallback_reason': None}
+  interpretation: outcome=ok prompt=interpret.v4.1
+  acts=[('find', 'pentru pete')] thread=continue
+  changes=[('set', 'concerns', 'eq', 'hyperpigmentation', None, 'pentru pete')]
+  checked=[('concerns', 'hyperpigmentation', 'explicit', 'soft', None)]
+  rejected=[]
+  state_after: {"needs": ["concerns contains hyperpigmentation"], "shown": ["0ff525e4-c726-4298-bbf1-e36c61f604c6", "2da4834e-b593-4cf8-9f9c-eb396c5f357d", "198ad2c4-f5b1-4379-95ba-e2620899204f", "a857a196-7fb5-4a3f-8af8-f93a84e88d91", "00eb4b22-7c45-42e6-b46c-3b350dd2fc6c", "381f2185-0003-41cd-8464-80691578c3d7"], "topic": null}
+  ambiguity=act reason=clear q=None
+  executor=search plans=[('search', 0, None)] args={"brand": null, "limit": 6, "query": "pete", "prefer": {}, "exclude": {}, "category": null, "concerns": null, "features": ["hyperpigmentation"], "price_max": null, "sort_mode": "relevance", "price_band": null, "rank_terms": [], "product_name": null, "in_stock_only": false, "variant_label": null}
+  gaps=[] disclosures=[] dropped=0
+  CARDS: [('SOME BY MI Yuja Niacin Brightening Moisture Gel Cream', 85.0), ('ARENCIA Holy Hyssop Serum 12', 110.0), ('MEDICUBE Deep Vita C Pad', 150.0), ('CENTELLIAN24 Madeca Mela Capture Ampoule Capsule Cream', 110.0), ('DR.JART+ Cryo Rubber', 60.0), ('NUMBUZIN No.5 Vitamin Spotlight Masca Servetel pentru Fata 2', 20.0)]
+  BOT: Am selectat doar produse potrivite pentru pete pigmentare: creme și un ser pentru rutina zilnică, alături de toner-paduri și măști pentru un plus de îngrijire. Pentru ten sensibil este potrivit serul cu niacinamidă și acid hialuronic, iar pentru ten uscat, masca cu vitamina C și niacinamidă.  1. SOME BY MI Yuja Niacin Brightening Moisture Gel Cream, 85,00 lei  ⭐5.0    Pentru rutina zilnică, crema cu yuja și niacinamidă hidratează și ajută la uniformizarea tonului. 2. ARENCIA Holy Hyssop Serum 12, 110,00 lei  ⭐5.0    Dacă ai ten sensibil, serul cu niacinamidă și acid hialuronic susține luminozitatea și hidratarea. 3. MEDICUBE Deep Vita C Pad, 150,00 lei  ⭐5.0  • Top Favorit    Când vrei o aplicare rapidă, toner-padurile cu derivați ai vitaminei C vizează petele pigmentare. 4. CENTELLIAN24 Madeca Mela Capture Ampoule Capsule Cream, 110,00 lei  ⭐5.0    Pentru hidratare și pete, crema cu nia…
+
+--- T3 [7484eb24-0933-4e72-9d54-43d64d819250] «ser»
+  EXPECT: seruri de fata pentru pete (tipul rafineaza)
+  kernel_turn: {'plans': 1, 'served': True, 'turn_id': '7484eb24-0933-4e72-9d54-43d64d819250', 'executor': 'search', 'fallback_reason': None}
+  interpretation: outcome=ok prompt=interpret.v4.1
+  acts=[('find', 'ser')] thread=continue
+  changes=[('set', 'product_type', 'eq', 'ser de fata', None, 'ser')]
+  checked=[('product_type', 'ser de fata', 'implicit', 'soft', None)]
+  rejected=[]
+  state_after: {"needs": ["concerns contains hyperpigmentation"], "shown": ["10364d12-082f-43dd-98fb-4358d9fde24e", "63f54a28-2766-445b-a80b-606e21288722", "e01bae4e-181f-4a24-8165-31f9aa5bce15", "2c0233d0-29b8-45c4-8d49-c8070ae7d662", "0290ad66-13ed-42e2-aa6a-f78c02dc0a6f", "042ea9cd-b399-43d4-8ac8-8b9f6d8c337b"], "topic": null, "recent": [["0ff525e4-c726-4298-bbf1-e36c61f604c6", "2da4834e-b593-4cf8-9f9c-eb396c5f357d", "198ad2c4-f5b1-4379-95ba-e2620899204f", "a857a196-7fb5-4a3f-8af8-f93a84e88d91", "00eb4b22-7c45-42e6-b46c-3b350dd2fc6c", "381f2185-0003-41cd-8464-80691578c3d7"]], "umbrella": ["ser de fata", "ser de par"]}
+  ambiguity=act reason=clear q=None
+  executor=search plans=[('search', 0, None)] args={"brand": null, "limit": 6, "query": "ser", "prefer": {"product_type": ["ser de fata", "ser de par"]}, "exclude": {}, "category": null, "concerns": null, "features": ["hyperpigmentation"], "price_max": null, "sort_mode": "relevance", "price_band": null, "rank_terms": [], "product_name": null, "in_stock_only": false, "variant_label": null}
+  gaps=[] disclosures=[] dropped=0
+  CARDS: [('SKINTEGRA Superba C', 145.0), ('MEDICUBE Deep Vita C Ampoule 2.0', 220.0), ('PURITO Pure Vitamin C Serum', 120.0), ('JUMISO Niacinamide 20 Serum', 110.0), ('PURITO Azelaic Acid 10 Kojic Teatree', 130.0), ('HARUHARU WONDER Centella 4% TXA Dark Spot Go Away Serum ser ', 110.0)]
+  BOT: Am selectat seruri potrivite pentru pete, cu formule pe bază de vitamina C, niacinamidă sau acid tranexamic. Unele se folosesc dimineața, iar altele dimineața și seara.  1. SKINTEGRA Superba C, 145,00 lei  ⭐5.0  • Top Favorit    Pentru pete și ten sensibil, vitamina C și E susțin tonusul uniform, se folosește dimineața. 2. MEDICUBE Deep Vita C Ampoule 2.0, 220,00 lei  ⭐4.9  • Top Favorit    Dacă vrei aplicare dimineața și seara, vitamina C pură și colagenul susțin luminozitatea fără senzație lipicioasă. 3. PURITO Pure Vitamin C Serum, 120,00 lei  ⭐4.9  • Top Favorit    Pentru ten tern și pete, acidul ascorbic și hialuronatul de sodiu susțin iluminarea și hidratarea. 4. JUMISO Niacinamide 20 Serum, 110,00 lei  ⭐5.0    Potrivit pentru urme de imperfecțiuni, cu niacinamidă și acid tranexamic pentru pete pigmentare. 5. PURITO Azelaic Acid 10 Kojic Teatree, 130,00 lei  ⭐5.0    Când te preocup…
+
+--- T4 [3a72b567-8a18-44cc-abcf-0971be48e872] «cel mai bine cotat»
+  EXPECT: serul pentru pete cu cel mai bun rating
+  kernel_turn: {'plans': 1, 'served': True, 'turn_id': '3a72b567-8a18-44cc-abcf-0971be48e872', 'executor': 'search', 'fallback_reason': None}
+  interpretation: outcome=ok prompt=interpret.v4.1
+  acts=[('find', 'cel mai bine cotat')] thread=continue
+  changes=[]
+  checked=[]
+  refs=[('extreme', 'not_found', 'shown_now', 'not_orderable', 0)]
+  rejected=[]
+  state_after: {"needs": ["concerns contains hyperpigmentation"], "shown": ["d1773281-0129-4170-8c6e-5946c90ec368", "99fee655-34a7-48d0-b20a-5e2e325007fb", "67e1899c-c984-48e7-9fa5-88ff6657c5cd", "4a5ecb80-1928-4854-9b33-e96145daa98e", "1f4b6858-7393-4176-a786-9268b101b83e", "1aa0e802-6090-4b84-b21a-939267ff0882"], "topic": null, "recent": [["10364d12-082f-43dd-98fb-4358d9fde24e", "63f54a28-2766-445b-a80b-606e21288722", "e01bae4e-181f-4a24-8165-31f9aa5bce15", "2c0233d0-29b8-45c4-8d49-c8070ae7d662", "0290ad66-13ed-42e2-aa6a-f78c02dc0a6f", "042ea9cd-b399-43d4-8ac8-8b9f6d8c337b"], ["0ff525e4-c726-4298-bbf1-e36c61f604c6", "2da4834e-b593-4cf8-9f9c-eb396c5f357d", "198ad2c4-f5b1-4379-95ba-e2620899204f", "a857a196
+  ambiguity=act reason=clear q=None
+  executor=search plans=[('search', 0, None)] args={"brand": null, "limit": 6, "query": "ser", "prefer": {"product_type": ["ser de fata", "ser de par"]}, "exclude": {}, "category": null, "concerns": null, "features": ["hyperpigmentation"], "price_max": null, "sort_mode": "relevance", "price_band": null, "rank_terms": [], "product_name": null, "in_stock_only": false, "variant_label": null}
+  gaps=[] disclosures=[] dropped=0
+  CARDS: [('SKIN1004 Madagascar Centella Ampoule', 120.0), ('NATURE REPUBLIC Vitapair C Dark Spot Serum', 140.0), ('Dear Klairs Vita C Vitamin Drop', 120.0), ('ARENCIA Fresh Red Smoothie Serum 30', 135.0), ("IT'S SKIN Dr. Savers Vita Glow Serum", 60.0)]
+  BOT: Pentru calmare și barieră cutanată se remarcă SKIN1004 Madagascar Centella Ampoule, iar pentru pete și luminozitate ai opțiuni cu vitamina C sau niacinamidă.  1. SKIN1004 Madagascar Centella Ampoule, 120,00 lei  ⭐5.0  • Top Favorit    Pentru roșeață și confortul barierei, cu centella și hidratare pentru rutina zilnică. 2. NATURE REPUBLIC Vitapair C Dark Spot Serum, 140,00 lei  ⭐5.0    Potrivit pentru pete și ten tern, cu vitamina C și niacinamidă pentru ton mai uniform. 3. Dear Klairs Vita C Vitamin Drop, 120,00 lei  ⭐5.0  • Top Favorit    Când tenul pare obosit, vitamina C și centella susțin luminozitatea. 4. ARENCIA Fresh Red Smoothie Serum 30, 135,00 lei  ⭐5.0    Pentru ten uscat, niacinamida și colagenul solubil susțin hidratarea și luminozitatea. 5. IT'S SKIN Dr. Savers Vita Glow Serum, 60,00 lei  ⭐5.0    Dacă te preocupă porii dilatați, niacinamida și derivații vitaminei C susțin u…
+
+  HTTP: [(200, 12.7), (200, 14.9), (200, 13.0), (200, 13.1)]
+
+######## k14_pregnancy_kernel  conv=2660ea0b-0d21-4d01-804c-6b153e486b07  focus: siguranta NX-173/NX-367 pe calea kernelului: excluderea se spune, modelul n-o neaga
+
+--- T1 [2f7dd8f1-1492-4ac6-9eed-587bec8ced96] «sunt insarcinata, ce crema anti-rid pot folosi?»
+  EXPECT: fraza garantata de siguranta + creme anti_aging fara retinoizi
+  kernel_turn: {'plans': 1, 'served': True, 'turn_id': '2f7dd8f1-1492-4ac6-9eed-587bec8ced96', 'executor': 'search', 'fallback_reason': None}
+  interpretation: outcome=ok prompt=interpret.v4.1
+  acts=[('find', 'ce crema anti-rid pot folosi?')] thread=continue
+  changes=[('set', 'product_type', 'eq', 'crema de fata', None, 'crema'), ('set', 'concerns', 'eq', 'anti_aging', None, 'anti-rid'), ('set', 'unmapped', 'eq', 'sunt insarcinata', None, 'sunt insarcinata')]
+  checked=[('product_type', 'crema de fata', 'implicit', 'soft', None), ('concerns', 'anti_aging', 'implicit', 'soft', None), ('unmapped', 'sunt insarcinata', 'implicit', 'soft', None)]
+  rejected=[]
+  state_after: {"needs": ["concerns contains anti_aging", "unmapped contains sunt insarcinata"], "shown": [], "topic": null, "umbrella": ["crema de fata", "crema contur ochi", "crema coloranta de fata", "crema de corp", "crema de maini", "crema de ochi", "crema de par", "crema de curatare"]}
+  ambiguity=act reason=clear q=None
+  executor=search plans=[('search', 0, None)] args={"brand": null, "limit": 6, "query": "crema", "prefer": {"concerns": ["anti_aging"], "product_type": ["crema de fata", "crema contur ochi", "crema coloranta de fata", "crema de corp", "crema de maini", "crema de ochi", "crema de par", "crema de curatare"]}, "exclude": {}, "category": null, "concerns": null, "features": null, "price_max": null, "sort_mode": "relevance", "price_band": null, "rank_terms": ["sunt insarcinata"], "product_name": null, "in_stock_only": false, "variant_label": null}
+  gaps=[] disclosures=[] dropped=0
+  CARDS: [('COSRX Advanced Snail 92 All in one', 136.0)]
+  BOT: Țin cont că ești însărcinată și am lăsat deoparte opțiunile cu retinoizi. Nu pot confirma doar din datele catalogului că un produs e potrivit în această situație, așa că verifică alegerea cu medicul sau farmacistul.  Dintre acestea, COSRX Advanced Snail 92 este crema de față potrivită pentru riduri și fermitate, cu mucină de melc.  1. COSRX Advanced Snail 92 All in one, 136,00 lei  ⭐5.0  • Top Favorit    Potrivită pentru rutina de dimineață și seară, cu mucină de melc pentru hidratare și confortul pielii.  Îți mai pot arăta: Ce spun recenziile despre COSRX Advanced Snail 92 All in · Trimite-mi linkul la COSRX Advanced Snail 92 All in one · Arata-mi ce ai la Ten · Arata-mi ce ai la Machiaj
+
+--- T2 [5e8d103e-56e2-4b24-9297-c092fe55d8f2] «si un ser cu vitamina C?»
+  EXPECT: seruri cu vitamina C, filtrate de registrul de siguranta
+  kernel_turn: {'plans': 1, 'served': True, 'turn_id': '5e8d103e-56e2-4b24-9297-c092fe55d8f2', 'executor': 'search', 'fallback_reason': None}
+  interpretation: outcome=ok prompt=interpret.v4.1
+  acts=[('find', 'un ser cu vitamina C')] thread=continue
+  changes=[('set', 'product_type', 'eq', 'ser de fata', None, 'un ser'), ('set', 'key_ingredients', 'contains', 'vitamina c', None, 'vitamina C')]
+  checked=[('product_type', 'ser de fata', 'implicit', 'soft', None), ('key_ingredients', 'vitamina c', 'explicit', 'soft', None)]
+  rejected=[]
+  state_after: {"needs": ["key_ingredients contains vitamina c"], "shown": ["2ac119f4-fd64-4587-9ada-5ced61696f9e"], "topic": null, "parked": {"needs": ["concerns contains anti_aging", "unmapped contains sunt insarcinata"], "shown": ["2ac119f4-fd64-4587-9ada-5ced61696f9e"], "topic": null}, "umbrella": ["ser de fata", "ser de par"]}
+  ambiguity=act reason=clear q=None
+  executor=search plans=[('search', 0, None)] args={"brand": null, "limit": 6, "query": "ser", "prefer": {"product_type": ["ser de fata", "ser de par"]}, "exclude": {}, "category": null, "concerns": null, "features": ["vitamina c"], "price_max": null, "sort_mode": "relevance", "price_band": null, "rank_terms": [], "product_name": null, "in_stock_only": false, "variant_label": null}
+  gaps=[] disclosures=[] dropped=0
+  CARDS: [('SKINTEGRA Superba C', 145.0), ('HARUHARU WONDER Centella 4% TXA Dark Spot Go Away Serum ser ', 110.0), ('TIMELESS SKIN CARE Hyaluronic Acid + Vitamin C Serum', 300.0)]
+  BOT: Țin cont că ești însărcinată și am lăsat deoparte opțiunile cu retinoizi. Nu pot confirma doar din datele catalogului că un produs e potrivit în această situație, așa că verifică alegerea cu medicul sau farmacistul.  Pentru serurile cu vitamina C, SKINTEGRA Superba C este pentru dimineață și ten sensibil, HARUHARU WONDER se folosește dimineața și seara, iar TIMELESS adaugă acid hialuronic pentru hidratare.  1. SKINTEGRA Superba C, 145,00 lei  ⭐5.0  • Top Favorit    Pentru dimineață și ten sensibil, cu vitamina C și E pentru un tonus mai uniform. 2. HARUHARU WONDER Centella 4% TXA Dark Spot Go Away Serum ser de fata, 110,00 lei  ⭐4.9    Pentru pete pigmentare și roșeață, cu niacinamidă și extract de centella. 3. TIMELESS SKIN CARE Hyaluronic Acid + Vitamin C Serum, 300,00 lei  ⭐5.0  • Voucher -49%    Dacă vrei hidratare dimineața și seara, acidul hialuronic completează vitamina C.  Îți ma…
+
+--- T3 [07a507fd-9d8c-49e6-a651-7b619db13bc3] «dar unul cu retinal?»
+  EXPECT: excluderea spusa (nu «nu avem retinal in catalog»), trimitere la medic/farmacist, alternative
+  kernel_turn: {'plans': 1, 'served': True, 'turn_id': '07a507fd-9d8c-49e6-a651-7b619db13bc3', 'executor': 'search', 'fallback_reason': None}
+  interpretation: outcome=ok prompt=interpret.v4.1
+  acts=[('find', 'dar unul cu retinal?')] thread=continue
+  changes=[('set', 'key_ingredients', 'contains', 'retinal', None, 'cu retinal')]
+  checked=[('key_ingredients', 'retinal', 'explicit', 'soft', None)]
+  rejected=[]
+  state_after: {"needs": ["key_ingredients contains retinal", "key_ingredients contains vitamina c"], "shown": ["d1773281-0129-4170-8c6e-5946c90ec368", "1aa0e802-6090-4b84-b21a-939267ff0882", "6de01f2f-93bd-4142-9aa8-8eb63631af59"], "topic": null, "parked": {"needs": ["concerns contains anti_aging", "unmapped contains sunt insarcinata"], "shown": ["2ac119f4-fd64-4587-9ada-5ced61696f9e"], "topic": null}, "recent": [["2ac119f4-fd64-4587-9ada-5ced61696f9e"]], "umbrella": ["ser de fata", "ser de par"]}
+  ambiguity=act reason=clear q=None
+  executor=search plans=[('search', 0, None)] args={"brand": null, "limit": 6, "query": "ser", "prefer": {"product_type": ["ser de fata", "ser de par"]}, "exclude": {}, "category": null, "concerns": null, "features": ["vitamina c", "retinal"], "price_max": null, "sort_mode": "relevance", "price_band": null, "rank_terms": [], "product_name": null, "in_stock_only": false, "variant_label": null}
+  gaps=[] disclosures=[] dropped=0
+  CARDS: []
+  BOT: Țin cont că ești însărcinată și am lăsat deoparte opțiunile cu retinoizi. Nu pot confirma doar din datele catalogului că un produs e potrivit în această situație, așa că verifică alegerea cu medicul sau farmacistul.  În produsele afișate nu găsesc un ser cu retinal.
+
+  HTTP: [(200, 12.0), (200, 13.4), (200, 8.4)]
+
+
+==== SUMMARY (conv, turn, served, executor, fallback)
+('k3_ordinal_zoom', 1, True, 'search', None)
+('k3_ordinal_zoom', 2, None, None, None)
+('k3_ordinal_zoom', 3, True, 'ask', None)
+('k3_ordinal_zoom', 4, True, 'cart', None)
+('k2_retract_budget', 1, True, 'search', None)
+('k2_retract_budget', 2, True, 'search', None)
+('k2_retract_budget', 3, True, 'search', None)
+('k2_retract_budget', 4, True, 'detail', None)
+('k1_park_resume', 1, True, 'search', None)
+('k1_park_resume', 2, True, 'search', None)
+('k1_park_resume', 3, True, 'search', None)
+('k1_park_resume', 4, True, 'search', None)
+('k1_park_resume', 5, None, None, None)
+('k5_umbrella', 1, True, 'search', None)
+('k5_umbrella', 2, True, 'search', None)
+('k5_umbrella', 3, True, 'search', None)
+('k5_umbrella', 4, True, 'ask', None)
+('k4_price_band', 1, True, 'search', None)
+('k4_price_band', 2, True, 'search', None)
+('k4_price_band', 3, True, 'search', None)
+('k4_price_band', 4, True, 'search', None)
+('k6_named_cart', 1, True, 'search', None)
+('k6_named_cart', 2, True, 'ask', None)
+('k6_named_cart', 3, True, 'ask', None)
+('k6_named_cart', 4, True, 'search', None)
+('k6_named_cart', 5, True, 'delegate', None)
+('k7_multi_act', 1, False, 'none', None)
+('k7_multi_act', 2, True, 'search', None)
+('k7_multi_act', 3, True, 'delegate', None)
+('k9_aside_pagination', 1, True, 'search', None)
+('k9_aside_pagination', 2, True, 'faq', None)
+('k9_aside_pagination', 3, None, None, None)
+('k9_aside_pagination', 4, True, 'ask', None)
+('k8_correction', 1, True, 'search', None)
+('k8_correction', 2, True, 'search', None)
+('k8_correction', 3, True, 'search', None)
+('k8_correction', 4, True, 'detail', None)
+('k10_routine', 1, True, 'search', None)
+('k10_routine', 2, True, 'search', None)
+('k10_routine', 3, True, 'search', None)
+('k11_compare_verdict', 1, True, 'search', None)
+('k11_compare_verdict', 2, True, 'detail', None)
+('k11_compare_verdict', 3, True, 'compare', None)
+('k13_typos_eye', 1, True, 'search', None)
+('k13_typos_eye', 2, True, 'detail', None)
+('k13_typos_eye', 3, True, 'search', None)
+('k13_typos_eye', 4, False, 'none', None)
+('k12_vague_clarify', 1, True, 'search', None)
+('k12_vague_clarify', 2, True, 'search', None)
+('k12_vague_clarify', 3, True, 'search', None)
+('k12_vague_clarify', 4, True, 'search', None)
+('k14_pregnancy_kernel', 1, True, 'search', None)
+('k14_pregnancy_kernel', 2, True, 'search', None)
+('k14_pregnancy_kernel', 3, True, 'search', None)

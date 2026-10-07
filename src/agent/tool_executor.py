@@ -15,6 +15,7 @@ emite din `execute` (cu `turn_id`, P10); args-urile sunt whitelisted (`_safe_too
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Collection
 from dataclasses import dataclass, field
 from time import perf_counter
 from typing import TYPE_CHECKING, Any
@@ -26,7 +27,7 @@ from src.models import TurnContext
 from src.observability import hooks, turn_latency
 from src.runtime import deadline, turn_budget
 from src.safety.policy import SafetyPolicy
-from src.tools.base import ARGS_REJECTED, CATALOG_READ_TOOLS, run_tool
+from src.tools.base import ARGS_REJECTED, CATALOG_READ_TOOLS, STORE_READ_TOOLS, run_tool
 
 if TYPE_CHECKING:
     from src.worker.runner import PipelineDeps
@@ -144,6 +145,9 @@ class ToolRun:
     # catalogul (`read_catalog`), iar procesorul dacă turul a fost o paranteză care nu trebuie să
     # golească sesiunea de căutare.
     called: list[str] = field(default_factory=list)
+    # NX-372 (recenzia): câte apeluri la o unealtă de reguli (`STORE_READ_TOOLS`) au REUȘIT. Un
+    # `faq_lookup` picat e tot în `called`, dar n-a citit nimic: fraza de răspuns diferă.
+    store_reads_ok: int = 0
     failed_commerce: set[str] = field(default_factory=set)  # NX-137: cart/checkout eșuate
     checkout_url: str | None = None  # NX-137: linkul REAL de checkout creat în acest tur → CTA
     # NX-237: ultimul snapshot al coșului CANONIC (CartService, sub flag). Plannerul citește de
@@ -179,6 +183,19 @@ class ToolRun:
         return bool(self.grounded_sources) or any(
             name not in CATALOG_READ_TOOLS for name in self.called
         )
+
+    @property
+    def read_store_only(self) -> bool:
+        """NX-372: turul a chemat cel puțin o unealtă și TOATE citesc regulile magazinului
+        (`STORE_READ_TOOLS`). Mai îngust decât `read_beyond_catalog`, deliberat: o clarificare, o
+        comandă sau o mutație picată nu sunt întrebări despre regulile magazinului."""
+        return bool(self.called) and all(name in STORE_READ_TOOLS for name in self.called)
+
+    @property
+    def store_read_ok(self) -> bool:
+        """NX-372 (recenzia): măcar o citire a regulilor a reușit. Fals pe un tur de magazin în care
+        toate apelurile au picat: atunci regulile nu au fost citite, deci nu pot „lipsi" din ele."""
+        return self.store_reads_ok > 0
 
     def _tool_gate(self) -> tool_budget.ToolGate:
         if self._gate is None:
@@ -292,7 +309,9 @@ class ToolRun:
             if seq is not None:
                 await self._finish_ticket(seq)
 
-    async def execute_planned(self, args: Any, *, exclude_shown: bool = False) -> Any:
+    async def execute_planned(
+        self, args: Any, *, exclude_shown: bool = False, seen_extra: Collection[str] = ()
+    ) -> Any:
         """NX-336 PR C: căutarea PLANULUI kernelului (`SearchArgs` scris de planner, I2), cu
         aceeași acumulare ca o unealtă chemată de model: plasa de siguranță, `retrieved`,
         relevanța, `called`, linkurile și sumele grounded, `state_patch` (sesiunea de căutare) și
@@ -304,9 +323,10 @@ class ToolRun:
         started = perf_counter()
         with turn_latency.span("tools"):
             # NX-370: argumentul pleacă doar când e cerut, ca semnătura de azi să rămână apelabilă
-            result = await run_planned_search(
-                self.ctx, self.deps, args, **({"exclude_shown": True} if exclude_shown else {})
-            )
+            extra: dict[str, Any] = {"exclude_shown": True} if exclude_shown else {}
+            if seen_extra:  # NX-378: doar când e cerut, ca semnătura de azi să rămână apelabilă
+                extra["seen_extra"] = tuple(seen_extra)
+            result = await run_planned_search(self.ctx, self.deps, args, **extra)
         return self._absorb_planned("search_products", result, args, started)
 
     async def execute_planned_routine(
@@ -401,6 +421,8 @@ class ToolRun:
         self.grounded_prices.update(result.prices)
         self.grounded_sources.extend(getattr(result, "sources", None) or ())  # NX-346
         self.grounded_questions.update(getattr(result, "source_questions", None) or {})  # NX-369
+        if name in STORE_READ_TOOLS and result.ok:
+            self.store_reads_ok += 1  # NX-372: o citire de reguli REUȘITĂ, nu doar chemată
         if result.state_patch:  # NX-79: cart_add → mutație de state (persistată de processor)
             ctx.state_patch.update(result.state_patch)
         # NX-237: coșul canonic al turului (sub flag). `getattr` — testele duck-type-uiesc
