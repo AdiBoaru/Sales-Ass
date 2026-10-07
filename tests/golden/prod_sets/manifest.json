@@ -15,5 +15,11 @@
   "conversations": 14,
   "messages": 54,
   "about": "seturi complexe pe mecanismele kernelului (kernel.v6.0), scrise pe 2026-10-01 dupa aprinderea kernelului 100% pe sole-ro; rulat pe productie"
+ },
+ "fresh-2026-10-07.json": {
+  "sha256": "201a2554c9b49c7066ce81d0432a561eca89e562814415373c46cca8ed7a0e3b",
+  "conversations": 12,
+  "messages": 49,
+  "frozen": "2026-10-07, scris de un agent fără acces la cod, analize sau seturile anterioare; are `expect` per tur; ținta: release 419c73a (NX-379)"
  }
 }
