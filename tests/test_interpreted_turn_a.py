@@ -763,7 +763,10 @@ def test_the_trace_is_redacted_before_it_is_stored():
     mail, phone = "ana.pop@example.com", "0722 123 456"
     interp = TurnInterpretation(
         thread="continue",
-        acts=[Act(kind="find", targets=["r1"], query=f"scrie-mi la {mail}")],
+        acts=[
+            Act(kind="find", targets=["r1"], query=f"scrie-mi la {mail}"),
+            Act(kind="detail", targets=["r1"], query=None, question=f"ajunge la {phone}?"),
+        ],
         changes=[
             StateChange(
                 op="add",

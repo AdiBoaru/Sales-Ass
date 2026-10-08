@@ -55,8 +55,29 @@ def test_the_loader_carries_the_notes_into_the_pack():
     )
     pack = load_domain_pack(biz)
     assert interpret_notes(pack, "ro-RO") == ("o notiță",)
-    assert interpret_notes(pack, "en") == ()
     assert interpret_notes(None, "ro") == ()
+
+
+def test_notes_describe_the_catalog_so_a_turn_in_another_language_keeps_them():
+    """Recenzia NX-380: notițele sunt despre catalog; un tur în engleză nu le pierde. Cu mai multe
+    limbi declarate și niciuna potrivită, nu se ghicește."""
+    one = BusinessConfig(
+        id="b",
+        slug="s",
+        name="n",
+        vertical="ecommerce",
+        settings={"domain_pack": {"interpret_notes": {"ro": ["o notiță"]}}},
+    )
+    assert interpret_notes(load_domain_pack(one), "en") == ("o notiță",)
+    two = BusinessConfig(
+        id="b",
+        slug="s",
+        name="n",
+        vertical="ecommerce",
+        settings={"domain_pack": {"interpret_notes": {"ro": ["ro"], "en": ["en"]}}},
+    )
+    assert interpret_notes(load_domain_pack(two), "hu") == ()
+    assert interpret_notes(load_domain_pack(two), "en-GB") == ("en",)
 
 
 def test_the_sole_pack_notes_load_whole():

@@ -83,6 +83,11 @@ def interpret_notes(pack: object | None, locale: str | None) -> tuple[str, ...]:
     table = getattr(pack, "interpret_notes", None) or {}
     lang = (locale or "").strip().lower()
     notes = table.get(lang) or table.get(lang.split("-")[0]) or ()
+    if not notes and len(table) == 1:
+        # Notițele descriu CATALOGUL, nu limba turului (recenzia NX-380): un tur în altă limbă
+        # decât cea a notițelor le primește pe singurele declarate, altfel le-ar pierde exact
+        # pe turele în care clientul nu folosește cuvintele meniului.
+        notes = next(iter(table.values()))
     return tuple(n for n in notes if isinstance(n, str) and n.strip())
 
 

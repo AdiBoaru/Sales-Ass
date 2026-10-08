@@ -147,7 +147,7 @@ def first_divergence(expected: dict[str, Any], actual: KernelTrace) -> Divergenc
         if name == "interpretation" and isinstance(label, dict):
             # NX-380: o etichetă scrisă înaintea unui câmp aditiv (`Act.question`) se compară în
             # forma modelului, cu default-urile lui, nu ca dicționar căruia îi lipsește cheia.
-            label = TurnInterpretation.model_validate(label)
+            label = TurnInterpretation.model_validate(label, strict=True)
         want, got = _plain(label), _plain(getattr(actual, attr))
         if name in _DERIVED:
             want, got = _without(want, _DERIVED[name]), _without(got, _DERIVED[name])
@@ -250,7 +250,13 @@ def _redacted(trace: KernelTrace, redact: Callable[[str], str]) -> KernelTrace:
     interpretation = i.model_copy(
         update={
             "acts": [
-                a.model_copy(update={"query": text(a.query), "targets": deep(a.targets)})
+                a.model_copy(
+                    update={
+                        "query": text(a.query),
+                        "question": text(a.question),  # NX-380: textul clientului
+                        "targets": deep(a.targets),
+                    }
+                )
                 for a in i.acts
             ],
             "changes": [change(c) for c in i.changes],

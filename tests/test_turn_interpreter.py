@@ -649,7 +649,7 @@ V5_RULES = {
     "store_info = regula comună tuturor produselor": "a rule that is the same for every item",
     "question pe detail/compare": "question: for detail and compare",
     "orice tip spus devine schimbare": "never has empty changes",
-    "alt fel de produs = set, nu add": "is op set on category and product_type, never add",
+    "alt fel de produs = set, nu add": "is op set on the dimensions the customer names for it",
     "partea corpului numește raftul": "the part or place the items are used on is",
     "umbrela de tip": "write the first listed code with that head",
     "forma de bază": "in base form (singular, no article)",
@@ -746,3 +746,10 @@ def test_an_interpretation_without_question_still_parses():
         }
     )
     assert interp.acts[0].question is None
+
+
+def test_store_notes_change_the_snapshot_id():
+    """Recenzia NX-380: turele cu și fără notițe trebuie să se despartă în raport (R2)."""
+    plain = _with_notes("sole-ro", {})
+    noted = _with_notes("sole-ro", {"ro": ("o notiță",)})
+    assert ic.snapshot_id(plain.pack, plain.vocab) != ic.snapshot_id(noted.pack, noted.vocab)

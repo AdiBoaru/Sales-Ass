@@ -295,6 +295,10 @@ def snapshot_id(pack: object | None, vocab: CatalogVocabulary | None) -> str:
         "searchable": sorted(str(k) for k in (getattr(pack, "searchable_facets", ()) or ())),
         "units": _units_doc(getattr(pack, "units", None)),
         "vocabulary": dimensions,
+        # NX-380: notițele de magazin sunt în prompt, deci turele cu și fără ele se despart pe id
+        "notes": {
+            str(k): list(v) for k, v in (getattr(pack, "interpret_notes", None) or {}).items()
+        },
     }
     raw = json.dumps(doc, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]

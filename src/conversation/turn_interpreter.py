@@ -277,8 +277,8 @@ item that was not shown (with a name reference).
   show_more: more of the same results.
   detail: a question about one item on screen, just discussed or named (its price, stock, \
 contents, size, how to use it, why), with a reference to that item.
-  compare: a question about two or more items; "which of them", "both" or "all" point at every \
-item meant.
+  compare: a question that sets two or more items against each other; "both" or "all" point at \
+every item meant.
   link: the link to items named by references.
   cart: only when the customer explicitly asks to buy or to add an item to this conversation's \
 cart; otherwise the act the rest of the sentence asks for. Asking about or changing an order \
@@ -299,9 +299,9 @@ value when one names it, otherwise the customer's words; a find for a kind of it
 names never has empty changes.
   op set: one value; add: one more value; remove: drop the handle in target; replace: the handle \
 in target gets a new value; clear: target "topic" drops the current subject, "all" drops \
-everything. A request for a different kind of item, or for another person, is op set on category \
-and product_type, never add; a requirement stated only for the previous item or person is not \
-repeated.
+everything. A request for a different kind of item, or for another person, is op set on the \
+dimensions the customer names for it, never add; a requirement stated only for the previous item \
+or person is not repeated.
   dimension: one from {dimensions_header}, "category" for a shelf from {shelves_header} (value = \
 the shelf key), "price" for money, "unmapped" only when no dimension fits. A shelf the customer \
 names as the kind of item they want or ask about, also inside a question, is a set on category \
