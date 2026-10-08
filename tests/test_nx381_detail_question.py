@@ -294,3 +294,95 @@ def test_the_plan_question_is_redacted_in_the_trace():
     )
     dumped = stored.model_dump_json()
     assert phone not in dumped and "[telefon]" in dumped
+
+
+# --- cap-coadă: agent_stage REAL (interpretare → poartă → plan → executor → răspuns → trace) ------
+
+
+async def test_end_to_end_a_detail_question_is_answered_through_the_real_stage(
+    monkeypatch, electronics
+):
+    """Lanțul întreg pe catalogul de fixture: interpretarea (prin `LLMClient.complete_schema_raw`
+    peste un transport fals) poartă `question`, resolverul ține ordinalul, plannerul duce
+    întrebarea pe plan, executorul răspunde din fișă, iar traceul o păstrează (redactată)."""
+    from src.conversation.interpretation import TurnInterpretation
+    from src.conversation.state_v2 import ConversationStateV2, DisplayedRef, References
+
+    ids = list(electronics.items)[:3]
+    shown = tuple(
+        DisplayedRef(p, electronics.items[p]["name"], float(electronics.items[p]["price"]))
+        for p in ids
+    )
+    state = ConversationStateV2(references=References(displayed_products=shown))
+    interp = TurnInterpretation.model_validate(
+        {
+            "thread": "continue",
+            "acts": [
+                {"kind": "detail", "targets": ["r1"], "query": None, "question": "e rezistent?"}
+            ],
+            "changes": [],
+            "references": [
+                {
+                    "id": "r1",
+                    "text": "primul",
+                    "kind": "ordinal",
+                    "ordinal": 1,
+                    "name": None,
+                    "dimension": None,
+                    "value": None,
+                    "direction": None,
+                }
+            ],
+            "ambiguities": [],
+            "corrects_previous_turn": False,
+        }
+    )
+
+    class LLM(sh.StageLLM):
+        answers: list[str] = []
+
+        async def complete(self, system, user, **kw):
+            self.answers.append(user)
+            return "Fișa nu spune dacă e rezistent la apă."
+
+    llm = LLM(interp)
+    ctx = sh.build_ctx(electronics, state, "primul e rezistent?")
+    run = await sh.run_turn(monkeypatch, electronics, ctx, llm)
+    assert run.branch_result is True, [e.properties for e in ctx.events if e.type == "kernel_turn"]
+    assert ctx.reply.text == "Fișa nu spune dacă e rezistent la apă."
+    assert [p["product_id"] for p in ctx.reply.products] == [ids[0]]
+    assert len(llm.answers) == 1 and "CUSTOMER QUESTION\ne rezistent?" in llm.answers[0]
+    [turn] = [e.properties for e in ctx.events if e.type == "kernel_turn"]
+    assert turn["served"] is True and turn["executor"] == "detail"
+    assert ctx.trace["kernel"]["plan"]["question"] == "e rezistent?"
+
+
+async def test_end_to_end_the_wire_request_on_sole_carries_v5_the_notes_and_the_schema(monkeypatch):
+    """Ce pleacă EFECTIV spre modelul de interpretare pe pachetul SOLE (seed-ul, cu notițele):
+    instrucțiunile v5, blocul STORE NOTES, meniul de tipuri peste plafonul vechi și schema strictă
+    cu `question` obligatoriu."""
+    cat = sh.catalog("sole-ro")
+    sh.install(monkeypatch, cat, executors=True)
+    from src.conversation.interpretation import TurnInterpretation
+    from src.conversation.state_v2 import ConversationStateV2
+
+    interp = TurnInterpretation.model_validate(
+        {
+            "thread": "continue",
+            "acts": [{"kind": "chitchat", "targets": [], "query": None, "question": None}],
+            "changes": [],
+            "references": [],
+            "ambiguities": [],
+            "corrects_previous_turn": False,
+        }
+    )
+    llm = sh.StageLLM(interp)
+    ctx = sh.build_ctx(cat, ConversationStateV2(), "salut")
+    await sh.run_turn(monkeypatch, cat, ctx, llm)
+    [request] = llm.transport.calls
+    system = request["messages"][0]["content"]
+    assert "question: for detail and compare" in system
+    assert "STORE NOTES" in system and "«balsam» alone is a hair conditioner" in system
+    schema = request["response_format"]["json_schema"]["schema"]
+    assert "question" in schema["$defs"]["Act"]["required"]
+    assert "rating" in schema["$defs"]["Reference"]["properties"]["dimension"]["anyOf"][0]["enum"]
