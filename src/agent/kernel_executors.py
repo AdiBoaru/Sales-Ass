@@ -571,14 +571,15 @@ async def _composed_no_results(ctx: TurnContext, deps: PipelineDeps, plan: TurnP
     from src.worker.context import conversation_transcript  # noqa: PLC0415
 
     args = plan.search_args
+    # cuvintele cererii, nu cheile de catalog (un cod de raft sau de nevoie ar ajunge la client)
     searched = {
         k: v
         for k, v in {
             "words": args.query,
-            "shelf": args.category,
-            "needs": list(args.concerns or []) + list(args.features or []),
             "brand": args.brand,
             "price_max": args.price_max,
+            "cheaper_half_only": True if args.price_band else None,
+            "excluded": sorted({str(x) for vals in (args.exclude or {}).values() for x in vals}),
         }.items()
         if v not in (None, "", [])
     }

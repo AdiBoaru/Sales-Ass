@@ -61,12 +61,16 @@ COMPOSER_PROMPT_VERSION = "composer.v1"
 COMPOSE_TIMEOUT_S = 20.0
 #: Cât de lung poate fi un motiv de card și câte chips cere schema.
 MAX_SUGGESTIONS = 5
+#: Sarcinile pe care sfatul general de folosire are sens (despre produse).
+_ADVICE_TASKS = frozenset({"detail", "recommend", "compare", "not_found"})
 #: Motivele porții (vocabular închis, evenimentul `composer{outcome, reason}`).
 REASONS = (
     *detail_answer.REASONS,
     "unknown_handle",
     "obligation_missing",
     "invalid_reply",
+    "ungrounded_rule",
+    "not_a_question",
 )
 
 CORE = """\
@@ -173,15 +177,16 @@ TASKS: Mapping[str, str] = {
         "you would take for which kind of person."
     ),
     "store_info": (
-        "TASK store_info: answer from STORE RULES. Numbers, amounts and deadlines exactly as "
-        "written there. What the rules do not cover, say briefly that you do not know; do not ask "
-        "the customer to rephrase."
+        "TASK store_info: answer from STORE RULES. A sentence that gives a number from a rule "
+        "(an amount, a threshold, a number of days or hours) is copied from that rule word for "
+        "word, as one whole sentence; the rest you say in your own words. What the rules do not "
+        "cover, say briefly that you do not know; do not ask the customer to rephrase."
     ),
     "ask": (
         "TASK ask: you need one answer before acting. The obligation `ask` carries the question "
         "code needs answered, with its options; the candidate products, if any, are shown as "
         "cards. Ask it in one short, natural sentence that names the options (short product names) "
-        "so the customer can answer in a word. No other content."
+        "so the customer can answer in a word, in the order they are given. No other content."
     ),
     "not_found": (
         "TASK not_found: the product the customer named is not in the catalog as such. Say so in a "
@@ -191,8 +196,8 @@ TASKS: Mapping[str, str] = {
         "TASK no_results: nothing in the catalog matches what was searched (obligation "
         "`nothing_found`, with what was searched for). Say so plainly and concretely, then offer "
         "one or two ways forward that the customer can take: drop or loosen one requirement, a "
-        "related kind of product, or a different budget. Never say what the store sells in "
-        "general."
+        "related kind of product, or a looser budget (without naming a new amount). Never say "
+        "what the store sells in general, and never claim that a product exists."
     ),
     "cart": (
         "TASK cart: confirm the cart change in one sentence (with the quantity); if it failed, say "
@@ -392,18 +397,33 @@ def _advice_ok(advice: str, products: Sequence[dict[str, Any]]) -> bool:
 
 
 def rule_prices(rules: Sequence[str]) -> frozenset[float]:
-    """Sumele de bani scrise în regulile magazinului (pragul de livrare, costul returului): un
-    răspuns care le redă e întemeiat. Același tipar de sumă ca validatorul (`_PRICE_RE`)."""
-    from src.agent.validator import _PRICE_RE, parse_amount  # noqa: PLC0415
+    """Numerele scrise în regulile magazinului (pragul de livrare, costul returului, capetele unei
+    plaje „între 19,9 și 24,90 lei"): o sumă care le redă e întemeiată ca sumă. Ce regulă o
+    poartă și lângă ce cuvinte o judecă `rule_numbers_ok`."""
+    return frozenset(v for rule in rules for v, _start, _end in _numbers_in(rule))
 
-    out: set[float] = set()
-    for rule in rules:
-        for m in _PRICE_RE.finditer(rule):
-            try:
-                out.add(parse_amount(m.group(1) or m.group(2)))
-            except ValueError:
-                continue
-    return frozenset(out)
+
+def _numbers_in(text: str) -> list[tuple[float, int, int]]:
+    out: list[tuple[float, int, int]] = []
+    for m in re.finditer(r"\d+(?:[.,]\d+)?", text or ""):
+        try:
+            out.append((round(float(m.group().replace(",", ".")), 4), m.start(), m.end()))
+        except ValueError:
+            continue
+    return out
+
+
+def rule_numbers_ok(reply: str, rules: Sequence[str]) -> bool:
+    """Recenzia fazei 2: pe un răspuns despre magazin, o propoziție cu o cifră (sumă, prag, zile,
+    ore) e acceptată doar CITATĂ LITERAL dintr-o regulă (`validator.strip_quoted`, NX-346).
+    Regulile SOLE pun mai multe cifre în aceeași frază («peste 199 lei… pragul scade la 149»), deci
+    o parafrază poate lega o cifră reală de alt sens («gratuită la prima comandă peste 149 lei»,
+    «returul costă 24,90 lei», «14 zile pentru retur»), iar nicio potrivire pe cuvinte nu le
+    deosebește. Propozițiile fără cifre rămân libere, în cuvintele modelului. PUR."""
+    from src.agent.validator import strip_quoted  # noqa: PLC0415
+
+    answers = [r.split(" -> ", 1)[-1] for r in rules]
+    return not _numbers_in(strip_quoted(reply, answers))
 
 
 def _obligation_amounts(obligations: Sequence[Obligation]) -> frozenset[float]:
@@ -414,11 +434,18 @@ def _obligation_amounts(obligations: Sequence[Obligation]) -> frozenset[float]:
         for v in ob.facts.values():
             if isinstance(v, int | float) and not isinstance(v, bool):
                 out.add(float(v))
+            elif isinstance(v, str):
+                out.update(n for n, _s, _e in _numbers_in(v))
     return frozenset(out)
 
 
 def check(
-    composed: Composed, inp: ComposeInput, *, facts: str, units: frozenset[str]
+    composed: Composed,
+    inp: ComposeInput,
+    *,
+    facts: str,
+    units: frozenset[str],
+    locale: str | None = None,
 ) -> tuple[Verdict, Composed]:
     """Poarta compozitorului. PURĂ (în afara flagurilor citite de porțile refolosite). Întoarce
     verdictul și răspunsul CURĂȚAT: propozițiile cu claim medical scoase (P0), sfatul general
@@ -432,7 +459,20 @@ def check(
     if not reply:
         return Verdict(False, "medical_claim"), composed
     grounded = rule_prices(inp.store_rules) | _obligation_amounts(inp.obligations)
-    verdict = detail_answer.check_answer(reply, list(inp.products), facts, units, grounded)
+    verdict = detail_answer.check_answer(
+        reply,
+        list(inp.products),
+        facts,
+        units,
+        grounded,
+        # o regulă a magazinului nu e o afirmație de stoc despre un produs; în rest, fără produse,
+        # orice „avem pe stoc" e nefondat (recenzia fazei 2)
+        check_stock=inp.task != "store_info",
+    )
+    if verdict.ok and inp.task == "store_info" and not rule_numbers_ok(reply, inp.store_rules):
+        verdict = Verdict(False, "ungrounded_rule")
+    if verdict.ok and inp.task == "ask" and "?" not in reply:
+        verdict = Verdict(False, "not_a_question")
     if not verdict.ok:
         return Verdict(False, verdict.reason), composed
     items: list[tuple[str, str]] = []
@@ -444,7 +484,9 @@ def check(
                 return Verdict(False, v.reason), composed
         items.append((pid, reason))
     advice, _ = _without_medical(composed.advice)
-    if advice and not _advice_ok(advice, inp.products):
+    if advice and (inp.task not in _ADVICE_TASKS or not _advice_ok(advice, inp.products)):
+        # sfatul general e despre FOLOSIREA produselor; pe magazin, întrebare sau „n-am găsit" ar fi
+        # un canal pentru o regulă inventată (recenzia fazei 2)
         advice = ""
     missing = {o.code for o in inp.obligations} - set(composed.obligations_met)
     if missing:
@@ -480,7 +522,9 @@ async def compose(
     if composed is None:
         ctx.emit("composer", outcome="rejected", reason="invalid_reply", **emit)
         return None, "invalid_reply"
-    verdict, cleaned = check(composed, inp, facts=facts, units=detail_answer.unit_words(pack))
+    verdict, cleaned = check(
+        composed, inp, facts=facts, units=detail_answer.unit_words(pack), locale=locale
+    )
     if not verdict.ok:
         ctx.emit("composer", outcome="rejected", reason=verdict.reason, **emit)
         return None, verdict.reason

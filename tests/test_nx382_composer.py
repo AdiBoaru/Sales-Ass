@@ -444,10 +444,12 @@ def _faq_plan() -> TurnPlan:
 
 
 async def test_a_store_question_is_answered_from_the_rules_in_the_models_words(store, electronics):
-    llm = ComposeLLM(_reply("Peste 149 lei livrarea e gratuită, altfel costă 15 lei."))
+    llm = ComposeLLM(
+        _reply("Pe scurt, depinde de valoare. Livrarea costa 15 lei, gratuita peste 149 lei.")
+    )
     ctx = _ctx(electronics, "cat e transportul?")
     assert await kx.execute_read_plans(ctx, _deps(llm), _planned(_faq_plan()), _outcome())
-    assert store == [] and ctx.reply.text.startswith("Peste 149 lei")
+    assert store == [] and ctx.reply.text.startswith("Pe scurt, depinde de valoare.")
     assert ctx.reply.cacheable is False
     assert ctx.retrieval.store_only and not ctx.retrieval.catalog_read
     system, user, _ = llm.calls[0]
@@ -556,3 +558,50 @@ async def test_nothing_found_is_said_concretely_by_the_composer(electronics, mon
     assert ctx.reply.text.startswith("N-am găsit un ser sub 100 lei")
     user = llm.calls[0][1]
     assert '"words": "ser pete"' in user and '"price_max": 100' in user
+
+
+# --- recenzia fazei 2 ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Livrarea e gratuită peste 15 lei.",  # suma reală a ALTEI reguli (taxa, nu pragul)
+        "Ai 149 de zile pentru retur.",
+        "Returul e în 30 de zile, cu livrare gratuită peste 149 lei.",  # parafrază cu cifre
+    ],
+)
+def test_a_store_number_must_be_quoted_from_its_rule(text):
+    rules = [f"{r['question']} -> {r['answer']}" for r in RULES]
+    inp = cp.ComposeInput(task="store_info", store_rules=rules)
+    assert _check(_reply(text), inp).reason == "ungrounded_rule"
+    ok = _reply("Da. Poti returna in 30 de zile de la primire.")
+    assert _check(ok, inp).ok
+
+
+def test_general_advice_is_dropped_outside_product_tasks():
+    rules = [f"{r['question']} -> {r['answer']}" for r in RULES]
+    inp = cp.ComposeInput(task="store_info", store_rules=rules)
+    verdict, cleaned = _checked(_reply("Da.", advice="Coletele ajung de obicei în 2 zile."), inp)
+    assert verdict.ok and cleaned.advice == ""
+
+
+def test_a_stock_claim_without_products_is_rejected_outside_store_answers():
+    inp = cp.ComposeInput(task="no_results", obligations=[cp.Obligation("nothing_found")])
+    assert _check(_reply("Avem pe stoc ceva similar.", met=["nothing_found"]), inp).reason == (
+        "stock_claim"
+    )
+
+
+def test_the_gate_question_must_be_a_question():
+    inp = cp.ComposeInput(task="ask", obligations=[cp.Obligation("ask", {"question_to_ask": "?"})])
+    assert _check(_reply("Am pus produsul în coș.", met=["ask"]), inp).reason == "not_a_question"
+    assert _check(_reply("Pe care dintre ele?", met=["ask"]), inp).ok
+
+
+def test_amounts_inside_the_gate_question_are_grounded():
+    inp = cp.ComposeInput(
+        task="ask",
+        obligations=[cp.Obligation("ask", {"question_to_ask": "Sub 100 lei sau peste 200 lei?"})],
+    )
+    assert _check(_reply("Vrei sub 100 de lei sau peste 200 de lei?", met=["ask"]), inp).ok

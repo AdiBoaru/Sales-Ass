@@ -214,18 +214,20 @@ def check_answer(
     facts: str,
     units: frozenset[str] = frozenset({"%"}),
     grounded_prices: frozenset[float] = frozenset(),
+    *,
+    check_stock: bool = True,
 ) -> Verdict:
     """Poarta de adevăr a răspunsului, legată de fișă. PURĂ (în afara flagurilor citite de
     porțile refolosite din `validator`). `product` = produsul răspunsului sau produsele unui text
     care le numește pe mai multe (NX-382): prețul și stocul se judecă pe oricare dintre ele.
     `grounded_prices` = sumele din alte fapte ale turului (pragul de livrare dintr-o regulă a
-    magazinului, NX-382 faza 2). Fără produse, nu există afirmație de stoc de judecat."""
+    magazinului, NX-382 faza 2). `check_stock=False` doar pe un răspuns despre magazin (o regulă
+    nu e o afirmație de stoc); altfel, fără produse, orice afirmație de stoc e nefondată."""
     products = [p for p in (product if isinstance(product, list) else [product]) if p]
     from src.agent.validator import (  # noqa: PLC0415 — ciclul validator ↔ agent
         _links_ok,
         _prices_ok,
         _safety_ok,
-        _stock_claim_ok,
     )
 
     text = (answer or "").strip()
@@ -246,9 +248,19 @@ def check_answer(
         return Verdict(False, "ungrounded_price")
     if not _numbers_grounded(text, facts, units):
         return Verdict(False, "ungrounded_number")
-    if products and not _stock_claim_ok(text, products):
+    if check_stock and _unfounded_stock_claim(text, products):
         return Verdict(False, "stock_claim")
     return Verdict(True)
+
+
+def _unfounded_stock_claim(text: str, products: list[dict[str, Any]]) -> bool:
+    """O afirmație de stoc („pe stoc", „disponibil") fără niciun produs al turului disponibil. Pe
+    calea compozitorului se judecă MEREU (NX-382, recenzia fazei 2): poarta validatorului
+    (`_stock_claim_ok`) e sub un flag stins implicit, deci nu prindea nimic."""
+    from src.agent.validator import _stock_available  # noqa: PLC0415
+    from src.worker.text_scrub import has_stock_claim  # noqa: PLC0415
+
+    return has_stock_claim(text) and not _stock_available(products)
 
 
 async def answer_question(

@@ -60,6 +60,12 @@
       "file": "src/agent/detail_answer.py",
       "detail": "regex pe textul brut (_WORD_AFTER.search)",
       "reason": "NX-382: regex pe textul SCRIS DE MODEL si pe faptele catalogului (poarta de adevar a compozitorului), nu pe cuvintele clientului; nicio decizie a kernelului nu ramifica pe ele."
+    },
+    {
+      "gate": "raw_text",
+      "file": "src/agent/composer.py",
+      "detail": "regex pe textul brut (re.finditer)",
+      "reason": "NX-382 faza 2: cifrele din regulile magazinului, din faptele obligatiilor si din textul SCRIS DE MODEL (poarta de adevar a compozitorului), nu din cuvintele clientului; nicio decizie a kernelului nu ramifica pe ele."
     }
   ],
   "raw_text_readers": [
