@@ -535,6 +535,9 @@ async def test_a_refusing_executor_falls_back_without_a_trace_of_the_kernel(
     assert run.branch_result is False and ctx.kernel_turn is None and ctx.kernel_view is None
     assert ctx.trace["kernel_fallback"]["reason"] == "executor_refused"
     assert "kernel" not in ctx.trace
+    # NX-387: lanțul care a dus la refuz rămâne citibil, redactat, sub cheia fallback-ului
+    chain = ctx.trace["kernel_fallback"]["chain"]
+    assert chain["contract_version"] and chain["plans"]
     diff = sorted(k for k in run.before_branch if run.before_branch[k] != run.after_branch[k])
     assert diff == []
 

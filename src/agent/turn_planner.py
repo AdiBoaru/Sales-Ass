@@ -745,7 +745,25 @@ class _Planner:
             search_args=args,
             depends_on=None,
             family=family,
+            steps=self._asked_steps(family),
         )
+
+    def _asked_steps(self, family: str) -> list[str]:
+        """NX-387 (`kernel.v8.0`): pașii pe care îi NUMEȘTE clientul în tur («vreau o rutină:
+        șampon, balsam și mască»): tipurile schimbărilor acceptate ale turului, prin
+        `routine_steps.by_product_type`, doar ai familiei rutinei. Cel puțin doi, altfel nimic: un
+        singur tip spus lângă «rutină» nu e un scop (rutina rămâne întreagă)."""
+        by_type = getattr(getattr(self.pack, "routine_steps", None), "by_product_type", None) or {}
+        found: list[str] = []
+        for change in self.checked or ():
+            if change.rejected is not None or change.dimension != PRODUCT_TYPE:
+                continue
+            for kind in (change.canonical_value, *change.umbrella[:1]):
+                fam, _sep, step = str(by_type.get(kind, "")).partition(SEP)
+                if fam == family and step and step not in found:
+                    found.append(step)
+                    break
+        return found if len(found) >= 2 else []
 
     def _sum_asked_this_turn(self) -> bool:
         """Clientul a spus o SUMĂ în turul ăsta (o limită de preț cu număr, nu relativă la un

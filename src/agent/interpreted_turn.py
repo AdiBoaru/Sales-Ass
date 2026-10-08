@@ -1047,7 +1047,20 @@ async def run_interpreted_turn(ctx: TurnContext, deps: PipelineDeps, *, dark: bo
         log.warning("interpreted_turn: restaurarea (%s)", type(e).__name__)
         ctx.emit("kernel_restore_failed", error=type(e).__name__)
     if record is None:
+        chain_trace = None
+        if chain is not None:
+            # NX-387: un fallback DUPĂ lanț (executor refuzat, frază lipsă, excepție) își păstrează
+            # traceul redactat, ca motivul să se poată citi (pe wide-2026-10-07 două ture
+            # `executor_refused` aveau doar motivul). Sub cheia fallback-ului, nu `kernel` (aceea
+            # înseamnă un lanț încheiat), iar evenimentele rămân cele de azi.
+            try:
+                built = cap_trace(redact_trace(build_trace(chain, ctx.turn_id), _redact))
+                chain_trace = built.model_dump(mode="json")
+            except Exception as e:  # noqa: BLE001 — P6: traceul e diagnostic, turul continuă
+                log.warning("interpreted_turn: traceul fallback-ului (%s)", type(e).__name__)
         _record_fallback(ctx, reason, snapshot, dark=dark_mode)
+        if chain_trace is not None:
+            ctx.trace["kernel_fallback"]["chain"] = chain_trace
         return False
     trace, events = record
     ctx.trace["kernel"] = trace
