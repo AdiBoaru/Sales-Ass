@@ -1310,6 +1310,10 @@ class Settings(BaseSettings):
     detail_question_answer_enabled: bool = Field(
         default=True, validation_alias="DETAIL_QUESTION_ANSWER_ENABLED"
     )
+    # NX-382 faza 1: orice `detail` pe un produs (cu sau fără întrebare) e scris de compozitorul
+    # unic (`src/agent/composer.py`): fișa întreagă ca fapte, istoricul, poarta pe fapte. Fișa fixă
+    # rămâne doar rezerva pe model căzut. OFF → calea NX-381 (întrebarea) + fișa fixă, byte-identic.
+    composer_detail_enabled: bool = Field(default=True, validation_alias="COMPOSER_DETAIL_ENABLED")
     # NX-326 (kernel v1.0, pasul 0): scurtăturile de link și comparație servesc produsele NUMITE în
     # mesaj (`reference_resolver.named_targets`), nu tot ecranul (B1) și nici primele două carduri
     # (B2). NX-316 o făcea doar pentru chip-urile recunoscute; aceeași frază tastată servea

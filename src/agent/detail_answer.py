@@ -209,10 +209,15 @@ def _numbers_grounded(answer: str, facts: str, units: frozenset[str]) -> bool:
 
 
 def check_answer(
-    answer: str, product: dict[str, Any], facts: str, units: frozenset[str] = frozenset({"%"})
+    answer: str,
+    product: dict[str, Any] | list[dict[str, Any]],
+    facts: str,
+    units: frozenset[str] = frozenset({"%"}),
 ) -> Verdict:
     """Poarta de adevăr a răspunsului, legată de fișă. PURĂ (în afara flagurilor citite de
-    porțile refolosite din `validator`)."""
+    porțile refolosite din `validator`). `product` = produsul răspunsului sau produsele unui text
+    care le numește pe mai multe (NX-382): prețul și stocul se judecă pe oricare dintre ele."""
+    products = list(product) if isinstance(product, list) else [product]
     from src.agent.validator import (  # noqa: PLC0415 — ciclul validator ↔ agent
         _links_ok,
         _prices_ok,
@@ -227,11 +232,11 @@ def check_answer(
         return Verdict(False, "medical_claim")
     if not _links_ok(text, [], None):
         return Verdict(False, "invented_link")
-    if not _prices_ok(text, [product], None):
+    if not _prices_ok(text, products, None):
         return Verdict(False, "ungrounded_price")
     if not _numbers_grounded(text, facts, units):
         return Verdict(False, "ungrounded_number")
-    if not _stock_claim_ok(text, [product]):
+    if not _stock_claim_ok(text, products):
         return Verdict(False, "stock_claim")
     return Verdict(True)
 

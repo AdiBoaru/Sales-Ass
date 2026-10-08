@@ -58,7 +58,10 @@ def request_shape(kwargs: dict[str, Any]) -> str:
 #: Interpretarea turului și compunerea bogată au amândouă forma `schema`, deci forma singură nu
 #: poate număra „exact un apel `interpret` pe tur interpretat" (I13, verificat pe replay, pasul 6).
 #: Vocabular ÎNCHIS: un nume care nu e aici nu primește scop, deci rândurile de azi rămân identice.
-CALL_PURPOSES: dict[str, str] = {"turn_interpretation": "interpret"}
+CALL_PURPOSES: dict[str, str] = {
+    "turn_interpretation": "interpret",
+    "composer_reply": "compose",  # NX-382
+}
 
 
 def request_purpose(kwargs: dict[str, Any]) -> str | None:

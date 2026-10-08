@@ -140,6 +140,11 @@ CHIP_PRODUCERS: dict[str, str] = {
         "Trei chip-uri de copy fix (`review_chip`/`link_chip`/`compare_chip`), despre produsul "
         "deja în context. Fără nume de catalog în text."
     ),
+    "src/agent/kernel_executors.py::_compose_detail": (
+        "NX-382: chip-urile le FORMULEAZĂ modelul din pașii oferiți de cod (`_DETAIL_MOVES`: "
+        "recenziile, linkul, comparația cu un produs similar), despre produsul deja în context. "
+        "Apăsarea retrimite textul, pe care îl interpretează modelul 1."
+    ),
     "src/agent/kernel_executors.py::_answer_detail": (
         "NX-381: aceleași trei chip-uri de copy fix ca `serve_details` (`_detail_copy`), sub "
         "răspunsul la întrebarea despre produsul deja în context. Fără nume de catalog în text."

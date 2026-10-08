@@ -30,7 +30,7 @@ def _schema_call(name: str) -> dict:
 
 
 def test_the_interpretation_schema_maps_to_interpret():
-    assert usage.CALL_PURPOSES == {"turn_interpretation": "interpret"}
+    assert usage.CALL_PURPOSES == {"turn_interpretation": "interpret", "composer_reply": "compose"}
     assert usage.request_purpose(_schema_call("turn_interpretation")) == "interpret"
 
 
