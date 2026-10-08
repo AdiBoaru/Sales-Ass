@@ -852,10 +852,13 @@ def test_the_orchestrator_role_is_registered_with_its_gates():
     # NX-336 PR B: commit-ul kernelului a trecut din `planned` în rol, în PR-ul care l-a creat.
     # NX-336 PR C: executorii kernelului sunt lipici NOU, deci au porțile orchestratorului, nu ale
     # rolului `executor` (modulele de azi): recenzia PR C, constatarea 7.
+    # NX-382: compozitorul unic și faptele lui, chemați de executori.
     assert roles["orchestrator"] == [
         "src/agent/interpreted_turn.py",
         "src/agent/kernel_executors.py",
         "src/worker/kernel_commit.py",
+        "src/agent/composer.py",
+        "src/agent/detail_answer.py",
     ]
     assert set(gates.GATES_BY_ROLE["orchestrator"]) == {
         "search_args",

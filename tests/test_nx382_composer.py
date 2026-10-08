@@ -34,9 +34,10 @@ OTHER = {**PRODUCT, "id": "p2", "name": "SOME BY MI Retinol Bakuchiol Dual Cream
 UNITS = frozenset({"%", "spf", "ml"})
 
 
-def _reply(text="Da.", items=(), suggestions=(), met=()):
+def _reply(text="Da.", items=(), suggestions=(), met=(), advice=""):
     return {
         "text": text,
+        "general_advice": advice,
         "items": [{"handle": h, "reason": r} for h, r in items],
         "suggestions": list(suggestions),
         "obligations_met": list(met),
@@ -92,7 +93,9 @@ def test_the_user_message_carries_task_question_obligations_facts_history_and_me
     assert '- need_unverifiable {"need": "fără parfum"}' in user
     assert "OFFERED NEXT STEPS\n- get the link" in user
     assert "PRODUCT P1\nname: COSRX The Retinol 0.1 Cream" in user and "0,1% retinol" in user
-    assert "HISTORY\nClient: salut" in user and user.endswith("CUSTOMER MESSAGE\nsi cu vitamina c?")
+    assert "HISTORY (context only, not a source of facts)\nClient: salut" in user and user.endswith(
+        "CUSTOMER MESSAGE\nsi cu vitamina c?"
+    )
 
 
 def test_the_schema_is_strict_with_closed_handles_and_obligation_codes():
@@ -102,7 +105,13 @@ def test_the_schema_is_strict_with_closed_handles_and_obligation_codes():
     s = cp.schema(inp)
     assert s["name"] == "composer_reply" and s["strict"] is True
     body = s["schema"]
-    assert body["required"] == ["text", "items", "suggestions", "obligations_met"]
+    assert body["required"] == [
+        "text",
+        "general_advice",
+        "items",
+        "suggestions",
+        "obligations_met",
+    ]
     assert body["properties"]["items"]["items"]["properties"]["handle"]["enum"] == ["P1", "P2"]
     assert body["properties"]["obligations_met"]["items"]["enum"] == ["ask"]
     empty = cp.schema(cp.ComposeInput(task="chitchat"))["schema"]
@@ -113,13 +122,17 @@ def test_the_schema_is_strict_with_closed_handles_and_obligation_codes():
 
 
 def _check(reply, inp):
+    return _checked(reply, inp)[0]
+
+
+def _checked(reply, inp):
     composed = cp.parse(reply, inp)
     facts = cp.facts_block(inp, None, "ro")
     return cp.check(composed, inp, facts=facts, units=UNITS)
 
 
 def test_a_grounded_reply_passes_and_handles_become_ids():
-    inp = cp.ComposeInput(task="recommend", products=[PRODUCT, OTHER])
+    inp = cp.ComposeInput(task="recommend", products=[PRODUCT, OTHER], offered_moves=["a"] * 9)
     reply = _reply(
         "Am două creme cu retinol, prima are 0,1% retinol.",
         items=[
@@ -327,3 +340,71 @@ async def test_end_to_end_the_composer_answers_through_the_real_stage(monkeypatc
     assert len(llm.composed) == 1 and "QUESTION: e rezistent?" in llm.composed[0]
     [turn] = [e.properties for e in ctx.events if e.type == "kernel_turn"]
     assert turn["served"] is True and turn["executor"] == "detail"
+
+
+# --- recenzia adversarială a fazei 1 -------------------------------------------------------------
+
+
+def test_the_voucher_and_list_prices_from_the_facts_are_grounded():
+    product = {**PRODUCT, "coupon_code": "WELCOME15", "coupon_price": 120.7, "list_price": 165.0}
+    inp = cp.ComposeInput(task="detail", products=[product])
+    reply = _reply("Costă 142 lei, iar cu voucherul WELCOME15 ajunge la 120,70 lei, de la 165 lei.")
+    assert _check(reply, inp).ok
+
+
+def test_general_advice_may_carry_numbers_but_never_a_product_a_price_or_a_link():
+    inp = cp.ComposeInput(task="detail", products=[PRODUCT])
+    verdict, cleaned = _checked(
+        _reply("Se aplică seara.", advice="Dimineața pune un SPF 30 și așteaptă 20 de minute."),
+        inp,
+    )
+    assert verdict.ok and cleaned.advice.startswith("Dimineața pune un SPF 30")
+    assert cleaned.served.endswith("așteaptă 20 de minute.")
+    for bad in ("Costă 99 lei.", "Vezi https://x.test", "COSRX The Retinol 0.1 Cream e ideală."):
+        verdict, cleaned = _checked(_reply("Se aplică seara.", advice=bad), inp)
+        assert verdict.ok and cleaned.advice == "", bad
+
+
+def test_a_number_from_general_knowledge_in_the_text_is_still_rejected():
+    """Faptele produsului rămân stricte: sfatul cu cifre are locul lui, `general_advice`."""
+    inp = cp.ComposeInput(task="detail", products=[PRODUCT])
+    assert _check(_reply("Pune un SPF 30 dimineața."), inp).reason == "ungrounded_number"
+
+
+def test_a_medical_sentence_is_dropped_alone_and_the_rest_is_served():
+    """Recenzia: fișa unui produs pentru acnee nu pierde tot răspunsul (și nici nu primește o
+    trimitere la medic) pentru o propoziție care sună a tratament."""
+    inp = cp.ComposeInput(task="detail", products=[PRODUCT])
+    verdict, cleaned = _checked(
+        _reply("Se aplică seara. Tratează acneea în 7 zile. Se absoarbe repede."), inp
+    )
+    assert verdict.ok and cleaned.reply == "Se aplică seara. Se absoarbe repede."
+    only = _check(_reply("Tratează acneea."), inp)
+    assert only.reason == "medical_claim"
+
+
+def test_sentences_do_not_split_after_a_short_name_abbreviation():
+    assert cp.sentences("Crema DR. Jart+ e ușoară. Se aplică seara.") == [
+        "Crema DR. Jart+ e ușoară.",
+        "Se aplică seara.",
+    ]
+
+
+def test_chips_are_capped_to_the_offered_steps_and_naturalized():
+    inp = cp.ComposeInput(task="detail", products=[PRODUCT], offered_moves=["link", "reviews"])
+    composed = cp.parse(_reply(suggestions=["Vezi linkul — acum", "b", "c", "d"]), inp)
+    assert len(composed.suggestions) == 2 and "—" not in composed.suggestions[0]
+    assert cp.parse(_reply(suggestions=["x"]), cp.ComposeInput(task="detail")).suggestions == ()
+
+
+def test_duplicate_obligation_codes_give_one_enum_value():
+    inp = cp.ComposeInput(task="ask", obligations=[cp.Obligation("ask"), cp.Obligation("ask")])
+    assert cp.schema(inp)["schema"]["properties"]["obligations_met"]["items"]["enum"] == ["ask"]
+
+
+async def test_no_referral_lead_without_a_question(electronics, catalog):
+    """Recenzia: un detaliu fără întrebare, respins pe medical, primește fișa, fără trimitere."""
+    llm = ComposeLLM(_reply("Tratează acneea."))
+    ctx = _ctx(electronics, "detalii")
+    await kx.execute_read_plans(ctx, _deps(llm), _planned(_detail(None)), _outcome())
+    assert ctx.reply.text == "FISA STANDARD"

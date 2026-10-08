@@ -30,6 +30,36 @@
       "file": "src/agent/interpreted_turn.py",
       "detail": "needs_topic prin assign",
       "reason": "NX-336 PR B §3: vedere de citire pentru compunere; persistenta trece prin `reduce_turn` (`worker/kernel_commit.py`), iar cu scrierea v2 aprinsa (ceruta de flag) `_build_new_state` intoarce documentul v2 inainte sa citeasca `ctx.state`. Doua situri, fixate de test (`test_the_view_writes_live_only_in_the_two_declared_sites`): `_apply_turn_view` copiaza `constraints`/`search_constraints` din proiectia starii portii dupa ce executorii au servit turul, iar `_restore_state_fields` le readuce la valoarea de dinaintea ramurii pe fallback."
+    },
+    {
+      "gate": "raw_text",
+      "file": "src/agent/composer.py",
+      "detail": "regex pe textul brut (_SPLIT.split)",
+      "reason": "NX-382: regex pe textul SCRIS DE MODEL si pe faptele catalogului (poarta de adevar a compozitorului), nu pe cuvintele clientului; nicio decizie a kernelului nu ramifica pe ele."
+    },
+    {
+      "gate": "raw_text",
+      "file": "src/agent/composer.py",
+      "detail": "regex pe textul brut (_ABBREVIATION.search)",
+      "reason": "NX-382: regex pe textul SCRIS DE MODEL si pe faptele catalogului (poarta de adevar a compozitorului), nu pe cuvintele clientului; nicio decizie a kernelului nu ramifica pe ele."
+    },
+    {
+      "gate": "raw_text",
+      "file": "src/agent/detail_answer.py",
+      "detail": "regex pe textul brut (_NUMBER.finditer)",
+      "reason": "NX-382: regex pe textul SCRIS DE MODEL si pe faptele catalogului (poarta de adevar a compozitorului), nu pe cuvintele clientului; nicio decizie a kernelului nu ramifica pe ele."
+    },
+    {
+      "gate": "raw_text",
+      "file": "src/agent/detail_answer.py",
+      "detail": "regex pe textul brut (_WORD_BEFORE.search)",
+      "reason": "NX-382: regex pe textul SCRIS DE MODEL si pe faptele catalogului (poarta de adevar a compozitorului), nu pe cuvintele clientului; nicio decizie a kernelului nu ramifica pe ele."
+    },
+    {
+      "gate": "raw_text",
+      "file": "src/agent/detail_answer.py",
+      "detail": "regex pe textul brut (_WORD_AFTER.search)",
+      "reason": "NX-382: regex pe textul SCRIS DE MODEL si pe faptele catalogului (poarta de adevar a compozitorului), nu pe cuvintele clientului; nicio decizie a kernelului nu ramifica pe ele."
     }
   ],
   "raw_text_readers": [
@@ -102,6 +132,11 @@
       "file": "src/agent/interpreted_turn.py",
       "function": "_redact",
       "reason": "NX-336: frontiera NX-230 (make_safe, profilul persist = categoriile apply_boundary) data lui redact_trace; citeste `.text` al rezultatului redactat, nu decide nimic."
+    },
+    {
+      "file": "src/agent/composer.py",
+      "function": "_message",
+      "reason": "NX-382: mesajul curent al clientului pleaca NESCHIMBAT spre compozitor (ca _message din kernel_executors spre compunerea v1). Nimic nu ramifica pe el."
     }
   ]
 }

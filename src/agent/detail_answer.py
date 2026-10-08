@@ -232,7 +232,14 @@ def check_answer(
         return Verdict(False, "medical_claim")
     if not _links_ok(text, [], None):
         return Verdict(False, "invented_link")
-    if not _prices_ok(text, products, None):
+    # NX-382 (recenzia): prețul de listă și prețul cu voucher sunt în fapte, deci și în răspuns
+    extra = {
+        float(p[k])
+        for p in products
+        for k in ("list_price", "coupon_price")
+        if isinstance(p.get(k), int | float) and not isinstance(p.get(k), bool)
+    }
+    if not _prices_ok(text, products, extra):
         return Verdict(False, "ungrounded_price")
     if not _numbers_grounded(text, facts, units):
         return Verdict(False, "ungrounded_number")

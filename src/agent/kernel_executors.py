@@ -814,10 +814,12 @@ async def _compose_detail(
         composed, reason = await composer.compose(ctx, deps, inp, history=history)
         if composed is not None:
             ctx.retrieval = RetrievalResult(products=products, source="composer_detail")
-            ctx.set_reply(composed.reply, products=_card_products(products, n=1), cacheable=False)
+            ctx.set_reply(composed.served, products=_card_products(products, n=1), cacheable=False)
             ctx.reply.suggestions = list(composed.suggestions)
             return True
-        if reason == "medical_claim":
+        # trimiterea la medic doar când clientul a ÎNTREBAT ceva (recenzia NX-382: fișa unui
+        # produs pentru acnee nu e o întrebare de sănătate)
+        if reason == "medical_claim" and question:
             refer = refer_sentence(ctx.language)
             await det.serve_details(ctx, deps, product_id, lead=lambda _p: refer, gated=products)
             return ctx.reply is not None

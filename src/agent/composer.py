@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal
@@ -122,8 +123,9 @@ sentence shape, and never open several product lines with the same word.
 real explanation. Never pad.
 - General know-how about using products (the order of routine steps, sun protection with \
 exfoliants or retinoids, a patch test for a strong active) may come from your own knowledge when \
-it is standard practice and not about a health condition. Never present it as a fact about a \
-specific product: what a product contains, does or costs comes only from FACTS.
+it is standard practice and not about a health condition. Put it in `general_advice`, never in \
+`text` or in a reason: `text` and reasons hold only what FACTS say about the products, and \
+`general_advice` never names a product, a price or what a product contains.
 - When the customer asks for something no fact can confirm, do not refuse the items: keep the ones \
 that fit the rest of the request, drop only those whose facts contradict it, and say once, \
 briefly, what you cannot guarantee.
@@ -140,10 +142,11 @@ naturally; list its code in `obligations_met`. An obligation already said in HIS
 only if it still matters, and then in a few words.
 
 OUTPUT
-`text` is the reply. `items` (only when TASK asks for it) is one entry per product you present, \
-with its handle and its `reason`. `suggestions` phrases, as the customer would type them, the next \
-steps listed in OFFERED NEXT STEPS (one each, short), or stays empty. `obligations_met` lists the \
-obligation codes your text covers."""
+`text` is the reply. `general_advice` is the general know-how that completes it (one or two \
+sentences, shown right after `text`), or empty. `items` (only when TASK asks for it) is one entry \
+per product you present, with its handle and its `reason`. `suggestions` phrases, as the customer \
+would type them, the next steps listed in OFFERED NEXT STEPS (at most one each, short), or stays \
+empty. `obligations_met` lists the obligation codes your text covers."""
 
 TASKS: Mapping[str, str] = {
     "recommend": (
@@ -152,17 +155,16 @@ TASKS: Mapping[str, str] = {
         "introduction (2-4 sentences: what you found for what they asked, what to look for in this "
         "kind of product given their situation, and the one difference that decides between the "
         "items); do not walk through every item, each has its own reason. Per chosen item, "
-        "`reason` "
-        "is 1-2 sentences: why this one for THIS customer, the mechanism in plain words, one "
-        "concrete detail from its sheet. When items are of a different kind than what was asked, "
-        "say so and do not pretend they fit."
+        "`reason` is 1-2 sentences: why this one for THIS customer, the mechanism in plain "
+        "words, one concrete detail from its sheet. When items are of a different kind than what "
+        "was asked, say so and do not pretend they fit."
     ),
     "detail": (
         "TASK detail: the customer asks about one product, P1; its card is shown under your text. "
-        "When QUESTION is given, answer it from P1's facts in 1-3 sentences (plus general know-how "
-        "when it helps). Without a question, tell what matters most about it for this customer in "
-        "3-5 sentences (what it is for, how it feels, how to use it, what customers say), not its "
-        "whole sheet. `items` stays empty."
+        "When QUESTION is given, answer it from P1's facts in 1-3 sentences (general know-how that "
+        "helps goes in `general_advice`). Without a question, tell what matters most about it "
+        "for this customer in 3-5 sentences (what it is for, how it feels, how to use it, what "
+        "customers say), not its whole sheet. `items` stays empty."
     ),
     "compare": (
         "TASK compare: start with the answer to what the customer asked (which is more X, how they "
@@ -220,9 +222,15 @@ class ComposeInput:
 @dataclass(frozen=True)
 class Composed:
     reply: str
+    advice: str  # sfatul general (NX-382, recenzia): permis, dar separat de faptele produsului
     items: tuple[tuple[str, str], ...]  # (product_id, reason), în ordinea modelului
     suggestions: tuple[str, ...]
     obligations_met: tuple[str, ...]
+
+    @property
+    def served(self) -> str:
+        """Ce citește clientul: răspunsul, apoi sfatul general, ca ultim paragraf."""
+        return f"{self.reply}\n\n{self.advice}" if self.advice else self.reply
 
 
 def handles(products: Sequence[dict[str, Any]]) -> dict[str, str]:
@@ -262,17 +270,17 @@ def user_message(inp: ComposeInput, *, facts: str, history: str, message: str) -
         lines.append("OFFERED NEXT STEPS")
         lines.extend(f"- {m}" for m in inp.offered_moves)
     blocks = ["\n".join(lines), f"FACTS\n{facts or 'none'}"]
-    blocks.append(f"HISTORY\n{history or 'none'}")
+    blocks.append(f"HISTORY (context only, not a source of facts)\n{history or 'none'}")
     blocks.append(f"CUSTOMER MESSAGE\n{message}")
     return "\n\n".join(blocks)
 
 
 def schema(inp: ComposeInput) -> dict[str, Any]:
     """Schema strictă a răspunsului. Handle-urile și codurile obligațiilor sunt enumuri închise
-    când există (o listă goală nu e un enum valid în `strict`)."""
+    când există (o listă goală nu e un enum valid în `strict`; codurile, fără dubluri)."""
     known = list(handles(inp.products))
     handle = {"type": "string", "enum": known} if known else {"type": "string"}
-    codes = [o.code for o in inp.obligations]
+    codes = list(dict.fromkeys(o.code for o in inp.obligations))
     code = {"type": "string", "enum": codes} if codes else {"type": "string"}
     item = {
         "type": "object",
@@ -284,11 +292,12 @@ def schema(inp: ComposeInput) -> dict[str, Any]:
         "type": "object",
         "properties": {
             "text": {"type": "string"},
+            "general_advice": {"type": "string"},
             "items": {"type": "array", "items": item},
             "suggestions": {"type": "array", "items": {"type": "string"}},
             "obligations_met": {"type": "array", "items": code},
         },
-        "required": ["text", "items", "suggestions", "obligations_met"],
+        "required": ["text", "general_advice", "items", "suggestions", "obligations_met"],
         "additionalProperties": False,
     }
     return {"name": SCHEMA_NAME, "strict": True, "schema": body}
@@ -302,7 +311,11 @@ class Verdict:
 
 def parse(raw: Any, inp: ComposeInput) -> Composed | None:
     """Răspunsul modelului ca `Composed`, sau `None` dacă forma e greșită. Handle-urile se
-    traduc în id-uri; unul necunoscut rămâne ca atare, ca poarta să-l prindă."""
+    traduc în id-uri (unul necunoscut rămâne ca atare, ca poarta să-l prindă). Chips-urile: cel
+    mult câte un text pe pas OFERIT de cod (NX-296: un chip e o mutare oferită, nu o idee a
+    modelului), trecute prin plasa de voce (P13)."""
+    from src.agent.voice import naturalize  # noqa: PLC0415
+
     if not isinstance(raw, dict) or not isinstance(raw.get("text"), str):
         return None
     ids = handles(inp.products)
@@ -310,32 +323,96 @@ def parse(raw: Any, inp: ComposeInput) -> Composed | None:
     for it in raw.get("items") or []:
         if isinstance(it, dict) and isinstance(it.get("handle"), str):
             items.append((ids.get(it["handle"], it["handle"]), str(it.get("reason") or "").strip()))
+    cap = min(len(inp.offered_moves), MAX_SUGGESTIONS)
     suggestions = tuple(
-        s.strip() for s in (raw.get("suggestions") or []) if isinstance(s, str) and s.strip()
-    )[:MAX_SUGGESTIONS]
+        naturalize(s.strip())
+        for s in (raw.get("suggestions") or [])
+        if isinstance(s, str) and s.strip()
+    )[:cap]
     met = tuple(str(c) for c in raw.get("obligations_met") or [])
-    return Composed(raw["text"].strip(), tuple(items), suggestions, met)
+    advice = raw.get("general_advice")
+    advice = advice.strip() if isinstance(advice, str) else ""
+    return Composed(raw["text"].strip(), advice, tuple(items), suggestions, met)
 
 
-def check(composed: Composed, inp: ComposeInput, *, facts: str, units: frozenset[str]) -> Verdict:
-    """Poarta compozitorului. PURĂ (în afara flagurilor citite de porțile refolosite)."""
+_SPLIT = re.compile(r"(?<=[.!?])\s+")
+#: Un fragment care se termină într-o abreviere scurtă cu majusculă („DR.", „Dr.") continuă
+#: propoziția: numele de brand nu se taie (recenzia NX-382, clasa „DR. SKINTEGRA").
+_ABBREVIATION = re.compile(r"\b[A-Z][A-Za-z]{0,3}\.$")
+
+
+def sentences(text: str) -> list[str]:
+    """Propozițiile unui text, fără să taie după o abreviere de nume. PUR."""
+    out: list[str] = []
+    for part in _SPLIT.split(text or ""):
+        if out and _ABBREVIATION.search(out[-1]):
+            out[-1] = f"{out[-1]} {part}"
+        elif part.strip():
+            out.append(part)
+    return out
+
+
+def _without_medical(text: str) -> tuple[str, int]:
+    """Scoate propozițiile cu claim medical (P0, `has_medical_claim`), una câte una: o fișă de
+    produs pentru acnee sau mătreață nu pierde tot răspunsul pentru o propoziție. Întoarce textul
+    rămas și câte s-au scos."""
+    from src.worker.text_scrub import has_medical_claim  # noqa: PLC0415
+
+    kept = [s for s in sentences(text) if not has_medical_claim(s)]
+    dropped = len(sentences(text)) - len(kept)
+    return " ".join(kept).strip(), dropped
+
+
+def _advice_ok(advice: str, products: Sequence[dict[str, Any]]) -> bool:
+    """Sfatul general nu e o afirmație despre produs: fără preț, fără link, fără numele unui
+    produs al turului (numele scurt, ca pe card). Cifrele unei rutine sunt permise."""
+    from src.agent.validator import _PRICE_RE, _URL_RE  # noqa: PLC0415
+    from src.catalog.folding import fold_text  # noqa: PLC0415
+    from src.catalog.render_text import display_name  # noqa: PLC0415
+
+    if _PRICE_RE.search(advice) or _URL_RE.search(advice):
+        return False
+    folded = fold_text(advice)
+    for p in products:
+        name = fold_text(display_name(str(p.get("name") or "")))
+        if name and name in folded:
+            return False
+    return True
+
+
+def check(
+    composed: Composed, inp: ComposeInput, *, facts: str, units: frozenset[str]
+) -> tuple[Verdict, Composed]:
+    """Poarta compozitorului. PURĂ (în afara flagurilor citite de porțile refolosite). Întoarce
+    verdictul și răspunsul CURĂȚAT: propozițiile cu claim medical scoase (P0), sfatul general
+    scos dacă numește un produs, un preț sau un link."""
     known = {str(p.get("id")) for p in inp.products}
     by_id = {str(p.get("id")): p for p in inp.products}
     for pid, _reason in composed.items:
         if pid not in known:
-            return Verdict(False, "unknown_handle")
-    verdict = detail_answer.check_answer(composed.reply, list(inp.products), facts, units)
+            return Verdict(False, "unknown_handle"), composed
+    reply, _dropped = _without_medical(composed.reply)
+    if not reply:
+        return Verdict(False, "medical_claim"), composed
+    verdict = detail_answer.check_answer(reply, list(inp.products), facts, units)
     if not verdict.ok:
-        return Verdict(False, verdict.reason)
+        return Verdict(False, verdict.reason), composed
+    items: list[tuple[str, str]] = []
     for pid, reason in composed.items:
+        reason, _ = _without_medical(reason)
         if reason:
             v = detail_answer.check_answer(reason, by_id[pid], facts, units)
             if not v.ok:
-                return Verdict(False, v.reason)
+                return Verdict(False, v.reason), composed
+        items.append((pid, reason))
+    advice, _ = _without_medical(composed.advice)
+    if advice and not _advice_ok(advice, inp.products):
+        advice = ""
     missing = {o.code for o in inp.obligations} - set(composed.obligations_met)
     if missing:
-        return Verdict(False, "obligation_missing")
-    return Verdict(True)
+        return Verdict(False, "obligation_missing"), composed
+    cleaned = Composed(reply, advice, tuple(items), composed.suggestions, composed.obligations_met)
+    return Verdict(True), cleaned
 
 
 async def compose(
@@ -365,12 +442,18 @@ async def compose(
     if composed is None:
         ctx.emit("composer", outcome="rejected", reason="invalid_reply", **emit)
         return None, "invalid_reply"
-    verdict = check(composed, inp, facts=facts, units=detail_answer.unit_words(pack))
+    verdict, cleaned = check(composed, inp, facts=facts, units=detail_answer.unit_words(pack))
     if not verdict.ok:
         ctx.emit("composer", outcome="rejected", reason=verdict.reason, **emit)
         return None, verdict.reason
-    ctx.emit("composer", outcome="composed", **emit)
-    return composed, None
+    ctx.emit(
+        "composer",
+        outcome="composed",
+        trimmed=cleaned.reply != composed.reply or cleaned.advice != composed.advice,
+        advice=bool(cleaned.advice),
+        **emit,
+    )
+    return cleaned, None
 
 
 def _message(ctx: TurnContext) -> str:
