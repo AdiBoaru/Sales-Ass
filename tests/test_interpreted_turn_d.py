@@ -356,9 +356,16 @@ async def test_other_reply_only_stays_dark(electronics):
     deps = _deps(LoopLLM())
     outcome = _gate("must_ask", "no_subject")
     assert await kx.execute_read_plans(_ctx(electronics), deps, planned, outcome) is None
-    assert (
-        await kx.execute_read_plans(_ctx(electronics), deps, planned, _gate(), None, True) is None
-    )
+
+
+async def test_a_mutating_reply_only_is_refused_by_the_kernel_whatever_the_verdict(electronics):
+    """I10 (P0, 2026-10-08): pe un tur care cere o mutație, `reply_only` e refuzul kernelului și
+    pe un verdict `act` (actul de coș scos de I24, `invalid_target`), nu calea v1, unde modelul
+    alegea singur ce pune în coș."""
+    planned = PlannedTurn(plans=(_plan("reply_only"),), primary=0)
+    ctx = _ctx(electronics)
+    assert await kx.execute_read_plans(ctx, _deps(LoopLLM()), planned, _gate(), None, True)
+    assert ctx.reply is not None and ctx.reply.text
 
 
 def _search_stub(monkeypatch, cat, ids, *, raises=None):
@@ -638,7 +645,8 @@ def test_a_turn_with_a_cart_act_is_a_mutating_turn():
     assert _mutating_turn(chain(["cart"]))
     assert _mutating_turn(chain(["find", "cart"]))
     assert not _mutating_turn(chain(["chitchat"]))
-    assert not _mutating_turn(chain(["cart", "find"], skipped=(0,)))
+    # I10 (P0, 2026-10-08): un act de coș SCOS de poartă tot e o mutație cerută
+    assert _mutating_turn(chain(["cart", "find"], skipped=(0,)))
 
 
 # --- D3: rutina planificată -----------------------------------------------------------------------

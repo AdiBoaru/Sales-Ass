@@ -15,6 +15,7 @@ emite din `execute` (cu `turn_id`, P10); args-urile sunt whitelisted (`_safe_too
 from __future__ import annotations
 
 import asyncio
+import json
 from collections.abc import Collection
 from dataclasses import dataclass, field
 from time import perf_counter
@@ -268,6 +269,11 @@ class ToolRun:
         active, apelul trece întâi prin ADMISSION (plafon de tool calls / mutații / timp rămas) și
         apoi prin poarta read-mutation. Un refuz e TYPED și ajunge la model ca text scurt și onest,
         nu ca timeout: modelul trebuie să încheie cu ce are, nu să reîncerce."""
+        if getattr(self.ctx, "mutations_blocked", False) and tool_budget.spec_for(name).is_mutation:
+            # I10, plasa: o mutație cerută și neservită de kernel nu se execută pe calea v1
+            # `name` vine din schemele închise date modelului, deci e vocabular închis
+            self.ctx.emit("mutation_blocked", name=name)
+            return json.dumps({"ok": False, "error": "mutation_not_allowed"})
         ledger = turn_budget.current()
         d = deadline.current()
         if ledger is None and d is None:

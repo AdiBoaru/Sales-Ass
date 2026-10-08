@@ -1180,6 +1180,12 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     tool_names, tools = tool_loop_tools(
         ctx.business, route.route.value, unrouted=unrouted, need_menu=need_menu
     )
+    if ctx.mutations_blocked:
+        # I10, plasa: kernelul n-a servit mutația cerută, deci bucla nu primește unelte care scriu
+        from src.agent.tool_budget import spec_for  # noqa: PLC0415
+
+        tool_names = [n for n in tool_names if not spec_for(n).is_mutation]
+        tools = [t for t in tools if t.get("function", {}).get("name") in tool_names]
     # Faza D (NX-143): tool executor cu stare explicită. Acumulatorii (produse/linkuri/sume/…) sunt
     # câmpuri ale lui `run`, nu `nonlocal`; `run.execute` e callback-ul buclei; citim `run.X` după.
     run = ToolRun(ctx, deps)

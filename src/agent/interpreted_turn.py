@@ -453,13 +453,18 @@ _MUTATING: frozenset[str] = frozenset({"cart"})
 
 
 def _mutating_turn(chain: _Chain) -> bool:
-    """Interpretarea turului are un act care SCRIE, printre actele rămase după poartă: pe un refuz
-    al porții fără întrebare, răspunsul e al kernelului, niciodată o buclă v1 cu `cart_add`."""
+    """Interpretarea turului are un act care SCRIE, INCLUSIV unul scos de poartă: pe un refuz al
+    porții fără întrebare, răspunsul e al kernelului, niciodată o buclă v1 cu `cart_add`.
+
+    I10 (raportul `cod-dupa-interpretare-2026-10-08`, P0): numărat doar printre actele RĂMASE, un
+    `cart` pe o țintă care numește o proprietate (scos de I24, verdict `act`/`invalid_target`)
+    lăsa turul pe v1, unde modelul a adăugat în coș un produs ales de el
+    (`w2_corector_cearcane_acoperire#4`). Clientul a cerut o mutație; dacă nu există o țintă
+    `exact`, răspunsul e refuzul, nu ghicitul."""
     interp = chain.interpreted.interpretation
     if interp is None:
         return False
-    skipped = set(chain.outcome.skipped_acts)
-    return any(a.kind in MUTATING_ACTS for i, a in enumerate(interp.acts) if i not in skipped)
+    return any(a.kind in MUTATING_ACTS for a in interp.acts)
 
 
 def _mutations_exact(chain: _Chain) -> bool:
@@ -1010,6 +1015,12 @@ async def run_interpreted_turn(ctx: TurnContext, deps: PipelineDeps, *, dark: bo
     except Exception as e:  # noqa: BLE001 — P6: numărat, calea v1 continuă (declarat)
         log.warning("interpreted_turn: restaurarea (%s)", type(e).__name__)
         ctx.emit("kernel_restore_failed", error=type(e).__name__)
+    if not dark_mode and chain is not None and _mutating_turn(chain):
+        # I10, plasa: turul a cerut o mutație pe care kernelul n-a servit-o, deci calea v1 rulează
+        # FĂRĂ unelte care scriu (`ToolRun` le refuză, bucla nu le vede). Pusă DUPĂ restaurare, ca
+        # instantaneul să n-o șteargă.
+        ctx.mutations_blocked = True
+        ctx.emit("kernel_mutation_blocked", reason=reason or "dark")
     if record is None:
         _record_fallback(ctx, reason, snapshot, dark=dark_mode)
         return False

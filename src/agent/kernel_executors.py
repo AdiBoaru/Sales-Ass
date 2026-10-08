@@ -728,7 +728,7 @@ async def _run_plan(
         # neexactă, fără opțiuni, fără șablon, întrebare deja pusă). Căderea pe v1 ar da turul unei
         # bucle care are `cart_add`, exact pe turul pe care poarta l-a oprit (I10/I11, recenzia D2).
         # Restul lui `reply_only` (din `chitchat`) rămâne pe v1.
-        if outcome.decision.verdict != "must_ask" or not mutating:
+        if not mutating:
             return None
         reason = outcome.decision.reason
         code = reason if reason in _REFUSED_MUTATION else "mutation_not_exact"

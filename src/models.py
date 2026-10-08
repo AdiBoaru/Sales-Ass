@@ -706,6 +706,11 @@ class TurnContext:
     # `subject_is_new`, întrebarea NX-315 oprită). Owner UNIC: orchestratorul, scrisă după ce
     # executorii au servit turul și restaurată pe fallback. `None` = calea de azi.
     kernel_view: Any = None
+    # I10 (P0, 2026-10-08): turul a cerut o mutație (coș) pe care kernelul NU a servit-o. Owner
+    # UNIC: orchestratorul (`agent.interpreted_turn`), scris după restaurare, pe fallback. Citit de
+    # `ToolRun.execute` (refuză orice unealtă care scrie) și de bucla v1 (nu i le oferă): pe calea
+    # v1, modelul nu poate alege singur ce intră în coșul clientului.
+    mutations_blocked: bool = False
     # NX-236: acțiunea OPACĂ pe care a apăsat-o clientul (`web.action_models.ActionCommand`), deja
     # deschisă, autorizată și consumată la marginea web. Owner UNIC: processor (din payload-ul
     # DURABIL al mesajului inbound, nu din requestul HTTP — un turn reluat după restart trebuie să
