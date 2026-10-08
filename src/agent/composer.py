@@ -72,6 +72,12 @@ REASONS = (
     "ungrounded_rule",
     "not_a_question",
     "safety_referral_missing",
+    "unsourced_claim",
+)
+#: Recenzia fazei 3: garanția ca promisiune («garanție 2 ani», «drept de retur»), nu verbul («nu
+#: pot garanta», formularea pe care promptul o cere pentru ce nu se poate confirma).
+_WARRANTY_NOUN = re.compile(
+    r"\bgaran[țt]i[aeiu]\w*|\bwarrant(?:y|ies)\b|\bdrept\s+de\s+retur\b", re.IGNORECASE
 )
 #: NX-382 faza 2c: codul obligației de siguranță (contextul declarat de client, NX-173).
 SAFETY_REFERRAL = "safety_referral"
@@ -468,6 +474,21 @@ def _advice_ok(advice: str, products: Sequence[dict[str, Any]]) -> bool:
     return True
 
 
+def unsourced(text: str, facts: str) -> bool:
+    """Recenzia fazei 3: o afirmație despre magazin pe care nicio sursă a sarcinii n-o poartă:
+    livrarea (aceleași tipare ca `grounding_guard`), un voucher când fișa n-are niciunul, o
+    garanție sau un drept de retur. Pe comparație treceau («ambele au livrare gratuită și
+    garanție»), fiindcă `check_answer` judecă doar cifre, prețuri, linkuri, stoc și medical. PUR."""
+    from src.agent.grounding_guard import _DELIVERY_RE, _PROMO_RE  # noqa: PLC0415
+
+    # o familie are sursă doar dacă faptele turului o poartă și ele (un FAQ de produs despre
+    # livrare, voucherul de pe fișă); altfel e o promisiune a magazinului fără sursă
+    return any(
+        pattern.search(text) and not pattern.search(facts)
+        for pattern in (_DELIVERY_RE, _WARRANTY_NOUN, _PROMO_RE)
+    )
+
+
 def rule_prices(rules: Sequence[str]) -> frozenset[float]:
     """Numerele scrise în regulile magazinului (pragul de livrare, costul returului, capetele unei
     plaje „între 19,9 și 24,90 lei"): o sumă care le redă e întemeiată ca sumă. Ce regulă o
@@ -586,6 +607,13 @@ def check(
         v = detail_answer.check_answer(verdict_text, list(inp.products), facts, units)
         if not v.ok:
             return Verdict(False, v.reason), composed
+    if inp.task != "store_info":
+        # recenzia fazei 3: livrarea, garanția, un voucher pe care fișa nu-l poartă; regulile
+        # magazinului au poarta lor (`rule_numbers_ok`), restul sarcinilor nu au sursă pentru ele
+        if any(unsourced(t, facts) for t in (reply, verdict_text, *(r for _p, r in items))):
+            return Verdict(False, "unsourced_claim"), composed
+        if advice and unsourced(advice, facts):
+            advice = ""
     cleaned = Composed(
         reply,
         advice,
@@ -736,7 +764,12 @@ async def compose(
         ctx.emit("composer", outcome="rejected", reason=verdict.reason, **emit)
         return None, verdict.reason
     if safety is not None:
-        ctx.safety_referral_composed = referral_sentence(cleaned.reply, contexts, locale)
+        from src.agent.voice import naturalize  # noqa: PLC0415
+
+        # forma pe care o randează canalele (`set_reply` și câmpurile comparației trec prin
+        # `naturalize`): altfel `enforce` n-ar regăsi propoziția și ar pune fraza codului peste ea
+        sentence = referral_sentence(cleaned.reply, contexts, locale)
+        ctx.safety_referral_composed = naturalize(sentence) if sentence else None
     ctx.emit(
         "composer",
         outcome="composed",

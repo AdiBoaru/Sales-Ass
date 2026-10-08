@@ -397,7 +397,9 @@ def _narrator(ctx: TurnContext, deps: PipelineDeps, question: str | None) -> det
     """NX-382 faza 3: comparația scrisă de compozitorul unic (răspunsul la ce s-a întrebat,
     verdictul pe tipuri de client, axele), cu istoricul în față. `None` cu flagul stins
     (narativul de azi)."""
-    if not get_settings().composer_compare_enabled:
+    settings = get_settings()
+    if not settings.composer_compare_enabled or not settings.comparison_narrative_enabled:
+        # recenzia fazei 3: kill-switch-ul narativului oprește ORICE text de model pe comparație
         return None
 
     async def narrate(
@@ -418,8 +420,13 @@ def _narrator(ctx: TurnContext, deps: PipelineDeps, question: str | None) -> det
         composed, _reason = await composer.compose(ctx, deps, inp, history=history)
         if composed is None:
             return None
+        from src.worker import compose as wc  # noqa: PLC0415
+
         built = composer.comparison_reply(ctx, composed, comparison, products, facets)
-        return built, list(composed.suggestions)
+        # recenzia fazei 3: aceeași formatare ca orice chip de model (cap, dedupe, scurtare), altfel
+        # randorul web le arunca pe cele lungi, iar comparația rămânea fără pas următor; o listă
+        # goală lasă chips-urile deterministe (`serve_comparison`)
+        return built, [c.label for c in wc._suggestion_chips(list(composed.suggestions))]
 
     return narrate
 

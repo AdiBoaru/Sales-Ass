@@ -235,3 +235,68 @@ async def test_the_compare_flag_off_is_todays_narrative(monkeypatch, electronics
     planned = _planned(_plan(executor="compare", product_ids=_pair(electronics)))
     assert await kx.execute_read_plans(ctx, _deps(llm), planned, _outcome())
     assert llm.calls == [] and len(spy) == 1
+
+
+# --- recenzia fazei 3 ----------------------------------------------------------------------------
+
+
+def _verdict_of(text, *, verdict="", facts=""):
+    inp = cp.ComposeInput(task="compare", products=[P1, P2])
+    composed = cp.parse(_reply(text, verdict=verdict), inp)
+    return cp.check(composed, inp, facts=facts, units=frozenset())[0]
+
+
+def test_store_promises_without_a_source_are_rejected_on_product_tasks():
+    assert _verdict_of("Ambele au livrare gratuită și garanție.").reason == "unsourced_claim"
+    assert _verdict_of("Diferența e textura.", verdict="COSRX ajunge mâine.").reason == (
+        "unsourced_claim"
+    )
+    assert _verdict_of("Folosește un cupon la plată.").reason == "unsourced_claim"
+
+
+def test_honest_wording_and_sourced_facts_still_pass():
+    # verbul („nu pot garanta") e formularea cerută de prompt, nu o promisiune
+    assert _verdict_of("Nu pot garanta că se potrivește pielii tale.").ok
+    # voucherul și garanția de pe fișă sunt fapte
+    facts = "price with voucher WELCOME15: 84 lei\nfaq: Are garanție? -> Da, garanție de 2 ani."
+    assert _verdict_of("Cu voucherul, iese mai ieftin. Are și garanție.", facts=facts).ok
+
+
+async def test_model_chips_on_a_comparison_are_shaped_and_fall_back_when_empty(
+    monkeypatch,
+    electronics,  # noqa: F811
+):
+    from src.models import MAX_CHIP_LEN
+
+    _spy_compose(monkeypatch)
+    long_chip = "Adaugă în coș Samsung Phone 1 128 GB cu husa și folia de protecție inclusă"
+    llm = ComposeLLM(_reply("Diferența e memoria.", suggestions=[long_chip]))
+    ctx = _ctx(electronics, "compara-le")
+    planned = _planned(_plan(executor="compare", product_ids=_pair(electronics)))
+    policy_for = lambda partners, rows: _policy(True)  # noqa: E731
+    assert await kx.execute_read_plans(ctx, _deps(llm), planned, _outcome(), policy_for)
+    assert ctx.reply.suggestions and all(len(c) <= MAX_CHIP_LEN for c in ctx.reply.suggestions)
+    llm = ComposeLLM(_reply("Diferența e memoria."))
+    ctx = _ctx(electronics, "compara-le")
+    assert await kx.execute_read_plans(ctx, _deps(llm), planned, _outcome(), policy_for)
+    assert ctx.reply.suggestions, "fără chips de model: cele deterministe"
+
+
+async def test_the_narrative_kill_switch_stops_the_composer_too(
+    monkeypatch,
+    electronics,  # noqa: F811
+):
+    monkeypatch.setattr(get_settings(), "comparison_narrative_enabled", False)
+    llm = ComposeLLM(_reply("x"))
+    ctx = _ctx(electronics, "compara-le")
+    planned = _planned(_plan(executor="compare", product_ids=_pair(electronics)))
+    assert await kx.execute_read_plans(ctx, _deps(llm), planned, _outcome())
+    assert llm.calls == []
+
+
+def test_the_saved_text_carries_the_verdict():
+    from src.worker import compose as wc
+
+    table = _table()
+    table.closing = ["Pentru ten uscat, COSRX."]
+    assert wc.flatten_comparison(table, "ro").endswith("Pentru ten uscat, COSRX.")

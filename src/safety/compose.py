@@ -147,6 +147,13 @@ def enforce(ctx: Any) -> None:
         # scoaterea propozițiilor medicale). Ea e chiar în fiecare câmp randat, deci fraza codului
         # ar fi a doua. Un set golit de excludere rămâne al codului (NX-367): acolo proza modelului
         # vorbește despre un set golit de noi. Idempotent: a doua trecere nu mai emite.
+        # Recenzia fazei 3: o a doua trimitere, scrisă de model sub tabel sau în sfatul general,
+        # se scoate (contractul NX-173: o singură trimitere), ca pe calea codului.
+        names = _card_names(reply, locale)
+        if rich is not None and getattr(rich, "education", None):
+            rich.education = _without_referrals(rich.education, names) or None
+        if cmp is not None and getattr(cmp, "closing", None):
+            cmp.closing = [c for c in (_without_referrals(p, names) for p in cmp.closing) if c]
         reported = any(
             e.type == "safety_sentence_enforced" for e in (getattr(ctx, "events", None) or [])
         )
