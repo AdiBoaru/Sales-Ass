@@ -450,6 +450,13 @@ def _store_rules_partial(ctx: TurnContext, rules: tuple[str, ...] | list[str]) -
 
 #: NX-373: nota pentru compunerea bogată pe un tur mixt. Fără subiecte numite (P11): partea de
 #: magazin e a codului, deci compunerea nu trebuie nici s-o redea, nici s-o nege.
+#: NX-382 faza 4 (recenzia): aceeași notă pentru compozitor, în limba promptului lui și pe câmpul
+#: lui (`text`, nu `intro`).
+COMPOSER_MIXED_STORE_NOTE = (
+    "The customer also asked about the store's rules; that part is added after your text, in the "
+    "store's own words. In `text` talk only about the products, and never say that you have no "
+    "information about the store's rules."
+)
 MIXED_STORE_NOTE = (
     "clientul a întrebat și despre regulile magazinului. Răspunsul la partea asta se adaugă "
     "separat, în cuvintele magazinului, după textul tău. În `intro` vorbește doar despre produse "
@@ -1191,7 +1198,7 @@ async def _compose_recommend(
     from src.worker.context import conversation_transcript  # noqa: PLC0415
 
     reps, variants = composer.families(await _full_sheets(ctx, deps, products))
-    notes = [n for n in (plan.commerce_note, MIXED_STORE_NOTE if store_part else "") if n]
+    notes = [n for n in (plan.commerce_note, COMPOSER_MIXED_STORE_NOTE if store_part else "") if n]
     extra: list[tuple[str, str]] = [("TURN NOTES", " ".join(notes))] if notes else []
     routine = getattr(ctx, "routine", None)
     if routine is not None:
@@ -1206,7 +1213,12 @@ async def _compose_recommend(
         task="recommend", products=reps, variants=variants, extra_facts=tuple(extra)
     )
     history = conversation_transcript(ctx.history, consumer="composer")
-    composed, _reason = await composer.compose(ctx, deps, inp, history=history)
+    composed, reason = await composer.compose(ctx, deps, inp, history=history)
+    if composed is None and reason == "call_failed":
+        # recenzia fazei 4: furnizorul n-a răspuns (timeout de 20 s inclus): un al doilea apel
+        # după unul picat e exact latența pe care o tăiem (NX-312). Cardurile se recuperează din
+        # fapte (`rich_from_facts`, NX-302), ca pe compunerea bogată picată.
+        return _RichOutcome(reply=None)
     if composed is None:
         return None
     if variants:

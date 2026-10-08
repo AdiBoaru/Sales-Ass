@@ -86,7 +86,7 @@ def test_the_variants_reach_the_facts_of_their_representative():
     facts = cp.facts_block(inp, None, "ro")
     head, rest = facts.split("PRODUCT P2", 1)
     assert (
-        "also available as (other shades or sizes): KUNDAL Shampoo Cherry Blossom - sampon "
+        "also available as (other versions of it): KUNDAL Shampoo Cherry Blossom - sampon "
         "pentru par uscat 500 ml" in head
     )
     assert "also available as" not in rest
@@ -269,3 +269,56 @@ def test_a_routine_keeps_its_slot_order_and_step_labels(electronics):  # noqa: F
     assert [it.product_id for it in rich.items] == ids, "ordinea sloturilor, cu pasul nenarat"
     assert [it.badge for it in rich.items] == ["Pas 1", "Pas 2", "Pas 3"]
     assert [it.reason for it in rich.items] == ["Primul.", None, "Ultimul."]
+
+
+# --- recenzia fazei 4 ----------------------------------------------------------------------------
+
+
+def test_handles_in_prose_become_short_names_before_the_gate():
+    inp = cp.ComposeInput(task="recommend", products=[OTHER, SHADE_A])
+    composed = cp.parse(
+        _reply("P2 e șamponul, iar P1 e crema.", items=[("P1", "Mai blândă decât P2.")]), inp
+    )
+    assert (
+        composed.reply == "KUNDAL Shampoo Cherry Blossom e șamponul, iar SOME BY MI Cream e crema."
+    )
+    assert composed.items[0][1] == "Mai blândă decât KUNDAL Shampoo Cherry Blossom."
+
+
+def test_the_cards_and_intro_carry_the_voice_and_drop_sentences_naming_a_hidden_product(
+    electronics,  # noqa: F811
+):
+    ctx = _ctx(electronics)
+    rows = [dict(OTHER), dict(SHADE_A)]
+    inp = cp.ComposeInput(task="recommend", products=rows)
+    text = "Crema e blândă — o poți folosi zilnic. KUNDAL Shampoo e bun, dar nu ți-l arăt."
+    composed = cp.parse(_reply(text, items=[("P1", "Hidratează — fără să lase urme; bună.")]), inp)
+    rich = cp.rich_reply(ctx, composed, rows)
+    assert "—" not in rich.intro and "KUNDAL" not in rich.intro
+    assert "—" not in rich.items[0].reason and ";" not in rich.items[0].reason
+
+
+def test_a_fill_in_with_unknown_facets_says_so_in_the_facts():
+    row = {**OTHER, "facet_unknown": ["skin_type"]}
+    facts = cp.facts_block(cp.ComposeInput(task="recommend", products=[row]), None, "ro")
+    assert "not known for this product (never claim it fits): skin_type" in facts
+
+
+def test_the_family_representative_is_the_available_one():
+    gone = {**SHADE_A, "availability": "out_of_stock"}
+    there = {**SHADE_B, "availability": "in_stock"}
+    reps, variants = cp.families([gone, there])
+    assert [p["id"] for p in reps] == ["b"] and variants == {"b": [gone["name"]]}
+
+
+async def test_a_composer_timeout_does_not_pay_a_second_call(
+    monkeypatch,
+    electronics,  # noqa: F811
+):
+    ids = list(electronics.items)[:2]
+    _stub_search(monkeypatch, electronics, ids)
+    llm = ComposeLLM(TimeoutError("slow"))
+    ctx = _ctx(electronics)
+    assert await kx.execute_read_plans(ctx, _deps(llm), _search_plan(), _outcome()) is True
+    assert llm.rich_calls == 0, "fără al doilea apel după un apel picat"
+    assert ctx.reply is not None
