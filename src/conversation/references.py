@@ -25,7 +25,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from src.catalog.query_terms import (
     any_locale_stopwords,
@@ -305,6 +305,8 @@ def match_name_in_set(
     items: Sequence[ShownItem],
     stop: Collection[str],
     suffixes: Collection[str] = (),
+    *,
+    distinctive: bool = True,
 ) -> _Hit | None:
     """Produsul (sau produsele) din `items` pe care `name` îl numește. None = setul ratează.
 
@@ -342,6 +344,10 @@ def match_name_in_set(
         return _Hit("exact", full)
     if len(full) >= 2:
         return _Hit("ambiguous", full)
+    if not distinctive:
+        # NX-386: pe un set care NU e ecranul clientului (rezultatele unei căutări după nume),
+        # un cuvânt purtat de un singur produs nu-l numește: setul l-a adus tocmai după cuvinte.
+        return None
 
     owners = {w: [pid for pid, nw in named if _carries(nw, w, suffixes)] for w in content}
     if any(not o for o in owners.values()):
@@ -358,6 +364,24 @@ def match_name_in_set(
     if shared:
         return _Hit("ambiguous", shared)
     return None
+
+
+def name_in_results(
+    name: str, products: Sequence[Mapping[str, Any]], locale: str | None
+) -> tuple[str, ...]:
+    """NX-386 (`kernel.v7.1`): produsele din REZULTATELE unei căutări după nume pe care `name` le
+    numește, după treptele precise ale resolverului (numele întreg, fraza întreagă, toate cuvintele
+    de conținut, cu flexiunea locale-i), fără treapta „cuvânt purtat de un singur produs". PUR.
+    Gol = niciun produs nu poartă numele (căutarea a adus doar ce seamănă)."""
+    items = [
+        ShownItem(product_id=str(pid), name=str(p.get("name") or ""))
+        for p in products
+        if (pid := p.get("product_id") or p.get("id"))
+    ]
+    hit = match_name_in_set(
+        name, items, _stop(locale), inflection_suffixes(locale), distinctive=False
+    )
+    return tuple(hit.ids) if hit is not None else ()
 
 
 def _values_of(facts: ProductFacts, dimension: str) -> list[str]:
@@ -1080,6 +1104,7 @@ __all__ = [
     "find_name_reference",
     "gate_act_targets",
     "match_name_in_set",
+    "name_in_results",
     "name_key",
     "plan_lookup",
     "resolve_references",

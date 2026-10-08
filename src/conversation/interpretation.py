@@ -23,7 +23,7 @@ import copy
 from collections.abc import Sequence
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from src.tools.catalog_tools import SearchArgs
 
@@ -91,7 +91,10 @@ from src.tools.catalog_tools import SearchArgs
 #: (garda NX-313), în afara unui omograf NX-319; (3) `avoid` pe raft sau pe tip e excludere, nu
 #: subiect. Poarta de replay e DEROGATĂ (ca la v2.0-v6.0), declarat în card. Schema scrisă de
 #: model neschimbată.
-KERNEL_CONTRACT_VERSION = "kernel.v7.0"
+#: `kernel.v7.1` (NX-386, MINOR): `TurnPlan.then` + `TurnPlan.names` (aditive): un nume negăsit de
+#: resolver nu mai degradează actul în căutare când căutarea găsește chiar produsul numit; o
+#: comparație cu o singură țintă compară ecranul (sau dă detaliul), nu un partener din graf.
+KERNEL_CONTRACT_VERSION = "kernel.v7.1"
 
 # --- scrise de model ----------------------------------------------------------------------------
 
@@ -245,6 +248,12 @@ class TurnPlan(_CodeWritten):
     #: `kernel.v2.1` (D3): familia rutinei pe un plan `bundle` (scrisă de planner din subiect și
     #: pachet); `None` pe orice alt plan și pe un `bundle` fără familie declarată (calea de azi).
     family: str | None = None
+    #: `kernel.v7.1` (NX-386): pe o căutare după NUMELE unui produs negăsit de resolver, actul
+    #: pe care îl cerea clientul (`detail`, `link`, `compare`) și TOATE numele negăsite. Executorul
+    #: caută fiecare nume și, când rezultatele poartă numele (treptele resolverului), servește
+    #: actul pe produsele găsite; altfel căutarea de azi. Gol pe orice alt plan.
+    then: Literal["detail", "link", "compare"] | None = None
+    names: list[str] = Field(default_factory=list)
 
 
 class AnswerPolicy(_CodeWritten):

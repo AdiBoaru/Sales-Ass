@@ -174,6 +174,11 @@ class RoutineSpec:
     #: legătura raft → familie e o dată a TENANTULUI (P9), nu o regulă în cod. Absentă ⇒ `bundle`
     #: rămâne pe calea de azi (modelul alege familia din enum).
     family_by_shelf: dict[str, str] = field(default_factory=dict)
+    #: NX-386 (`kernel.v7.1`): nevoie (`dimensiune:valoare`, ca în stare) → familie. OPȚIONAL. O
+    #: rutină cerută fără subiect («fă-mi o rutină de seară pentru pete») își ia familia din nevoile
+    #: spuse. E o dată DERIVATĂ din catalog (`scripts/derive_family_by_need.py`: familia care poartă
+    #: majoritatea clară a produselor cu nevoia), nu o regulă în cod.
+    family_by_need: dict[str, str] = field(default_factory=dict)
 
     def label_of(self, step: str, locale: str | None = None) -> str:
         """Eticheta afișabilă a unui pas. Fallback: cheia humanizată (`_` → spațiu, capitalizat).
@@ -415,6 +420,22 @@ def build_spec(raw: Any) -> RoutineSpec:
             raise RoutineStepConfigError(f"family_by_shelf[{shelf!r}] = {fam!r} nu e o familie")
         family_by_shelf[shelf.strip()] = fam
 
+    family_by_need: dict[str, str] = {}
+    raw_needs = raw.get("family_by_need") or {}
+    if not isinstance(raw_needs, dict):
+        raise RoutineStepConfigError("routine_steps.family_by_need trebuie să fie obiect")
+    for need, fam in raw_needs.items():
+        dimension, sep, value = (
+            (need or "").partition(":") if isinstance(need, str) else ("", "", "")
+        )
+        if not sep or not dimension.strip() or not value.strip():
+            raise RoutineStepConfigError(
+                f"family_by_need: cheie invalidă {need!r} (dimensiune:valoare)"
+            )
+        if fam not in families:
+            raise RoutineStepConfigError(f"family_by_need[{need!r}] = {fam!r} nu e o familie")
+        family_by_need[f"{dimension.strip()}:{value.strip()}"] = fam
+
     step_stems: dict[str, tuple[str, ...]] = {}
     raw_stems = raw.get("step_stems") or {}
     if not isinstance(raw_stems, dict):
@@ -438,6 +459,7 @@ def build_spec(raw: Any) -> RoutineSpec:
         time_markers=time_markers,
         step_stems=step_stems,
         family_by_shelf=family_by_shelf,
+        family_by_need=family_by_need,
     )
 
 
@@ -446,7 +468,7 @@ EMPTY_ROUTINE_STEPS = RoutineSpec(families={}, by_product_type={})
 #: Cheile care ADAUGĂ o comportare, fără ca absența lor să schimbe ce funcționa înainte. Sunt
 #: singurele pe care `load_routine_steps` le poate arunca separat — vezi docstringul lui.
 _OPTIONAL_KEYS: frozenset[str] = frozenset(
-    {"priority", "step_time", "time_markers", "step_stems", "family_by_shelf"}
+    {"priority", "step_time", "time_markers", "step_stems", "family_by_shelf", "family_by_need"}
 )
 
 

@@ -23,7 +23,22 @@ Versioning: the contract is `kernel.v1.0`. **Minor** (`v1.1`): additive schema f
 
 No invariant, ownership row or state rule changes in v1.2, so no replay gate is required. The open questions step 6 raised on I5 (the safety prune on `aside`), I20 (the cart on `cart_ref`) and I15a/I12 (`grounding_guard` does not run on the v1 composition) are decided in the PRs that need them (B and C), under the minor/major rule.
 
-**Current version: `kernel.v7.0` (MAJOR, NX-384, 2026-10-08).** Three rules that discarded what the
+**Current version: `kernel.v7.1` (minor, NX-386, 2026-10-08).** Additive fields and executor rows
+from the same set: (1) `TurnPlan.then` + `TurnPlan.names`: a `detail`/`link`/`compare` (or a `find`
+naming a product) whose name the resolver did not find written whole is planned as today's name
+search, carrying the asked act and every missing name; the executor searches each name and matches
+the results with the resolver's precise steps (`references.name_in_results`: whole name, whole
+phrase, all content words, no "word owned by one item" step); every name on 1 to 3 products ⇒ the
+act is served on them next to the targets already `exact`, without `not_exact_match`; otherwise
+today's search with its disclosure (the resolution searches leave no session and no events);
+(2) a `compare` on a single target compares the rest of the set the target sits in (screen, then
+earlier sets, at most two), else a graph partner only if it is a curated substitute or the same
+type, else the target's detail (the graph partner was a towel); (3) `SearchArgs.price_min`
+(planner-only) from a hard `budget_min`, a typed `gte` price constraint on the planned path (a soft
+one stays the `price_min` gap); (4) `routine_steps.family_by_need` (pack data derived from the
+catalog): a `bundle` without subject takes the family of its active needs when they all agree.
+
+**`kernel.v7.0` (MAJOR, NX-384, 2026-10-08).** Three rules that discarded what the
 interpretation understood (set `wide-2026-10-07`, turns labelled "interpretation right, code wrong"):
 (1) a product KIND said in the turn that the vocabulary lacks (moved to `unmapped` by the
 validator) heads the search text like a named type, before spoken facet filters; next to a subject

@@ -223,6 +223,8 @@ def _redacted(trace: KernelTrace, redact: Callable[[str], str]) -> KernelTrace:
         )
 
     def plan(p: TurnPlan) -> TurnPlan:
+        # NX-386: numele negăsite sunt cuvintele clientului (P12), ca textul căutării
+        p = p.model_copy(update={"names": [text(n) for n in p.names]}) if p.names else p
         args = p.search_args
         if args is None:
             return p

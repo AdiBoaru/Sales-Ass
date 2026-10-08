@@ -81,7 +81,9 @@ from src.agent.tool_executor import ToolRun
 from src.agent.turn_planner import DELEGATE_TOOLS
 from src.catalog.render_text import display_name
 from src.config import get_settings
+from src.conversation.ambiguity_gate import MAX_ACT_BOTH
 from src.conversation.answer_policy import dimension_label
+from src.conversation.references import name_in_results
 from src.db.queries.catalog import get_products_by_ids
 from src.domain.pack import kernel_sentence
 from src.models import RetrievalResult
@@ -125,6 +127,8 @@ KERNEL_EXECUTOR_EVENTS: frozenset[str] = frozenset(
         "kernel_similar_partner",
         "verdict_withheld",
         "delegate_tool_refused",
+        "kernel_name_resolved",
+        "kernel_compare_single",
         "delegate_loop_failed",
         "kernel_second_plan_failed",
         "kernel_i10_blocked",
@@ -163,7 +167,10 @@ def _required_sentence(ctx: TurnContext, code: str) -> str:
 
 
 def _disclosure_text(
-    ctx: TurnContext, planned: PlannedTurn, skip: frozenset[int] = frozenset()
+    ctx: TurnContext,
+    planned: PlannedTurn,
+    skip: frozenset[int] = frozenset(),
+    drop: frozenset[str] = frozenset(),
 ) -> str:
     """Frazele dezvăluirilor planului, în ordine, fiecare o singură dată. Fail-open. `skip` =
     planurile care n-au servit: dezvăluirile lor nu descriu răspunsul (NX-374, recenzia: pe un coș
@@ -171,7 +178,7 @@ def _disclosure_text(
     pack = getattr(ctx.business, "domain_pack", None)
     out: list[str] = []
     for index, code in planned.disclosures:
-        if code in _REQUIRED or index in skip:
+        if code in _REQUIRED or index in skip or code in drop:
             continue
         phrase = kernel_sentence(pack, ctx.language, code)
         if phrase is None:
@@ -377,22 +384,49 @@ def _withhold(
 async def _compare(
     ctx: TurnContext, deps: PipelineDeps, ids: list[str], policy_for: PolicyFor | None
 ) -> bool | None:
-    """≥ 2 ținte ⇒ comparația lor. O țintă ⇒ partenerul similar (NX-319), sub același kill-switch
-    ca pe v1; ajunge aici doar când ACTUL are o singură țintă (orchestratorul lasă `dark` un act cu
-    mai multe ținte din care una s-a pierdut, `_target_lost`)."""
+    """≥ 2 ținte ⇒ comparația lor. O țintă (actul are una singură; orchestratorul lasă `dark` un act
+    cu mai multe ținte din care una s-a pierdut, `_target_lost`):
+
+    NX-386 (`kernel.v7.1`, turele wide-2026-10-07): partenerul din graf ieșea un prosop sau un
+    produs pe care clientul nu-l văzuse. Acum, în ordine: (1) restul setului în care stă ținta
+    (ecranul, apoi seturile de mai devreme, după starea porții), cel mult doi; (2) un partener din
+    graf doar dacă e substitut curatoriat sau de ACELAȘI tip; (3) altfel detaliul țintei, fără
+    partener inventat. Chip-ul nostru «compară-l cu un produs similar» rămâne pe scurtătura lui
+    (NX-319)."""
     if len(ids) >= 2:
         return await det.serve_comparison(ctx, deps, ids, withhold=_withhold(ctx, policy_for))
-    if not ids or not get_settings().compare_with_similar_enabled:
+    if not ids:
         return None
-    async with deps.db("similar_candidates") as conn:
-        candidates = await det.similar_candidates(conn, ctx.business.id, ids[0])
-    partner = det.pick_similar_partner(candidates)
-    ctx.emit("kernel_similar_partner", found=partner is not None, n=len(candidates))
-    if partner is None:
-        return False
-    return await det.serve_comparison(
-        ctx, deps, [ids[0], partner], withhold=_withhold(ctx, policy_for, (partner,))
-    )
+    partners = _set_partners(ctx, ids[0])
+    if not partners and get_settings().compare_with_similar_enabled:
+        async with deps.db("similar_candidates") as conn:
+            candidates = await det.similar_candidates(conn, ctx.business.id, ids[0])
+        kin = [c for c in candidates if c.get("is_substitute") or c.get("same_type")]
+        partner = det.pick_similar_partner(kin)
+        ctx.emit("kernel_similar_partner", found=partner is not None, n=len(kin))
+        partners = (partner,) if partner is not None else ()
+    if partners:
+        return await det.serve_comparison(
+            ctx, deps, [ids[0], *partners], withhold=_withhold(ctx, policy_for, partners)
+        )
+    ctx.emit("kernel_compare_single", served="detail")
+    await det.serve_details(ctx, deps, ids[0])
+    return ctx.reply is not None
+
+
+def _set_partners(ctx: TurnContext, target: str) -> tuple[str, ...]:
+    """NX-386: restul primului set (ecranul, apoi seturile de mai devreme, după starea porții) care
+    conține ținta, cel mult doi produse. Gol când ținta nu stă într-un set de cel puțin două."""
+    view = getattr(ctx, "kernel_view", None)
+    refs = getattr(getattr(view, "gate_state", None), "references", None)
+    if refs is None:
+        return ()
+    sets = [list(refs.displayed_products), *(list(s) for s in refs.recent_sets)]
+    for items in sets:
+        found = [d.product_id for d in items if d.product_id]
+        if target in found and len(found) >= 2:
+            return tuple(p for p in dict.fromkeys(found) if p != target)[:2]
+    return ()
 
 
 def _confirm(ctx: TurnContext, question: str) -> None:
@@ -801,6 +835,49 @@ async def _bundle(ctx: TurnContext, deps: PipelineDeps, plan: TurnPlan) -> bool 
     return ctx.reply is not None
 
 
+async def _serve_named(
+    ctx: TurnContext,
+    deps: PipelineDeps,
+    plan: TurnPlan,
+    policy_for: PolicyFor | None,
+) -> bool | None:
+    """NX-386 (`kernel.v7.1`): actul cerut pe un produs NUMIT pe care resolverul nu l-a găsit scris
+    întreg. Fiecare nume se caută (căutarea planificată, cu poarta de siguranță a uneltei), iar
+    rezultatele se confruntă cu numele pe treptele precise ale resolverului (`name_in_results`).
+    Fiecare nume pe 1..`MAX_ACT_BOTH` produse ⇒ actul (`detail`, `link`, `compare`) pe ele, lângă
+    țintele deja `exact`; altfel `None`, iar planul rulează ca azi (căutarea primului nume, cu
+    dezvăluirea). Căutările de rezolvare nu lasă sesiune și nici evenimente: nu ele au fost
+    arătate clientului. Turul real `w4_alergie_sarcina_nu#1`: «beauty of joseon relief sun contine
+    alcool?» primea „Nu am găsit exact produsul" deasupra exact acelui produs."""
+    from src.tools import catalog_tools  # noqa: PLC0415 — ciclul unelte ↔ agent
+
+    args = plan.search_args
+    if args is None or plan.then is None or not plan.names:
+        return None
+    ids = list(dict.fromkeys(plan.product_ids))
+    saved = _SecondPlan.take(ctx)
+    try:
+        for n, name in enumerate(plan.names):
+            update = {"query": name, "product_name": name}
+            current = args if n == 0 else args.model_copy(update=update)
+            result = await catalog_tools.run_planned_search(ctx, deps, current)
+            hits = name_in_results(name, result.products or [], ctx.language)
+            if not hits or len(hits) > MAX_ACT_BOTH:
+                return None
+            ids += [h for h in hits if h not in ids]
+    finally:
+        saved.restore(ctx)
+    ctx.emit("kernel_name_resolved", act=plan.then, names=len(plan.names), ids=len(ids))
+    if plan.then == "link":
+        await det._handle_link_intent(ctx, deps, ids=ids)
+        return True
+    if plan.then == "detail" and len(ids) == 1:
+        await det.serve_details(ctx, deps, ids[0])
+        return ctx.reply is not None
+    # `detail` pe mai mulți candidați = comparația lor (ca `act_both` pe o citire)
+    return await _compare(ctx, deps, ids, policy_for)
+
+
 async def execute_read_plans(
     ctx: TurnContext,
     deps: PipelineDeps,
@@ -823,6 +900,13 @@ async def execute_read_plans(
     plan = plans[0]
     if plan.executor not in READ_EXECUTORS:
         return None
+    if plan.executor == "search" and plan.then is not None:
+        named = await _serve_named(ctx, deps, plan, policy_for)
+        if named is not None:
+            if named:
+                # produsul numit E răspunsul: „nu am găsit exact” ar spune contrariul
+                _prefix(ctx, _disclosure_text(ctx, planned, drop=frozenset({"not_exact_match"})))
+            return named
     verdict = await _run_plan(
         ctx, deps, plan, outcome, policy_for, mutating, exclude_shown=0 in planned.excludes_shown
     )

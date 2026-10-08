@@ -246,7 +246,7 @@
                 {"id": "r1", "text": "Nokia Lumia 800", "kind": "name", "name": "Nokia Lumia 800"}
               ]
             },
-            "plan": {"executor": "search", "search_args": {"query": "Nokia Lumia 800", "product_name": "Nokia Lumia 800", "category": "telefoane"}}
+            "plan": {"executor": "search", "search_args": {"query": "Nokia Lumia 800", "product_name": "Nokia Lumia 800", "category": "telefoane"}, "then": "link", "names": ["Nokia Lumia 800"]}
           }
         },
         {
@@ -258,7 +258,7 @@
                 {"id": "r1", "text": "Nokia Lumia 800", "kind": "name", "name": "Nokia Lumia 800"}
               ]
             },
-            "plan": {"executor": "search", "search_args": {"query": "Nokia Lumia 800", "product_name": "Nokia Lumia 800", "category": "telefoane"}}
+            "plan": {"executor": "search", "search_args": {"query": "Nokia Lumia 800", "product_name": "Nokia Lumia 800", "category": "telefoane"}, "then": "detail", "names": ["Nokia Lumia 800"]}
           }
         },
         {
@@ -271,7 +271,7 @@
                 {"id": "r2", "text": "Nokia Lumia 800", "kind": "name", "name": "Nokia Lumia 800"}
               ]
             },
-            "plan": {"executor": "search", "search_args": {"query": "Nokia Lumia 800", "product_name": "Nokia Lumia 800", "category": "telefoane"}}
+            "plan": {"executor": "search", "search_args": {"query": "Nokia Lumia 800", "product_name": "Nokia Lumia 800", "category": "telefoane"}, "then": "compare", "names": ["Nokia Lumia 800"], "product_ids": ["el-01"]}
           }
         }
       ]
