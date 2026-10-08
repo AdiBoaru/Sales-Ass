@@ -197,11 +197,15 @@ _TREAT_VERB = re.compile(
 )
 # Verdict de SIGURANȚĂ în sarcină/alăptare (ambele ordine). „recomandat" NU e cuvânt de siguranță:
 # ar prinde redirectarea SIGURĂ „îți recomand să consulți medicul în sarcină" (fals-pozitiv).
+# NX-382 (recenzia 2c): `sigur\w*` și `potrivit\w*`: «crema e sigură în sarcină» și «e potrivită
+# pentru femeile însărcinate» treceau (doar masculinul „sigur" era prins). Fals-pozitivul costă o
+# propoziție (pe compozitor: fraza de siguranță a codului), fals-negativul e un claim P0 servit.
+_PREG_SAFE_CLAIM = r"(sigur\w*|safe|fara risc|poti folosi|se poate folosi|potrivit\w*|suitable)"
 _PREG_SAFE = re.compile(
-    r"(sigur|safe|fara risc|poti folosi|se poate folosi)\b.{0,30}"
-    r"(sarcin|insarcin|alaptar|pregnan|breastfeed|nursing)"
-    r"|(sarcin|insarcin|alaptar|pregnan|breastfeed|nursing).{0,30}"
-    r"(sigur|safe|fara risc|poti folosi|se poate folosi)"
+    rf"{_PREG_SAFE_CLAIM}\b.{{0,30}}"
+    r"(sarcin|insarcin|gravid|alapt|pregnan|breastfeed|nursing)"
+    r"|(sarcin|insarcin|gravid|alapt|pregnan|breastfeed|nursing).{0,30}"
+    rf"{_PREG_SAFE_CLAIM}"
 )
 # Garanție ABSOLUTĂ de inocuitate (nu „testat dermatologic", care e claim cosmetic uzual).
 _ALLERGEN_FREE = re.compile(

@@ -29,14 +29,14 @@ import asyncio
 import json
 import re
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any, Literal
 
 from src.agent import detail_answer
 from src.agent.voice import VOICE_RULES
 
 if TYPE_CHECKING:
-    from src.models import TurnContext
+    from src.models import RichReply, TurnContext
     from src.worker.runner import PipelineDeps
 
 TaskKind = Literal[
@@ -71,7 +71,10 @@ REASONS = (
     "invalid_reply",
     "ungrounded_rule",
     "not_a_question",
+    "safety_referral_missing",
 )
+#: NX-382 faza 2c: codul obligației de siguranță (contextul declarat de client, NX-173).
+SAFETY_REFERRAL = "safety_referral"
 
 CORE = """\
 You write the reply that a customer of the online store "{store}" reads in the chat. Code has \
@@ -144,6 +147,13 @@ OBLIGATIONS
 Each obligation listed for this turn must be in the reply, in your own words and where it reads \
 naturally; list its code in `obligations_met`. An obligation already said in HISTORY is said again \
 only if it still matters, and then in a few words.
+- `safety_referral`: the customer told you about a situation (its facts name it). Say it in every \
+reply, in a sentence of its own near the start of `text`: acknowledge the situation, say what you \
+left out when `left_out` is given, and that the product data cannot confirm what suits this \
+situation, so they should check their choice with a doctor or a pharmacist. Never say that a \
+product is safe or suitable for it, and never say that the store lacks what was left out. When \
+`already_told` is true, a short reminder that still names the doctor or the pharmacist is \
+enough.
 
 OUTPUT
 `text` is the reply. `general_advice` is the general know-how that completes it (one or two \
@@ -200,13 +210,19 @@ TASKS: Mapping[str, str] = {
         "what the store sells in general, and never claim that a product exists."
     ),
     "cart": (
-        "TASK cart: confirm the cart change in one sentence (with the quantity); if it failed, say "
-        "what to do. If COMPLEMENTS are given, suggest one with why it goes with what they took."
+        "TASK cart: the obligation `cart_change` says what was put in the cart (`added`, by short "
+        "name) and how many additions failed (`failed`). Confirm it in one sentence; if something "
+        "failed, say so and that they can try again. ITEMS, when given, are products that usually "
+        "go with what they took: present only those that really complete it (one or two, in "
+        "`items`, each `reason` saying why it goes with what they took), or none; never present "
+        "an item as part of the cart. No checkout link, no price for the cart."
     ),
     "order": "TASK order: say the order status plainly, or why login is needed and how.",
     "chitchat": (
-        "TASK chitchat: greeting, thanks or small talk. One short sentence, then what you can help "
-        "with, in context."
+        "TASK chitchat: a greeting, thanks, goodbye or small talk, with no request. Answer it in "
+        "one or two short sentences that fit the conversation so far (a goodbye after a choice is "
+        "a goodbye, not a new pitch). Offer help only when the conversation has not started yet. "
+        "No product facts, no prices, no promises."
     ),
 }
 
@@ -431,11 +447,13 @@ def _obligation_amounts(obligations: Sequence[Obligation]) -> frozenset[float]:
     întemeiat."""
     out: set[float] = set()
     for ob in obligations:
-        for v in ob.facts.values():
-            if isinstance(v, int | float) and not isinstance(v, bool):
-                out.add(float(v))
-            elif isinstance(v, str):
-                out.update(n for n, _s, _e in _numbers_in(v))
+        for value in ob.facts.values():
+            # o listă (numele adăugate în coș, cele lăsate deoparte) poartă și ea fapte
+            for v in value if isinstance(value, list | tuple) else (value,):
+                if isinstance(v, int | float) and not isinstance(v, bool):
+                    out.add(float(v))
+                elif isinstance(v, str):
+                    out.update(n for n, _s, _e in _numbers_in(v))
     return frozenset(out)
 
 
@@ -491,8 +509,59 @@ def check(
     missing = {o.code for o in inp.obligations} - set(composed.obligations_met)
     if missing:
         return Verdict(False, "obligation_missing"), composed
+    if any(o.code == SAFETY_REFERRAL for o in inp.obligations) and referral_sentence(reply) is None:
+        # P0: declarația nu ajunge; trimiterea la medic sau farmacist trebuie să fie în text, după
+        # scoaterea propozițiilor medicale (o trimitere care afirmă că un produs e sigur a căzut)
+        return Verdict(False, "safety_referral_missing"), composed
     cleaned = Composed(reply, advice, tuple(items), composed.suggestions, composed.obligations_met)
     return Verdict(True), cleaned
+
+
+def referral_sentence(text: str) -> str | None:
+    """Prima propoziție din `text` care trimite la medic sau farmacist (amprenta NX-173, aceeași pe
+    care o caută `safety.compose`), sau `None`. PUR."""
+    from src.safety.compose import already_has_sentence  # noqa: PLC0415
+
+    return next((s for s in sentences(text) if already_has_sentence(s)), None)
+
+
+def safety_obligation(ctx: TurnContext) -> Obligation | None:
+    """Obligația de siguranță a turului, din decizia ACUMULATĂ (`ctx.safety_decision`, NX-173): un
+    context declarat ⇒ trimiterea la medic sau farmacist e a modelului, verificată de poartă. Pe
+    registrul indisponibil (fail-closed) fraza rămâne a codului: nu există o decizie de povestit.
+    Faptele sunt etichetele localizate ale contextului și ale celor lăsate deoparte, nu id-uri.
+
+    `already_told` doar cu `SAFETY_REFERRAL_SHORT_AFTER_FIRST` (decizia lui Adi, implicit stins:
+    fraza întreagă pe fiecare tur, ca azi) și doar când un răspuns anterior a trimis deja la
+    medic."""
+    from src.config import get_settings  # noqa: PLC0415
+    from src.safety import messages  # noqa: PLC0415
+
+    decision = getattr(ctx, "safety_decision", None)
+    if not get_settings().composer_safety_enabled:
+        return None
+    if decision is None or not decision.must_refer or decision.unavailable:
+        return None
+    locale = ctx.language or ""
+    facts: dict[str, Any] = {
+        "situation": [messages.context_label(c, locale) for c in decision.contexts]
+    }
+    if decision.blocked:
+        facts["left_out"] = list(
+            dict.fromkeys(messages.omission_label(r, locale) for r in decision.rule_ids)
+        ) or [messages.omission_label("", locale)]
+    if get_settings().safety_referral_short_after_first and _referred_before(ctx):
+        facts["already_told"] = True
+    return Obligation(SAFETY_REFERRAL, facts)
+
+
+def _referred_before(ctx: TurnContext) -> bool:
+    """Un răspuns ANTERIOR al botului a trimis deja la medic sau farmacist. Citește doar textul
+    botului din istoric (amprenta NX-173), niciodată cuvintele clientului."""
+    from src.models import Author  # noqa: PLC0415
+    from src.safety.compose import already_has_sentence  # noqa: PLC0415
+
+    return any(m.author == Author.BOT and already_has_sentence(m.body) for m in ctx.history or [])
 
 
 async def compose(
@@ -504,9 +573,17 @@ async def compose(
 ) -> tuple[Composed | None, str | None]:
     """UN apel, validat pe fapte. `(None, motiv)` = apelantul servește rezerva de azi (motivul
     din `REASONS` sau `call_failed`). Emite `composer{task, outcome, reason?, prompt}`, vocabular
-    închis, zero text de client."""
+    închis, zero text de client.
+
+    Faza 2c: pe un context de siguranță declarat (NX-173), obligația `safety_referral` se adaugă
+    aici, pe orice sarcină, iar propoziția verificată se ține minte pe tur
+    (`ctx.safety_referral_composed`): `safety.compose.enforce` nu mai pune fraza codului peste
+    ea."""
     pack = getattr(ctx.business, "domain_pack", None)
     locale = ctx.language or ""
+    safety = safety_obligation(ctx)
+    if safety is not None and all(o.code != SAFETY_REFERRAL for o in inp.obligations):
+        inp = replace(inp, obligations=(*inp.obligations, safety))
     facts = facts_block(inp, pack, locale)
     system = system_prompt(inp.task, store=str(ctx.business.name or ""), locale=locale)
     user = user_message(inp, facts=facts, history=history, message=_message(ctx))
@@ -528,14 +605,52 @@ async def compose(
     if not verdict.ok:
         ctx.emit("composer", outcome="rejected", reason=verdict.reason, **emit)
         return None, verdict.reason
+    if safety is not None:
+        ctx.safety_referral_composed = referral_sentence(cleaned.reply)
     ctx.emit(
         "composer",
         outcome="composed",
         trimmed=cleaned.reply != composed.reply or cleaned.advice != composed.advice,
         advice=bool(cleaned.advice),
+        **({"safety": True} if safety is not None else {}),
         **emit,
     )
     return cleaned, None
+
+
+def rich_reply(
+    ctx: TurnContext, composed: Composed, products: Sequence[dict[str, Any]]
+) -> RichReply | None:
+    """Răspunsul cu carduri: cardurile ALESE de model (`items`, în ordinea lui, fiecare o dată),
+    hidratate din catalog pe același drum ca recomandarea v1 (`compose.hydrated_item`: preț, preț de
+    listă, rating, badge, link, variante), cu motivul lui, deja verificat pe fapte. Textul e
+    `intro`, sfatul general `education`, chips-urile pașii oferiți și formulați de model. Fără
+    nicio scurtare pe liste de cuvinte: poarta compozitorului a judecat deja. `None` = modelul n-a
+    ales niciun produs."""
+    from src.config import card_slots, get_settings  # noqa: PLC0415
+    from src.models import RichReply  # noqa: PLC0415
+    from src.worker import compose as wc  # noqa: PLC0415 — ciclul worker ↔ agent
+
+    by_id = {str(p.get("id")): p for p in products if p.get("id")}
+    items: list[Any] = []
+    kinds: dict[str, str | None] = {}
+    for pid, reason in composed.items:
+        p = by_id.get(pid)
+        if p is None or pid in kinds:
+            continue
+        item, kinds[pid] = wc.hydrated_item(ctx, p, reason=reason or None)
+        items.append(item)
+    if not items:
+        return None
+    items = wc.suppress_common_badges(ctx, items[: card_slots()], kinds)
+    return RichReply(
+        intro=composed.reply,
+        items=items,
+        pick=None,
+        education=composed.advice or None,
+        chips=wc._suggestion_chips(list(composed.suggestions)),
+        disclaimer=(wc.disclaimer(ctx.language) if get_settings().ai_disclaimer_enabled else None),
+    )
 
 
 def _message(ctx: TurnContext) -> str:

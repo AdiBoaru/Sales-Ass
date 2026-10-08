@@ -671,6 +671,11 @@ class TurnContext:
     # Citită de compunere (garantează fraza de siguranță) și de enforcement-ul final. `Any` ca să
     # nu importăm src.safety în models (ciclu: safety → config → …).
     safety_decision: Any = None
+    # NX-382 faza 2c: propoziția cu trimiterea la medic sau farmacist pe care a scris-o
+    # compozitorul și pe care poarta lui a verificat-o (obligația `safety_referral`). Owner UNIC:
+    # `composer.compose`. Citită DOAR de `safety.compose.enforce`, care nu mai pune fraza codului
+    # când propoziția e chiar în fiecare câmp randat. `None` = garanția NX-367 de azi.
+    safety_referral_composed: str | None = None
     halt: bool = False  # owner: Gates (tăcere intenționată — early exit fără reply)
     # NX-368, owner: Gates. Mesajul a fost semnalat de moderare, dar turul continuă la agent: nu
     # intră în cache-ul partajat și nici în memoria clientului (aftercare).

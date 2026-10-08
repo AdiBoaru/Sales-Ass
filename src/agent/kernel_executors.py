@@ -702,10 +702,108 @@ def _replace_lead(reply: Any, old: str, lead: str) -> None:
 async def _serve_cart(ctx: TurnContext, deps: PipelineDeps, plan: TurnPlan) -> bool:
     _require_cart_sentences(ctx)
     mutation = await _cart(ctx, deps, plan)
+    if get_settings().composer_cart_enabled and await _compose_cart(ctx, deps, mutation):
+        return True
     # cross-sell doar pe o mutație reușită integral: un eșec parțial se spune (recenzia D2)
     if mutation.added and not mutation.failed and await _cross_sell(ctx, deps, mutation):
         return True
     _set_cart_reply(ctx, mutation)
+    return True
+
+
+async def _cart_complements(
+    ctx: TurnContext, deps: PipelineDeps, mutation: _Mutation
+) -> list[dict[str, Any]]:
+    """Complementarele produsului adăugat EFECTIV (aceleași condiții și aceeași citire ca
+    cross-sell-ul v1, `planner.maybe_cross_sell`: graful de relații, fără ce e deja în coș, prin
+    poarta de siguranță). Doar CANDIDAȚI: pe care îi arată, sau niciunul, decide compozitorul
+    (wide-2026-10-07: 22 de ture cu complemente fără legătură, 8 fără nicio potrivire)."""
+    from src.agent.planner import (  # noqa: PLC0415 — ciclul agent
+        _cart_followup_products,
+        _current_cart_lines,
+    )
+
+    added = mutation.run.added_product
+    if (
+        not mutation.added
+        or mutation.failed
+        or added is None
+        or mutation.run.generated_links
+        or not get_settings().cross_sell_enabled
+    ):
+        return []
+    if get_settings().conversation_cart_enabled:
+        lines = await _current_cart_lines(ctx, deps, mutation.run, fetch=False)
+    else:
+        lines = list(ctx.state.cart or []) + list(ctx.state_patch.get("cart") or [])
+    exclude = [str(line.get("product_id")) for line in lines if line.get("product_id")]
+    exclude += [str(p.get("id")) for p in mutation.added]
+    rows, _label = await _cart_followup_products(ctx, deps, str(added["id"]), exclude)
+    return SafetyPolicy.for_turn(ctx).gate(ctx, list(rows), purpose="cross_sell")[0]
+
+
+async def _compose_cart(ctx: TurnContext, deps: PipelineDeps, mutation: _Mutation) -> bool:
+    """NX-382 faza 2c: confirmarea coșului o scrie compozitorul (obligația `cart_change`: ce s-a
+    adăugat, pe numele scurt, și câte au picat), iar complementarele sunt candidați pe care modelul
+    îi arată doar dacă chiar completează ce a luat clientul. Mutația a rulat deja: orice eșec al
+    modelului lasă răspunsul de azi (`False`), niciodată o a doua scriere."""
+    from src.agent import composer  # noqa: PLC0415 — ciclul agent ↔ executori
+    from src.worker import compose as wc  # noqa: PLC0415
+    from src.worker.context import conversation_transcript  # noqa: PLC0415
+
+    try:
+        complements = await _cart_complements(ctx, deps, mutation)
+    except Exception as e:  # noqa: BLE001 — complementarele sunt opționale; confirmarea rămâne
+        ctx.emit("composer", task="cart", outcome="complements_failed", error=type(e).__name__)
+        complements = []
+    change = {
+        "added": [display_name(str(p.get("name") or "")) for p in mutation.added],
+        "failed": mutation.failed,
+    }
+    inp = composer.ComposeInput(
+        task="cart",
+        products=complements,
+        obligations=[composer.Obligation("cart_change", change)],
+    )
+    history = conversation_transcript(ctx.history, consumer="composer")
+    composed, _reason = await composer.compose(ctx, deps, inp, history=history)
+    if composed is None:
+        return False
+    rich = composer.rich_reply(ctx, composed, complements)
+    if rich is not None:
+        ctx.retrieval = RetrievalResult(products=complements, source="composer_cart")
+        ctx.set_rich_reply(
+            rich, text=wc.flatten(rich, ctx.language), products=wc.card_products(rich.items)
+        )
+        ctx.reply.cacheable = False
+        ctx.emit("cross_sell", added=str(mutation.added[0].get("id")), n=len(rich.items))
+        return True
+    products = list(mutation.added)
+    ctx.retrieval = RetrievalResult(products=products, source="kernel_cart", catalog_read=False)
+    ctx.set_reply(
+        composed.served,
+        products=_card_products(products, n=len(products)) or None,
+        cacheable=False,
+    )
+    return True
+
+
+async def _compose_chitchat(ctx: TurnContext, deps: PipelineDeps) -> bool | None:
+    """NX-382 faza 2c: un salut, o mulțumire sau un rămas-bun (un tur doar `chitchat`) primește
+    răspunsul compozitorului, cu istoricul în față, fără unelte (pe v1, «ok pa» ajunsese la o
+    abonare la stoc, NX-383). `None` = calea v1 (fără unelte de mutație), ca azi. Turul n-a citit
+    catalogul: e o paranteză (NX-326), sesiunea de căutare rămâne."""
+    from src.agent import composer  # noqa: PLC0415 — ciclul agent ↔ executori
+    from src.worker.context import conversation_transcript  # noqa: PLC0415
+
+    history = conversation_transcript(ctx.history, consumer="composer")
+    composed, _reason = await composer.compose(
+        ctx, deps, composer.ComposeInput(task="chitchat"), history=history
+    )
+    if composed is None:
+        return None
+    ctx.retrieval = RetrievalResult(products=[], source="composer_chitchat", catalog_read=False)
+    ctx.set_reply(composed.served, cacheable=False)
     return True
 
 
@@ -923,10 +1021,16 @@ async def _run_plan(
     policy_for: PolicyFor | None,
     mutating: bool = False,
     exclude_shown: bool = False,
+    social: bool = False,
 ) -> bool | None:
     """`exclude_shown` (NX-370) = planul e o căutare născută dintr-un act `show_more`
-    (`PlannedTurn.excludes_shown`): prima pagină sare produsele de pe ecran."""
+    (`PlannedTurn.excludes_shown`): prima pagină sare produsele de pe ecran. `social` (NX-382
+    faza 2c) = turul e doar `chitchat`: `reply_only` îl răspunde compozitorul."""
     kind, ids = plan.executor, list(plan.product_ids)
+    if kind == "reply_only" and social and not mutating:
+        if get_settings().composer_chitchat_enabled:
+            return await _compose_chitchat(ctx, deps)
+        return None
     if kind == "reply_only":
         # Doar răspunsul unei MUTAȚII oprite de poartă fără întrebare (orice motiv: epuizat, țintă
         # neexactă, fără opțiuni, fără șablon, întrebare deja pusă, ținta care numește o
@@ -1076,9 +1180,12 @@ async def execute_read_plans(
     policy_for: PolicyFor | None = None,
     mutating: bool = False,
     dropped_request: bool = False,
+    *,
+    social: bool = False,
 ) -> bool | None:
     """Rulează planul turului. `mutating` = interpretarea turului a cerut o scriere (coșul);
-    `dropped_request` = poarta a scos și o cerere care nu scrie (NX-383: dezvăluirea ei rămâne).
+    `dropped_request` = poarta a scos și o cerere care nu scrie (NX-383: dezvăluirea ei rămâne);
+    `social` = turul e doar `chitchat` (NX-382 faza 2c: îl răspunde compozitorul).
     `None` = niciun executor legat (calea v1, `dark`), `False` =
     executorul a refuzat, `True` = a servit. `NoSentence` urcă la orchestrator. `policy_for` =
     politica de răspuns a orchestratorului, judecată pe produsele unei comparații (I12)."""
@@ -1111,7 +1218,14 @@ async def execute_read_plans(
                     _confirm(ctx, question)
             return named
     verdict = await _run_plan(
-        ctx, deps, plan, outcome, policy_for, mutating, exclude_shown=0 in planned.excludes_shown
+        ctx,
+        deps,
+        plan,
+        outcome,
+        policy_for,
+        mutating,
+        exclude_shown=0 in planned.excludes_shown,
+        social=social,
     )
     if not verdict:
         return verdict

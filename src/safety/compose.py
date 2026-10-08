@@ -112,18 +112,29 @@ def enforce(ctx: Any) -> None:
     if _already_enforced(reply, rich, cmp, sentence):
         # A doua trecere a runnerului (ieșire timpurie): nimic de adăugat, nimic de raportat.
         return
-    # „Golit" = excluderea a lăsat setul turului GOL (nimic păstrat), nu e niciun card, nicio
-    # întrebare deschisă, iar turul n-a citit nimic în afara catalogului (o regulă a magazinului,
-    # o comandă): atunci proza modelului vorbește doar despre un set golit de noi.
-    retrieval = getattr(ctx, "retrieval", None)
-    emptied = (
-        bool(getattr(decision, "blocked", None))
-        and not getattr(decision, "kept", None)
-        and not _has_cards(reply)
-        and not getattr(reply, "pending_question", None)
-        and not getattr(retrieval, "read_beyond_catalog", False)
-    )
-    if emptied:
+    composed = getattr(ctx, "safety_referral_composed", None)
+    if (
+        composed
+        and not _emptied(ctx, decision, reply)
+        and _already_enforced(reply, rich, cmp, composed)
+    ):
+        # NX-382 faza 2c: trimiterea a scris-o compozitorul, iar poarta lui a verificat-o (după
+        # scoaterea propozițiilor medicale). Ea e chiar în fiecare câmp randat, deci fraza codului
+        # ar fi a doua. Un set golit de excludere rămâne al codului (NX-367): acolo proza modelului
+        # vorbește despre un set golit de noi. Idempotent: a doua trecere nu mai emite.
+        reported = any(
+            e.type == "safety_sentence_enforced" for e in (getattr(ctx, "events", None) or [])
+        )
+        if not reported:
+            ctx.emit(
+                "safety_sentence_enforced",
+                contexts=list(getattr(decision, "contexts", ()) or []),
+                blocked=len(getattr(decision, "blocked", ()) or []),
+                unavailable=False,
+                outcome="composed",
+            )
+        return
+    if _emptied(ctx, decision, reply):
         # NX-367: excluderea a golit setul, deci proza modelului vorbește despre un set golit de
         # noi („nu am găsit seruri cu retinol în catalog"). Răspunsul e al codului.
         own = f"{sentence} {messages.alternatives_offer(locale)}"
@@ -158,6 +169,20 @@ def enforce(ctx: Any) -> None:
         blocked=len(getattr(decision, "blocked", ()) or []),
         unavailable=bool(getattr(decision, "unavailable", False)),
         outcome=outcome,
+    )
+
+
+def _emptied(ctx: Any, decision: Any, reply: Any) -> bool:
+    """„Golit" = excluderea a lăsat setul turului GOL (nimic păstrat), nu e niciun card, nicio
+    întrebare deschisă, iar turul n-a citit nimic în afara catalogului (o regulă a magazinului,
+    o comandă): atunci proza modelului vorbește doar despre un set golit de noi."""
+    retrieval = getattr(ctx, "retrieval", None)
+    return (
+        bool(getattr(decision, "blocked", None))
+        and not getattr(decision, "kept", None)
+        and not _has_cards(reply)
+        and not getattr(reply, "pending_question", None)
+        and not getattr(retrieval, "read_beyond_catalog", False)
     )
 
 
