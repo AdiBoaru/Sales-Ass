@@ -137,6 +137,11 @@
       "file": "src/agent/composer.py",
       "function": "_message",
       "reason": "NX-382: mesajul curent al clientului pleaca NESCHIMBAT spre compozitor (ca _message din kernel_executors spre compunerea v1). Nimic nu ramifica pe el."
+    },
+    {
+      "file": "src/agent/kernel_executors.py",
+      "function": "_composed_no_results",
+      "reason": "NX-382 faza 2: textul cautarii planificate (compus de planner) pleaca NESCHIMBAT spre compozitor, ca fapt al obligatiei `nothing_found` (ce s-a cautat). Nimic nu ramifica pe el."
     }
   ]
 }

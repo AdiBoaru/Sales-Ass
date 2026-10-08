@@ -491,3 +491,68 @@ async def test_without_rules_or_with_the_flag_off_todays_loop_answers(
 
 def test_rule_prices_are_grounded_for_the_store_answer():
     assert cp.rule_prices(["Livrarea costa 15 lei, gratuita peste 149 lei."]) == {15.0, 149.0}
+
+
+# --- faza 2: întrebarea porții și „n-am găsit" ----------------------------------------------------
+
+
+def _gate_ask(question="La care te referi dintre A și B?"):
+    from src.conversation.ambiguity_gate import GateOutcome
+    from src.conversation.interpretation import AmbiguityDecision
+
+    return GateOutcome(
+        decision=AmbiguityDecision(verdict="must_ask", reason="x", question=question),
+        asked_key="ref:abc",
+        asked_kind="pending",
+    )
+
+
+async def test_the_gate_question_is_phrased_by_the_composer_and_stays_pending(
+    electronics, catalog, monkeypatch
+):
+    monkeypatch.setattr(get_settings(), "composer_ask_enabled", True)
+    llm = ComposeLLM(_reply("Pe care o vrei, crema COSRX sau cea SOME BY MI?", met=["ask"]))
+    plan = TurnPlan(executor="ask", product_ids=["p1"], search_args=None, depends_on=None)
+    ctx = _ctx(electronics, "o iau")
+    assert await kx.execute_read_plans(ctx, _deps(llm), _planned(plan), _gate_ask())
+    assert ctx.reply.text.startswith("Pe care o vrei")
+    assert ctx.reply.pending_question is not None  # memoria întrebării (I11) rămâne
+    assert [p["product_id"] for p in ctx.reply.products] == ["p1"]
+    user = llm.calls[0][1]
+    assert '- ask {"question_to_ask": "La care te referi dintre A și B?"}' in user
+
+
+async def test_the_gate_question_falls_back_to_the_template(electronics, catalog, monkeypatch):
+    monkeypatch.setattr(get_settings(), "composer_ask_enabled", True)
+    llm = ComposeLLM(_reply("Pe care o vrei?"))  # obligația `ask` nedeclarată ⇒ respins
+    plan = TurnPlan(executor="ask", product_ids=["p1"], search_args=None, depends_on=None)
+    ctx = _ctx(electronics, "o iau")
+    await kx.execute_read_plans(ctx, _deps(llm), _planned(plan), _gate_ask())
+    assert ctx.reply.text == "La care te referi dintre A și B?"
+
+
+async def test_nothing_found_is_said_concretely_by_the_composer(electronics, monkeypatch):
+    from src.tools import catalog_tools
+    from src.tools.base import ToolResult
+    from src.tools.catalog_tools import SearchArgs
+
+    monkeypatch.setattr(get_settings(), "composer_no_results_enabled", True)
+
+    async def empty(ctx, deps, args, **kw):
+        return ToolResult(ok=True, products=[])
+
+    monkeypatch.setattr(catalog_tools, "run_planned_search", empty)
+    llm = ComposeLLM(
+        _reply("N-am găsit un ser sub 100 lei pentru pete, dar am peste.", met=["nothing_found"])
+    )
+    plan = TurnPlan(
+        executor="search",
+        product_ids=[],
+        search_args=SearchArgs(query="ser pete", price_max=100),
+        depends_on=None,
+    )
+    ctx = _ctx(electronics, "un ser pentru pete sub 100")
+    assert await kx.execute_read_plans(ctx, _deps(llm), _planned(plan), _outcome())
+    assert ctx.reply.text.startswith("N-am găsit un ser sub 100 lei")
+    user = llm.calls[0][1]
+    assert '"words": "ser pete"' in user and '"price_max": 100' in user

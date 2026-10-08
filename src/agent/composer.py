@@ -178,16 +178,21 @@ TASKS: Mapping[str, str] = {
         "the customer to rephrase."
     ),
     "ask": (
-        "TASK ask: you need one answer before acting. Ask one short, natural question that names "
-        "the OPTIONS so the customer can answer in a word. No other content."
+        "TASK ask: you need one answer before acting. The obligation `ask` carries the question "
+        "code needs answered, with its options; the candidate products, if any, are shown as "
+        "cards. Ask it in one short, natural sentence that names the options (short product names) "
+        "so the customer can answer in a word. No other content."
     ),
     "not_found": (
         "TASK not_found: the product the customer named is not in the catalog as such. Say so in a "
         "few words, then present the closest ITEMS as in a recommendation."
     ),
     "no_results": (
-        "TASK no_results: nothing in the catalog matches. Say so plainly and offer the closest "
-        "direction from OFFERED NEXT STEPS."
+        "TASK no_results: nothing in the catalog matches what was searched (obligation "
+        "`nothing_found`, with what was searched for). Say so plainly and concretely, then offer "
+        "one or two ways forward that the customer can take: drop or loosen one requirement, a "
+        "related kind of product, or a different budget. Never say what the store sells in "
+        "general."
     ),
     "cart": (
         "TASK cart: confirm the cart change in one sentence (with the quantity); if it failed, say "
@@ -246,6 +251,12 @@ def facts_block(inp: ComposeInput, pack: Any, language: str | None) -> str:
         parts.append(f"PRODUCT {handle}\n{detail_answer.product_facts(product, pack, language)}")
     if inp.store_rules:
         parts.append("STORE RULES\n" + "\n".join(f"- {r}" for r in inp.store_rules))
+    told = [ob for ob in inp.obligations if ob.facts]
+    if told:
+        # faptele obligațiilor (ce s-a căutat, întrebarea porții) sunt și ele fapte ale turului:
+        # un răspuns care le redă e întemeiat
+        lines = [f"- {ob.code}: {json.dumps(dict(ob.facts), ensure_ascii=False)}" for ob in told]
+        parts.append("OBLIGATION FACTS\n" + "\n".join(lines))
     return "\n\n".join(parts)
 
 
@@ -395,6 +406,17 @@ def rule_prices(rules: Sequence[str]) -> frozenset[float]:
     return frozenset(out)
 
 
+def _obligation_amounts(obligations: Sequence[Obligation]) -> frozenset[float]:
+    """Sumele numerice din faptele obligațiilor (bugetul căutat): un răspuns care le redă e
+    întemeiat."""
+    out: set[float] = set()
+    for ob in obligations:
+        for v in ob.facts.values():
+            if isinstance(v, int | float) and not isinstance(v, bool):
+                out.add(float(v))
+    return frozenset(out)
+
+
 def check(
     composed: Composed, inp: ComposeInput, *, facts: str, units: frozenset[str]
 ) -> tuple[Verdict, Composed]:
@@ -409,8 +431,8 @@ def check(
     reply, _dropped = _without_medical(composed.reply)
     if not reply:
         return Verdict(False, "medical_claim"), composed
-    rules = rule_prices(inp.store_rules)
-    verdict = detail_answer.check_answer(reply, list(inp.products), facts, units, rules)
+    grounded = rule_prices(inp.store_rules) | _obligation_amounts(inp.obligations)
+    verdict = detail_answer.check_answer(reply, list(inp.products), facts, units, grounded)
     if not verdict.ok:
         return Verdict(False, verdict.reason), composed
     items: list[tuple[str, str]] = []

@@ -503,7 +503,8 @@ async def _search(
             # aceeași amprentă ca sesiunea activă, pool epuizat: nu e „nu am găsit în catalog"
             return False
         # confirmarea unei nevoi implicite, cu setul gol, e chiar răspunsul (cardul §5)
-        text = _confirmation(outcome) or _required_sentence(ctx, "no_results")
+        text = _confirmation(outcome) or await _composed_no_results(ctx, deps, plan)
+        text = text or _required_sentence(ctx, "no_results")
         ctx.retrieval = RetrievalResult(products=[], source="kernel", catalog_read=True)
         ctx.set_reply(text, cacheable=False)
         return True
@@ -528,18 +529,65 @@ async def _page(ctx: TurnContext, deps: PipelineDeps) -> bool:
 
 
 async def _ask(ctx: TurnContext, deps: PipelineDeps, plan: TurnPlan, outcome: GateOutcome) -> bool:
+    """Întrebarea porții. NX-382 faza 2: o formulează compozitorul (întrebarea porții și opțiunile
+    ei sunt obligația `ask`), cu candidații ca carduri; pe orice eșec, șablonul pachetului. Memoria
+    întrebării (I11) se scrie după `pending_question`, nu după text, deci formularea nu o atinge."""
     question = outcome.decision.question
     if not question:
         return False
-    ctx.set_clarify(question, field="kernel", resume_route="sales")
     ids = list(plan.product_ids)
-    if ids and ctx.reply is not None:
+    rows: list[dict[str, Any]] = []
+    if ids:
         async with deps.db("kernel_ask_candidates") as conn:
             rows = await get_products_by_ids(conn, ctx.business.id, ids, limit=len(ids))
         rows = SafetyPolicy.for_turn(ctx).gate(ctx, rows, purpose="kernel_ask")[0]
-        if rows:
-            ctx.reply.products = _card_products(rows, n=len(rows))
+    text = question
+    if get_settings().composer_ask_enabled:
+        from src.agent import composer  # noqa: PLC0415 — ciclul agent ↔ executori
+        from src.worker.context import conversation_transcript  # noqa: PLC0415
+
+        inp = composer.ComposeInput(
+            task="ask",
+            products=rows,
+            obligations=[composer.Obligation("ask", {"question_to_ask": question})],
+        )
+        history = conversation_transcript(ctx.history, consumer="composer")
+        composed, _reason = await composer.compose(ctx, deps, inp, history=history)
+        if composed is not None:
+            text = composed.served
+    ctx.set_clarify(text, field="kernel", resume_route="sales")
+    if rows and ctx.reply is not None:
+        ctx.reply.products = _card_products(rows, n=len(rows))
     return True
+
+
+async def _composed_no_results(ctx: TurnContext, deps: PipelineDeps, plan: TurnPlan) -> str | None:
+    """NX-382 faza 2: „n-am găsit" scris de compozitor, din ce s-a căutat (textul, raftul,
+    nevoile, bugetul planului), ca să spună concret ce lipsește și încotro s-o ia. `None` = fraza
+    pachetului (flag stins sau model picat)."""
+    if not get_settings().composer_no_results_enabled or plan.search_args is None:
+        return None
+    from src.agent import composer  # noqa: PLC0415 — ciclul agent ↔ executori
+    from src.worker.context import conversation_transcript  # noqa: PLC0415
+
+    args = plan.search_args
+    searched = {
+        k: v
+        for k, v in {
+            "words": args.query,
+            "shelf": args.category,
+            "needs": list(args.concerns or []) + list(args.features or []),
+            "brand": args.brand,
+            "price_max": args.price_max,
+        }.items()
+        if v not in (None, "", [])
+    }
+    inp = composer.ComposeInput(
+        task="no_results", obligations=[composer.Obligation("nothing_found", searched)]
+    )
+    history = conversation_transcript(ctx.history, consumer="composer")
+    composed, _reason = await composer.compose(ctx, deps, inp, history=history)
+    return composed.served if composed is not None else None
 
 
 @dataclass(frozen=True)
