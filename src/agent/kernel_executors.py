@@ -746,7 +746,19 @@ async def _compose_cart(ctx: TurnContext, deps: PipelineDeps, mutation: _Mutatio
     """NX-382 faza 2c: confirmarea coșului o scrie compozitorul (obligația `cart_change`: ce s-a
     adăugat, pe numele scurt, și câte au picat), iar complementarele sunt candidați pe care modelul
     îi arată doar dacă chiar completează ce a luat clientul. Mutația a rulat deja: orice eșec al
-    modelului lasă răspunsul de azi (`False`), niciodată o a doua scriere."""
+    modelului lasă răspunsul de azi (`False`), niciodată o a doua scriere.
+
+    Recenzia 2c: ORICE excepție de după mutație (compunerea, cardurile, aplatizarea) întoarce
+    `False`, ca cross-sell-ul de azi: o excepție care urcă la orchestrator ar face turul să cadă pe
+    v1, iar instantaneul ar anula coșul din `state_patch` și confirmarea."""
+    try:
+        return await _compose_cart_reply(ctx, deps, mutation)
+    except Exception as e:  # noqa: BLE001 — după mutație: răspunsul coșului de azi (P6)
+        ctx.emit("composer", task="cart", outcome="cart_reply_failed", error=type(e).__name__)
+        return False
+
+
+async def _compose_cart_reply(ctx: TurnContext, deps: PipelineDeps, mutation: _Mutation) -> bool:
     from src.agent import composer  # noqa: PLC0415 — ciclul agent ↔ executori
     from src.worker import compose as wc  # noqa: PLC0415
     from src.worker.context import conversation_transcript  # noqa: PLC0415
@@ -771,7 +783,13 @@ async def _compose_cart(ctx: TurnContext, deps: PipelineDeps, mutation: _Mutatio
         return False
     rich = composer.rich_reply(ctx, composed, complements)
     if rich is not None:
-        ctx.retrieval = RetrievalResult(products=complements, source="composer_cart")
+        chosen = {it.product_id for it in rich.items}
+        # doar complementarele ALESE sunt ale turului; un coș nu închide sesiunea de căutare
+        ctx.retrieval = RetrievalResult(
+            products=[p for p in complements if str(p.get("id")) in chosen],
+            source="composer_cart",
+            catalog_read=False,
+        )
         ctx.set_rich_reply(
             rich, text=wc.flatten(rich, ctx.language), products=wc.card_products(rich.items)
         )

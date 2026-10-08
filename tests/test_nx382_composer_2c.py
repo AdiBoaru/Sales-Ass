@@ -36,11 +36,6 @@ from tests.test_interpreted_turn_d import (  # noqa: F401
     electronics,
 )
 
-REFERRAL = (
-    "Țin cont că ești însărcinată, așa că am lăsat deoparte opțiunile cu retinoizi, iar alegerea "
-    "e bine s-o verifici cu medicul sau farmacistul."
-)
-
 
 def _reply(text="Da.", items=(), met=(), advice="", suggestions=()):
     return {
@@ -244,7 +239,7 @@ async def test_the_chitchat_flag_off_stays_on_v1(electronics, monkeypatch):  # n
 def _chain(kinds, skipped=()):
     acts = [NS(kind=k) for k in kinds]
     return NS(
-        interpreted=NS(interpretation=NS(acts=acts)),
+        interpreted=NS(interpretation=NS(acts=acts, changes=[], references=[])),
         outcome=NS(skipped_acts=tuple(skipped)),
     )
 
@@ -265,8 +260,14 @@ def test_a_social_turn_is_only_chitchat_with_nothing_dropped(kinds, skipped, soc
 
 # --- fraza de siguranță ---------------------------------------------------------------------------
 
+#: o trimitere scrisă de model pe un context fără nimic exclus: situația, medicul și farmacistul
+ACK = (
+    "Fiindcă ești însărcinată, nu pot confirma ce ți se potrivește, așa că verifică alegerea cu "
+    "medicul sau farmacistul."
+)
 
-def _pregnant(blocked: bool = True, unavailable: bool = False) -> Decision:
+
+def _pregnant(blocked: bool = False, unavailable: bool = False) -> Decision:
     blocks = [Block("x1", "pregnancy", "pregnancy-retinoids", "retinol")] if blocked else []
     return Decision(
         kept=[{"id": "p1"}],
@@ -288,14 +289,17 @@ def _sctx(decision, history=()):
     )
 
 
-def test_a_declared_context_becomes_the_safety_obligation_with_labels():
+def test_a_declared_context_becomes_the_safety_obligation_with_its_label():
     ob = cp.safety_obligation(_sctx(_pregnant()))
-    assert ob.code == cp.SAFETY_REFERRAL
-    assert ob.facts == {
-        "situation": ["ești însărcinată"],
-        "left_out": ["opțiunile cu retinoizi"],
-    }
-    assert "left_out" not in cp.safety_obligation(_sctx(_pregnant(blocked=False))).facts
+    assert ob.code == cp.SAFETY_REFERRAL and ob.facts == {"situation": ["ești însărcinată"]}
+    assert cp.safety_note(_sctx(_pregnant())) is None
+
+
+def test_an_exclusion_keeps_the_codes_sentence_and_tells_the_model():
+    """Recenzia 2c (P0): ce s-a lăsat deoparte nu se poate verifica pe textul modelului."""
+    assert cp.safety_obligation(_sctx(_pregnant(blocked=True))) is None
+    title, body = cp.safety_note(_sctx(_pregnant(blocked=True)))
+    assert title == "SAFETY NOTE" and "1 products" in body and "do not write a referral" in body
 
 
 @pytest.mark.parametrize(
@@ -304,6 +308,7 @@ def test_a_declared_context_becomes_the_safety_obligation_with_labels():
 )
 def test_no_obligation_without_a_context_or_on_the_fail_closed_registry(decision):
     assert cp.safety_obligation(_sctx(decision)) is None
+    assert cp.safety_note(_sctx(decision)) is None
 
 
 def test_already_told_only_with_the_short_reminder_setting(monkeypatch):
@@ -316,23 +321,34 @@ def test_already_told_only_with_the_short_reminder_setting(monkeypatch):
     assert "already_told" not in cp.safety_obligation(_sctx(_pregnant(), [said])).facts
 
 
-def _checked(text, met=(cp.SAFETY_REFERRAL,)):
+def _checked(text, met=(cp.SAFETY_REFERRAL,), contexts=frozenset({"pregnancy"})):
     inp = cp.ComposeInput(
         task="chitchat", obligations=[cp.Obligation(cp.SAFETY_REFERRAL, {"situation": ["x"]})]
     )
-    return cp.check(cp.parse(_reply(text, met=met), inp), inp, facts="", units=frozenset())[0]
+    composed = cp.parse(_reply(text, met=met), inp)
+    return cp.check(
+        composed, inp, facts="", units=frozenset(), locale="ro", safety_contexts=contexts
+    )[0]
 
 
 def test_the_referral_must_be_in_the_text():
-    assert _checked(REFERRAL).ok
-    assert _checked("Țin cont de situația ta.").reason == "safety_referral_missing"
-    assert _checked(REFERRAL, met=()).reason == "obligation_missing"
+    assert _checked(ACK).ok
+    assert _checked("Țin cont că ești însărcinată.").reason == "safety_referral_missing"
+    assert _checked(ACK, met=()).reason == "obligation_missing"
 
 
-def test_a_referral_that_claims_safety_is_dropped_and_then_missing():
-    claim = "Crema e sigură în sarcină, dar întreabă farmacistul."
-    assert has_medical_claim(claim)
-    assert _checked(f"Salut. {claim}").reason == "safety_referral_missing"
+@pytest.mark.parametrize(
+    "text",
+    [
+        # recenzia 2c: amprenta „farmacist" singură le primea pe toate
+        "Ești însărcinată? Nu e nevoie să mergi la farmacist sau la medic pentru asta.",
+        "Felicitări pentru sarcină! Farmacistul tău o să fie mulțumit.",
+        "Verifică alegerea cu medicul sau farmacistul.",  # situația nu e numită
+        "Fiind însărcinată, crema e sigură, dar întreabă medicul sau farmacistul.",  # claim medical
+    ],
+)
+def test_a_fake_or_incomplete_referral_is_rejected(text):
+    assert _checked(text).reason in {"safety_referral_missing", "medical_claim"}
 
 
 @pytest.mark.parametrize(
@@ -342,39 +358,66 @@ def test_a_referral_that_claims_safety_is_dropped_and_then_missing():
         "Crema e sigură în sarcină.",
         "E potrivită pentru femeile însărcinate.",
         "Se poate folosi și când alăptezi.",
+        "It is suitable during pregnancy.",
     ],
 )
 def test_pregnancy_safety_claims_are_caught_in_every_gender(text):
     assert has_medical_claim(text)
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Pentru siguranța ta în sarcină, verifică cu medicul sau farmacistul.",
+        "Am lăsat deoparte opțiunile nepotrivite în sarcină.",
+        "În sarcină, aș merge pe ceva simplu și potrivit pentru ten sensibil.",
+        ACK,
+    ],
+)
+def test_the_widened_pattern_does_not_hit_honest_sentences(text):
+    assert not has_medical_claim(text)
+
+
 def test_the_guaranteed_sentences_are_not_medical_claims():
     from src.safety import messages
 
-    for blocked in (True, False):
-        sentence = messages.safety_sentence(
-            ["pregnancy"], ["pregnancy-retinoids"], locale="ro", blocked=blocked
-        )
-        assert not has_medical_claim(sentence)
-    assert not has_medical_claim(REFERRAL)
+    for locale in ("ro", "en"):
+        for blocked in (True, False):
+            for rules in (["pregnancy-retinoids"], ["necunoscut"]):
+                sentence = messages.safety_sentence(
+                    ["pregnancy", "breastfeeding"], rules, locale=locale, blocked=blocked
+                )
+                assert not has_medical_claim(sentence), sentence
+        assert not has_medical_claim(messages.unavailable_sentence(locale))
 
 
 async def test_the_composer_adds_the_obligation_and_remembers_the_sentence(
     electronics,  # noqa: F811
 ):
-    llm = ComposeLLM(_reply(f"{REFERRAL} Spune-mi ce cauți.", met=[cp.SAFETY_REFERRAL]))
+    llm = ComposeLLM(_reply(f"{ACK} Spune-mi ce cauți.", met=[cp.SAFETY_REFERRAL]))
     ctx = _ctx(electronics, "salut")
     ctx.safety_decision = _pregnant()
     composed, reason = await cp.compose(
         ctx, _deps(llm), cp.ComposeInput(task="chitchat"), history=""
     )
     assert reason is None and composed is not None
-    assert ctx.safety_referral_composed == REFERRAL
+    assert ctx.safety_referral_composed == ACK
+    assert '- safety_referral {"situation": ["ești însărcinată"]}' in llm.calls[0][1]
+
+
+async def test_on_an_exclusion_the_composer_gets_the_note_and_no_obligation(
+    electronics,  # noqa: F811
+):
+    llm = ComposeLLM(_reply("Spune-mi ce cauți."))
+    ctx = _ctx(electronics, "salut")
+    ctx.safety_decision = _pregnant(blocked=True)
+    composed, _ = await cp.compose(ctx, _deps(llm), cp.ComposeInput(task="chitchat"), history="")
+    assert composed is not None and ctx.safety_referral_composed is None
     user = llm.calls[0][1]
-    assert '- safety_referral {"situation": ["ești însărcinată"]' in user
+    assert "SAFETY NOTE" in user and "safety_referral" not in user
 
 
-def _enforce_ctx(text: str, composed: str | None, *, products=None, blocked=True, kept=True):
+def _enforce_ctx(text: str, composed: str | None, *, products=None, blocked=False, kept=True):
     decision = _pregnant(blocked=blocked)
     if not kept:
         decision = Decision(
@@ -397,25 +440,96 @@ def _enforce_ctx(text: str, composed: str | None, *, products=None, blocked=True
 
 
 def test_enforce_keeps_the_composed_referral_instead_of_the_code_sentence():
-    ctx = _enforce_ctx(f"{REFERRAL} Uite ce am.", REFERRAL, products=[{"product_id": "p1"}])
+    ctx = _enforce_ctx(f"{ACK} Uite ce am.", ACK, products=[{"product_id": "p1"}])
     safety_compose.enforce(ctx)
-    assert ctx.reply.text == f"{REFERRAL} Uite ce am."
+    assert ctx.reply.text == f"{ACK} Uite ce am."
     assert ctx.reply.cacheable is False
     [event] = ctx.events
     assert event.properties["outcome"] == "composed"
     safety_compose.enforce(ctx)  # a doua trecere a runnerului: nimic în plus
-    assert len(ctx.events) == 1 and ctx.reply.text == f"{REFERRAL} Uite ce am."
+    assert len(ctx.events) == 1 and ctx.reply.text == f"{ACK} Uite ce am."
 
 
 def test_enforce_prepends_the_code_sentence_when_the_composed_one_is_gone():
-    ctx = _enforce_ctx("Alt răspuns, pus de altă cale.", REFERRAL, products=[{"product_id": "p1"}])
+    ctx = _enforce_ctx("Alt răspuns, pus de altă cale.", ACK, products=[{"product_id": "p1"}])
+    safety_compose.enforce(ctx)
+    assert ctx.reply.text.startswith("Țin cont că ești însărcinată.")
+    assert ctx.events[-1].properties["outcome"] == "prepended"
+
+
+def test_an_exclusion_is_always_the_codes_sentence_even_with_a_marker():
+    ctx = _enforce_ctx(f"{ACK} Uite ce am.", ACK, products=[{"product_id": "p1"}], blocked=True)
     safety_compose.enforce(ctx)
     assert ctx.reply.text.startswith("Țin cont că ești însărcinată și am lăsat deoparte")
     assert ctx.events[-1].properties["outcome"] == "prepended"
 
 
 def test_an_emptied_set_stays_the_codes_answer():
-    ctx = _enforce_ctx(f"{REFERRAL} N-am găsit.", REFERRAL, kept=False)
+    ctx = _enforce_ctx(f"{ACK} N-am găsit.", ACK, kept=False, blocked=True)
     safety_compose.enforce(ctx)
     assert ctx.events[-1].properties["outcome"] == "replaced"
     assert "N-am găsit" not in ctx.reply.text
+
+
+def test_the_composed_sentence_is_restored_on_a_fallen_kernel_turn():
+    assert "safety_referral_composed" in it.EXECUTOR_WRITABLE
+
+
+# --- recenzia 2c: coșul și chitchat-ul ------------------------------------------------------------
+
+
+def test_numbers_in_cart_names_and_counts_are_not_amounts():
+    inp = cp.ComposeInput(
+        task="cart",
+        obligations=[
+            cp.Obligation("cart_change", {"added": ["ANUA Heartleaf 77 Toner"], "failed": 0})
+        ],
+    )
+    facts = cp.facts_block(inp, None, "ro")
+    for text in ("Am pus tonerul în coș, costă 77 lei.", "Coșul tău are acum 0 lei de plată."):
+        composed = cp.parse(_reply(text, met=["cart_change"]), inp)
+        assert not cp.check(composed, inp, facts=facts, units=frozenset())[0].ok, text
+    named = cp.parse(_reply("Am pus ANUA Heartleaf 77 Toner în coș.", met=["cart_change"]), inp)
+    assert cp.check(named, inp, facts=facts, units=frozenset())[0].ok
+
+
+async def test_an_exception_after_the_cart_write_keeps_todays_sentence(
+    electronics,  # noqa: F811
+    cart_tool,  # noqa: F811
+    complements,
+    monkeypatch,
+):
+    from tests.test_interpreted_turn_d import _added
+
+    def boom(*a, **kw):
+        raise KeyError("price")
+
+    monkeypatch.setattr(cp, "rich_reply", boom)
+    llm = ComposeLLM(_reply("E în coș.", items=[("P1", "Merge cu el.")], met=["cart_change"]))
+    ctx = _ctx(electronics, "il iau")
+    assert await kx.execute_read_plans(ctx, _deps(llm), _cart(), _outcome()) is True
+    assert ctx.reply.text == _added(electronics, "el-01")
+    assert [c[0] for c in cart_tool.calls].count("cart_add") == 1
+
+
+async def test_the_cart_turn_keeps_only_the_chosen_complements_and_the_session(
+    electronics,  # noqa: F811
+    cart_tool,  # noqa: F811
+    complements,
+):
+    llm = ComposeLLM(
+        _reply("E în coș.", items=[("P1", "Merge cu telefonul.")], met=["cart_change"])
+    )
+    ctx = _ctx(electronics, "il iau")
+    await kx.execute_read_plans(ctx, _deps(llm), _cart(), _outcome())
+    assert [p["id"] for p in ctx.retrieval.products] == ["el-03"]
+    assert ctx.retrieval.catalog_read is False
+
+
+def test_a_chitchat_that_changes_something_is_not_social():
+    chain = _chain(["chitchat"])
+    chain.interpreted.interpretation.changes = [NS()]
+    assert it._social_turn(chain) is False
+    chain = _chain(["chitchat"])
+    chain.interpreted.interpretation.references = [NS()]
+    assert it._social_turn(chain) is False

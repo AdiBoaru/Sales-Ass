@@ -143,6 +143,7 @@ EXECUTOR_WRITABLE: tuple[str, ...] = (
     "reply",
     "retrieval",
     "safety_decision",
+    "safety_referral_composed",  # NX-382 faza 2c: propoziția verificată a compozitorului
     "routine",
     "match_set",
     "answer_plan",
@@ -481,6 +482,10 @@ def _social_turn(chain: _Chain) -> bool:
     abonarea la stoc pe «ok pa», NX-383)."""
     interp = chain.interpreted.interpretation
     if interp is None or chain.outcome.skipped_acts or not interp.acts:
+        return False
+    # recenzia 2c: «mersi, apropo am tenul gras» schimbă starea, iar un «da» spus unei oferte are
+    # o referință; nu sunt doar un salut
+    if interp.changes or interp.references:
         return False
     return all(a.kind in _NO_REQUEST for a in interp.acts)
 

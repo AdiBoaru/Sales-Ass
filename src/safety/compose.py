@@ -42,6 +42,29 @@ def already_has_sentence(text: str | None) -> bool:
     return any(f in t for f in _FINGERPRINTS)
 
 
+#: NX-382 faza 2c (recenzia): o trimitere SCRISĂ DE MODEL numește și medicul, ca fraza codului
+#: („medicul sau farmacistul"). Amprenta singură ar fi primit «Farmacistul tău o să fie mulțumit».
+_DOCTOR_STEMS = ("medic", "doctor", "orvos")
+#: Câte cuvinte dinaintea farmacistului se caută o negație («nu e nevoie să mergi la farmacist»).
+_NEGATION_WINDOW = 6
+
+
+def is_model_referral(sentence: str, locale: str | None) -> bool:
+    """O propoziție scrisă de model care TRIMITE la medic sau farmacist (NX-382 faza 2c): amprenta
+    farmacistului, rădăcina medicului, și nicio negație a locale-i (`query_terms.
+    negation_markers`) în cele `_NEGATION_WINDOW` cuvinte dinaintea farmacistului. PUR. Nu
+    judecă un claim medical: acela îl scoate `has_medical_claim`, înainte."""
+    from src.catalog.folding import fold_text  # noqa: PLC0415
+    from src.catalog.query_terms import negation_markers  # noqa: PLC0415
+
+    words = re.findall(r"\w+", fold_text(sentence or ""))
+    at = next((i for i, w in enumerate(words) if any(f in w for f in _FINGERPRINTS)), None)
+    if at is None or not any(w.startswith(_DOCTOR_STEMS) for w in words):
+        return False
+    window = set(words[max(0, at - _NEGATION_WINDOW) : at])
+    return not (window & negation_markers(locale))
+
+
 def model_hint(decision: Any) -> str:
     """Hint-ul MINIM dat modelului când un context de siguranță e activ: o linie, ca framing-ul
     lui comercial să fie coerent („în sarcină, aș merge pe ceva simplu…") în loc să pară că
@@ -115,6 +138,8 @@ def enforce(ctx: Any) -> None:
     composed = getattr(ctx, "safety_referral_composed", None)
     if (
         composed
+        # o excludere o spune MEREU codul (recenzia 2c): ce s-a lăsat deoparte nu se verifică
+        and not getattr(decision, "blocked", None)
         and not _emptied(ctx, decision, reply)
         and _already_enforced(reply, rich, cmp, composed)
     ):
