@@ -228,15 +228,6 @@ class _Evidence:
 SUBJECT_TYPE = "product_type"
 
 
-def _same_stem(word: str, other: str, suffixes: Collection[str]) -> bool:
-    """NX-387: același cuvânt modulo un sufix de flexiune al locale-i (`query_terms`)."""
-    if word == other:
-        return True
-    short, long_ = sorted((word, other), key=len)
-    tail = long_[len(short) :]
-    return len(short) >= 3 and long_.startswith(short) and tail in suffixes
-
-
 def _same_stem(a: str, b: str, suffixes: Collection[str]) -> bool:
     """Același cuvânt, eventual flexionat pe AMBELE părți («creme» = „crema": tulpina „crem" +
     „e" / „a"), cu tulpina de cel puțin 3 litere. Sufixele sunt ale locale-i (P11)."""
@@ -650,18 +641,16 @@ class _Checker:
             anywhere = self._resolve_anywhere(phrase)
             if anywhere is None or anywhere.key == canonical:
                 continue
-            # NX-387 (`kernel.v8.0`): un cuvânt care se rezolvă pe ALTĂ dimensiune contrazice doar
-            # când citatul nu poartă nimic din numele valorii propuse. «un luciu» e și un finisaj,
-            # dar numește și „luciu de buze" (setul wide-2026-10-07 respingea tipul corect);
-            # «lemn» pentru culoarea „negru" rămâne contradicție. Un raft nu concura deja cu o
-            # fațetă (NX-330); pe ACEEAȘI dimensiune, altă valoare contrazice ca înainte.
-            if anywhere.dimension != dimension and named_part:
+            # Un RAFT nu concurează cu o valoare de fațetă: e subiectul, nu o proprietate. Altfel
+            # «se usucă după duș» ar fi „contrazis" de un raft „Duș" (NX-330).
+            if anywhere.dimension == CATEGORY_DIMENSION and dimension != CATEGORY_DIMENSION:
                 continue
-            if dimension == CATEGORY_DIMENSION and self._homograph_subshelf(
-                anywhere.key, evidence.words
-            ):
-                # NX-319 pe validator: un subraft numit doar prin eticheta lui, fără rădăcină în
-                # citat («pt fata lui» lângă Machiaj > Fata), e omograf, nu un raft concurent
+            # NX-387 (`kernel.v8.0`): un cuvânt care se rezolvă pe ALTĂ dimensiune nu contrazice o
+            # valoare al cărei CAP e numit în citat: «un luciu» e și un finisaj, dar e capul lui
+            # „luciu de buze" (setul wide-2026-10-07 respingea tipul corect). Coada unui nume nu
+            # ajunge («ten» din „fond de ten", NX-350), iar «lemn» pentru „negru" rămâne
+            # contradicție; pe ACEEAȘI dimensiune, altă valoare contrazice ca înainte.
+            if anywhere.dimension != dimension and named_part:
                 continue
             other = True
         return "implicit", -1, other, 0
@@ -669,9 +658,9 @@ class _Checker:
     def _names_part(
         self, words: Sequence[str], dimension: str, canonical: str | float | None
     ) -> bool:
-        """NX-387: citatul poartă un cuvânt de conținut din numele valorii propuse (cheia sau
-        eticheta ei din vocabular), cu flexiunea locale-i. Doar o dovadă PARȚIALĂ: nu face valoarea
-        `explicit`, doar o scoate dintre contradicții."""
+        """NX-387: citatul poartă CAPUL numelui valorii propuse (primul cuvânt de conținut al cheii
+        sau al etichetei ei din vocabular), cu flexiunea locale-i. Doar o dovadă PARȚIALĂ: nu face
+        valoarea `explicit`, doar o scoate dintre contradicțiile de pe alte dimensiuni."""
         if not isinstance(canonical, str) or self.vocab is None:
             return False
         vocab_dim = CATEGORY_DIMENSION if dimension == CATEGORY_DIMENSION else dimension
@@ -679,20 +668,13 @@ class _Checker:
         for entry in self.vocab.entries(vocab_dim):
             if entry.key == canonical and entry.label:
                 names.add(entry.label)
-        own = {w for n in names for w in tokens(n.replace("-", " ")) if w not in self.stop}
+        heads = set()
+        for name in names:
+            content = [w for w in tokens(name.replace("-", " ")) if w not in self.stop]
+            if content:
+                heads.add(content[0])
         suffixes = inflection_suffixes(self.locale)
-        return any(_same_stem(w, o, suffixes) for w in words for o in own)
-
-    def _homograph_subshelf(self, key: str, words: Sequence[str]) -> bool:
-        """Raftul `key` e un SUBRAFT a cărui rădăcină (cheie sau etichetă) nu apare în citat."""
-        entries = {e.key: e for e in (self.vocab.categories if self.vocab is not None else ())}
-        entry = entries.get(key)
-        if entry is None or not entry.path or "/" not in entry.path:
-            return False
-        root_key = entry.path.split("/", 1)[0]
-        root = entries.get(root_key)
-        names = {*tokens(root_key.replace("-", " ")), *(tokens(root.label) if root else ())}
-        return not (names & set(words))
+        return any(_same_stem(w, h, suffixes) for w in words for h in heads)
 
     def _spelled_name(
         self, words: Sequence[str], dimension: str, canonical: str | float | None

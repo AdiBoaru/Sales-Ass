@@ -756,12 +756,19 @@ class _Planner:
         by_type = getattr(getattr(self.pack, "routine_steps", None), "by_product_type", None) or {}
         found: list[str] = []
         for change in self.checked or ():
-            if change.rejected is not None or change.dimension != PRODUCT_TYPE:
-                continue
-            for kind in (change.canonical_value, *change.umbrella[:1]):
+            if (
+                change.rejected is not None
+                or change.dimension != PRODUCT_TYPE
+                or change.strength == "ranking"
+                or (change.change.relation or "eq") == "avoid"
+            ):
+                continue  # recenzia: un tip ocolit («fără mască») sau doar ghicit nu e un pas cerut
+            # codul presupus, apoi restul umbrelei: «mască» ghicită „de față" într-o rutină de păr
+            for kind in (change.canonical_value, *change.umbrella):
                 fam, _sep, step = str(by_type.get(kind, "")).partition(SEP)
-                if fam == family and step and step not in found:
-                    found.append(step)
+                if fam == family and step:
+                    if step not in found:
+                        found.append(step)
                     break
         return found if len(found) >= 2 else []
 

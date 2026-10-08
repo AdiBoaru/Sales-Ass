@@ -61,12 +61,56 @@ def test_a_quote_naming_nothing_of_the_value_is_still_a_mismatch():
     assert c.rejected == "semantic_mismatch"
 
 
-def test_a_subshelf_homograph_is_not_a_competing_shelf():
+def test_a_subshelf_homograph_still_competes_declared():
+    """Declarat: «pt fata lui» pe raftul `ten` rămâne contrazis de Machiaj > Fata. O excepție pentru
+    omograf ar fi lăsat să treacă orice raft («pt fata lui» pe `par`, recenzia); notițele de
+    magazin NX-380 țin raftul în amonte."""
     c = _check(
         ch(op="set", dimension="category", relation="eq", value="ten", quote="pt fata lui"),
         "ok atunci ceva pt fata lui, are tenul gras",
     )
-    assert c.rejected is None and c.canonical_value == "ten"
+    assert c.rejected == "semantic_mismatch"
+
+
+def test_a_shelf_word_never_contradicts_a_facet_value():
+    """Recenzia (H1): regula NX-330 rămâne: «pt fata» (raftul Machiaj > Fata) nu contrazice
+    hidratarea."""
+    vocab = CatalogVocabulary(
+        business_id="b",
+        dimensions={
+            **VOCAB.dimensions,
+            "concerns": (VocabEntry("hydration", "hidratare", 90),),
+        },
+    )
+    [c] = check_changes(
+        interp(ch(dimension="concerns", value="hydration", quote="ceva hidratant pt fata")),
+        words=UserWords("vreau ceva hidratant pt fata", ()),
+        vocab=vocab,
+        pack=SOLE,
+        locale="ro",
+    )
+    assert c.rejected is None
+
+
+def test_the_tail_of_a_name_is_not_its_head():
+    """Recenzia (M1, NX-350): «ten» e coada lui „fond de ten", deci «ten gras» (tip de ten) o
+    contrazice în continuare."""
+    vocab = CatalogVocabulary(
+        business_id="b",
+        dimensions={
+            **VOCAB.dimensions,
+            "product_type": (VocabEntry("fond de ten", "fond de ten", 50),),
+            "skin_type": (VocabEntry("oily", "ten gras", 300),),
+        },
+    )
+    [c] = check_changes(
+        interp(ch(dimension="product_type", value="fond de ten", quote="pentru ten gras")),
+        words=UserWords("vreau ceva pentru ten gras", ()),
+        vocab=vocab,
+        pack=SOLE,
+        locale="ro",
+    )
+    assert c.rejected == "semantic_mismatch"
 
 
 def test_a_subshelf_with_its_root_named_still_competes():
@@ -109,6 +153,22 @@ def test_a_new_value_on_an_emptied_list_key_is_not_a_revival():
 
 def test_the_retracted_value_itself_stays_retracted():
     state, policy = _after_retracting("concerns", "redness")
+    result = reduce_all(
+        state, [_proposal("set_need", "concerns", "redness", "user_implicit")], policy
+    )
+    assert [r.reason for r in result.rejected] == ["revoked_key"]
+
+
+def test_a_cleared_list_key_still_blocks_a_revival_by_description():
+    """Recenzia (M2): după «uită criteriile» (tombstone de cod pe cheie), o descriere nu reînvie
+    valoarea pe o cheie de listă."""
+    from src.agent.interpreted_turn import reducer_policy
+
+    policy = reducer_policy(SOLE)
+    state = reduce_all(
+        ConversationStateV2(), [_proposal("set_need", "concerns", "redness")], policy
+    ).state
+    state = reduce_all(state, [_proposal("clear_all", None, None)], policy).state
     result = reduce_all(
         state, [_proposal("set_need", "concerns", "redness", "user_implicit")], policy
     )
@@ -198,6 +258,13 @@ def test_the_steps_named_in_the_turn_scope_the_routine():
     buget, a ieșit fără mască."""
     plan = _bundle_plan([_type("sampon"), _type("balsam"), _type("masca de par")])
     assert (plan.family, plan.steps) == ("par", ["spalare", "conditionare", "tratament"])
+
+
+def test_an_avoided_type_is_not_an_asked_step():
+    """Recenzia (M3): «șampon și balsam, fără mască» nu cere tratamentul."""
+    avoid = {**_type("masca de par"), "relation": "avoid"}
+    plan = _bundle_plan([_type("sampon"), _type("balsam"), avoid])
+    assert plan.steps == ["spalare", "conditionare"]
 
 
 def test_one_type_next_to_a_routine_is_not_a_scope():
