@@ -12,7 +12,7 @@ import json
 from typing import TYPE_CHECKING, Any
 
 from src.models import Author, Direction, Message
-from src.worker.summarizer import _redact_pii
+from src.worker.profile import _redact_pii
 
 if TYPE_CHECKING:
     import asyncpg

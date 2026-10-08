@@ -40,7 +40,6 @@ from src.db.queries.facts import fetch_relevant_facts
 from src.db.queries.inbound_dedupe import claim_inbound, mark_inbound_completed
 from src.db.queries.messages import get_recent_messages, insert_message
 from src.db.queries.outbox import enqueue_outbox
-from src.db.queries.summaries import get_summary_for_context
 from src.models import Author, BusinessConfig, Contact, Direction, Message
 from src.observability import turn_latency
 
@@ -63,7 +62,6 @@ class TurnLoadSnapshot:
     bot_active: bool = True
     shadow_mode: bool = False
     history: list[Message] = field(default_factory=list)
-    summary: str | None = None
     facts: list[Any] = field(default_factory=list)
     inbound_msg_id: str | None = None
 
@@ -163,8 +161,7 @@ async def _load_turn(
             )
             await touch_last_inbound(conn, business.id, conv["id"])
         history = await get_recent_messages(conn, business.id, conv["id"])
-        summary = await get_summary_for_context(conn, business.id, conv["id"])
-        # NX-148: memoria structurată. BEST-EFFORT (ca summary/cache): un fail de citire NU
+        # NX-148: memoria structurată. BEST-EFFORT (ca cache-ul): un fail de citire NU
         # blochează turul — degradare la history+state (P6).
         facts: list[Any] = []
         if load_facts:
@@ -183,7 +180,6 @@ async def _load_turn(
         bot_active=conv["bot_active"],
         shadow_mode=bool(conv.get("shadow_mode")),
         history=history,
-        summary=summary,
         facts=facts,
         inbound_msg_id=inbound_msg_id,
     )

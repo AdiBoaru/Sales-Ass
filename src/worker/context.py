@@ -1,12 +1,13 @@
 """Stagiul 6 (logică) — Context builder: pregătește contextul conversației pentru
 prompturile LLM (triaj + agent), cu BUGET impus în cod (principiul 4).
 
-Istoricul e deja încărcat în `ctx.history` de processor (max 8 mesaje, cel mai
-recent ultimul — INCLUSIV mesajul curent). Aici îl formatăm compact + bugetat, plus
-blocuri de **rezumat de conversație** (`conversation_summaries`, felia 2), **profil client**
+Istoricul e deja încărcat în `ctx.history` de processor (max 20 de mesaje, `HISTORY_LIMIT`, cel
+mai recent ultimul — INCLUSIV mesajul curent). Aici îl formatăm, plus blocuri de **profil client**
 (`contacts.profile`) și **state references** (produse arătate + constrângeri, principiul 8).
-Rezumatul e DOAR citit aici (din `ctx.summary`, seedat de processor) — generarea lui rulează
-post-tur async (vezi `src.worker.summarizer`).
+
+Rezumatul de conversație a ieșit din proiect (decis de Adi pe 2026-10-08): modelul vede ultimele
+mesaje întregi, exact cum au fost scrise, iar ce e mai vechi de fereastră îl poartă doar starea
+(produse afișate, nevoi, subiect), nu un text comprimat de alt apel de model.
 """
 
 from __future__ import annotations
@@ -72,9 +73,8 @@ def conversation_transcript(
             role = "Client" if m.direction == Direction.INBOUND else "Asistent"
             lines.append(f"{role}: {safe_body}")
         return "\n".join(lines)[-max_chars:]
-    # NX-255: implicit toată fereastra încărcată (`HISTORY_LIMIT`), nu 6. Rezumatul acoperă
-    # ce e ÎNAINTEA mesajelor încărcate, deci o fereastră de 6 din 8 lăsa un tur (mesajele 7-8 în
-    # urmă) în afara ambelor (recenzia NX-255).
+    # NX-255: implicit toată fereastra încărcată (`HISTORY_LIMIT`). O fereastră mai mică decât cea
+    # încărcată ar arunca mesaje pe care nimic altceva nu le mai poartă.
     window = max_turns if max_turns is not None else HISTORY_LIMIT
     return _structured_transcript(prior[-window:], emit=emit, consumer=consumer)
 
@@ -247,7 +247,7 @@ def _fact_label(f: dict) -> str:
 
 def facts_block(ctx: TurnContext, *, max_facts: int = 6, max_chars: int = 400) -> str:
     """Bloc compact de facts STABILE știute despre client (buget/brand/restricții/…), memoria
-    structurată peste mesajele ieșite din istoricul de 8. Bugetat (P4). Seed de processor în
+    structurată peste mesajele ieșite din fereastra de istoric. Bugetat (P4). Seed de processor în
     `ctx.facts` (gol când memoria e OFF → bloc gol, degradare).
 
     NX-160: `ctx.facts` conține DOAR facts `visibility='inject'` (PII/medical filtrate la sursă +
@@ -303,7 +303,7 @@ def memory_block(ctx: TurnContext, *, max_needs: int = 8, max_chars: int = 500) 
     reducerului și al validatorului — un prompt nu e o poartă.
 
     Revocările apar EXPLICIT. O absență e ambiguă („n-a spus" vs „a retras"), iar ambiguitatea e
-    exact ce permite unui rezumat să reintroducă faptul retras. Gol când v2 e stins."""
+    exact ce permite istoricului să reintroducă faptul retras. Gol când v2 e stins."""
     from src.conversation.state_v2 import ConversationStateV2
 
     state_v2 = getattr(ctx, "state_v2", None)
@@ -321,7 +321,7 @@ def memory_block(ctx: TurnContext, *, max_needs: int = 8, max_chars: int = 500) 
     revoked = sorted(state_v2.revoked_keys())
     if revoked:
         lines.append(
-            "Retrase de client (NU le reintroduce, nici din rezumat): " + ", ".join(revoked[:6])
+            "Retrase de client (NU le reintroduce, nici din istoric): " + ", ".join(revoked[:6])
         )
     if state_v2.topic.category_key:
         lines.append(f"Subiect curent: {state_v2.topic.category_key}")
@@ -387,7 +387,7 @@ def state_block(
     ## De ce 1200 și nu „cât mai mult"
 
     `max_chars` e bugetul ACESTUI bloc, nu al promptului: un singur paragraf, vecin cu transcriptul
-    (1200), rezumatul, profilul (300) și `memory_block` (500). La ~4 caractere pe token, blocul
+    (1200), profilul (300) și `memory_block` (500). La ~4 caractere pe token, blocul
     plin costă ~300 de tokeni pe tur, și e dinamic, deci nu atinge prefixul cacheabil (NX-275).
 
     Cifra nu e rotunjită din intuiție, e pragul la care bugetul ÎNCETEAZĂ să lege. Măsurat pe cele
@@ -472,17 +472,6 @@ def page_context_block(ctx: TurnContext, *, max_chars: int = 300) -> str:
     return text[:max_chars]
 
 
-def summary_block(ctx: TurnContext, *, max_chars: int | None = None) -> str:
-    """Bloc de rezumat al conversației anterioare (felia 2), din `ctx.summary` (seedat de
-    processor — fără I/O aici). Acoperă mesajele de dinaintea ultimelor 8 (care rămân în
-    transcript). Bugetat (P4); gol/lipsă → "" (degradare: doar ultimele 8)."""
-    text = (ctx.summary or "").strip()
-    if not text:
-        return ""
-    cap = max_chars if max_chars is not None else get_settings().summary_max_chars
-    return ("Rezumat conversație anterioară: " + text)[:cap]
-
-
 def _emit_context_bytes(ctx: TurnContext, consumer: str, sections: list[tuple[str, str]]) -> None:
     """UN event per consumator, cu octeții fiecărui bloc — ca `turn_latency`/`llm_usage`: o
     defalcare, nu N evenimente. Numele blocurilor sunt vocabular ÎNCHIS, iar valorile sunt lungimi:
@@ -496,9 +485,8 @@ def _emit_context_bytes(ctx: TurnContext, consumer: str, sections: list[tuple[st
 
 
 def context_blocks(ctx: TurnContext, *, consumer: str | None = None) -> str:
-    """Unește blocurile ne-goale de context (rezumat + profil + state) pentru prompturile
-    triaj/agent. Ordine CRONOLOGICĂ: rezumatul (fundalul vechi) ÎNAINTEA profilului/state-ului;
-    transcriptul ultimelor 8 e concatenat downstream (în triage/agent), deci rezumat→…→recent.
+    """Unește blocurile ne-goale de context (profil + state) pentru promptul agentului.
+    Transcriptul ultimelor mesaje e concatenat downstream (în agent).
     Stă în mesajul USER (dinamic), nu în system — promptul static rămâne byte-identic (prompt
     caching neatins). Gol → "" (nimic de adăugat).
 
@@ -513,7 +501,6 @@ def context_blocks(ctx: TurnContext, *, consumer: str | None = None) -> str:
     # fapt apare de două ori, iar varianta fără tărie e cea care invită la relaxare.
     v2 = isinstance(getattr(ctx, "state_v2", None), ConversationStateV2)
     sections = [
-        ("summary", summary_block(ctx)),
         ("profile", customer_profile_block(ctx.contact)),
         ("facts", facts_block(ctx)),  # NX-148: memorie structurată (după profil, înainte de state)
         ("state", state_block(ctx.state, include_constraints=not v2, language=ctx.language)),

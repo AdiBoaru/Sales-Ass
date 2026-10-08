@@ -129,7 +129,6 @@ def begin_turn_input(
                 "locale": snap.locale,
                 "bot_active": snap.bot_active,
                 "shadow_mode": snap.shadow_mode,
-                "summary": snap.summary,
                 "facts": snap.facts,
                 "history": [_message(m) for m in snap.history],
                 "contact": {k: contact.get(k) for k in _CONTACT_KEYS},

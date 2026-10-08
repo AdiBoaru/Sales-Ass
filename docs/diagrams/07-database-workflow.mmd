@@ -33,7 +33,7 @@ flowchart TD
     WSTATE["conversations.state + state_version"]:::db
     WDED["inbound_dedupe claim → completed<br/>claim-or-resume NX-86"]:::db
     WANA["analytics_events INSERT-only, best-effort"]:::db
-    WCACHE["semantic_cache / summaries — savepoints"]:::db
+    WCACHE["semantic_cache — savepoints"]:::db
     WSTS["message_status_events → messages.status"]:::db
     WLOC["conversations.locale — language stage :44"]:::db
   end

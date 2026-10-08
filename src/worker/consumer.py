@@ -203,7 +203,7 @@ async def process_event(pool, redis: Redis, event: dict) -> None:
                 db, business, channel["channel_id"], event, redis=redis, defer_aftercare=True
             )
             # Aftercare-ul rulează cu checkout-uri scurte proaspete, fără conexiune ținută pe
-            # durata LLM-ului de fundal (summarizer/profil/embed de cache).
+            # durata LLM-ului de fundal (profil/embed de cache).
             if result is not None and result.aftercare is not None:
                 await run_aftercare(db, redis, result.aftercare)
         finally:

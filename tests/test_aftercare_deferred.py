@@ -1,7 +1,7 @@
 """NX-161 F1 — DoD deferred: aftercare-ul folosește checkout-uri SCURTE, NU ține un conn peste LLM.
 
 Un `SpyDb` (provider fals) numără checkout-urile și urmărește câte conexiuni sunt DESCHISE în orice
-moment; LLM-urile (embed / generate_summary) înregistrează starea `open` la momentul apelului. Cele
+moment; LLM-urile (embed / profil) înregistrează starea `open` la momentul apelului. Cele
 două aserții cheie (regula 1 + fresh checkouts):
   • LLM-ul rulează cu ZERO conn deschis (`db_open_at_llm == 0`);
   • read și write sunt checkout-uri SEPARATE (`checkouts >= 2`, niciodată 2 simultan).
@@ -97,46 +97,6 @@ async def test_cache_writeback_uses_short_checkouts_and_no_model(monkeypatch):
     assert spy_db.max_concurrent == 1
     # 2026-09-24: cache-ul nu mai are vector, deci write-back-ul nu mai cheamă niciun model.
     assert spy_llm.db_open_at_llm is None
-
-
-async def test_summarize_deferred_releases_conn_across_generate(monkeypatch):
-    spy_db = SpyDb()
-    recorded = {}
-
-    async def fake_count(conn, b, c):
-        return 50  # peste prag
-
-    async def fake_latest(conn, b, c):
-        return None
-
-    async def fake_window(conn, b, c, *, after, tail=8):
-        return [SimpleNamespace(created_at="2026-06-16T10:00:00Z")]
-
-    async def fake_generate(llm, msgs, prev, lang):
-        recorded["db_open_at_llm"] = spy_db.open  # trebuie 0 (reads închise ÎNAINTE de generare)
-        return "REZUMAT"
-
-    async def fake_insert_sum(conn, *a):
-        return "sid"
-
-    async def fake_events(conn, *a, **k):
-        pass
-
-    monkeypatch.setattr(ac, "count_messages", fake_count)
-    monkeypatch.setattr(ac, "get_latest_summary", fake_latest)
-    monkeypatch.setattr(ac, "get_messages_for_summary", fake_window)
-    monkeypatch.setattr(ac, "generate_summary", fake_generate)
-    monkeypatch.setattr(ac, "insert_conversation_summary", fake_insert_sum)
-    monkeypatch.setattr(ac, "insert_events", fake_events)
-
-    ctx = SimpleNamespace(language="ro", turn_id="t")
-    await ac._summarize_if_needed(spy_db, None, "b", "conv", ctx, object())
-
-    # reads (count/latest/window) + writes (summary/events) = checkout-uri SEPARATE.
-    assert spy_db.checkouts == 2
-    assert spy_db.max_concurrent == 1
-    # generate_summary (LLM) a rulat cu conn ELIBERAT (regula 1).
-    assert recorded["db_open_at_llm"] == 0
 
 
 class _FailingDb:

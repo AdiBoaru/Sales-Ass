@@ -22,7 +22,7 @@ from typing import Any
 
 from src.catalog.folding import strip_diacritics
 
-# Telefon E.164-ish (aceeași formă ca profile._PHONE_RE / summarizer). PII (P12).
+# Telefon E.164-ish (aceeași formă ca profile._PHONE_RE). PII (P12).
 _PHONE_RE = re.compile(r"\+?\d[\d\s\-]{6,}\d")
 _EMAIL_RE = re.compile(r"[^\s@]+@[^\s@]+\.[^\s@]+")
 # IBAN RO / card 13-19 cifre / CNP RO (13 cifre) — financiar (drop).

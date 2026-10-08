@@ -10,15 +10,14 @@ flowchart TD
   classDef dec fill:#f9e79f,stroke:#b7950b,color:#000
 
   subgraph Load["ÎNCEPUTUL TURULUI — ce ne amintim (processor.py:280-310)"]
-    H["Ultimele 8 mesaje"]:::read
+    H["Ultimele 20 de mesaje, întregi"]:::read
     ST["Starea discuției (max 8KB): ce i-am arătat,<br/>ce caută, coșul"]:::read
-    SUM["Rezumatul discuției, dacă e lungă"]:::read
     PROF["Profilul clientului + scorul de interes"]:::read
     FCT["Fapte STABILE despre el: buget, brand<br/>preferat, restricții (processor.py:307)"]:::read
   end
 
   subgraph Use["CE VEDE AI-UL — context.py"]
-    TRANS["Transcriptul compact<br/>(max 6 tururi / 1200 caractere) (:23)"]:::read
+    TRANS["Transcriptul: clientul verbatim, proza botului<br/>întreagă + [a aratat] (NX-255)"]:::read
     BLOCKS["Blocurile: profil + fapte + stare<br/>(:40 · :87 · :155)"]:::read
   end
 
@@ -40,8 +39,6 @@ flowchart TD
   subgraph PostTurn["DUPĂ RĂSPUNS, ÎN FUNDAL — conexiunea DB e deja eliberată (NX-161)<br/>consumer.py:236 → aftercare.py:444"]
     CW{"Răspunsul merită salvat<br/>și pentru alți clienți?"}:::dec
     CWB["În cache-ul semantic: zile pentru statice,<br/>minute pentru preț/stoc (aftercare.py:106)"]:::db
-    SQ{"Discuția a depășit pragul<br/>de lungime?"}:::dec
-    SUMGEN["AI-ul mic scrie rezumatul<br/>(aftercare.py:193)"]:::llm
     PE{"Turul a rulat normal?"}:::dec
     PEX["AI-ul mic extrage fapte noi despre client<br/>+ actualizează scorul de interes<br/>(aftercare.py:248-281)"]:::llm
   end
@@ -50,7 +47,6 @@ flowchart TD
   PROF --> BLOCKS
   ST --> BLOCKS
   FCT --> BLOCKS
-  SUM --> TRANS
   TRANS --> AG
   BLOCKS --> AG
   AG --> MERGE
@@ -58,7 +54,5 @@ flowchart TD
   DP --> PQ --> MERGE --> ASR --> PATCH --> OPT
   OPT --> CW
   CW -- da --> CWB
-  OPT --> SQ
-  SQ -- da --> SUMGEN
   OPT --> PE
   PE -- da --> PEX

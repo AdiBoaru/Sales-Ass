@@ -482,18 +482,6 @@ class Settings(BaseSettings):
     # brut (NX-94). Gol → endpoint 403 (fail-closed).
     orders_webhook_secret: str = Field(default="", validation_alias="ORDERS_WEBHOOK_SECRET")
 
-    # --- Summarizer conversații lungi (G6-2 felia 2, stagiul 6) ---
-    # Generare POST-TUR async (nano), citire deterministă în context builder. Kill-switch global.
-    summary_enabled: bool = Field(default=True, validation_alias="SUMMARY_ENABLED")
-    # Prag de declanșare: nr. total de mesaje pe conversație de la care se sumarizează.
-    # CLAUDE.md zice „>20 mesaje"; interpretarea practică = la >= prag (default 20).
-    summary_threshold: int = Field(default=20, validation_alias="SUMMARY_THRESHOLD")
-    # Anti-regenerare: re-sumarizăm doar când s-au acumulat >= atâtea mesaje noi peste watermark
-    # (nu la fiecare tur). Acoperirea rămâne corectă: feed-ul ia tot de la watermark.
-    summary_regen_delta: int = Field(default=12, validation_alias="SUMMARY_REGEN_DELTA")
-    # Buget de caractere al blocului de rezumat injectat în prompt (P4).
-    summary_max_chars: int = Field(default=600, validation_alias="SUMMARY_MAX_CHARS")
-
     # --- Istoric structurat (NX-255) ---
     # OFF → `conversation_transcript` e byte-identic cu comportamentul de dinainte (tăiere oarbă
     # `[-1200:]`). ON → nicio tăiere de caractere: mesajele clientului verbatim, proza botului

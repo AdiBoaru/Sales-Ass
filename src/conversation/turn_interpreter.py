@@ -60,9 +60,10 @@ log = logging.getLogger(__name__)
 
 #: Numele schemei pe sârmă. `usage.CALL_PURPOSES` îl mapează pe `interpret` în `per_call` (I13).
 SCHEMA_NAME = "turn_interpretation"
-#: Fereastra de istoric (mesaje, ambele roluri), ca a stagiului de context (max 8). Din ACEEAȘI
-#: fereastră se derivă `UserWords`: un citat pe care modelul l-a văzut e găsit de validator.
-MAX_HISTORY_MESSAGES = 8
+#: Fereastra de istoric (mesaje, ambele roluri), ca a stagiului de context (`HISTORY_LIMIT` = 20,
+#: din care unul e mesajul curent; decis de Adi pe 2026-10-08). Din ACEEAȘI fereastră se derivă
+#: `UserWords`: un citat pe care modelul l-a văzut e găsit de validator.
+MAX_HISTORY_MESSAGES = 20
 #: NX-356: replica botului intră ÎNTREAGĂ, ca pe calea care răspunde (NX-255, decis de Adi pe
 #: 2026-09-29: nicio limită de caractere pe istoric). Tăierea la 400 lăsa modelului doar începutul
 #: unui răspuns de 1.200-1.600 de caractere, adică intro-ul, fără produsele și întrebarea de la

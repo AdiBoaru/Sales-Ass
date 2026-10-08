@@ -400,8 +400,9 @@ def test_the_earlier_sets_and_the_screen_come_from_the_state():
 
 
 def test_a_quote_inside_the_window_is_explicit_and_outside_is_inferred():
-    """Citatul scris cu 4 ture în urmă, în fereastră ⇒ găsit; cu 5 ture în urmă ⇒ nici vederea
-    nu l-a arătat, nici validatorul nu-l găsește (`inferred`)."""
+    """Citatul scris chiar la marginea ferestrei ⇒ găsit; o pereche mai devreme ⇒ nici vederea
+    nu l-a arătat, nici validatorul nu-l găsește (`inferred`). Borna se derivă din
+    `MAX_HISTORY_MESSAGES` (20 din 2026-10-08), nu e scrisă de mână."""
     old = "vreau neaparat culoarea albastra"
 
     def history(pairs_after: int) -> tuple[tuple[str, str], ...]:
@@ -410,8 +411,9 @@ def test_a_quote_inside_the_window_is_explicit_and_outside_is_inferred():
             turns += [("user", f"altceva numarul {i}"), ("bot", "Bine.")]
         return tuple(turns)
 
-    inside = _input("fashion", history=history(3))  # scris acum 4 ture
-    outside = _input("fashion", history=history(4))  # scris acum 5 ture
+    pairs = ti.MAX_HISTORY_MESSAGES // 2 - 1
+    inside = _input("fashion", history=history(pairs))  # primul mesaj din fereastră
+    outside = _input("fashion", history=history(pairs + 1))  # o pereche în afara ei
     assert len(inside.history) == ti.MAX_HISTORY_MESSAGES
     assert old in ti.render_view(inside)
     assert _read_quote(old, ti.user_words(inside), "ro").located
