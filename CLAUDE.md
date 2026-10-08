@@ -188,9 +188,10 @@ pe valoare, ținta e valoarea handle-ului. Card: [`tasks/stage1/NX-379.md`](task
 «il iau pe ala cu acoperire mai mare»: poarta a scos coșul (I24) cu verdictul `act`, garda servea
 refuzul doar pe `must_ask`, iar bucla v1 a pus în coș un produs ales de model; singura altă mutație
 de pe calea v1 după kernel a fost o abonare pe «ok pa». Acum un tur al cărui singur act era o mutație
-scoasă de poartă primește fraza `mutation_not_exact` pe orice verdict, iar în modul servit bucla v1
-de după kernel n-are drept de scriere (`ToolRun.mutations_allowed`, mutațiile scoase din scheme și
-refuzate la `execute`, `mutation_tool_refused`). Dark-ul rămâne neatins. Card:
+scoasă de poartă primește fraza `mutation_not_exact` pe orice verdict, iar într-o conversație servită
+bucla v1 n-are drept de scriere pe niciun tur, inclusiv apăsările de chip (`ToolRun.mutations_allowed`
+pe modul conversației, mutațiile scoase din scheme și refuzate la `execute`, `mutation_tool_refused`).
+Turul căzut rămâne turul cu flagul stins (I16) în afara unei mutații cerute. Dark-ul rămâne neatins. Card:
 [`tasks/stage1/NX-383.md`](tasks/stage1/NX-383.md); probă:
 `pytest tests/test_nx383_no_mutation_after_kernel.py -q`.
 **NX-334 — direcția unei limite numerice ajunge neschimbată în stare.** Pe pașii 3a/3b «minim 256

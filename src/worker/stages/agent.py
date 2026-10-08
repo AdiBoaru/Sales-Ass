@@ -1138,7 +1138,8 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     )
     # NX-353 (pasul 7): SERVIT (canary, per conversație, sticky) sau DARK (lanțul rulează, v1
     # răspunde); tenanții din `INTERPRETED_TURN_TENANTS`, gol = toți.
-    mode = kernel_mode(s, ctx.business, ctx.conversation_id) if eligible else None
+    conversation_mode = kernel_mode(s, ctx.business, ctx.conversation_id)
+    mode = conversation_mode if eligible else None
     if mode == "dark":
         from src.agent.interpreted_turn import run_interpreted_turn  # noqa: PLC0415
 
@@ -1190,12 +1191,13 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     tool_names, tools = tool_loop_tools(
         ctx.business, route.route.value, unrouted=unrouted, need_menu=need_menu
     )
-    # NX-383: un tur pe care kernelul l-a primit în modul SERVIT și nu l-a servit ajunge aici fără
-    # drept de scriere. Mutațiile trec doar prin executorul de coș al kernelului, pe ținte `exact`
+    # NX-383: într-o conversație SERVITĂ de kernel, bucla v1 n-are drept de scriere, pe orice tur
+    # care ajunge aici: unul pe care kernelul nu l-a servit, dar și unul neeligibil (apăsarea unui
+    # chip, recenzia). Mutațiile trec doar prin executorul de coș al kernelului, pe ținte `exact`
     # (I10); pe setul wide-2026-10-07 singurele două mutații de pe calea asta erau necerute (un
     # produs ales de model pus în coș, o abonare pe «ok pa»). Modelul nu le vede, iar `run` le
     # refuză dacă le cere totuși.
-    mutations_allowed = mode != "serve"
+    mutations_allowed = conversation_mode != "serve"
     if not mutations_allowed:
         tools = _without_mutations(tools)
         tool_names = [n for n in tool_names if not tool_budget.spec_for(n).is_mutation]
@@ -1262,7 +1264,7 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
         "discutate), cheamă checkout_link pe el și confirmă disponibilitatea/stocul; dacă nu e pe "
         "stoc, oferă subscribe_back_in_stock. Altfel caută-l întâi, apoi oferă linkul de checkout. "
         "NU re-recomanda inutil.\n"
-        if route.purchase_intent
+        if route.purchase_intent and mutations_allowed
         else ""
     )
     lead_hint = _lead_score_hint(ctx)  # Val3: nudge la lead_score ridicat (câmp altfel mort)

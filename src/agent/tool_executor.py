@@ -283,6 +283,9 @@ class ToolRun:
             # NX-383: refuzul ÎNAINTEA oricărei admisii sau citiri; un nume necunoscut e mutație
             # pentru registru (fail-closed), deci nu trece nici el.
             self.ctx.emit("mutation_tool_refused", name=name if name in TOOL_NAMES else "unknown")
+            if name in ("cart_add", "checkout_link"):
+                # NX-137: comerțul refuzat în tur ⇒ compunerea nu oferă chip-ul care îl promite
+                self.failed_commerce.add(name)
             return _MUTATION_REFUSED
         ledger = turn_budget.current()
         d = deadline.current()

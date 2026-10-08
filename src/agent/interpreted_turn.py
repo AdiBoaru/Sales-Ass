@@ -475,6 +475,20 @@ def _mutating_turn(chain: _Chain) -> bool:
     return dropped and all(a.kind in _NO_REQUEST for a in kept)
 
 
+def _dropped_request(chain: _Chain) -> bool:
+    """Poarta a scos și o cerere care NU scrie (regula 0). Pe un refuz de mutație, dezvăluirea
+    `invalid_target` o spune clientului; fără ea, refuzul coșului e tot răspunsul (NX-383)."""
+    interp = chain.interpreted.interpretation
+    if interp is None:
+        return False
+    skipped = set(chain.outcome.skipped_acts)
+    return any(
+        a.kind not in MUTATING_ACTS and a.kind not in _NO_REQUEST
+        for i, a in enumerate(interp.acts)
+        if i in skipped
+    )
+
+
 def _mutations_exact(chain: _Chain) -> bool:
     """I10 la rulare (D2): fiecare id al unei mutații vine dintr-o referință rezolvată `exact`.
     Plannerul pune în planul `cart` doar ținte `exact`, deci garda nu schimbă nimic azi; e plasa
@@ -712,6 +726,7 @@ async def execute_plans(
     outcome: GateOutcome,
     policy_for: PolicyFor | None = None,
     mutating: bool = False,
+    dropped_request: bool = False,
 ) -> bool | None:
     """Seam-ul executorilor: rulează planurile turului (cu decizia porții, a cărei întrebare o pune
     executorul `ask` sau compunerea, la confirmare). `None` = niciun executor pentru plan (turul
@@ -724,7 +739,9 @@ async def execute_plans(
     `NoSentence` (fraza fail-closed lipsă din pachet) urcă la `_serve`."""
     from src.agent.kernel_executors import execute_read_plans  # noqa: PLC0415 — ciclul agent
 
-    return await execute_read_plans(ctx, deps, planned, outcome, policy_for, mutating)
+    return await execute_read_plans(
+        ctx, deps, planned, outcome, policy_for, mutating, dropped_request
+    )
 
 
 def _question_memory(ctx: TurnContext, outcome: GateOutcome) -> tuple[StateUpdateProposal, ...]:
@@ -820,7 +837,13 @@ async def _serve(
     _apply_turn_view(ctx, chain.state, chain.reduced.state, chain.delta.thread)
     try:
         verdict = await execute_plans(
-            ctx, deps, chain.planned, chain.outcome, chain.policy_for, _mutating_turn(chain)
+            ctx,
+            deps,
+            chain.planned,
+            chain.outcome,
+            chain.policy_for,
+            _mutating_turn(chain),
+            _dropped_request(chain),
         )
     except NoSentence as e:
         ctx.emit("kernel_sentence_missing", code=e.code)

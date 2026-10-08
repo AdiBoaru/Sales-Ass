@@ -27,9 +27,9 @@ from types import SimpleNamespace as NS
 import pytest
 
 from src.agent import kernel_executors as kx
-from src.agent.interpreted_turn import _mutating_turn
+from src.agent.interpreted_turn import _dropped_request, _mutating_turn
 from src.agent.tool_executor import ToolRun
-from src.agent.turn_planner import PlannedTurn
+from src.agent.turn_planner import TURN_LEVEL, PlannedTurn
 from src.conversation.ambiguity_gate import GateOutcome
 from src.conversation.interpretation import (
     Act,
@@ -82,6 +82,20 @@ def test_a_turn_asked_to_write_when_its_only_request_was_a_dropped_mutation(
     assert _mutating_turn(_chain(kinds, skipped)) is expected
 
 
+@pytest.mark.parametrize(
+    ("kinds", "skipped", "expected"),
+    [
+        (["cart"], (0,), False),
+        (["chitchat", "cart"], (1,), False),
+        (["detail", "cart"], (0,), True),
+        (["detail", "cart"], (0, 1), True),
+        (["cart", "find"], (), False),
+    ],
+)
+def test_a_dropped_request_is_a_dropped_act_that_does_not_write(kinds, skipped, expected):
+    assert _dropped_request(_chain(kinds, skipped)) is expected
+
+
 @pytest.fixture
 def electronics(monkeypatch):
     cat = sh.catalog("electronics")
@@ -103,6 +117,28 @@ async def test_a_refused_mutation_is_answered_on_any_verdict(electronics, verdic
     deps = NS(db=sh.RecordingDb(), llm=sh.StageLLM())
     assert await kx.execute_read_plans(ctx, deps, _reply_only(), outcome, None, True) is True
     assert ctx.reply.text == kx.kernel_sentence(electronics.pack, "ro", "mutation_not_exact")
+
+
+@pytest.mark.parametrize("dropped_request", [False, True])
+async def test_the_refusal_keeps_the_disclosure_only_for_a_dropped_read(
+    electronics, dropped_request
+):
+    """Recenzia: «detaliul pe o proprietate + coșul pe o țintă neexactă» ⇒ detaliul scos de regula
+    0, coșul refuzat. Dezvăluirea `invalid_target` rămâne pentru detaliu; doar coșul scos ⇒ refuzul
+    singur, fără să spună același lucru de două ori."""
+    ctx = sh.build_ctx(electronics, sh.ConversationStateV2(), "x")
+    planned = PlannedTurn(
+        plans=_reply_only().plans, primary=0, disclosures=((TURN_LEVEL, "invalid_target"),)
+    )
+    outcome = GateOutcome(
+        decision=AmbiguityDecision(verdict="must_ask", reason="no_options", question=None)
+    )
+    deps = NS(db=sh.RecordingDb(), llm=sh.StageLLM())
+    assert await kx.execute_read_plans(ctx, deps, planned, outcome, None, True, dropped_request)
+    refusal = kx.kernel_sentence(electronics.pack, "ro", "mutation_not_exact")
+    disclosure = kx.kernel_sentence(electronics.pack, "ro", "invalid_target")
+    expected = f"{disclosure}\n\n{refusal}" if dropped_request else refusal
+    assert ctx.reply.text == expected
 
 
 # --- ToolRun: refuzul mutației ------------------------------------------------------------------
@@ -128,6 +164,8 @@ async def test_a_run_without_write_rights_refuses_every_mutation(electronics, ra
     assert json.loads(out) == {"ok": False, "error": "tool_not_allowed"}
     assert ran == [] and run.called == []
     assert {"name": name, "turn_id": "t0"} in _events(ctx, "mutation_tool_refused")
+    # NX-137: comerțul refuzat nu mai e oferit ca chip în același tur
+    assert (name in run.failed_commerce) is (name != "subscribe_back_in_stock")
 
 
 async def test_an_unknown_tool_name_is_a_mutation_and_is_refused(electronics, ran):
@@ -267,6 +305,27 @@ async def test_in_dark_mode_the_v1_loop_keeps_its_tools(monkeypatch, electronics
     _, ctx = _cart_step(electronics)
     ctx.message.body = "ok pa"
     llm = OfferLLM(_act_interp("chitchat"), calls=[("cart_add", {"product_id": "el-01"})])
-    await sh.run_turn(monkeypatch, electronics, ctx, llm)
+    run = await sh.run_turn(monkeypatch, electronics, ctx, llm)
+    assert run.reached, "ramura dark a rulat"
     assert llm.offered and "cart_add" in llm.offered[-1]
     assert writes == ["cart_add"]
+
+
+async def test_a_chip_press_in_a_served_conversation_gets_no_mutation_tools(
+    monkeypatch, electronics, writes
+):
+    """Recenzia: apăsarea unui chip recunoscut nu intră în kernel (NX-338), deci rula bucla v1 cu
+    toate mutațiile. Dreptul de scriere e al CONVERSAȚIEI servite, nu al turului eligibil."""
+    from src.worker.stages import agent as agent_mod
+
+    async def recognized(ctx, deps):
+        ctx.chip_recognized = object()
+
+    monkeypatch.setattr(agent_mod, "_recognize_chip_press", recognized)
+    _, ctx = _cart_step(electronics)
+    ctx.message.body = "Compară-l cu un produs similar"
+    llm = OfferLLM(_act_interp("compare"), calls=[("cart_add", {"product_id": "el-01"})])
+    run = await sh.run_turn(monkeypatch, electronics, ctx, llm)
+    assert not run.reached
+    assert llm.offered and not MUTATIONS & set(llm.offered[-1])
+    assert writes == []

@@ -808,8 +808,10 @@ async def execute_read_plans(
     outcome: GateOutcome,
     policy_for: PolicyFor | None = None,
     mutating: bool = False,
+    dropped_request: bool = False,
 ) -> bool | None:
-    """Rulează planul turului. `mutating` = interpretarea turului are un act care SCRIE (coșul).
+    """Rulează planul turului. `mutating` = interpretarea turului a cerut o scriere (coșul);
+    `dropped_request` = poarta a scos și o cerere care nu scrie (NX-383: dezvăluirea ei rămâne).
     `None` = niciun executor legat (calea v1, `dark`), `False` =
     executorul a refuzat, `True` = a servit. `NoSentence` urcă la orchestrator. `policy_for` =
     politica de răspuns a orchestratorului, judecată pe produsele unei comparații (I12)."""
@@ -827,8 +829,10 @@ async def execute_read_plans(
     if not verdict:
         return verdict
     if plan.executor == "reply_only":
-        # NX-383: refuzul mutației e tot răspunsul turului; dezvăluirea `invalid_target` a actului
-        # scos ar spune același lucru a doua oară.
+        # NX-383: refuzul mutației e răspunsul turului. Dezvăluirea `invalid_target` rămâne doar
+        # dacă poarta a scos și o cerere care nu scrie; altfel ar spune refuzul a doua oară.
+        if dropped_request:
+            _prefix(ctx, _disclosure_text(ctx, planned))
         return verdict
     no_results = (
         plan.executor == "search" and ctx.retrieval is not None and not ctx.retrieval.products
