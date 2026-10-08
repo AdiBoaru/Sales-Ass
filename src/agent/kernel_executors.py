@@ -386,6 +386,7 @@ async def _compare(
     deps: PipelineDeps,
     ids: list[str],
     policy_for: PolicyFor | None,
+    *,
     found: tuple[str, ...] = (),
 ) -> bool | None:
     """≥ 2 ținte ⇒ comparația lor. O țintă (actul are una singură; orchestratorul lasă `dark` un act
@@ -888,7 +889,7 @@ async def _serve_named(
     # produsele găsite prin căutare intră la politica de răspuns ca parteneri, altfel politica nu
     # le vedea și verdictul trecea pe o dimensiune necunoscută.
     found = tuple(i for i in ids if i not in plan.product_ids)
-    return await _compare(ctx, deps, ids, policy_for, found)
+    return await _compare(ctx, deps, ids, policy_for, found=found)
 
 
 async def execute_read_plans(
