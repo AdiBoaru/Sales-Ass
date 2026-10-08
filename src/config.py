@@ -1336,6 +1336,13 @@ class Settings(BaseSettings):
     # deasupra tabelului, verdictul pe tipuri de client dedesubt, axele cu sursa verificată pe
     # celulă, istoricul în față). Verdictul reținut (I12) rămâne pe calea de azi. Eșec ⇒
     # narativul de azi (`compose_comparison`). OFF → narativul de azi, byte-identic.
+    # NX-382 faza 4: recomandarea pe calea kernelului (căutare, paginare, rutină) o scrie
+    # compozitorul unic: fișa întreagă a fiecărui produs în fapte, istoricul, variantele aceleiași
+    # familii o singură dată, motivul fiecărui card verificat pe fapte. Eșec ⇒ compunerea bogată
+    # de azi (`_finalize_rich`). OFF → compunerea bogată de azi, byte-identic.
+    composer_recommend_enabled: bool = Field(
+        default=True, validation_alias="COMPOSER_RECOMMEND_ENABLED"
+    )
     composer_compare_enabled: bool = Field(
         default=True, validation_alias="COMPOSER_COMPARE_ENABLED"
     )

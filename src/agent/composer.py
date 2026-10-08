@@ -73,7 +73,11 @@ REASONS = (
     "not_a_question",
     "safety_referral_missing",
     "unsourced_claim",
+    "items_missing",
+    "fit_contradiction",
 )
+#: Faza 4: cum răspunde setul cererii, spus de model (vocabular închis al schemei `recommend`).
+SET_FITS = ("fits", "partial", "none")
 #: Recenzia fazei 3: garanția ca promisiune («garanție 2 ani», «drept de retur»), nu verbul («nu
 #: pot garanta», formularea pe care promptul o cere pentru ce nu se poate confirma).
 _WARRANTY_NOUN = re.compile(
@@ -177,7 +181,14 @@ TASKS: Mapping[str, str] = {
         "items); do not walk through every item, each has its own reason. Per chosen item, "
         "`reason` is 1-2 sentences: why this one for THIS customer, the mechanism in plain "
         "words, one concrete detail from its sheet. When items are of a different kind than what "
-        "was asked, say so and do not pretend they fit."
+        "was asked, say so and do not pretend they fit; when none of them answers the request, "
+        "choose none and say so in `text`. A product that is `also available as` other shades "
+        "or sizes is one item: say it comes in other shades or sizes only when that helps, "
+        "without their prices. `set_fit` says how the set answers the request: `fits` (the "
+        "items you chose answer it), `partial` (they answer only part of it; say which part in "
+        "`text`), `none` (nothing answers it; then `items` is empty). When FACTS give a ROUTINE, "
+        "the items are its steps: choose them all, and in `text` say the order and what each "
+        "step does for this customer, numbered only as the steps are numbered there."
     ),
     "detail": (
         "TASK detail: the customer asks about one product, P1; its card is shown under your text. "
@@ -261,6 +272,9 @@ class ComposeInput:
     #: Blocuri de fapte în plus, cu titlul lor (faza 2c: nota de siguranță; faza 3: sursele
     #: citabile ale comparației).
     extra_facts: Sequence[tuple[str, str]] = ()
+    #: Faza 4: celelalte variante ale unui produs (aceeași familie, altă nuanță sau gramaj), pe
+    #: id-ul reprezentantului: se arată O DATĂ, iar variantele intră doar ca fapt (`families`).
+    variants: Mapping[str, Sequence[str]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -274,6 +288,9 @@ class Composed:
     #: `product_id` deja tradus din handle; le verifică `compare_narrative.assemble_axes`).
     verdict: str = ""
     axes: tuple[dict[str, Any], ...] = ()
+    #: Faza 4, doar pe `recommend`: `fits` / `partial` / `none` (`SET_FITS`). Lista goală de
+    #: carduri nu mai înseamnă singură refuz (AQUAPICK: proza recomanda, `items` venea gol).
+    fit: str = ""
 
     @property
     def served(self) -> str:
@@ -291,7 +308,11 @@ def facts_block(inp: ComposeInput, pack: Any, language: str | None) -> str:
     regulile magazinului."""
     parts: list[str] = []
     for handle, product in zip(handles(inp.products), inp.products, strict=False):
-        parts.append(f"PRODUCT {handle}\n{detail_answer.product_facts(product, pack, language)}")
+        block = f"PRODUCT {handle}\n{detail_answer.product_facts(product, pack, language)}"
+        others = inp.variants.get(str(product.get("id"))) or ()
+        if others:
+            block += "\nalso available as (other shades or sizes): " + "; ".join(others)
+        parts.append(block)
     if inp.store_rules:
         parts.append("STORE RULES\n" + "\n".join(f"- {r}" for r in inp.store_rules))
     told = [ob for ob in inp.obligations if ob.facts]
@@ -376,6 +397,9 @@ def schema(inp: ComposeInput) -> dict[str, Any]:
         body["properties"]["verdict"] = {"type": "string"}
         body["properties"]["axes"] = {"type": "array", "items": axis}
         body["required"] = [*body["required"], "verdict", "axes"]
+    if inp.task == "recommend":
+        body["properties"]["set_fit"] = {"type": "string", "enum": list(SET_FITS)}
+        body["required"] = [*body["required"], "set_fit"]
     return {"name": SCHEMA_NAME, "strict": True, "schema": body}
 
 
@@ -424,8 +448,16 @@ def parse(raw: Any, inp: ComposeInput) -> Composed | None:
             if isinstance(c, dict)
         ]
         axes.append({"label": axis.get("label"), "cells": cells})
+    fit = raw.get("set_fit") if inp.task == "recommend" else ""
     return Composed(
-        raw["text"].strip(), advice, tuple(items), suggestions, met, verdict, tuple(axes)
+        raw["text"].strip(),
+        advice,
+        tuple(items),
+        suggestions,
+        met,
+        verdict,
+        tuple(axes),
+        fit if isinstance(fit, str) else "",
     )
 
 
@@ -578,6 +610,11 @@ def check(
         verdict = Verdict(False, "not_a_question")
     if not verdict.ok:
         return Verdict(False, verdict.reason), composed
+    if inp.task == "recommend":
+        # faza 4: verdictul pe set decide, nu lista goală (AQUAPICK: text pozitiv, zero carduri)
+        if composed.fit not in SET_FITS or (composed.fit == "none") == bool(composed.items):
+            reason = "fit_contradiction" if composed.fit == "none" else "items_missing"
+            return Verdict(False, reason), composed
     items: list[tuple[str, str]] = []
     for pid, reason in composed.items:
         reason, _ = _without_medical(reason)
@@ -622,6 +659,7 @@ def check(
         composed.obligations_met,
         verdict_text,
         composed.axes,
+        composed.fit,
     )
     return Verdict(True), cleaned
 
@@ -795,13 +833,24 @@ def rich_reply(
     from src.worker import compose as wc  # noqa: PLC0415 — ciclul worker ↔ agent
 
     by_id = {str(p.get("id")): p for p in products if p.get("id")}
+    reasons = dict(composed.items)
+    order = list(dict.fromkeys(pid for pid, _r in composed.items))
+    routine = getattr(ctx, "routine", None)
+    steps = routine.by_product() if routine is not None else {}
+    if routine is not None and reasons:
+        # faza 4: pe o rutină ordinea e a SLOTURILOR (ca `assemble`), iar un pas pe care modelul nu
+        # l-a narat rămâne pe ecran, fără motiv: o rutină cu un pas lipsă e un gol inexplicabil
+        in_routine = [pid for pid in routine.ordered_ids() if pid in by_id]
+        order = in_routine + [pid for pid in order if pid not in set(in_routine)]
     items: list[Any] = []
     kinds: dict[str, str | None] = {}
-    for pid, reason in composed.items:
+    for pid in order:
         p = by_id.get(pid)
         if p is None or pid in kinds:
             continue
-        item, kinds[pid] = wc.hydrated_item(ctx, p, reason=reason or None)
+        item, kinds[pid] = wc.hydrated_item(
+            ctx, p, reason=reasons.get(pid) or None, routine_by_product=steps
+        )
         items.append(item)
     if not items:
         return None
@@ -814,6 +863,29 @@ def rich_reply(
         chips=wc._suggestion_chips(list(composed.suggestions)),
         disclaimer=(wc.disclaimer(ctx.language) if get_settings().ai_disclaimer_enabled else None),
     )
+
+
+def families(
+    products: Sequence[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], dict[str, list[str]]]:
+    """Faza 4: un reprezentant pe familie (același nume AFIȘAT, ca `catalog_tools.one_per_family`:
+    «…Light Ivory 30 ml» și «…Natural Beige 30 ml» sunt identice pe card), în ordinea dată, plus
+    numele întregi ale celorlalte variante, pe id-ul reprezentantului. wide-2026-10-07: 13 ture cu
+    nuanțele aceluiași produs arătate ca produse diferite. PUR."""
+    from src.catalog.render_text import display_name  # noqa: PLC0415
+
+    reps: list[dict[str, Any]] = []
+    by_key: dict[str, str] = {}
+    variants: dict[str, list[str]] = {}
+    for p in products:
+        key = display_name(str(p.get("name") or "")).casefold()
+        if key and key in by_key:
+            variants.setdefault(by_key[key], []).append(" ".join(str(p.get("name") or "").split()))
+            continue
+        if key:
+            by_key[key] = str(p.get("id"))
+        reps.append(p)
+    return reps, variants
 
 
 def comparison_sources(

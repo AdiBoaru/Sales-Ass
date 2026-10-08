@@ -276,6 +276,9 @@ class ResponsePlan:
     # arată-mi"), nu fiindcă modelul n-a scris nimic. `render` nu mai cere atunci o recompunere:
     # dacă rich-ul pică, un al doilea apel de model după unul picat e exact latența pe care o tăiem.
     prose_skipped: bool = False
+    #: NX-382 faza 4: planul vine de pe calea kernelului (`build_plan(kernel=True)`): recomandarea
+    #: o scrie compozitorul unic (`render`), cu rezerva compunerii bogate de azi.
+    kernel: bool = False
 
 
 @dataclass(frozen=True)
@@ -1051,4 +1054,5 @@ async def build_plan(
         checkout_url=run.checkout_url,
         successful_action_ids=set(run.successful_action_ids),
         prose_skipped=prose_skipped,
+        kernel=kernel,
     )

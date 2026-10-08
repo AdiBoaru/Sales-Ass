@@ -1152,6 +1152,76 @@ async def _apply_move_chips(ctx, deps, rich) -> None:
         log.warning("finalize: chips ca mutări au eșuat (%s)", type(e).__name__)
 
 
+async def _full_sheets(
+    ctx: TurnContext, deps: PipelineDeps, products: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """NX-382 faza 4: fișa ÎNTREAGĂ a produselor recomandate (secțiuni, FAQ, recenzii, ingrediente,
+    `_DETAIL_SELECT`), citită O DATĂ, peste rândurile căutării: câmpurile căutării rămân (treapta
+    lexicală, marcajele ei), fișa adaugă ce lipsește. Citire picată ⇒ rândurile căutării (P6)."""
+    from src.db.queries.catalog import get_products_by_ids  # noqa: PLC0415
+
+    ids = [str(p["id"]) for p in products if p.get("id")]
+    try:
+        async with deps.db("composer_recommend_sheets") as conn:
+            sheets = await get_products_by_ids(conn, ctx.business.id, ids, limit=len(ids))
+    except Exception as e:  # noqa: BLE001 — fișa e un plus; rândurile căutării ajung
+        ctx.emit("composer", task="recommend", outcome="sheets_failed", error=type(e).__name__)
+        return products
+    by_id = {str(s.get("id")): s for s in sheets}
+    out: list[dict[str, Any]] = []
+    for p in products:
+        sheet = by_id.get(str(p.get("id"))) or {}
+        out.append({**p, **{k: v for k, v in sheet.items() if p.get(k) in (None, "", [], {})}})
+    return out
+
+
+async def _compose_recommend(
+    ctx: TurnContext,
+    deps: PipelineDeps,
+    plan: ResponsePlan,
+    products: list[dict[str, Any]],
+    store_part: tuple[str, ...] | list[str],
+) -> _RichOutcome | None:
+    """NX-382 faza 4: recomandarea pe calea kernelului o scrie compozitorul unic: fișa întreagă a
+    fiecărui produs în fapte, istoricul de 20 de mesaje, variantele aceleiași familii arătate O
+    DATĂ (`composer.families`). Cardurile alese poartă motivul modelului, verificat pe fapte
+    (`composer.rich_reply`). Niciun produs ales ⇒ refuzul modelului (`model_intro`), pe care
+    `render` îl judecă la fel ca pe calea de azi (NX-306/362). `None` ⇒ compunerea bogată de azi."""
+    from src.agent import composer  # noqa: PLC0415 — ciclul agent
+    from src.worker.context import conversation_transcript  # noqa: PLC0415
+
+    reps, variants = composer.families(await _full_sheets(ctx, deps, products))
+    notes = [n for n in (plan.commerce_note, MIXED_STORE_NOTE if store_part else "") if n]
+    extra: list[tuple[str, str]] = [("TURN NOTES", " ".join(notes))] if notes else []
+    routine = getattr(ctx, "routine", None)
+    if routine is not None:
+        # pașii rutinei, în ordinea și cu numerotarea de pe carduri (NX-323: 1..N, a serverului)
+        handle_of = {pid: h for h, pid in composer.handles(reps).items()}
+        lines = [
+            f"step {n}: {s.label} -> {handle_of[s.product_id]}"
+            for n, s in enumerate((s for s in routine.steps if s.product_id in handle_of), 1)
+        ]
+        extra.append(("ROUTINE (the cards show these steps in this order)", "\n".join(lines)))
+    inp = composer.ComposeInput(
+        task="recommend", products=reps, variants=variants, extra_facts=tuple(extra)
+    )
+    history = conversation_transcript(ctx.history, consumer="composer")
+    composed, _reason = await composer.compose(ctx, deps, inp, history=history)
+    if composed is None:
+        return None
+    if variants:
+        ctx.emit(
+            "composer_variants", families=len(variants), hidden=sum(map(len, variants.values()))
+        )
+    rich = composer.rich_reply(ctx, composed, reps)
+    if rich is None:
+        empty = RichReply(
+            intro=composed.served, items=[], pick=None, education=None, chips=[], disclaimer=None
+        )
+        return _RichOutcome(reply=empty, model_items=0, model_intro=composed.served)
+    return _RichOutcome(reply=rich, model_items=len(rich.items), model_intro=rich.intro)
+
+
 async def _finalize_rich(
     llm,
     rich_system: str,
@@ -1392,7 +1462,12 @@ async def render(
         # Calea BOGATĂ (model iZi): recomandare structurată → compose. Doar pe SALES.
         # Orice eșec (apel structurat, zero items după membership) → fallback pe proză.
         if not is_order:
-            outcome = await _finalize_rich(
+            outcome = (
+                await _compose_recommend(ctx, deps, plan, products, store_part)
+                if plan.kernel and get_settings().composer_recommend_enabled
+                else None
+            )
+            outcome = outcome or await _finalize_rich(
                 deps.llm,
                 prompt_builder.build_rich_system(
                     plan.inp,
