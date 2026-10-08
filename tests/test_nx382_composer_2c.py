@@ -28,7 +28,13 @@ from src.safety import compose as safety_compose
 from src.safety.contraindications import Block
 from src.safety.policy import Decision
 from src.worker.text_scrub import has_medical_claim
-from tests.test_interpreted_turn_d import _ctx, _deps, _outcome, cart_tool, electronics  # noqa: F401
+from tests.test_interpreted_turn_d import (  # noqa: F401
+    _ctx,
+    _deps,
+    _outcome,
+    cart_tool,
+    electronics,
+)
 
 REFERRAL = (
     "Țin cont că ești însărcinată, așa că am lăsat deoparte opțiunile cu retinoizi, iar alegerea "
@@ -301,9 +307,7 @@ def test_no_obligation_without_a_context_or_on_the_fail_closed_registry(decision
 
 
 def test_already_told_only_with_the_short_reminder_setting(monkeypatch):
-    told = Message(
-        direction=Direction.OUTBOUND, author=Author.BOT, body="Verifică cu farmacistul."
-    )
+    told = Message(direction=Direction.OUTBOUND, author=Author.BOT, body="Verifică cu farmacistul.")
     assert "already_told" not in cp.safety_obligation(_sctx(_pregnant(), [told])).facts
     monkeypatch.setattr(get_settings(), "safety_referral_short_after_first", True)
     assert cp.safety_obligation(_sctx(_pregnant(), [told])).facts["already_told"] is True
