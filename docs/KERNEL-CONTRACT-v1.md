@@ -26,9 +26,11 @@ No invariant, ownership row or state rule changes in v1.2, so no replay gate is 
 **Current version: `kernel.v8.1` (minor, NX-380, 2026-10-08).** Two additive fields in the
 model-written schema. `Act.question` is the customer's question on a `detail` or `compare` act, in
 their words («does it have SPF?»): on the wide set of 2026-10-07, 72 `detail` turns were answered
-with the fixed product sheet because the question had nowhere to go. It has no consumer yet: the
-detail executor keeps serving the sheet until its own card reads the field, so this bump changes no
-behaviour downstream. `Reference.dimension` also accepts `rating` (`REFERENCE_ONLY_DIMENSIONS`): the
+with the fixed product sheet because the question had nowhere to go. The planner copies it onto the
+plan (`TurnPlan.question`, code-written, additive, redacted in the trace) of a `detail`/`compare`
+act; the `detail` executor answers it from the product sheet (NX-381: one composition call, a truth
+gate bound to the sheet, today's sheet on any failure), and the answer policy reads the decisive
+dimension from it when `query` is empty. `Reference.dimension` also accepts `rating` (`REFERENCE_ONLY_DIMENSIONS`): the
 resolver, the planner's sort and the answer policy already order by it as a product column, but the
 enum did not let the model write «the best rated». `StateChange.dimension` is unchanged (a rating is
 not a requirement that persists). The interpretation prompt moves to `interpret.v5` in the same PR

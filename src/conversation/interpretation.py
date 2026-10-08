@@ -100,10 +100,11 @@ from src.tools.catalog_tools import SearchArgs
 #: cheia; (3) `TurnPlan.steps` / `RoutineArgs.steps`: pașii numiți de client scopează rutina;
 #: (4) o citire fără țintă primește fraza `no_target`, nu calea v1; (5) traceul fallback-ului.
 #: `kernel.v8.1` (NX-380, MINOR): două câmpuri aditive în schema scrisă de model. `Act.question` =
-#: întrebarea clientului pe `detail`/`compare`, în cuvintele lui; `Reference.dimension` acceptă și
-#: `rating` (resolverul, plannerul și politica de răspuns îl ordonează deja ca dimensiune-coloană,
-#: dar enumul nu-l lăsa pe model să-l scrie: «cele mai bune recenzii»). Niciun invariant, rând de
-#: proprietate sau regulă de stare nu se schimbă.
+#: întrebarea clientului pe `detail`/`compare`, în cuvintele lui (NX-381: plannerul o copiază pe
+#: `TurnPlan.question`, iar executorul de `detail` răspunde la ea din fișă); `Reference.dimension`
+#: acceptă și `rating` (resolverul, plannerul și politica de răspuns îl ordonează deja ca
+#: dimensiune-coloană, dar enumul nu-l lăsa pe model să-l scrie: «cele mai bune recenzii»). Niciun
+#: invariant, rând de proprietate sau regulă de stare nu se schimbă.
 KERNEL_CONTRACT_VERSION = "kernel.v8.1"
 
 # --- scrise de model ----------------------------------------------------------------------------
@@ -275,6 +276,10 @@ class TurnPlan(_CodeWritten):
     #: `kernel.v8.0` (NX-387): pe un plan `bundle`, pașii numiți de client în tur (din tipurile
     #: lui, prin `routine_steps.by_product_type`), când sunt cel puțin doi ai familiei. Gol altfel.
     steps: list[str] = Field(default_factory=list)
+    #: `kernel.v8.1` (NX-381): întrebarea clientului (`Act.question`), copiată de planner pe planul
+    #: unui act `detail` / `compare`, ca executorul să răspundă la ea. Text de client: redactat în
+    #: trace. `None` pe orice alt plan.
+    question: str | None = None
 
 
 class AnswerPolicy(_CodeWritten):

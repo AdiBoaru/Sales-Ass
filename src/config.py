@@ -1302,6 +1302,14 @@ class Settings(BaseSettings):
     compare_with_similar_enabled: bool = Field(
         default=True, validation_alias="COMPARE_WITH_SIMILAR_ENABLED"
     )
+    # NX-381: pe calea kernelului, un `detail` care poartă întrebarea clientului
+    # (`TurnPlan.question`, kernel.v6.3) primește răspunsul compus din fișa produsului
+    # (`detail_answer`, un apel de model, poartă de adevăr pe fișă), nu fișa fixă. Orice eșec
+    # servește fișa de azi. Fără întrebare (sau cu interpretarea v4.1, care n-o scrie) nimic nu se
+    # schimbă. OFF → fișa fixă, byte-identic.
+    detail_question_answer_enabled: bool = Field(
+        default=True, validation_alias="DETAIL_QUESTION_ANSWER_ENABLED"
+    )
     # NX-326 (kernel v1.0, pasul 0): scurtăturile de link și comparație servesc produsele NUMITE în
     # mesaj (`reference_resolver.named_targets`), nu tot ecranul (B1) și nici primele două carduri
     # (B2). NX-316 o făcea doar pentru chip-urile recunoscute; aceeași frază tastată servea

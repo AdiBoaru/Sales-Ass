@@ -140,6 +140,10 @@ CHIP_PRODUCERS: dict[str, str] = {
         "Trei chip-uri de copy fix (`review_chip`/`link_chip`/`compare_chip`), despre produsul "
         "deja în context. Fără nume de catalog în text."
     ),
+    "src/agent/kernel_executors.py::_answer_detail": (
+        "NX-381: aceleași trei chip-uri de copy fix ca `serve_details` (`_detail_copy`), sub "
+        "răspunsul la întrebarea despre produsul deja în context. Fără nume de catalog în text."
+    ),
     "src/agent/finalize.py::_attach_no_result_alternatives": (
         "`_thin_path_chips(language)` — copy fix, pe drumul «n-am găsit». Tocmai aici un chip cu "
         "afirmație de catalog ar fi cel mai toxic: ai spune «n-am găsit» și ai oferi un raft."

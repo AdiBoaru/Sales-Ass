@@ -670,6 +670,14 @@ blocul `STORE NOTES`; cele SOLE sunt în `db/seed/domain_pack_sole_ro.json`, ver
 aplicarea în DB o rulează Adi. Regula GO (R1 pe seturile etichetate, R2 pe un set nou de producție) e
 pre-înregistrată în card. Card: [`tasks/stage1/NX-380.md`](tasks/stage1/NX-380.md); probă:
 `pytest tests/test_turn_interpreter.py tests/test_nx380_interpret_notes.py -q`.
+**NX-381 — întrebarea despre un produs primește un răspuns din fișă.** Plannerul copiază
+`Act.question` pe `TurnPlan.question` (`detail`/`compare`, redactat în trace); executorul de `detail`
+cu o întrebare răspunde prin `src/agent/detail_answer.py`: faptele = fișa pe care o citește clientul,
+UN apel de model, poartă de ADEVĂR legată de fișă (claim medical, link, preț, cifră absentă din fișă și
+din întrebare, stoc), nu lista de cuvinte a validatorului de proză. Orice eșec servește fișa de azi;
+politica de răspuns citește dimensiunea decisivă și din `question`. Flag
+`DETAIL_QUESTION_ANSWER_ENABLED` (ON). Card: [`tasks/stage1/NX-381.md`](tasks/stage1/NX-381.md); probă:
+`pytest tests/test_nx381_detail_question.py -q`.
 
 **NX-238 — retrievalul trece printr-un PORT, iar candidatul e inert (verdict `NOT-READY`).**
 `src/retrieval/` e contractul stabil pe care îl consumă NX-239: `RetrievalPort` + `RetrievalBundle`
