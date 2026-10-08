@@ -301,7 +301,7 @@ flowchart TD
   HT["Începe procesarea turului<br/>(processor.py:200)"]:::step
   DED2{"Dublură scăpată de Redis?<br/>(plasa a doua, în DB) (:238)"}:::dec
   SKIP2["Ignorat: deja procesat"]:::step
-  CTX["Încărcăm: cine e clientul, conversația,<br/>ultimele 8 mesaje, starea, faptele știute"]:::db
+  CTX["Încărcăm: cine e clientul, conversația,<br/>ultimele 20 de mesaje, starea, faptele știute"]:::db
   SEEDC["Pornim contorul de cost al zilei (:336)"]:::step
   GUARD{"Magazinul a depășit bugetul zilnic<br/>de AI? (:116)"}:::dec
   NOLLM["AI oprit pe azi → răspundem degradat,<br/>dar RĂSPUNDEM"]:::err
@@ -312,7 +312,7 @@ flowchart TD
   SPLIT{"Text prea lung (și nu e cu carduri)?"}:::dec
   FRAG["Îl spargem în maxim 2 mesaje"]:::step
   TX["Salvăm TOTUL dintr-o mișcare: mesajele +<br/>coada de trimis + starea discuției<br/>(:382-492)"]:::db
-  POST["După răspuns, în fundal: cache, rezumat,<br/>profil, fapte noi — cu conexiunea DB<br/>deja eliberată (consumer.py:236 · aftercare.py:444)"]:::step
+  POST["După răspuns, în fundal: cache,<br/>profil, fapte noi — cu conexiunea DB<br/>deja eliberată (consumer.py:236 · aftercare.py:444)"]:::step
 
   DISP["Dispecerul (alt proces) ia din coadă<br/>ce e de trimis"]:::step
   RENDER{"Alegem forma după ce POATE canalul:<br/>carduri / carusel / șablon / text<br/>(dispatcher.py:101)"}:::dec
@@ -643,7 +643,7 @@ un complement contraindicat.
 unde se știe că turul a fost o intenție de preț. Din rollup n-ai cum să distingi post-hoc „n-am găsit
 nimic" de „n-am găsit nimic mai ieftin" — de aceea faptul se scrie la sursă, nu se inferă.
 
-Memoria (istoric / profil / state / rezumat) intră în prompturi prin `conversation_transcript` +
+Memoria (istoric / profil / state) intră în prompturi prin `conversation_transcript` +
 `context_blocks` ([src/worker/context.py:28](../src/worker/context.py)). System-promptul agentului e
 GENERAT din DB ([src/agent/prompt_builder.py](../src/agent/prompt_builder.py), principiul 9).
 
@@ -663,8 +663,9 @@ Cu flagul aprins: mesajul clientului e **verbatim, netăiat**; turul botului pă
 `[a aratat]` cu ref-uri `{id, nume, preț}` din `messages.payload.shown` și vechimea în ture.
 Separarea e regula care face păstrarea prozei sigură: **proza spune CUM vorbești, blocul de produse
 spune CE e adevărat**, iar cifrele se reconfirmă prin tool. Nu există plafon de caractere:
-singura margine e fereastra încărcată, `HISTORY_LIMIT` (mesajul clientului e plafonat la intrare, 2.000 de
-caractere). Un plafon pe caractere se atingea pe fiecare conversație cu răspunsuri de 1.200-1.600
+singura margine e fereastra încărcată, `HISTORY_LIMIT` = 20 de mesaje cu cel curent (din
+2026-10-08; rezumatul de conversație a ieșit din proiect), iar mesajul clientului e plafonat la
+intrare (2.000 de caractere). Un plafon pe caractere se atingea pe fiecare conversație cu răspunsuri de 1.200-1.600
 de caractere, adică defectul reparat, mutat mai încolo.
 
 ---
@@ -1123,15 +1124,14 @@ flowchart TD
   classDef dec fill:#f9e79f,stroke:#b7950b,color:#000
 
   subgraph Load["ÎNCEPUTUL TURULUI — ce ne amintim (processor.py:280-310)"]
-    H["Ultimele 8 mesaje"]:::read
+    H["Ultimele 20 de mesaje, întregi"]:::read
     ST["Starea discuției (max 8KB): ce i-am arătat,<br/>ce caută, coșul"]:::read
-    SUM["Rezumatul discuției, dacă e lungă"]:::read
     PROF["Profilul clientului + scorul de interes"]:::read
     FCT["Fapte STABILE despre el: buget, brand<br/>preferat, restricții (processor.py:307)"]:::read
   end
 
   subgraph Use["CE VEDE AI-UL — context.py"]
-    TRANS["Transcriptul compact<br/>(max 6 tururi / 1200 caractere) (:23)"]:::read
+    TRANS["Transcriptul: clientul verbatim, proza botului<br/>întreagă + [a aratat] (NX-255)"]:::read
     BLOCKS["Blocurile: profil + fapte + stare<br/>(:40 · :87 · :155)"]:::read
   end
 
@@ -1153,8 +1153,6 @@ flowchart TD
   subgraph PostTurn["DUPĂ RĂSPUNS, ÎN FUNDAL — conexiunea DB e deja eliberată (NX-161)<br/>consumer.py:236 → aftercare.py:444"]
     CW{"Răspunsul merită salvat<br/>și pentru alți clienți?"}:::dec
     CWB["În cache-ul semantic: zile pentru statice,<br/>minute pentru preț/stoc (aftercare.py:106)"]:::db
-    SQ{"Discuția a depășit pragul<br/>de lungime?"}:::dec
-    SUMGEN["AI-ul mic scrie rezumatul<br/>(aftercare.py:193)"]:::llm
     PE{"Turul a rulat normal?"}:::dec
     PEX["AI-ul mic extrage fapte noi despre client<br/>+ actualizează scorul de interes<br/>(aftercare.py:248-281)"]:::llm
   end
@@ -1163,7 +1161,6 @@ flowchart TD
   PROF --> BLOCKS
   ST --> BLOCKS
   FCT --> BLOCKS
-  SUM --> TRANS
   TRANS --> AG
   BLOCKS --> AG
   AG --> MERGE
@@ -1171,8 +1168,6 @@ flowchart TD
   DP --> PQ --> MERGE --> ASR --> PATCH --> OPT
   OPT --> CW
   CW -- da --> CWB
-  OPT --> SQ
-  SQ -- da --> SUMGEN
   OPT --> PE
   PE -- da --> PEX
 ```
@@ -1217,7 +1212,7 @@ flowchart TD
     WSTATE["conversations.state + state_version"]:::db
     WDED["inbound_dedupe claim → completed<br/>claim-or-resume NX-86"]:::db
     WANA["analytics_events INSERT-only, best-effort"]:::db
-    WCACHE["semantic_cache / summaries — savepoints"]:::db
+    WCACHE["semantic_cache — savepoints"]:::db
     WSTS["message_status_events → messages.status"]:::db
     WLOC["conversations.locale — language stage :44"]:::db
   end
@@ -1244,7 +1239,7 @@ flowchart TD
   RLS --> WLOC
 ```
 
-Tranzacția Sender (mesaje + outbox + state + dedupe-complete, atomic): `src/worker/processor.py:382-492`. Scrierile best-effort (analytics, cache, rezumat) rulează în `try/except` propriu, cu tranzacții imbricate unde e nevoie (`aftercare.py:72-87, :165, :227`) — un eșec se loghează, turul continuă.
+Tranzacția Sender (mesaje + outbox + state + dedupe-complete, atomic): `src/worker/processor.py:382-492`. Scrierile best-effort (analytics, cache) rulează în `try/except` propriu, cu tranzacții imbricate unde e nevoie (`aftercare.py:72-87, :165, :227`) — un eșec se loghează, turul continuă.
 
 ---
 
@@ -1258,7 +1253,7 @@ flowchart LR
   classDef q fill:#f5b7b1,stroke:#922b21,color:#000
 
   subgraph OpenAI["OpenAI — the ONLY LLM seam, agent/llm.py"]
-    NANO["chat nano: triage · summarizer · profile<br/>classify_json :168"]:::llm
+    NANO["chat nano: triage · profile<br/>classify_json :168"]:::llm
     MINI["chat mini: agent tool loop :227<br/>compose :211 · schema :188"]:::llm
     EMBD["embeddings: cache/FAQ/search/products"]:::llm
     MOD["moderation — free, gates"]:::llm
@@ -1525,13 +1520,12 @@ Zece puncte în care sistemul cheamă un model. Restul e cod determinist.
 | Compunere rich | `gpt-5.4-mini` | Recomandare cu produse | — |
 | Finalizare proză (+1 retry) | `gpt-5.4-mini` | Când rich eșuează sau ruta e order | — |
 | Extractor profil | `gpt-5.4-nano` | Post-tur, async | `profile_extraction_enabled` |
-| Summarizer | `gpt-5.4-mini` | Conversații > 20 mesaje | `summary_enabled` |
 
 **Căile cu cost zero de inferență** (ținta: 40-60% din trafic): alias exact · cache semantic ·
 FAQ · salut determinist · intenții pre-loop (link/compare/detaliu/recenzie) · paginare
 `show_more` · tabel comparativ · căutarea „mai ieftin" · toate mesajele de fallback.
 
-**Plafoane impuse în cod**, nu în prompturi: max 3 tool calls/tur · istoric max 8 mesaje ·
+**Plafoane impuse în cod**, nu în prompturi: max 3 tool calls/tur · istoric max 20 de mesaje (fără rezumat) ·
 state ≤ 8KB (CHECK în DB ca plasă) · max 6 produse × 8 câmpuri în tool results · cost guard
 zilnic per business (`cost_guard_enabled`, contor Redis; sursa de facturare rămâne `usage_daily`).
 Prefixul de system e byte-identic între tururi → prompt caching (75-90% discount) — orice hint
@@ -1641,8 +1635,8 @@ de siguranță).
 **Contraindicații** (`src/safety/policy.py`): `SafetyPolicy.for_turn` o dată per tur, aplicat în
 **cinci** puncte — `cross_sell`, `attr_query`, `cheaper`, `rehydrate`, `retrieval_final` — plus
 `state_prune` pe `displayed_products`. Contextul declarat (ex. sarcină) se **persistă** în
-`state.safety`, pentru că istoricul e plafonat la 8 mesaje: fără persistare, o declarație de la
-turul 9 dispărea și produsul contraindicat reintra.
+`state.safety`, pentru că istoricul e plafonat la 20 de mesaje: fără persistare, o declarație mai veche decât
+fereastra dispărea și produsul contraindicat reintra.
 
 **Claim-uri medicale** (`validator._safety_ok`, `safety_medical_guardrail_enabled`): niciun claim
 terapeutic („tratează", „sigur în sarcină", „fără alergeni", „recomandat de medic"). Pe proză:
@@ -1922,7 +1916,6 @@ spec_digits_grounded_enabled = true
 speculative_retrieval_enabled = false
 store_info_fallback_enabled = true
 structured_history_enabled = true
-summary_enabled = true
 tool_field_errors_enabled = true
 tool_loop_skip_prose_enabled = true
 tool_loop_skip_prose_exact_enabled = true

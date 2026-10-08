@@ -264,8 +264,9 @@ def test_context_size_is_measured_per_block_and_per_consumer():
     event = _events(ctx, "context_bytes")[0].properties
     assert event["consumer"] == "agent"
     assert event["memory"] > 0
+    assert "summary" not in event  # rezumatul a ieșit din proiect (2026-10-08)
     assert event["total"] == sum(
-        event[name] for name in ("summary", "profile", "facts", "state", "memory", "page")
+        event[name] for name in ("profile", "facts", "state", "memory", "page")
     )
 
 

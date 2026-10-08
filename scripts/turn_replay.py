@@ -25,7 +25,7 @@ import json
 import sys
 from typing import Any
 
-from src.worker.summarizer import _redact_pii
+from src.worker.profile import _redact_pii
 
 # business_id-ul clientului demo (fallback comod pt rulări locale; vezi CLAUDE.md).
 _DEMO_BUSINESS_ID = "6098812a-50fc-44bd-a1ba-bc77e6399158"

@@ -245,26 +245,23 @@ async def test_turn_commit_is_atomic_on_real_postgres(pool, monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
-# G6-2 felia 2 — summarizer DB path sub bot_runtime/RLS (window query + watermark)
+# Fereastra de istoric (2026-10-08): ultimele 20 de mesaje, întregi, fără rezumat
 # --------------------------------------------------------------------------- #
 
 
-async def test_summarize_if_needed_writes_summary_with_honest_watermark(pool):
-    """_summarize_if_needed pe DB real (rolul bot_runtime): validează SELECTUL de fereastră
-    (`get_messages_for_summary`: rn>tail + after) + INSERTUL pe tabela partiționată + watermark-ul
-    ONEST (cel mai nou mesaj IES din ultimele 8), pe care unit-urile cu monkeypatch nu-l ating.
-    LLM scriptat → testăm comportamentul față de DB, nu textul rezumatului."""
+async def test_recent_messages_window_is_last_twenty_verbatim(pool):
+    """`get_recent_messages` pe DB real (rolul bot_runtime): din 22 de mesaje întoarce EXACT
+    ultimele 20, în ordine cronologică, cu corpul neschimbat (un mesaj lung de client nu se taie).
+    Rezumatul de conversație a ieșit din proiect, deci ce e mai vechi de fereastră nu ajunge la
+    model pe nicio cale: testul fixează marginea, nu doar constanta."""
     from datetime import UTC, datetime, timedelta
-    from types import SimpleNamespace
 
-    from src.db.provider import static_db
     from src.db.queries.contacts import get_or_create_contact
     from src.db.queries.conversations import get_or_create_conversation
-    from src.worker.aftercare import _summarize_if_needed
+    from src.db.queries.messages import HISTORY_LIMIT, get_recent_messages
 
-    class _LLM:
-        async def complete(self, system, user, *, model=None):
-            return "REZUMAT"
+    assert HISTORY_LIMIT == 20
+    long_body = "am tenul uscat si sensibil, " * 40  # ~1.100 de caractere, scris de client
 
     async with tenant_tx(pool) as (conn, channel_id):
         contact = await get_or_create_contact(
@@ -273,10 +270,10 @@ async def test_summarize_if_needed_writes_summary_with_honest_watermark(pool):
         conv = await get_or_create_conversation(conn, DEMO_BIZ, contact.id, channel_id, locale="ro")
         conv_id = conv["id"]
 
-        # 22 mesaje cu created_at strict crescător → peste prag (20); 14 ies din ultimele 8.
         base = datetime.now(UTC).replace(microsecond=0)
-        created = [base + timedelta(seconds=i) for i in range(1, 23)]
-        for i, ts in enumerate(created, start=1):
+        bodies = [f"mesaj {i}" for i in range(1, 23)]
+        bodies[-2] = long_body
+        for i, body in enumerate(bodies, start=1):
             await conn.execute(
                 "insert into messages (business_id, conversation_id, contact_id, direction, "
                 "author, body, content_type, created_at) values ($1,$2,$3,$4,$5,$6,'text',$7)",
@@ -285,25 +282,14 @@ async def test_summarize_if_needed_writes_summary_with_honest_watermark(pool):
                 contact.id,
                 "inbound" if i % 2 else "outbound",
                 "contact" if i % 2 else "bot",
-                f"mesaj {i}",
-                ts,
+                body,
+                base + timedelta(seconds=i),
             )
 
-        await _summarize_if_needed(
-            static_db(conn), None, DEMO_BIZ, conv_id, SimpleNamespace(language="ro"), _LLM()
-        )
-
-        row = await conn.fetchrow(
-            "select business_id::text as business_id, upto_message_at, summary "
-            "from conversation_summaries where conversation_id = $1 "
-            "order by upto_message_at desc limit 1",
-            conv_id,
-        )
-        assert row is not None
-        assert row["business_id"] == DEMO_BIZ  # P7
-        assert row["summary"] == "REZUMAT"
-        # watermark = al 14-lea mesaj (22 total − 8 din coadă): cel mai nou care iese din fereastră.
-        assert row["upto_message_at"] == created[13]
+        history = await get_recent_messages(conn, DEMO_BIZ, conv_id)
+        assert [m.body for m in history] == bodies[-20:]
+        # O cerere mai mare nu trece de plafon (P4).
+        assert len(await get_recent_messages(conn, DEMO_BIZ, conv_id, limit=50)) == 20
 
 
 # --------------------------------------------------------------------------- #

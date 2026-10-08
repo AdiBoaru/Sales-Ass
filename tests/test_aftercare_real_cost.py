@@ -32,7 +32,6 @@ async def test_run_aftercare_records_real_accumulated_cost_once(monkeypatch):
         return amount
 
     monkeypatch.setattr(aftercare, "_cache_writeback", fake_cache)
-    monkeypatch.setattr(aftercare, "_summarize_if_needed", noop)
     monkeypatch.setattr(aftercare, "_extract_profile_and_score", noop)
     persisted: list[list] = []
 

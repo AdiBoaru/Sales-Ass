@@ -232,9 +232,6 @@ def store(monkeypatch):
     async def _get_recent(conn, business_id, conv_id, **k):
         return []  # istoric gol — round-trip-ul de state e singura punte între tururi
 
-    async def _get_summary(conn, business_id, conv_id, **k):
-        return None
-
     async def _enqueue_outbox(conn, business_id, conv_id, idem, payload, **k):
         st.outbox.append({"idem": idem, "payload": payload})
         return f"ob-{len(st.outbox)}"
@@ -250,11 +247,8 @@ def store(monkeypatch):
     async def _insert_events(conn, business_id, events, *, conversation_id=None, contact_id=None):
         return None
 
-    # POST-tur (cache write-back / summarizer / profil) → no-op (nu afectează reply-ul turului).
+    # POST-tur (cache write-back / profil) → no-op (nu afectează reply-ul turului).
     async def _noop_writeback(*a, **k):
-        return None
-
-    async def _noop_summarize(*a, **k):
         return None
 
     async def _noop_profile(*a, **k):
@@ -267,7 +261,6 @@ def store(monkeypatch):
     monkeypatch.setattr(uow, "touch_last_inbound", _touch_inbound)
     monkeypatch.setattr(uow, "insert_message", _insert_message)
     monkeypatch.setattr(uow, "get_recent_messages", _get_recent)
-    monkeypatch.setattr(uow, "get_summary_for_context", _get_summary)
     monkeypatch.setattr(uow, "enqueue_outbox", _enqueue_outbox)
     monkeypatch.setattr(uow, "patch_conversation_state", _patch_state)
     monkeypatch.setattr(proc, "persist_events", _noop_writeback)

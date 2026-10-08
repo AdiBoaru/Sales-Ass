@@ -71,7 +71,6 @@ async def _run(monkeypatch, stage, *, initial_state, body="salut"):
     monkeypatch.setattr(uow, "insert_message", fake_insert_msg)
     monkeypatch.setattr(uow, "touch_last_inbound", anoop)
     monkeypatch.setattr(uow, "get_recent_messages", anoop)
-    monkeypatch.setattr(uow, "get_summary_for_context", anoop)
     monkeypatch.setattr(uow, "enqueue_outbox", fake_outbox)
     monkeypatch.setattr(uow, "patch_conversation_state", fake_patch)
     monkeypatch.setattr(proc, "persist_events", anoop)

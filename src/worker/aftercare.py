@@ -1,7 +1,7 @@
-"""Felia 1 (NX-161) — aftercare POST-TUR off-conn: cache write-back + summarizer + profil/facts.
+"""Felia 1 (NX-161) — aftercare POST-TUR off-conn: cache write-back + profil/facts.
 
 Rulează DUPĂ ce reply-ul a fost commis (outbox), best-effort (P6: un eșec NU afectează reply/outbox/
-`mark_inbound_completed`). Ținta epic-ului: LLM-ul de fundal (embed/summarizer/profil) NU trebuie
+`mark_inbound_completed`). Ținta epic-ului: LLM-ul de fundal (embed/profil) NU trebuie
 să țină o conexiune DB. De aceea aftercare-ul ia un `db` PROVIDER (nu un `conn` viu):
 
   • inline (`static_db(conn)`, teste/sim) → același conn viu → comportament byte-identic;
@@ -34,9 +34,7 @@ from src.db.queries.facts import (
     select_whitelisted_facts,
     upsert_facts,
 )
-from src.db.queries.messages import count_messages, get_messages_for_summary
 from src.db.queries.semantic_cache import upsert_entry
-from src.db.queries.summaries import get_latest_summary, insert_conversation_summary
 from src.db.queries.traces import insert_trace
 from src.domain.loader import load_domain_pack
 from src.models import BusinessConfig, Event, TurnContext
@@ -52,7 +50,6 @@ from src.worker.profile import (
     extract_profile,
     filter_profile_patch,
 )
-from src.worker.summarizer import generate_summary
 
 log = logging.getLogger(__name__)
 
@@ -179,7 +176,7 @@ async def persist_events(
 
 
 def _usage_event_props(acc: usage.UsageAccumulator, *, phase: str) -> dict:
-    """Props pentru un event `llm_usage` dintr-un acumulator (POST-tur: summarizer + profil + cache
+    """Props pentru un event `llm_usage` dintr-un acumulator (POST-tur: profil + cache
     embed). Aceeași formă ca runner-ul → rollup-ul/raportul le tratează uniform; `phase` separă
     reply-ul de fundalul amortizat."""
     savings = sum(savings_for(model, row["cached_tokens"]) for model, row in acc.by_model.items())
@@ -303,62 +300,6 @@ async def _cache_writeback(db: DbProvider, llm, business_id, locale, body, ctx) 
         # ALERTABIL, nu doar logat: `cache_write_failed` e semnalul pe care se pune pragul.
         log.exception("cache write-back a eșuat (turul continuă)")
         ctx.emit("cache_write_failed", error_type=type(e).__name__, volatility=volatility)
-
-
-async def _summarize_if_needed(
-    db: DbProvider, redis, business_id, conversation_id, ctx, llm
-) -> None:
-    """POST-TUR async (G6-2 felia 2), best-effort — întreține rezumatul rolling (NX-297: pe
-    modelul agentului; nano nu mai există).
-    Sumarizează `get_messages_for_summary` (mesajele care ies din ultimele 8), watermark = cel mai
-    NOU mesaj INCLUS. Anti-regenerare: re-sumarizăm doar la >= `summary_regen_delta` mesaje noi.
-
-    NX-161 F1: reads + writes în checkout-uri SCURTE separate; `generate_summary` (LLM) între ele,
-    fără conn ținut (regula 1)."""
-    settings = get_settings()
-    if not settings.summary_enabled or llm is None:
-        return
-    try:
-        async with db() as conn:  # READS scurte
-            total = await count_messages(conn, business_id, conversation_id)
-            if total < settings.summary_threshold:
-                return
-            prev = await get_latest_summary(conn, business_id, conversation_id)
-            watermark = prev["upto_message_at"] if prev else None
-            to_summarize = await get_messages_for_summary(
-                conn, business_id, conversation_id, after=watermark
-            )
-        if not to_summarize:
-            return  # totul nou e încă în fereastra de 8 → nimic de comprimat
-        if prev is not None and len(to_summarize) < settings.summary_regen_delta:
-            return  # prea puține mesaje noi → nu ardem un apel nano (limbo temporar acceptat)
-
-        summary = await generate_summary(  # LLM — FĂRĂ conn ținut
-            llm, to_summarize, prev["summary"] if prev else None, ctx.language
-        )
-        if not summary:
-            return
-        new_watermark = to_summarize[-1].created_at  # cel mai nou mesaj INCLUS (watermark onest)
-        async with db() as conn:  # WRITES scurte
-            async with conn.transaction():
-                await insert_conversation_summary(
-                    conn, business_id, conversation_id, new_watermark, summary
-                )
-            # NX-122: persist OUT-OF-BAND cu turn_id stampat explicit → corelat cu turul la replay.
-            await insert_events(
-                conn,
-                business_id,
-                [Event("summarizer_run", {"messages": len(to_summarize), "turn_id": ctx.turn_id})],
-                conversation_id=conversation_id,
-            )
-        log.info(
-            "summarizer: rezumat scris conv=%s msgs=%d len=%dch",
-            conversation_id,
-            len(to_summarize),
-            len(summary),
-        )
-    except Exception:  # noqa: BLE001 — best-effort: turul a răspuns deja, nimic nu se rupe
-        log.exception("summarizer a eșuat (turul continuă)")
 
 
 async def _extract_profile_and_score(
@@ -562,14 +503,14 @@ async def _record_aftercare_cost(redis: Redis | None, work: AftercareWork, cost_
 
 
 async def run_aftercare(db: DbProvider, redis: Redis | None, work: AftercareWork) -> float:
-    """Orchestrează munca POST-TUR (best-effort): cache write-back + summarizer + profil/facts,
+    """Orchestrează munca POST-TUR (best-effort): cache write-back + profil/facts,
     într-un acumulator de usage propriu (al doilea `llm_usage`, phase=post_turn, ca fundalul să NU
     scape rollup-ului). `db` = PROVIDER: inline (static_db) = vechi; deferred (tenant_db) = conn
     eliberat pe durata LLM. Un eșec într-un helper e prins de el (best-effort) — nu afectează
     reply/outbox/`mark_inbound_completed` (deja commise).
 
     NX-241 — aftercare-ul rulează STRICT după terminal, dar tot BOUNDED (`aftercare_deadline_ms`):
-    un summarizer care atârnă 3 minute nu atinge răspunsul deja livrat, dar ține workerul (adică
+    o extracție de profil care atârnă 3 minute nu atinge răspunsul livrat, dar ține workerul (adică
     următorul tur al altcuiva). La depășire abandonăm și raportăm `aftercare_lag_ms{outcome}` —
     munca de fundal e best-effort prin contract, deci a o abandona e o degradare, nu o pierdere.
     Deadline-ul TURULUI nu se propagă aici: el e deja epuizat prin definiție (suntem după commit).
@@ -595,13 +536,10 @@ async def run_aftercare(db: DbProvider, redis: Redis | None, work: AftercareWork
         with turn_latency.span("aftercare"):
             async with asyncio.timeout(budget_ms / 1000.0 if budget_ms > 0 else None):
                 # PRIMA: e persistare pură a ceea ce s-a întâmplat deja (zero LLM). Dacă bugetul
-                # se termină pe summarizer, captura de diagnoză nu trebuie să fie ce s-a pierdut.
+                # se termină pe extracția de profil, captura de diagnoză nu trebuie să se piardă.
                 await _persist_trace(db, work)
                 await _cache_writeback(
                     db, work.llm, work.business.id, work.language, work.ctx.message.body, work.ctx
-                )
-                await _summarize_if_needed(
-                    db, redis, work.business.id, work.conversation_id, work.ctx, work.llm
                 )
                 await _extract_profile_and_score(
                     db,

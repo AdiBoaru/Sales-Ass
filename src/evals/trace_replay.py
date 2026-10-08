@@ -326,7 +326,6 @@ def snapshot_from(doc: Mapping[str, Any]) -> TurnLoadSnapshot:
         bot_active=bool(doc.get("bot_active", True)),
         shadow_mode=bool(doc.get("shadow_mode", False)),
         history=history,
-        summary=doc.get("summary"),
         facts=facts,
         inbound_msg_id=doc.get("inbound_msg_id"),
     )

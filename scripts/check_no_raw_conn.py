@@ -69,7 +69,6 @@ _EXTERNAL_AWAITS = {
     "moderation",
     "describe_image",
     "transcribe",
-    "generate_summary",
     "extract_profile",
     # HTTP de provider (canale, webhook-uri de operator, media). Verbele generice se verifică
     # ȘI pe receptor (`_HTTP_RECEIVERS`) — `cache.get(conn, ...)` nu e un apel de rețea.

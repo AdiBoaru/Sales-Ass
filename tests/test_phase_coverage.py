@@ -216,14 +216,12 @@ async def test_a_whole_turn_attributes_queue_load_and_commit(monkeypatch) -> Non
     monkeypatch.setattr(uow, "insert_message", lambda *a, **k: _msg_id())
     monkeypatch.setattr(uow, "touch_last_inbound", anoop)
     monkeypatch.setattr(uow, "get_recent_messages", anoop)
-    monkeypatch.setattr(uow, "get_summary_for_context", anoop)
     monkeypatch.setattr(uow, "enqueue_outbox", lambda *a, **k: _msg_id())
     monkeypatch.setattr(uow, "patch_conversation_state", anoop)
     monkeypatch.setattr(proc, "persist_events", anoop)
     monkeypatch.setattr(proc, "_record_turn_cost", anoop)
     monkeypatch.setattr(proc, "_llm_within_budget", anoop)
     monkeypatch.setattr(ac, "_cache_writeback", anoop)
-    monkeypatch.setattr(ac, "_summarize_if_needed", anoop)
     monkeypatch.setattr(ac, "_extract_profile_and_score", anoop)
 
     await handle_turn(

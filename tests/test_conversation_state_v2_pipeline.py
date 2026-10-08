@@ -94,7 +94,6 @@ async def _run(monkeypatch, stage, *, initial_state, body="salut") -> tuple[dict
     monkeypatch.setattr(uow, "insert_message", lambda *a, **k: _async("msg-id"))
     monkeypatch.setattr(uow, "touch_last_inbound", anoop)
     monkeypatch.setattr(uow, "get_recent_messages", anoop)
-    monkeypatch.setattr(uow, "get_summary_for_context", anoop)
     monkeypatch.setattr(uow, "enqueue_outbox", lambda *a, **k: _async("outbox-1"))
     monkeypatch.setattr(uow, "patch_conversation_state", fake_patch)
     monkeypatch.setattr(proc, "persist_events", fake_persist)

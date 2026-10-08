@@ -880,7 +880,6 @@ async def prepare_turn_context(
         conversation_id=conversation_id,
         history=snap.history,
         state=ConversationState.from_jsonb(snap.state),  # G6-2: agentul vede ce-a afișat
-        summary=snap.summary,  # G6-2 felia 2
         facts=snap.facts,  # NX-148: memorie structurată (facts_block)
         language=snap.locale or business.default_locale,
         bot_active=snap.bot_active,
@@ -1133,7 +1132,7 @@ async def _run_turn(  # noqa: PLR0913 — o fază, mulți parametri deja valida�
         len(reply_text),
         outbox_id,
     )
-    # === FAZA 4 — AFTERCARE (cache write-back + summarizer + profil/facts) =================
+    # === FAZA 4 — AFTERCARE (cache write-back + profil/facts) =================
     # Best-effort, DUPĂ commit, nu întârzie livrarea. Primește ID-uri + snapshot, NICIODATĂ o
     # conexiune (`aftercare.py` ia checkout-uri scurte, cu LLM-ul de fundal între ele).
     # INLINE = rulat aici, pe ACELAȘI provider. DEFERRED (`defer_aftercare`) → apelantul îl rulează

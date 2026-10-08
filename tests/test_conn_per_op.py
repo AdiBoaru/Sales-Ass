@@ -232,7 +232,6 @@ async def test_turn_uow_load_and_commit_are_separate_short_checkouts(monkeypatch
     monkeypatch.setattr(uow, "insert_message", _msg_id)
     monkeypatch.setattr(uow, "touch_last_inbound", anoop)
     monkeypatch.setattr(uow, "get_recent_messages", _empty_list)
-    monkeypatch.setattr(uow, "get_summary_for_context", anoop)
 
     snap = await uow.load_turn(
         db,

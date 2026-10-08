@@ -1684,12 +1684,26 @@ e **verbatim**, turul botului păstrează proza **integrală** (few-shot din pro
 sigură: **proza spune CUM vorbești, blocul spune CE e adevărat** — cifrele se reconfirmă prin tool.
 **Nicio limită de caractere** (decis de Adi, 2026-09-29): varianta cu buget pe rol (3.500)
 tăia tot proza turelor vechi, fiindcă pe `sole-ro` un răspuns are 1.200-1.600 de caractere. Singura
-margine e fereastra ÎNCĂRCATĂ (`HISTORY_LIMIT`, 8 mesaje cu cel curent; cu 6, un tur nu apărea nici în
-istoric, nici în rezumat); mesajul clientului e plafonat la intrare (2.000, `web/app.py`).
+margine e fereastra ÎNCĂRCATĂ (`HISTORY_LIMIT`, **20 de mesaje cu cel curent** din 2026-10-08, vezi
+nota de mai jos); mesajul clientului e plafonat la intrare (2.000, `web/app.py`).
 Declanșatorul: conversația `1748f988`, unde la turul 3 tăierea veche lăsa modelului doar coada
 listei de la turul 2, fără niciun mesaj al clientului. ON implicit, ca NX-311 (defect măsurat);
 `STRUCTURED_HISTORY_ENABLED=false` = tăierea veche, byte-identic. Card: [`tasks/stage1/NX-255.md`](tasks/stage1/NX-255.md); probă:
 `pytest tests/test_structured_history.py -q`.
+
+**Istoricul: ultimele 20 de mesaje, întregi, fără rezumat (decis de Adi pe 2026-10-08).**
+`HISTORY_LIMIT` 8 → **20** (19 anterioare + cel curent, deci ~10 ture pe web, unde un răspuns e un
+singur rând), aceeași fereastră și în interpretarea kernelului (`MAX_HISTORY_MESSAGES`). Rezumatul de
+conversație a IEȘIT din proiect: nu se mai generează post-tur (`summarizer.py`, `summaries.py` și
+`SUMMARY_*` șterse, deci un `SUMMARY_ENABLED=true` rămas în `.env` e ignorat), nu se mai citește la
+încărcare și nu mai intră în prompt. Tabela `conversation_summaries` rămâne, cu rândurile vechi,
+necitită. Ce e mai vechi de fereastră îl poartă doar starea (produse afișate, nevoi, subiect,
+`state.safety`), nu un text comprimat de alt apel de model. Consecințe declarate: porțile de
+proveniență care citesc „ce a spus clientul" (`uttered_by_client`, `UserWords`) văd acum 20 de mesaje,
+nu 8; promptul crește (un răspuns de bot are 1.200-1.600 de caractere, deci ~10 ture înseamnă până la
+~15.000 de caractere pe fiecare apel care primește istoricul); turele înregistrate înainte (NX-366)
+se rejoacă pe istoricul lor de 8. Probă: `pytest tests/test_structured_history.py
+tests/test_processor.py::test_recent_messages_window_is_last_twenty_verbatim -q`.
 
 **NX-289 — WhatsApp și Telegram nu mai există în proiect (cod + schemă).**
 NX-179 le declarase ÎNGHEȚATE: cod păstrat, zero investiție. Costul înghețului nu era zero —
@@ -2112,10 +2126,10 @@ Orice stagiu poate seta `reply` → early exit direct la Sender (stagiul 9).
       clasificator de model (test AST în `test_context_orchestration`)
 
 [6] CONTEXT BUILDER (buget impus în cod)
-    • istoric: max 8 mesaje (cele mai recente)
+    • istoric: ultimele 20 de mesaje (cu cel curent), ÎNTREGI, fără tăiere de caractere
     • state: max 8KB (impus în cod + CHECK pe conversations.state din 003)
     • profil client compact din contacts.profile
-    • summarizer conversații lungi (> 20 mesaje → conversation_summaries + ultimele 8)
+    • fără rezumat de conversație (scos pe 2026-10-08): ce e mai vechi de fereastră e doar în stare
     • prefix static byte-identic → prompt caching OpenAI (75-90% discount)
 
 [7] AGENT (`gpt-6-luna`, vezi tabelul de stack)
@@ -2290,7 +2304,7 @@ class TurnContext:
     business: BusinessConfig            # citit din businesses
     contact: Contact                    # citit din contacts (+ channel_identities)
     message: InboundMessage             # body, content_type, provider_msg_id
-    history: list[Message]              # max 8, cel mai recent ultimul
+    history: list[Message]              # max 20, cel mai recent ultimul
     state: ConversationState            # conversations.state jsonb, max 8KB (v1)
     state_v2: Any                       # NX-235: starea REDUSĂ (nevoi/revocări/referințe);
                                         # owner processor, None cu flagul stins
@@ -2356,6 +2370,7 @@ conversations     — id, business_id, contact_id, channel_id, status,
                       (`ConversationState.from_jsonb`). Migrare LAZY, fără SQL.
                       Contract: docs/CONVERSATION-STATE-V2.md
 conversation_summaries — id, business_id, conversation_id, upto_message_at, summary
+                    • NECITITĂ din 2026-10-08 (rezumatul a ieșit din proiect); rânduri vechi
 messages [PARTIȚIONAT] — id, business_id, conversation_id, contact_id,
                     direction(inbound|outbound|internal), author(contact|bot|
                     human_agent|system), provider_msg_id, content_type, body,
@@ -2552,7 +2567,7 @@ poartă pe worker și pe `/web/chat`). Detalii: `docs/db_connections.md`.
 ## Principii — respectă-le în tot codul
 
 1. **Pipeline liniar** — niciun stagiu nu sare înapoi, niciun loop de orchestrare
-2. **LLM doar la 1 punct pe drumul sincron** — agentul. NX-297 a șters triajul nano; extracția de profil și rezumatul rulează POST-tur, pe modelul agentului. Tot restul: cod determinist
+2. **LLM doar la 1 punct pe drumul sincron** — agentul. NX-297 a șters triajul nano; extracția de profil rulează POST-tur, pe modelul agentului (rezumatul de conversație a ieșit pe 2026-10-08). Tot restul: cod determinist
 3. **Un singur proprietar per câmp** — dacă două funcții scriu același câmp din TurnContext, e o greșeală de design
 4. **Buget de context impus în cod** — nu în prompturi, nu prin disciplină, în cod (state 8KB tăiat de context builder; CHECK în DB ca plasă)
 5. **Un singur punct de ieșire** — Sender → outbox → dispatcher. Orice alt loc care trimite mesaje e o greșeală

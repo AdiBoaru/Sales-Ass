@@ -126,7 +126,6 @@ async def _run(monkeypatch, stage):
     monkeypatch.setattr(uow, "insert_message", fake_insert_msg)
     monkeypatch.setattr(uow, "touch_last_inbound", anoop)
     monkeypatch.setattr(uow, "get_recent_messages", anoop)
-    monkeypatch.setattr(uow, "get_summary_for_context", anoop)
     monkeypatch.setattr(uow, "enqueue_outbox", fake_outbox)
     monkeypatch.setattr(uow, "patch_conversation_state", anoop)
     monkeypatch.setattr(proc, "persist_events", anoop)
@@ -135,7 +134,6 @@ async def _run(monkeypatch, stage):
     # NX-161 F1: run_aftercare RULEAZĂ (inline via static_db); patch helperele pe modulul aftercare
     # — fake_cache CAPTUREAZĂ textul pur pt aserția „cache-ul stochează fără disclaimer".
     monkeypatch.setattr(ac, "_cache_writeback", fake_cache)
-    monkeypatch.setattr(ac, "_summarize_if_needed", anoop)
     monkeypatch.setattr(ac, "_extract_profile_and_score", anoop)
 
     business = BusinessConfig(id="biz-1", slug="s", name="n")

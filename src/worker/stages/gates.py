@@ -418,8 +418,8 @@ def apply_moderation_notice(ctx: TurnContext) -> None:
 
 
 async def _charge_vision_cost(ctx: TurnContext, deps: PipelineDeps) -> None:
-    """Contează apelul Vision în contorul zilnic de cost (G2c), ca un apel de agent. Best-effort
-    (ca summarizer-ul): un eșec de Redis NU rupe turul — descrierea e deja injectată."""
+    """Contează apelul Vision în contorul zilnic de cost (G2c), ca un apel de agent. Best-effort:
+    un eșec de Redis NU rupe turul — descrierea e deja injectată."""
     settings = get_settings()
     if deps.redis is None or not settings.cost_guard_enabled:
         return

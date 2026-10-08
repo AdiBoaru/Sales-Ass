@@ -7,7 +7,7 @@ nu le citea → `usage_daily.tokens_in/out/cost_usd` erau mereu 0, iar economia 
   • adaptorul (`src.agent.llm`, singurul care vorbește OpenAI) raportează usage-ul fiecărui apel
     aici, prin `record_chat` / `record_embeddings`;
   • runner-ul deschide un acumulator per tur (`push`/`pop`) și emite UN event `llm_usage` la final;
-  • processor-ul deschide un al doilea acumulator în jurul apelurilor POST-tur (summarizer / profil)
+  • processor-ul deschide un al doilea acumulator în jurul apelurilor POST-tur (profil)
     → un al doilea `llm_usage` (phase=post_turn), ca nimic să nu scape rollup-ului (NX-103).
 
 Izolare la concurență: acumulatorul stă într-un `ContextVar`. `asyncio.gather` (ex. tool-urile

@@ -790,7 +790,7 @@ def uttered_by_client(ctx: TurnContext, *values: object) -> bool:
     doilea mesaj nu-l mai numește — și clientul ar primi tot catalogul.
 
     Deci partea sigură se inversează: verificăm ce a scris clientul în ORICE mesaj din fereastra de
-    istoric (`ctx.history` e deja plafonat la 8 de context builder, P4), și numai mesajele LUI
+    istoric (`ctx.history`, plafonat la `HISTORY_LIMIT` = 20 la încărcare, P4), doar mesajele LUI
     (`direction == "inbound"`) — o parafrază a botului nu e o afirmație a clientului. Pură, fără
     I/O, agnostică de limbă: nicio listă de cuvinte, doar coroborarea pe prefix din NX-251.
     """

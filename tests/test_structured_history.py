@@ -114,9 +114,9 @@ def test_no_character_cap_on_client_or_bot(structured):
 
 
 def test_window_of_messages_is_the_only_bound(structured):
-    """Fereastra e cea ÎNCĂRCATĂ (`HISTORY_LIMIT`), nu 6: rezumatul acoperă doar ce e înaintea
-    mesajelor încărcate, deci cu 6 din 8 un tur întreg nu apărea nicăieri (recenzia NX-255).
-    Mesajele mai vechi decât fereastra ies ÎNTREGI, nu tăiate."""
+    """Fereastra e cea ÎNCĂRCATĂ (`HISTORY_LIMIT`, 20 din 2026-10-08), nu una mai mică: fără
+    rezumat, un mesaj încărcat și nearătat nu ajunge nicăieri. Mesajele mai vechi decât fereastra
+    ies ÎNTREGI, nu tăiate."""
     from src.db.queries.messages import HISTORY_LIMIT
 
     n = HISTORY_LIMIT + 2  # ultimul e mesajul curent

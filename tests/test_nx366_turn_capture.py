@@ -56,7 +56,6 @@ def _snap() -> TurnLoadSnapshot:
                 payload={"shown": [{"id": "p1"}]},
             ),
         ],
-        summary=None,
         facts=[{"fact_type": "concerns", "fact_value": "dry"}],
         inbound_msg_id="m2",
     )

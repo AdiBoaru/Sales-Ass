@@ -43,7 +43,7 @@ flowchart TD
   HT["Începe procesarea turului<br/>(processor.py:200)"]:::step
   DED2{"Dublură scăpată de Redis?<br/>(plasa a doua, în DB) (:238)"}:::dec
   SKIP2["Ignorat: deja procesat"]:::step
-  CTX["Încărcăm: cine e clientul, conversația,<br/>ultimele 8 mesaje, starea, faptele știute"]:::db
+  CTX["Încărcăm: cine e clientul, conversația,<br/>ultimele 20 de mesaje, starea, faptele știute"]:::db
   SEEDC["Pornim contorul de cost al zilei (:336)"]:::step
   GUARD{"Magazinul a depășit bugetul zilnic<br/>de AI? (:116)"}:::dec
   NOLLM["AI oprit pe azi → răspundem degradat,<br/>dar RĂSPUNDEM"]:::err
@@ -54,7 +54,7 @@ flowchart TD
   SPLIT{"Text prea lung (și nu e cu carduri)?"}:::dec
   FRAG["Îl spargem în maxim 2 mesaje"]:::step
   TX["Salvăm TOTUL dintr-o mișcare: mesajele +<br/>coada de trimis + starea discuției<br/>(:382-492)"]:::db
-  POST["După răspuns, în fundal: cache, rezumat,<br/>profil, fapte noi — cu conexiunea DB<br/>deja eliberată (consumer.py:236 · aftercare.py:444)"]:::step
+  POST["După răspuns, în fundal: cache,<br/>profil, fapte noi — cu conexiunea DB<br/>deja eliberată (consumer.py:236 · aftercare.py:444)"]:::step
 
   DISP["Dispecerul (alt proces) ia din coadă<br/>ce e de trimis"]:::step
   RENDER{"Alegem forma după ce POATE canalul:<br/>carduri / carusel / șablon / text<br/>(dispatcher.py:101)"}:::dec

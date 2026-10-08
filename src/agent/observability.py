@@ -13,7 +13,7 @@ import hashlib
 from typing import Any
 
 from src.agent.validator import ValidationResult
-from src.worker.summarizer import _redact_pii
+from src.worker.profile import _redact_pii
 
 
 def _retrieval_ids(retrieved: Any) -> list[str]:
