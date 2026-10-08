@@ -249,7 +249,7 @@ async def test_detail_and_compare_route_to_the_existing_handlers(
         seen.append(("details", [pid]))
         ctx.set_reply("detalii", cacheable=False)
 
-    async def comparison(ctx, deps, pids, *, withhold=None):
+    async def comparison(ctx, deps, pids, *, withhold=None, narrate=None):
         seen.append(("comparison", list(pids)))
         ctx.set_reply("comparatie", cacheable=False)
         return True
@@ -630,7 +630,7 @@ async def test_the_disclosure_reaches_the_comparison_the_widget_shows(monkeypatc
     `reply.text`, deci fraza trebuie pusă și acolo."""
     from src.models import Comparison
 
-    async def comparison(ctx, deps, pids, *, withhold=None):
+    async def comparison(ctx, deps, pids, *, withhold=None, narrate=None):
         ctx.set_reply("comparatie", cacheable=False)
         ctx.reply.comparison = Comparison(columns=[], rows=[], intro="Lead.")
         return True

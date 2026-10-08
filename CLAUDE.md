@@ -703,6 +703,11 @@ setul golit (NX-367) rămân ale codului. `has_medical_claim` prinde acum și «
 «potrivită pentru însărcinate». Flaguri `COMPOSER_CART_ENABLED`, `COMPOSER_CHITCHAT_ENABLED`,
 `COMPOSER_SAFETY_ENABLED` (ON), `SAFETY_REFERRAL_SHORT_AFTER_FIRST` (OFF, decizia lui Adi). Probă:
 `pytest tests/test_nx382_composer_2c.py -q`.
+**Faza 3:** comparația pe calea kernelului (`serve_comparison(narrate=)`) o scrie compozitorul într-un
+apel: răspunsul la întrebare deasupra tabelului, verdictul pe tipuri de client dedesubt și axele, cu
+celulele verificate pe sursă de același `assemble_axes`; tabelul determinist rămâne plasa, iar
+verdictul reținut (I12) rămâne pe calea de azi. Flag `COMPOSER_COMPARE_ENABLED` (ON). Probă:
+`pytest tests/test_nx382_composer_3.py -q`.
 
 **NX-238 — retrievalul trece printr-un PORT, iar candidatul e inert (verdict `NOT-READY`).**
 `src/retrieval/` e contractul stabil pe care îl consumă NX-239: `RetrievalPort` + `RetrievalBundle`

@@ -134,6 +134,7 @@ KERNEL_EXECUTOR_EVENTS: frozenset[str] = frozenset(
         "kernel_i10_blocked",
         "detail_question",  # NX-381: măsurătoarea răspunsului rămâne și pe un tur căzut
         "composer",  # NX-382: idem pentru compozitor
+        "composer_axes",  # NX-382 faza 3: axele tabelului scrise de compozitor
     }
 )
 #: Politica de răspuns a orchestratorului pe produsele unei comparații: (partenerii adăugați de
@@ -383,11 +384,52 @@ def _withhold(
     return withhold
 
 
+#: NX-382 faza 3: pașii următori oferiți sub o comparație; modelul îi formulează (ca
+#: `_DETAIL_MOVES`).
+_COMPARE_MOVES = (
+    "add one of the compared products to the cart",
+    "more details about one of them",
+    "something cheaper than these",
+)
+
+
+def _narrator(ctx: TurnContext, deps: PipelineDeps, question: str | None) -> det.Narrator | None:
+    """NX-382 faza 3: comparația scrisă de compozitorul unic (răspunsul la ce s-a întrebat,
+    verdictul pe tipuri de client, axele), cu istoricul în față. `None` cu flagul stins
+    (narativul de azi)."""
+    if not get_settings().composer_compare_enabled:
+        return None
+
+    async def narrate(
+        comparison: Any, products: list[dict[str, Any]], facets: Any
+    ) -> tuple[Any, list[str]] | None:
+        from src.agent import composer  # noqa: PLC0415 — ciclul agent ↔ executori
+        from src.worker.context import conversation_transcript  # noqa: PLC0415
+
+        sources = composer.comparison_sources(products, facets, ctx.language)
+        inp = composer.ComposeInput(
+            task="compare",
+            products=products,
+            question=question,
+            offered_moves=_COMPARE_MOVES,
+            extra_facts=(("COMPARISON SOURCES", sources),),
+        )
+        history = conversation_transcript(ctx.history, consumer="composer")
+        composed, _reason = await composer.compose(ctx, deps, inp, history=history)
+        if composed is None:
+            return None
+        built = composer.comparison_reply(ctx, composed, comparison, products, facets)
+        return built, list(composed.suggestions)
+
+    return narrate
+
+
 async def _compare(
     ctx: TurnContext,
     deps: PipelineDeps,
     ids: list[str],
     policy_for: PolicyFor | None,
+    question: str | None = None,
     *,
     found: tuple[str, ...] = (),
 ) -> bool | None:
@@ -399,10 +441,12 @@ async def _compare(
     (ecranul, apoi seturile de mai devreme, după starea porții), cel mult doi; (2) un partener din
     graf doar dacă e substitut curatoriat sau de ACELAȘI tip; (3) altfel detaliul țintei, fără
     partener inventat. Chip-ul nostru «compară-l cu un produs similar» rămâne pe scurtătura lui
-    (NX-319)."""
+    (NX-319). `question` (NX-381) = ce a întrebat clientul despre ele: compozitorul răspunde la ea
+    (NX-382 faza 3), iar pe căderea pe detaliu tot el scrie fișa."""
+    narrate = _narrator(ctx, deps, question)
     if len(ids) >= 2:
         withhold = _withhold(ctx, policy_for, found)
-        return await det.serve_comparison(ctx, deps, ids, withhold=withhold)
+        return await det.serve_comparison(ctx, deps, ids, withhold=withhold, narrate=narrate)
     if not ids:
         return None
     partners = _set_partners(ctx, ids[0])
@@ -415,12 +459,18 @@ async def _compare(
         partners = (partner,) if partner is not None else ()
     if partners:
         served = await det.serve_comparison(
-            ctx, deps, [ids[0], *partners], withhold=_withhold(ctx, policy_for, partners)
+            ctx,
+            deps,
+            [ids[0], *partners],
+            withhold=_withhold(ctx, policy_for, partners),
+            narrate=narrate,
         )
         if served:
             return served
         # recenzia: o comparație refuzată (raft amestecat, siguranța) cade pe detaliul țintei
     ctx.emit("kernel_compare_single", served="detail")
+    if get_settings().composer_detail_enabled:
+        return await _compose_detail(ctx, deps, ids[0], question)
     await det.serve_details(ctx, deps, ids[0])
     return ctx.reply is not None
 
@@ -1083,9 +1133,11 @@ async def _run_plan(
                 return await _answer_detail(ctx, deps, ids[0], plan.question)
             await det.serve_details(ctx, deps, ids[0])
             return ctx.reply is not None
-        return await _compare(ctx, deps, ids, policy_for) if len(ids) >= 2 else False
+        if len(ids) < 2:
+            return False
+        return await _compare(ctx, deps, ids, policy_for, plan.question)
     if kind == "compare":
-        return await _compare(ctx, deps, ids, policy_for)
+        return await _compare(ctx, deps, ids, policy_for, plan.question)
     if kind == "faq" and get_settings().composer_store_info_enabled:
         if await _compose_store_info(ctx, deps):
             return True
@@ -1187,7 +1239,7 @@ async def _serve_named(
     # produsele găsite prin căutare intră la politica de răspuns ca parteneri, altfel politica nu
     # le vedea și verdictul trecea pe o dimensiune necunoscută.
     found = tuple(i for i in ids if i not in plan.product_ids)
-    return await _compare(ctx, deps, ids, policy_for, found=found)
+    return await _compare(ctx, deps, ids, policy_for, plan.question, found=found)
 
 
 async def execute_read_plans(

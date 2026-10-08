@@ -1332,6 +1332,13 @@ class Settings(BaseSettings):
     # scrie compozitorul. Orice eșec ⇒ textul de azi (fraza pachetului + cross-sell-ul v1;
     # chitchat-ul pe calea v1, fără unelte de mutație, NX-383). OFF → textul de azi, byte-identic.
     composer_cart_enabled: bool = Field(default=True, validation_alias="COMPOSER_CART_ENABLED")
+    # NX-382 faza 3: comparația pe calea kernelului o scrie compozitorul (răspunsul la întrebare
+    # deasupra tabelului, verdictul pe tipuri de client dedesubt, axele cu sursa verificată pe
+    # celulă, istoricul în față). Verdictul reținut (I12) rămâne pe calea de azi. Eșec ⇒
+    # narativul de azi (`compose_comparison`). OFF → narativul de azi, byte-identic.
+    composer_compare_enabled: bool = Field(
+        default=True, validation_alias="COMPOSER_COMPARE_ENABLED"
+    )
     composer_chitchat_enabled: bool = Field(
         default=True, validation_alias="COMPOSER_CHITCHAT_ENABLED"
     )
