@@ -23,7 +23,22 @@ Versioning: the contract is `kernel.v1.0`. **Minor** (`v1.1`): additive schema f
 
 No invariant, ownership row or state rule changes in v1.2, so no replay gate is required. The open questions step 6 raised on I5 (the safety prune on `aside`), I20 (the cart on `cart_ref`) and I15a/I12 (`grounding_guard` does not run on the v1 composition) are decided in the PRs that need them (B and C), under the minor/major rule.
 
-**Current version: `kernel.v6.2` (minor, NX-375, 2026-10-01).** One planner row, additive: a
+**Current version: `kernel.v7.0` (MAJOR, NX-384, 2026-10-08).** Four rules that discarded what the
+interpretation understood (set `wide-2026-10-07`, turns labelled "interpretation right, code wrong"):
+(1) a REFINEMENT (accepted changes or ranking signals, none naming the subject, and no subject type
+in state) searches the text of the ACTIVE search session, the set the customer was shown, instead
+of the turn's sentence («sub 100 lei» after night masks searched «sub 100 lei»); the session must be
+on the subject's shelf and not a name search, and a turn with no change keeps its own words;
+(2) a product KIND said in the turn that the vocabulary lacks (moved to `unmapped` by the
+validator) heads the search text like a named type, before spoken facet filters; (3) on the planned
+path, a search text made only of the shelf's own name (key, label, path) is no evidence against the
+shelf, so the NX-313 guard keeps it (it judged «Ochi» by eye-care matches and dropped Makeup > Eyes);
+(4) `avoid` on the shelf or the type is an exclusion (`restriction`, a filter only when the catalog
+carries the exact value and the customer said it), never the subject («nu vreau creme» became the
+cream umbrella). The replay gate is waived as for v2.0 to v6.0. The model-written schema is
+unchanged.
+
+**`kernel.v6.2` (minor, NX-375, 2026-10-01).** One planner row, additive: a
 `find` act that names a product. The name reference is chosen by one pure function,
 `references.find_name_reference`, shared by the planner and the gate: a `name` target of the `find`
 act, or a `name` reference no other act targets and no change anchors (`relative_to`). It is not a

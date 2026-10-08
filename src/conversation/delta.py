@@ -365,8 +365,14 @@ def to_delta(
                 continue
             proposals += structural
             continue
+        avoided = (c.change.relation or "eq") == "avoid"
+        # NX-384 (`kernel.v7.0`): un raft sau un tip OCOLIT («nu vreau creme») nu e subiectul: ca
+        # pe orice altă dimensiune, `avoid` merge pe excludere (`_need_proposals`), pe care
+        # plannerul o face filtru doar când catalogul poartă exact valoarea și clientul a spus-o.
+        # Înainte devenea umbrela subiectului, iar căutarea urca exact cremele.
         if (
             c.dimension == PRODUCT_TYPE
+            and not avoided
             and c.provenance != "explicit"
             and c.change.op in ("set", "add")
             and c.canonical_value is not None
@@ -381,7 +387,7 @@ def to_delta(
             umbrella.append(c.umbrella or (str(c.canonical_value),))
             counters["subject_type_umbrella"] = counters.get("subject_type_umbrella", 0) + 1
             continue
-        if c.dimension in SUBJECT_DIMENSIONS and c.canonical_value is not None:
+        if c.dimension in SUBJECT_DIMENSIONS and not avoided and c.canonical_value is not None:
             # NX-348: se adună, apoi UN `set_topic` pe pereche, în poziția subiectului (primul).
             if not subject and not umbrella:
                 proposals.append(None)  # type: ignore[arg-type]  # locul propunerii de subiect

@@ -181,6 +181,7 @@ def _read_act_query(
     shelf_names: Collection[str],
     locale: str,
     flags: Collection[str] = (),
+    session_text: str | None = None,
 ) -> tuple[str | None, str | None]:
     """SINGURUL loc din planner care citește `Act.query` și citatele schimbărilor (cuvintele
     clientului). Întoarce `(textul căutării, cererea întreagă fără cuvintele negate)`, ca VALORI;
@@ -208,7 +209,19 @@ def _read_act_query(
 
     NX-349: citatul unei fațete da/nu (`flags`) nu dă text nici în rezervă: proprietatea o poartă
     fațeta (sau golul dezvăluit), iar cuvintele ei sunt adesea negația unui lucru («fără parfum»),
-    deci «parfum» ar urca exact produsele parfumate."""
+    deci «parfum» ar urca exact produsele parfumate.
+
+    NX-384 (`kernel.v7.0`, setul wide-2026-10-07):
+    - un FEL de produs spus în tur, pe care vocabularul nu-l are (schimbarea modelului era pe tip
+      sau pe raft, validatorul a dus-o pe `unmapped`: «rimel», «iluminator»), e capul textului ca
+      un tip numit, nu un termen printre altele. Altfel «waterproof» la turul următor căuta doar
+      «waterproof»;
+    - `session_text` = textul căutării ACTIVE, dat de planner doar pe o RAFINARE (turul modifică
+      cererea, dar nu numește ce caută, iar starea n-are tipul subiectului). Ea vine înaintea
+      fațetelor, a termenilor nemapați și a etichetei raftului, plus cuvintele turului fără alt
+      canal: «sub 100 lei» după o căutare de măști de noapte caută tot măștile, nu «sub 100 lei».
+      Textul sesiunii e cel pe care clientul l-a văzut servit, deci rafinarea filtrează exact
+      acel set."""
     stop = stopwords(locale)
     # (dimensiune, relație, proveniență, cuvintele care au numit valoarea, valoarea de text,
     # cuvintele citatului, cuvintele citatului în forma scrisă de client)
@@ -283,6 +296,19 @@ def _read_act_query(
         for w in surface(m, raw)
     ]
     unmapped = [v for d, _r, _p, _m, v, _q, _raw in live if d == UNMAPPED_KEY and v]
+    # NX-384: felul spus în tur pe care vocabularul nu-l are (schimbarea modelului pe tip/raft,
+    # dusă de validator pe `unmapped`); doar pe schimbările ACCEPTATE, `avoid` exclus
+    kinds = [
+        str(c.canonical_value)
+        for c in checked or ()
+        if c.rejected is None
+        and c.strength != "ranking"
+        and c.dimension == UNMAPPED_KEY
+        and c.change.dimension in _SUBJECT_WORDS
+        and (c.change.relation or "eq") not in _NEGATIVE
+        and isinstance(c.canonical_value, str)
+        and c.canonical_value
+    ]
     negated = {w for _d, r, _p, _m, _v, q, _raw in items if r in _NEGATIVE for w in q}
     # NX-349 (recenzia): cuvintele unei fațete da/nu ies din rezervă, chiar și când schimbarea a
     # fost respinsă. Doar fraza care a numit-o (`matched`, cu negația ei), altfel citatul;
@@ -317,9 +343,18 @@ def _read_act_query(
 
         return " ".join(sorted(unique, key=position))
 
-    head = type_words or ([type_label] if type_label else []) or shelf_words
+    others = [*(w for w in unmapped if w not in kinds), *gapped]
+    if type_words:
+        head = [*type_words, *gapped]
+    elif kinds:
+        # ca pe rezerva NX-352 a termenilor nemapați: felul, plus restul cuvintelor nemapate
+        head = [*kinds, *others]
+    else:
+        said = ([type_label] if type_label else []) or shelf_words
+        head = [*said, *gapped] if said else []
     candidates = (
-        [*head, *gapped] if head else [],
+        head,
+        [session_text, *others] if session_text else [],
         [*named_filters, *gapped],
         [*unmapped, *gapped],
         [shelf_label, *gapped] if shelf_label else [],
@@ -856,6 +891,7 @@ class _Planner:
             {t for n in (topic.category_key, shelf_label) if n for t in tokens(n)},
             self.locale,
             flags=self.flags,
+            session_text=None if subject_kinds(topic) else self._refined_session_text(),
         )
         # NX-352: căutarea se COMPUNE din ce a validat kernelul (subiectul, nevoile filtrate,
         # termenii nemapați); cererea întreagă, fără cuvintele negate, e ultima rezervă.
@@ -880,6 +916,31 @@ class _Planner:
             self._gap("no_query")
             return self._plan("reply_only")
         return self._plan("search", (), args.model_copy(update={"query": phrase}))
+
+    def _refined_session_text(self) -> str | None:
+        """NX-384: textul căutării ACTIVE, când turul o RAFINEAZĂ: are o schimbare acceptată sau un
+        semnal de ordonare care nu e de subiect (preț, fațetă, fanion, excludere, bandă), nu
+        numește un subiect, iar sesiunea e pe raftul subiectului de acum și nu e o căutare pe numele
+        unui produs. Un tur fără nicio schimbare rămâne cererea lui (poate fi una nouă pe care
+        interpretarea n-a etichetat-o). Starea, nu rezultatele (I20): textul e argumentul căutării
+        trecute, scris de executor în `active_search`."""
+        changes = self._accepted()
+        if any(c.dimension in _SUBJECT_WORDS for c in changes):
+            return None
+        modifies = bool(self.ranking) or any(
+            c.dimension and c.op in ("set", "add", "replace", "remove") for c in changes
+        )
+        if not modifies:
+            return None
+        filters = (self.state.active_search or {}).get("filters") or {}
+        text = filters.get("query") if isinstance(filters, Mapping) else None
+        if not isinstance(text, str) or not text.strip() or text == _PENDING:
+            return None
+        if filters.get("product_name"):
+            return None
+        if (filters.get("category") or None) != (self.state.topic.category_key or None):
+            return None
+        return text.strip()
 
     def _filter_label(self, args: SearchArgs) -> str | None:
         """Eticheta locale-i a primului filtru de nevoie din argumente (`value_labels` ale

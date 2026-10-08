@@ -811,6 +811,28 @@ def client_texts(ctx: TurnContext) -> list[str]:
     return texts
 
 
+def query_names_only_shelf(
+    vocab: CatalogVocabulary | None, category_keys: Sequence[str], query: str, locale: str | None
+) -> bool:
+    """NX-384: textul căutării e făcut DOAR din numele raftului cerut (cheia, eticheta sau calea
+    lui, pe termenii de conținut ai locale-i)? PUR. Fără raft, fără text sau fără vocabular ⇒
+    `False` (garda NX-313 judecă în continuare)."""
+    if not category_keys or not query or vocab is None:
+        return False
+    terms = set(content_terms(query, locale))
+    if not terms:
+        return False
+    by_key = {e.key: e for e in getattr(vocab, "categories", ()) or ()}
+    names: set[str] = set()
+    for key in category_keys:
+        entry = by_key.get(key)
+        parts = [key, *(([entry.label, entry.path]) if entry is not None else [])]
+        for part in parts:
+            if part:
+                names |= set(content_terms(part.replace("-", " ").replace("/", " "), locale))
+    return bool(names) and terms <= names
+
+
 #: NX-319: de ce a rămas `price_max` al modelului în `WHERE`. Vocabular ÎNCHIS (telemetrie).
 PRICE_BOUND_SPOKEN_NOW = "spoken_now"
 PRICE_BOUND_SPOKEN_EARLIER = "spoken_earlier"
@@ -2416,6 +2438,18 @@ async def _search(
     ):
         category_uttered = False
         ctx.emit("category_subshelf_homograph", category_key=category_keys[0])
+    if (
+        planned
+        and not category_uttered
+        and query_names_only_shelf(vocab, category_keys, a.query, ctx.language)
+    ):
+        # NX-384 (`kernel.v7.0`): pe calea planificată, un text făcut DOAR din numele raftului
+        # (eticheta lui ca rezervă NX-352, sau cuvântul clientului care l-a numit: «ochi» pentru
+        # Machiaj > Ochi) nu e o dovadă despre raft: garda NX-313 l-ar judeca pe propriul nume,
+        # cuvânt care apare mai des în ALTE rafturi (îngrijirea ochilor), și l-ar scoate. Raftul
+        # rămâne, iar treapta `filters_only` servește setul lui dacă numele nu potrivește nimic.
+        category_uttered = True
+        ctx.emit("category_query_is_shelf", category_key=category_keys[0])
     # NX-352 (recenziile): pe calea PLANIFICATĂ filtrele de FAȚETĂ vin doar din nevoi spuse sau dure
     # ale stării, iar plannerul trimite codul canonic («anti_aging»), nerostit literal; re-judecate
     # aici, garda NX-313 le-ar scoate ca ghicite (o a doua memorie peste reducer, ca `price_max`,
