@@ -229,7 +229,7 @@
       "journey_id": "g09-furniture-too-many-candidates",
       "pack": "furniture",
       "family": ["ambiguity", "reference"],
-      "source": "NX-332 §2, regula 7: peste trei candidați la citire se întreabă pe primii patru",
+      "source": "NX-332 §2, regula 7: peste trei candidați la citire se întreabă; NX-385: peste patru (cât arată comparația) se întreabă pe TOȚI, nu pe primii patru",
       "turns": [
         {
           "user_input": "Arată-mi canapele.",
@@ -251,7 +251,7 @@
             "ambiguity": {
               "verdict": "must_ask",
               "reason": "ambiguous_too_many",
-              "question": "La care te referi dintre Canapea Oslo 2 locuri v1, Canapea Oslo 3 locuri v2, Canapea Oslo 4 locuri v3 și Canapea Oslo 2 locuri v4?"
+              "question": "La care te referi dintre Canapea Oslo 2 locuri v1, Canapea Oslo 3 locuri v2, Canapea Oslo 4 locuri v3, Canapea Oslo 2 locuri v4 și Canapea Oslo 3 locuri v5?"
             }
           }
         }
@@ -261,7 +261,7 @@
       "journey_id": "g10-gifts-confirm-an-implicit-recipient",
       "pack": "gifts",
       "family": ["ambiguity", "implicit_need", "anti_loop"],
-      "source": "NX-332 §2, regula 8: nevoie `implicit` cu câștig pe ecran ⇒ `act` + confirmare; a treia oară nu se mai întreabă",
+      "source": "NX-332 §2, regula 8: nevoie `implicit` cu câștig pe ecran ⇒ `act` + confirmare; a treia oară nu se mai întreabă. NX-385: se confirmă doar când lecturile modelului se bat pe dimensiunea ei (aici «ea» / «el», cu câștig mic pe ecran, deci fără întrebarea lecturilor)",
       "turns": [
         {
           "user_input": "Arată-mi ce ai la casa.",
@@ -278,7 +278,8 @@
           "expect": {
             "interpretation": {
               "acts": [{"kind": "find", "query": "cineva drag"}],
-              "changes": [{"op": "set", "dimension": "recipient", "relation": "eq", "value": "ea", "quote": "cineva drag"}]
+              "changes": [{"op": "set", "dimension": "recipient", "relation": "eq", "value": "ea", "quote": "cineva drag"}],
+              "ambiguities": [{"about": "value", "readings": ["ea", "el"]}]
             },
             "ambiguity": {
               "verdict": "act",
@@ -292,7 +293,8 @@
           "expect": {
             "interpretation": {
               "acts": [{"kind": "find", "query": "cineva drag"}],
-              "changes": [{"op": "set", "dimension": "recipient", "relation": "eq", "value": "ea", "quote": "cineva drag"}]
+              "changes": [{"op": "set", "dimension": "recipient", "relation": "eq", "value": "ea", "quote": "cineva drag"}],
+              "ambiguities": [{"about": "value", "readings": ["ea", "el"]}]
             },
             "ambiguity": {
               "verdict": "act",
@@ -306,9 +308,10 @@
           "expect": {
             "interpretation": {
               "acts": [{"kind": "find", "query": "cineva drag"}],
-              "changes": [{"op": "set", "dimension": "recipient", "relation": "eq", "value": "ea", "quote": "cineva drag"}]
+              "changes": [{"op": "set", "dimension": "recipient", "relation": "eq", "value": "ea", "quote": "cineva drag"}],
+              "ambiguities": [{"about": "value", "readings": ["ea", "el"]}]
             },
-            "ambiguity": {"verdict": "act", "reason": "clear"}
+            "ambiguity": {"verdict": "act_both", "reason": "already_asked"}
           }
         }
       ]

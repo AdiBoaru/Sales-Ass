@@ -72,6 +72,11 @@ class ClarificationPolicy:
     vocabulary: NeedVocabulary = field(default_factory=NeedVocabulary)
     min_information_gain: float = 0.30
     max_attempts_per_key: int = 2
+    #: NX-385: o întrebare despre o ȚINTĂ („la care te referi dintre A, B și C?", cheile `ref:` ale
+    #: porții kernelului) se pune o singură dată pe aceeași mulțime de candidați. Răspunsul la ea e
+    #: un nume, nu o valoare pe care clientul o poate reformula, deci a doua întrebare identică nu
+    #: aduce nimic: o citire răspunde despre toți, o mutație se oprește (I10, I11).
+    max_attempts_per_target: int = 1
 
 
 def estimate_information_gain(total_candidates: int, partition: Sequence[int]) -> float:

@@ -68,6 +68,13 @@ def _ordinals(n: int) -> list[dict]:
     ]
 
 
+def _seven() -> list[dict]:
+    """Șapte referințe, a șaptea DEICTICĂ: cu două produse pe ecran, un ordinal 7 e în afara
+    setului, iar NX-385 scoate din plan citirea pe el (`invalid_target`). Testele de mai jos
+    măsoară declararea referințelor (I22), nu ordinalul, deci a șaptea trebuie să se rezolve."""
+    return [*_ordinals(6), {"id": "r7", "text": "ăsta", "kind": "deictic"}]
+
+
 def _validate(interp: TurnInterpretation, state: ConversationStateV2, message: str = "mesaj"):
     pack = fc.pack(PACK)
     return ic.validate(
@@ -186,7 +193,7 @@ def test_r7_is_declared_for_an_act_but_rejected_as_relative_to_the_known_mismatc
                 "quote": "mai ieftin",
             }
         ],
-        references=_ordinals(7),
+        references=_seven(),
     )
     validated = _validate(interp, state, "ceva mai ieftin")
     assert validated.unknown_refs == []
@@ -206,7 +213,7 @@ def test_the_adapter_and_the_gate_agree_on_every_act_including_the_fourth():
             {"kind": "link", "targets": ["r8"]},
             {"kind": "detail", "targets": ["r9"]},
         ],
-        references=_ordinals(7),
+        references=_seven(),
     )
     validated = _validate(interp, state)
     assert validated.unknown_refs == ["r8", "r9"]

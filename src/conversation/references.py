@@ -159,6 +159,10 @@ class ReferenceSources:
     #: DOAR `sources_from_state`, adică calea kernelului; scurtăturile căii v1 își construiesc
     #: sursele separat și rămân pe ecran (I16, recenzia v6.0).
     zoom_ordinals: bool = False
+    #: NX-385: regulile resolverului reparate pe setul `wide-2026-10-07` (focusul nu bate ecranul,
+    #: «de mai devreme» nu alege tăcut cel mai recent set). Tot DOAR pe sursele kernelului, ca la
+    #: `zoom_ordinals`: scurtăturile v1 rămân neschimbate (I16).
+    kernel_rules: bool = False
 
     @property
     def focus_source(self) -> Source:
@@ -456,12 +460,14 @@ class _Resolver:
             return _Raw("deictic", "exact", (anchor.product_id,), "action", "action_anchor")
         if s.page is not None:
             return _Raw("deictic", "exact", (s.page.product_id,), "page", "page_deictic")
-        if s.focus:
+        if s.focus and (not s.kernel_rules or self._focus_decides()):
             src: Source = (
                 "shown_now"
                 if any(it.product_id == s.focus for it in s.shown_now)
                 else "shown_earlier"
             )
+            if s.kernel_rules and any(it.product_id == s.focus for it in s.focus_set):
+                src = s.focus_source  # pe `resume`, focusul trăiește în setul parcat
             return _Raw("deictic", "exact", (s.focus,), src, "focus")
         items = s.focus_set
         if len(items) == 1:
@@ -470,6 +476,27 @@ class _Resolver:
             ids = tuple(it.product_id for it in items)
             return _Raw("deictic", "ambiguous", ids, s.focus_source, "no_anchor")
         return _Raw("deictic", "not_found", (), s.focus_source, "no_set")
+
+    def _focus_decides(self) -> bool:
+        """NX-385: focusul (`selected_product`) e ce arată un «ăsta» doar când nimic din ce vede
+        clientul nu-l contrazice. Focusul îl scrie reducerul pe ținta `exact` a unui tur și rămâne
+        în stare până îl înlocuiește altă țintă, iar starea nu ține minte CÂND a fost scris, deci
+        poate fi mai vechi decât ecranul.
+
+        - Fără set în focus (nimic pe ecran): focusul e singura ancoră.
+        - Focusul e singurul produs al setului: el e.
+        - Focusul nu e în set: ecranul s-a schimbat după el (o căutare nouă, două mănuși după un
+          gel), deci decide ecranul (`w2_autobronzant_incepator_manusa#4`).
+        - Focusul e unul dintre MAI MULTE produse: nu se știe dacă e produsul ales sau doar unul
+          dintre carduri (comparația cu un produs similar pune ținta, adică focusul, lângă partener,
+          `w5_schimba_subiect_revine#4`; o căutare nouă poate re-arăta un produs vechi). Ambiguu pe
+          ecran: o citire răspunde despre toți, o mutație întreabă (I10). Prima variantă a cardului
+          compara revizia ecranului cu a turului și lăsa focusul să decidă pe un ecran „mai vechi";
+          recenzia a arătat că un singur tur fără carduri la mijloc («cât costă livrarea») făcea din
+          ecranul unei căutări unul „mai vechi", iar coșul rula pe focus. Fără revizia focusului
+          (a reducerului) regula sigură e cea de aici."""
+        items = self.sources.focus_set
+        return not items or (len(items) == 1 and items[0].product_id == self.sources.focus)
 
     def name(self, ref: Reference) -> _Raw:
         name = ref.name or ref.value or ""
@@ -654,6 +681,16 @@ class _Resolver:
             sets.append(("parked", self.sources.parked))
         if not sets:
             return _Raw("earlier", "not_found", (), "shown_earlier", "no_earlier")
+        if self.sources.kernel_rules:
+            # Setul parcat e de obicei și un set „de mai devreme” (aceleași id-uri): o singură dată.
+            seen: set[frozenset[str]] = set()
+            unique_sets: list[tuple[Source, tuple[ShownItem, ...]]] = []
+            for src_, items_ in sets:
+                key = frozenset(it.product_id for it in items_)
+                if key not in seen:
+                    seen.add(key)
+                    unique_sets.append((src_, items_))
+            sets = unique_sets
         if ref.name:
             for src, items in sets:
                 hit = match_name_in_set(ref.name, items, self.stop, self.suffixes)
@@ -662,6 +699,8 @@ class _Resolver:
                     return _Raw("earlier", hit.outcome, hit.ids, src, reason)
             return _Raw("earlier", "not_found", (), sets[-1][0], "name_not_found")
         src, newest = sets[0]
+        if ref.ordinal is not None and ref.ordinal >= 1 and self.sources.kernel_rules:
+            return self._earlier_ordinal(ref.ordinal, sets)
         if ref.ordinal is not None:
             if ref.ordinal < 1:
                 return _Raw("earlier", "not_found", (), src, "invalid_reference")
@@ -679,8 +718,35 @@ class _Resolver:
             return _Raw("earlier", "not_found", (), src, "attribute_not_in_sets")
         if len(newest) == 1:
             return _Raw("earlier", "exact", (newest[0].product_id,), src, "earlier_single")
+        if self.sources.kernel_rules and len(sets) > 1:
+            # NX-385 (`w3_exfoliant_inainte_autobronzant#4`): «exfoliantul din prima listă» fără
+            # nimic structurat (nici poziție, nici valoare) nu spune CARE listă de mai devreme.
+            # Cea mai recentă nu e un răspuns: candidații sunt toate listele, ca poarta să întrebe
+            # (o mutație) sau să răspundă despre ei, nu să aleagă tăcut între ei.
+            ids = _unique(it.product_id for _, items in sets for it in items)
+            return _Raw("earlier", "ambiguous", ids, src, "earlier_unspecified")
         ids = tuple(it.product_id for it in newest)
         return _Raw("earlier", "ambiguous", ids, src, "earlier_unspecified")
+
+    def _earlier_ordinal(
+        self, n: int, sets: Sequence[tuple[Source, tuple[ShownItem, ...]]]
+    ) -> _Raw:
+        """NX-385: «al doilea de mai devreme» nu spune din ce listă. Se numără pe LISTELE de mai
+        devreme (seturile de cel puțin două produse, criteriul lui `zoomed_list`: un set de un
+        produs e un detaliu, nu o listă; fără nicio listă, pe toate seturile), iar candidații sunt
+        produsele de pe poziția `n` din fiecare listă care o are. Unul ⇒ `exact`; mai mulți ⇒
+        `ambiguous` (nu cel mai recent set, ales tăcut); niciunul ⇒ ordinalul e în afara listelor,
+        ca pe ecran (`ordinal_out_of_range`, pe lista cea mai recentă)."""
+        lists = [(src, items) for src, items in sets if len(items) >= 2] or list(sets)
+        hits = [(src, items[n - 1].product_id) for src, items in lists if len(items) >= n]
+        ids = _unique(pid for _, pid in hits)
+        if len(ids) == 1:
+            return _Raw("earlier", "exact", ids, hits[0][0], "ordinal_in_set")
+        if ids:
+            return _Raw("earlier", "ambiguous", ids, hits[0][0], "earlier_unspecified")
+        src, newest = lists[0]
+        whole = tuple(it.product_id for it in newest)
+        return _Raw("earlier", "ambiguous", whole, src, "ordinal_out_of_range")
 
     # --- atribute ---------------------------------------------------------------------------------
 
@@ -895,6 +961,7 @@ def sources_from_state(state: ConversationStateV2, thread: str) -> ReferenceSour
         focus=state.references.selected_product,
         thread=thread,  # type: ignore[arg-type]
         zoom_ordinals=True,
+        kernel_rules=True,
     )
 
 

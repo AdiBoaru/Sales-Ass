@@ -121,7 +121,7 @@
       "journey_id": "n05-gifts-confirm-implicit-still-searches",
       "pack": "gifts",
       "family": ["planner", "find", "implicit_need"],
-      "source": "NX-333 §1: find cu verdict act + confirm_implicit ⇒ search; nevoia implicită intră în prefer, nu în filtru (I7)",
+      "source": "NX-333 §1: find cu o nevoie implicită ⇒ search; nevoia intră în prefer, nu în filtru (I7). NX-385: fără lecturi care se bat, nevoia se aplică în tăcere, fără confirmare",
       "turns": [
         {
           "user_input": "Arată-mi ce ai la casa.",
@@ -144,7 +144,7 @@
                 {"op": "set", "dimension": "recipient", "relation": "eq", "value": "ea", "quote": "cineva drag"}
               ]
             },
-            "ambiguity": {"verdict": "act", "reason": "confirm_implicit", "question": "Să înțeleg că e vorba de ea?"},
+            "ambiguity": {"verdict": "act", "reason": "clear"},
             "plan": {"executor": "search", "search_args": {"query": "Casa", "category": "casa", "prefer": {"recipient": ["ea"]}}}
           }
         }

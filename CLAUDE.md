@@ -203,6 +203,15 @@ omograf NX-319; (3) `avoid` pe raft sau pe tip e excludere, nu subiect («nu vre
 moștenire a sesiunii pe rafinări a fost scoasă la recenzie (pagina 2 a setului vechi, retrageri
 ignorate). Card: [`tasks/stage1/NX-384.md`](tasks/stage1/NX-384.md); probă:
 `pytest tests/test_nx384_subject_and_query.py -q`.
+**NX-385 — ținta la resolver și la poartă (setul `wide-2026-10-07`, fără bump de contract).** Doar pe
+sursele kernelului (`ReferenceSources.kernel_rules`, ca `zoom_ordinals`; I16 gol): focusul decide doar
+singur pe ecran sau pe un ecran gol (altfel decide ecranul), iar «de mai devreme» fără poziție peste
+mai multe liste e ambiguu pe toate (un ordinal se numără pe fiecare listă). Poarta: o întrebare pe o
+țintă se pune O dată (`max_attempts_per_target`), o citire răspunde despre toți până la 4 (cât ține
+comparația), întrebarea numește TOȚI candidații, numele identice primesc faptul care le deosebește, o
+citire pe un ordinal în afara setului iese din plan, o nevoie `implicit` se confirmă doar cu lecturi
+concurente. Declarat: B5, scurtăturile exacte de dinaintea kernelului, coșul pe carduri identice.
+Card: [`tasks/stage1/NX-385.md`](tasks/stage1/NX-385.md).
 **NX-334 — direcția unei limite numerice ajunge neschimbată în stare.** Pe pașii 3a/3b «minim 256
 GB» se persista `storage lte 256`: delta păstra relația doar pe preț, iar orice fațetă numerică era
 plafon. Acum o dimensiune numerică are DOUĂ chei, ca bugetul (`<fațetă>_min` / `<fațetă>_max`,
