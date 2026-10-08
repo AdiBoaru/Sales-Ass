@@ -24,7 +24,16 @@ from src.agent.turn_planner import plan_turn
 from src.catalog.vocabulary import CatalogVocabulary, VocabEntry
 from src.conversation.delta import to_delta
 from src.conversation.interpretation import CheckedChange
-from src.models import BusinessConfig, Contact, ConversationState, InboundMessage, TurnContext
+from src.models import (
+    Author,
+    BusinessConfig,
+    Contact,
+    ConversationState,
+    Direction,
+    InboundMessage,
+    Message,
+    TurnContext,
+)
 from src.tools import catalog_tools as ct
 from src.tools.catalog_tools import SearchArgs, query_names_only_shelf, run_planned_search
 from src.worker.runner import PipelineDeps
@@ -85,80 +94,6 @@ _UNDER_100 = {
 }
 
 
-# --- 1. rafinarea moștenește sesiunea ------------------------------------------------------------
-
-
-def test_a_price_refinement_searches_what_the_client_was_shown():
-    """`w1_produs_inexistent_similar#3`: «sub 100 lei» după o căutare de măști de noapte."""
-    needs = [_need("budget_max", 100.0, "hard")]
-    args = _search(
-        _plan("sub 100 lei", [_UNDER_100], session=_session("masca de noapte"), needs=needs)
-    )
-    assert args.query == "masca de noapte"
-    assert args.price_max == 100.0
-
-
-def test_without_a_session_the_refinement_keeps_the_old_text():
-    needs = [_need("budget_max", 100.0, "hard")]
-    args = _search(_plan("sub 100 lei", [_UNDER_100], needs=needs))
-    assert args.query != "masca de noapte"
-
-
-def test_a_flag_only_turn_refines_the_session_instead_of_giving_up():
-    """`w5_dermatita_maini#3`: «arata-mi ceva fara parfum» ⇒ `no_query` pe `main`."""
-    flag = {
-        "op": "set",
-        "dimension": "fragrance_free",
-        "relation": "eq",
-        "value": "true",
-        "quote": "fara parfum",
-    }
-    session = _session("ce crema pe maini dermatita")
-    planned = _plan(
-        "arata-mi ceva fara parfum",
-        [flag],
-        [(None, "explicit", ("fara", "parfum"))],
-        session=session,
-        needs=[_need("fragrance_free", True)],
-    )
-    assert _search(planned).query == "ce crema pe maini dermatita"
-
-
-def test_a_turn_without_changes_keeps_its_own_words():
-    """Un tur fără nicio schimbare poate fi o cerere NOUĂ pe care interpretarea n-a etichetat-o:
-    nu moștenește sesiunea."""
-    args = _search(_plan("vreau ceva pentru picioare uscate", session=_session("masca de noapte")))
-    assert "masca" not in args.query
-
-
-@pytest.mark.parametrize(
-    "session",
-    [
-        _session("masca de noapte", category="par"),  # sesiunea altui raft
-        _session("Laneige Water Sleeping Mask", name="laneige water sleeping mask"),  # pe nume
-    ],
-)
-def test_a_session_of_another_subject_is_not_inherited(session):
-    needs = [_need("budget_max", 100.0, "hard")]
-    args = _search(_plan("sub 100 lei", [_UNDER_100], session=session, needs=needs))
-    assert args.query not in ("masca de noapte", "Laneige Water Sleeping Mask")
-
-
-def test_a_typed_subject_beats_the_session():
-    """Cu tipul subiectului în stare, eticheta lui rămâne textul (NX-352)."""
-    needs = [_need("budget_max", 100.0, "hard")]
-    args = _search(
-        _plan(
-            "sub 100 lei",
-            [_UNDER_100],
-            session=_session("ceva vechi"),
-            needs=needs,
-            ptype="crema de fata",
-        )
-    )
-    assert args.query != "ceva vechi"
-
-
 # --- 2. felul nemapat e subiect -------------------------------------------------------------------
 
 
@@ -199,31 +134,17 @@ def test_an_unmapped_kind_beats_a_spoken_facet_as_the_search_text():
     assert _search(planned).query.split()[0] == "rimel"
 
 
-def test_the_next_modifier_refines_the_unmapped_kind_through_the_session():
-    """`w2_rimel_ochi_sensibili_lentile#2`: «waterproof» la turul următor caută tot rimelul."""
+def test_an_unmapped_kind_next_to_a_typed_subject_joins_its_label():
+    """Recenzia: o valoare pusă de model pe tip («mat»), dusă pe `unmapped`, nu înlocuiește tipul
+    subiectului din stare: se adaugă etichetei lui."""
     planned = _plan(
-        "waterproof",
-        [_unmapped("waterproof", "waterproof")],
-        [("unmapped", "explicit", ("waterproof",))],
-        session=_session("rimel", category=None),
-        shelf=None,
-        needs=[_need("unmapped", "rimel")],
+        "dar mat",
+        [_kind("mat", "mat")],
+        [("unmapped", "explicit", ("mat",))],
+        ptype="crema de fata",
     )
-    assert _search(planned).query.split() == ["waterproof", "rimel"] or (
-        set(_search(planned).query.split()) == {"rimel", "waterproof"}
-    )
-
-
-def test_a_new_unmapped_kind_is_not_glued_to_the_old_session():
-    """Un fel nou spus în tur («iluminator» după rimel) e subiectul turului, nu o rafinare."""
-    planned = _plan(
-        "si un iluminator",
-        [_kind("iluminator", "iluminator")],
-        [("unmapped", "explicit", ("iluminator",))],
-        session=_session("rimel", category=None),
-        shelf=None,
-    )
-    assert _search(planned).query == "iluminator"
+    words = _search(planned).query.split()
+    assert "mat" in words and len(words) > 1, "eticheta tipului rămâne în text"
 
 
 # --- 3. raftul nu se judecă pe propriul nume -----------------------------------------------------
@@ -281,27 +202,61 @@ class _LLM:
         return [[0.0] * 8 for _ in texts]
 
 
-def _ctx(body: str) -> TurnContext:
+def _ctx(body: str, history: tuple[str, ...] = ()) -> TurnContext:
     return TurnContext(
         turn_id="t",
         business=BusinessConfig(id="b", slug="d", name="D"),
         contact=Contact(id="c", business_id="b"),
         message=InboundMessage(provider_msg_id="m", body=body),
         conversation_id="conv",
+        history=[
+            Message(direction=Direction.INBOUND, author=Author.CONTACT, body=h) for h in history
+        ],
         state=ConversationState(),
     )
 
 
 async def test_the_planned_shelf_is_not_dropped_for_its_own_name(lexical):
-    """`w2_paleta_ochi_caprui_mate#2` («doar mate, fara sclipici»): raftul din stare, textul =
-    eticheta lui («Ochi»). Pe `main` garda NX-313 îl scotea (`contradicted`) și servea îngrijirea
-    ochilor."""
-    ctx = _ctx("doar mate, fara sclipici")
+    """`w5_un_cuvant_machiaj_ochi#2` («machiaj», apoi «ochi»): raftul Machiaj > Ochi, textul =
+    numele lui. Pe `main` garda NX-313 îl scotea (`contradicted`) și servea îngrijirea ochilor."""
+    ctx = _ctx("ochi", history=("machiaj",))
     deps = PipelineDeps(conn=object(), redis=None, llm=_LLM())
     result = await run_planned_search(ctx, deps, SearchArgs(query="Ochi", category="machiaj-ochi"))
     assert [e for e in ctx.events if e.type == "category_query_is_shelf"]
     assert not [e for e in ctx.events if e.type == "guessed_filter_rescued"]
     assert result.products and all(str(p["id"]).startswith("pal") for p in result.products)
+
+
+MACHIAJ_FATA = VocabEntry(key="machiaj-fata", label="Fata", count=274, path="machiaj/fata")
+_FATA = CatalogVocabulary(business_id="b", dimensions={"category": (MACHIAJ, MACHIAJ_FATA)})
+
+
+async def test_the_homograph_guard_still_judges_a_subshelf_named_by_a_common_word(monkeypatch):
+    """Recenzia: «ceva pentru fata» pe Machiaj > Fata e un omograf (NX-319, cd98a513); textul «fata»
+    e și numele raftului, dar rădăcina (Machiaj) n-a numit-o nimeni, deci NX-313 îl judecă."""
+
+    async def fake_lexical(conn, business_id, *, query_text, **kwargs):
+        if "machiaj-fata" in tuple(kwargs.get("category") or ()):
+            return [{"id": f"bb{i}", "name": f"BB {i}", "price": 50.0, "lexical_step": "strict"}
+                    for i in range(3)]  # fmt: skip
+        return [{"id": f"cr{i}", "name": f"Crema fata {i}", "price": 60.0,
+                 "lexical_step": "strict"} for i in range(20)]  # fmt: skip
+
+    async def no_embeddings(conn, business_id):
+        return False
+
+    async def fake_vocab(deps, business_id):
+        return _FATA
+
+    monkeypatch.setattr(ct, "search_products_lexical", fake_lexical)
+    monkeypatch.setattr(ct, "has_embeddings", no_embeddings)
+    monkeypatch.setattr(ct, "fuse_candidates", lambda lex, vec, **k: list(lex))
+    monkeypatch.setattr(ct, "get_vocabulary", fake_vocab)
+    ctx = _ctx("ceva pentru fata")
+    deps = PipelineDeps(conn=object(), redis=None, llm=_LLM())
+    await run_planned_search(ctx, deps, SearchArgs(query="fata", category="machiaj-fata"))
+    types = [e.type for e in ctx.events]
+    assert "category_query_is_shelf" not in types
 
 
 # --- 4. «nu vreau X» nu e subiectul ---------------------------------------------------------------

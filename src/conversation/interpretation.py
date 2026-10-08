@@ -85,12 +85,12 @@ from src.tools.catalog_tools import SearchArgs
 #: `exact` ⇒ `detail` pe id-ul recitit, `ambiguous` pe ≤ 3 candidați ⇒ `detail` pe toți, altfel
 #: căutarea pe NUMELE ei, doar cu filtrele turului (golul `name_unscoped`). Schema neschimbată.
 #: `kernel.v7.0` (NX-384, MAJOR, „repară tot", Adi, 2026-10-08; turele wide-2026-10-07):
-#: (1) o RAFINARE (schimbări care nu numesc subiectul, starea fără tipul lui) caută textul
-#: sesiunii active, nu fraza turului; (2) un fel spus în tur pe care vocabularul nu-l are (dus pe
-#: `unmapped` de validator) e capul textului, ca un tip numit; (3) pe calea planificată un text
-#: făcut doar din numele raftului nu mai e dovadă împotriva raftului (garda NX-313); (4) `avoid`
-#: pe raft sau pe tip e excludere, nu subiect. Poarta de replay e DEROGATĂ (ca la v2.0-v6.0),
-#: declarat în card. Schema scrisă de model neschimbată.
+#: (1) un fel spus în tur pe care vocabularul nu-l are (dus pe `unmapped` de validator) e capul
+#: textului căutării, ca un tip numit (lângă un tip din stare doar se adaugă etichetei); (2) pe
+#: calea planificată un text făcut doar din numele raftului nu mai e dovadă împotriva raftului
+#: (garda NX-313), în afara unui omograf NX-319; (3) `avoid` pe raft sau pe tip e excludere, nu
+#: subiect. Poarta de replay e DEROGATĂ (ca la v2.0-v6.0), declarat în card. Schema scrisă de
+#: model neschimbată.
 KERNEL_CONTRACT_VERSION = "kernel.v7.0"
 
 # --- scrise de model ----------------------------------------------------------------------------

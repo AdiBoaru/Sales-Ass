@@ -2427,6 +2427,7 @@ async def _search(
     by_provenance = getattr(get_settings(), "search_relax_by_provenance_enabled", False)
     hard_category = getattr(get_settings(), "search_category_hard_enabled", True)
     category_uttered = "category" in inherited or uttered_by_client(ctx, a.category, *category_keys)
+    homograph = False
     # NX-319: coroborarea literală nu deosebește un RAFT de un cuvânt obișnuit care îi poartă numele
     # („crema de fata" ≠ raftul Machiaj > Fata). Un subraft rostit fără rădăcina lui devine ipoteză,
     # deci îl judecă NX-313 pe date, mai jos. Moștenit din sesiune rămâne rostit (NX-299).
@@ -2437,17 +2438,22 @@ async def _search(
         and named_only_as_subshelf(vocab, category_keys, client_texts(ctx))
     ):
         category_uttered = False
+        homograph = True
         ctx.emit("category_subshelf_homograph", category_key=category_keys[0])
     if (
         planned
+        and not homograph
         and not category_uttered
         and query_names_only_shelf(vocab, category_keys, a.query, ctx.language)
+        and not named_only_as_subshelf(vocab, category_keys, client_texts(ctx))
     ):
         # NX-384 (`kernel.v7.0`): pe calea planificată, un text făcut DOAR din numele raftului
         # (eticheta lui ca rezervă NX-352, sau cuvântul clientului care l-a numit: «ochi» pentru
         # Machiaj > Ochi) nu e o dovadă despre raft: garda NX-313 l-ar judeca pe propriul nume,
         # cuvânt care apare mai des în ALTE rafturi (îngrijirea ochilor), și l-ar scoate. Raftul
         # rămâne, iar treapta `filters_only` servește setul lui dacă numele nu potrivește nimic.
+        # Nu pe un omograf NX-319 (recenzia): un subraft a cărui rădăcină clientul n-a numit-o
+        # nicăieri («ceva pentru fata» pe Machiaj > Fata) rămâne o ipoteză judecată pe date.
         category_uttered = True
         ctx.emit("category_query_is_shelf", category_key=category_keys[0])
     # NX-352 (recenziile): pe calea PLANIFICATĂ filtrele de FAȚETĂ vin doar din nevoi spuse sau dure
