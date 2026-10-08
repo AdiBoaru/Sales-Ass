@@ -382,7 +382,11 @@ def _withhold(
 
 
 async def _compare(
-    ctx: TurnContext, deps: PipelineDeps, ids: list[str], policy_for: PolicyFor | None
+    ctx: TurnContext,
+    deps: PipelineDeps,
+    ids: list[str],
+    policy_for: PolicyFor | None,
+    found: tuple[str, ...] = (),
 ) -> bool | None:
     """≥ 2 ținte ⇒ comparația lor. O țintă (actul are una singură; orchestratorul lasă `dark` un act
     cu mai multe ținte din care una s-a pierdut, `_target_lost`):
@@ -394,7 +398,8 @@ async def _compare(
     partener inventat. Chip-ul nostru «compară-l cu un produs similar» rămâne pe scurtătura lui
     (NX-319)."""
     if len(ids) >= 2:
-        return await det.serve_comparison(ctx, deps, ids, withhold=_withhold(ctx, policy_for))
+        withhold = _withhold(ctx, policy_for, found)
+        return await det.serve_comparison(ctx, deps, ids, withhold=withhold)
     if not ids:
         return None
     partners = _set_partners(ctx, ids[0])
@@ -406,9 +411,12 @@ async def _compare(
         ctx.emit("kernel_similar_partner", found=partner is not None, n=len(kin))
         partners = (partner,) if partner is not None else ()
     if partners:
-        return await det.serve_comparison(
+        served = await det.serve_comparison(
             ctx, deps, [ids[0], *partners], withhold=_withhold(ctx, policy_for, partners)
         )
+        if served:
+            return served
+        # recenzia: o comparație refuzată (raft amestecat, siguranța) cade pe detaliul țintei
     ctx.emit("kernel_compare_single", served="detail")
     await det.serve_details(ctx, deps, ids[0])
     return ctx.reply is not None
@@ -857,12 +865,14 @@ async def _serve_named(
     ids = list(dict.fromkeys(plan.product_ids))
     saved = _SecondPlan.take(ctx)
     try:
+        # un `find` (NX-375) devine detaliu doar pe UN produs; o citire, pe cel mult `MAX_ACT_BOTH`
+        cap = 1 if plan.then == "find" else MAX_ACT_BOTH
         for n, name in enumerate(plan.names):
             update = {"query": name, "product_name": name}
             current = args if n == 0 else args.model_copy(update=update)
             result = await catalog_tools.run_planned_search(ctx, deps, current)
             hits = name_in_results(name, result.products or [], ctx.language)
-            if not hits or len(hits) > MAX_ACT_BOTH:
+            if not hits or len(hits) > cap:
                 return None
             ids += [h for h in hits if h not in ids]
     finally:
@@ -871,11 +881,14 @@ async def _serve_named(
     if plan.then == "link":
         await det._handle_link_intent(ctx, deps, ids=ids)
         return True
-    if plan.then == "detail" and len(ids) == 1:
+    if plan.then in ("detail", "find") and len(ids) == 1:
         await det.serve_details(ctx, deps, ids[0])
         return ctx.reply is not None
-    # `detail` pe mai mulți candidați = comparația lor (ca `act_both` pe o citire)
-    return await _compare(ctx, deps, ids, policy_for)
+    # `detail` pe mai mulți candidați = comparația lor (ca `act_both` pe o citire). Recenzia (I12):
+    # produsele găsite prin căutare intră la politica de răspuns ca parteneri, altfel politica nu
+    # le vedea și verdictul trecea pe o dimensiune necunoscută.
+    found = tuple(i for i in ids if i not in plan.product_ids)
+    return await _compare(ctx, deps, ids, policy_for, found)
 
 
 async def execute_read_plans(
@@ -906,6 +919,9 @@ async def execute_read_plans(
             if named:
                 # produsul numit E răspunsul: „nu am găsit exact” ar spune contrariul
                 _prefix(ctx, _disclosure_text(ctx, planned, drop=frozenset({"not_exact_match"})))
+                question = _confirmation(outcome)
+                if question is not None:
+                    _confirm(ctx, question)
             return named
     verdict = await _run_plan(
         ctx, deps, plan, outcome, policy_for, mutating, exclude_shown=0 in planned.excludes_shown

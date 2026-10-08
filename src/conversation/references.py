@@ -307,6 +307,7 @@ def match_name_in_set(
     suffixes: Collection[str] = (),
     *,
     distinctive: bool = True,
+    by_words: bool = True,
 ) -> _Hit | None:
     """Produsul (sau produsele) din `items` pe care `name` îl numește. None = setul ratează.
 
@@ -339,6 +340,10 @@ def match_name_in_set(
         if phrase:
             return _Hit("ambiguous", phrase)
 
+    if not by_words:
+        # NX-386 (recenzia): pe rezultatele unei căutări, „toate cuvintele" e o dovadă slabă:
+        # setul a fost adus tocmai după ele («crema hidratanta» ar numi orice cremă hidratantă)
+        return None
     full = _unique(pid for pid, nw in named if all(_carries(nw, w, suffixes) for w in content))
     if len(full) == 1:
         return _Hit("exact", full)
@@ -370,16 +375,17 @@ def name_in_results(
     name: str, products: Sequence[Mapping[str, Any]], locale: str | None
 ) -> tuple[str, ...]:
     """NX-386 (`kernel.v7.1`): produsele din REZULTATELE unei căutări după nume pe care `name` le
-    numește, după treptele precise ale resolverului (numele întreg, fraza întreagă, toate cuvintele
-    de conținut, cu flexiunea locale-i), fără treapta „cuvânt purtat de un singur produs". PUR.
-    Gol = niciun produs nu poartă numele (căutarea a adus doar ce seamănă)."""
+    numește ca FRAZĂ: numele întreg al produsului în cerere, sau cererea întreagă în numele lui
+    (treptele 1-2 ale resolverului). Fără „toate cuvintele" și fără „cuvânt purtat de un singur
+    produs": setul a fost adus tocmai după cuvinte, deci ele nu mai deosebesc nimic. PUR. Gol =
+    niciun produs nu poartă numele (căutarea a adus doar ce seamănă)."""
     items = [
         ShownItem(product_id=str(pid), name=str(p.get("name") or ""))
         for p in products
         if (pid := p.get("product_id") or p.get("id"))
     ]
     hit = match_name_in_set(
-        name, items, _stop(locale), inflection_suffixes(locale), distinctive=False
+        name, items, _stop(locale), inflection_suffixes(locale), distinctive=False, by_words=False
     )
     return tuple(hit.ids) if hit is not None else ()
 

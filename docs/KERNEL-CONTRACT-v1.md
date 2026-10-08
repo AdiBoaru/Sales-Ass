@@ -27,10 +27,13 @@ No invariant, ownership row or state rule changes in v1.2, so no replay gate is 
 from the same set: (1) `TurnPlan.then` + `TurnPlan.names`: a `detail`/`link`/`compare` (or a `find`
 naming a product) whose name the resolver did not find written whole is planned as today's name
 search, carrying the asked act and every missing name; the executor searches each name and matches
-the results with the resolver's precise steps (`references.name_in_results`: whole name, whole
-phrase, all content words, no "word owned by one item" step); every name on 1 to 3 products ⇒ the
-act is served on them next to the targets already `exact`, without `not_exact_match`; otherwise
-today's search with its disclosure (the resolution searches leave no session and no events);
+the results as a PHRASE (`references.name_in_results`: the product's whole name in the request, or
+the whole request in the name; no "all content words" and no "word owned by one item" step, which a
+set fetched by those words cannot tell apart); every name on 1 to 3 products (one for a `find`) ⇒
+the act is served on them next to the other targets, without `not_exact_match`, the found products
+judged by the answer policy as partners (I12); promoted only when every target is usable or a name
+not found; otherwise today's search with its disclosure (the resolution searches leave no session
+and no events);
 (2) a `compare` on a single target compares the rest of the set the target sits in (screen, then
 earlier sets, at most two), else a graph partner only if it is a curated substitute or the same
 type, else the target's detail (the graph partner was a towel); (3) `SearchArgs.price_min`

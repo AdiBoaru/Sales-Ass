@@ -41,10 +41,20 @@ def test_a_partial_name_found_in_the_results_is_that_product():
     assert name_in_results("beauty of joseon relief sun", ROWS, "ro") == ("a",)
 
 
-def test_a_brand_alone_is_not_a_product_name():
-    """Treapta „cuvânt purtat de un singur produs" nu se aplică pe rezultate: «joseon» e în două."""
+def test_a_brand_alone_names_all_its_products():
+    """«joseon» e în două nume: ambiguu pe amândouă (un `find` nu-l promovează, cap 1)."""
     assert name_in_results("joseon", ROWS, "ro") == ("a", "b")
     assert name_in_results("beauty of joseon cushion", ROWS, "ro") == ()
+
+
+def test_all_the_words_scattered_in_a_name_are_not_the_name():
+    """Recenzia: pe rezultatele unei căutări, „toate cuvintele" e o dovadă slabă (setul a fost adus
+    după ele); doar fraza întreagă numește un produs."""
+    rows = [
+        {"id": "1", "name": "Crema de zi cu efect hidratant si calmant"},
+        {"id": "2", "name": "Ser hidratant pentru crema de noapte"},
+    ]
+    assert name_in_results("crema hidratant", rows, "ro") == ()
 
 
 def test_words_the_product_does_not_carry_keep_the_search():
@@ -87,6 +97,17 @@ def test_a_compare_on_two_names_not_found_carries_both():
     planned = _plan("compare", ["xiaomi phone 3", "apple phone 2"], resolved)
     plan = planned.plans[planned.primary]
     assert plan.then == "compare" and plan.names == ["xiaomi phone 3", "apple phone 2"]
+
+
+def test_a_lost_target_without_a_name_is_not_promoted():
+    """Recenzia: o țintă `stale` lângă un nume negăsit ar ieși din act fără dezvăluire."""
+    resolved = [
+        _ref("r1", "stale", ["el-01"], kind="name", reason="not_in_catalog"),
+        _ref("r2", "not_found", [], kind="name"),
+    ]
+    planned = _plan("compare", ["samsung phone 1", "apple phone 2"], resolved)
+    plan = planned.plans[planned.primary]
+    assert plan.then is None and (0, "not_exact_match") in planned.disclosures
 
 
 def test_a_compare_with_one_name_found_keeps_the_exact_target():
@@ -182,6 +203,41 @@ async def test_two_names_resolved_are_compared(monkeypatch, electronics):
     planned = _named("compare", ["xiaomi phone 3", "apple phone 2"])
     assert await kx.execute_read_plans(ctx, _deps(), planned, _outcome()) is True
     assert seen == [["el-03", "el-02"]]
+
+
+async def test_the_found_products_are_judged_by_the_answer_policy(monkeypatch, electronics):
+    """Recenzia (I12): produsele găsite prin căutare intră la politica comparației ca parteneri."""
+    _search_stub(
+        monkeypatch,
+        electronics,
+        {"xiaomi phone 3": ["el-03"], "apple phone 2": ["el-02"]},
+    )
+    judged = []
+
+    async def comparison(ctx, deps, ids, *, withhold=None, **kw):
+        if withhold is not None:
+            withhold([{"id": i} for i in ids])
+        ctx.set_reply("comparatie", cacheable=False)
+        return True
+
+    def policy_for(partners, rows):
+        judged.append(tuple(partners))
+        return None
+
+    monkeypatch.setattr(kx.det, "serve_comparison", comparison)
+    ctx = sh.build_ctx(electronics, ConversationStateV2(), "compara")
+    planned = _named("compare", ["xiaomi phone 3", "apple phone 2"])
+    assert await kx.execute_read_plans(ctx, _deps(), planned, _outcome(), policy_for) is True
+    assert judged == [("el-03", "el-02")]
+
+
+async def test_a_find_is_promoted_only_on_one_product(monkeypatch, electronics):
+    """Un `find` pe un nume care prinde două produse rămâne lista (căutarea de azi)."""
+    _search_stub(monkeypatch, electronics, {"phone": ["el-01", "el-02"]})
+    ctx = sh.build_ctx(electronics, ConversationStateV2(), "aveti phone?")
+    planned = _named("find", ["phone"])
+    assert await kx.execute_read_plans(ctx, _deps(), planned, _outcome()) is True
+    assert not [e for e in ctx.events if e.type == "kernel_name_resolved"]
 
 
 async def test_a_name_the_results_do_not_carry_keeps_todays_search(monkeypatch, electronics):

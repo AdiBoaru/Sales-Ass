@@ -212,6 +212,16 @@ comparația), întrebarea numește TOȚI candidații, numele identice primesc fa
 citire pe un ordinal în afara setului iese din plan, o nevoie `implicit` se confirmă doar cu lecturi
 concurente. Declarat: B5, scurtăturile exacte de dinaintea kernelului, coșul pe carduri identice.
 Card: [`tasks/stage1/NX-385.md`](tasks/stage1/NX-385.md).
+**NX-386 — `kernel.v7.1` (minor): executorii pe ce a înțeles modelul.** (1) Un produs numit parțial,
+negăsit de resolver, e căutat după nume, iar când rezultatele îl poartă ca FRAZĂ actul cerut
+(`TurnPlan.then`: detaliu, link, comparație; `find` doar pe un produs) se servește pe el, fără
+„n-am găsit exact" (`references.name_in_results`, `kernel_executors._serve_named`); (2) o comparație cu
+o țintă compară restul setului ei, altfel un partener substitut sau de același tip, altfel detaliul;
+(3) `SearchArgs.price_min` (doar al plannerului) dintr-un `budget_min` dur, constrângere tipizată `gte`;
+(4) `routine_steps.family_by_need`, derivat din catalog de `scripts/derive_family_by_need.py` (îl
+rulează Adi), dă familia unei rutine fără subiect; (5) promptul nu mai promite „un coleg". Card:
+[`tasks/stage1/NX-386.md`](tasks/stage1/NX-386.md); probă:
+`pytest tests/test_nx386_named_reads.py tests/test_nx386_executors.py -q`.
 **NX-334 — direcția unei limite numerice ajunge neschimbată în stare.** Pe pașii 3a/3b «minim 256
 GB» se persista `storage lte 256`: delta păstra relația doar pe preț, iar orice fațetă numerică era
 plafon. Acum o dimensiune numerică are DOUĂ chei, ca bugetul (`<fațetă>_min` / `<fațetă>_max`,

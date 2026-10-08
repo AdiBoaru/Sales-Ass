@@ -249,10 +249,10 @@ class TurnPlan(_CodeWritten):
     #: pachet); `None` pe orice alt plan și pe un `bundle` fără familie declarată (calea de azi).
     family: str | None = None
     #: `kernel.v7.1` (NX-386): pe o căutare după NUMELE unui produs negăsit de resolver, actul
-    #: pe care îl cerea clientul (`detail`, `link`, `compare`) și TOATE numele negăsite. Executorul
-    #: caută fiecare nume și, când rezultatele poartă numele (treptele resolverului), servește
-    #: actul pe produsele găsite; altfel căutarea de azi. Gol pe orice alt plan.
-    then: Literal["detail", "link", "compare"] | None = None
+    #: pe care îl cerea clientul (`detail`, `link`, `compare`; `find` = detaliu doar pe UN produs)
+    #: și TOATE numele negăsite. Executorul caută fiecare nume și, când rezultatele poartă numele
+    #: ca frază întreagă, servește actul pe produsele găsite; altfel căutarea de azi. Gol altfel.
+    then: Literal["detail", "link", "compare", "find"] | None = None
     names: list[str] = Field(default_factory=list)
 
 

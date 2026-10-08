@@ -735,6 +735,10 @@ class _Planner:
             self._gap("exclusion")
         if args.price_band:
             self._gap("soft_budget")
+        if args.price_min is not None:
+            # NX-386 (recenzia): `RoutineArgs` n-are limită de jos
+            args = args.model_copy(update={"price_min": None})
+            self._gap("price_min")
         return TurnPlan(
             executor="bundle",
             product_ids=list(dict.fromkeys(ids))[:1],
@@ -798,8 +802,9 @@ class _Planner:
         if name is None:
             return None
         plan = self._search(act, index, name=name, name_only=True)
-        # NX-386: produsul găsit după nume e răspunsul, ca rândul `exact` de mai sus
-        return self._named_read(plan, act, [name], [], then="detail")
+        # NX-386: produsul găsit după nume e răspunsul, ca rândul `exact` de mai sus; doar unul
+        # singur (`then=find`): pe un `find` o descriere etichetată `name` nu devine un detaliu
+        return self._named_read(plan, act, [name], [], then="find")
 
     def _named_read(
         self,
@@ -811,7 +816,7 @@ class _Planner:
     ) -> TurnPlan:
         """NX-386: căutarea pe nume poartă actul cerut și numele de rezolvat (`then`/`names`)."""
         kind = then or act.kind
-        if plan.executor != "search" or kind not in ("detail", "link", "compare"):
+        if plan.executor != "search" or kind not in ("detail", "link", "compare", "find"):
             return plan
         return plan.model_copy(
             update={"then": kind, "names": names, "product_ids": list(dict.fromkeys(exact))}
@@ -844,9 +849,24 @@ class _Planner:
             if names:
                 # NX-386 (`kernel.v7.1`): căutarea după PRIMUL nume e rezerva de azi; executorul
                 # caută și restul, iar când rezultatele poartă numele servește actul cerut pe
-                # produsele găsite, lângă țintele deja `exact` (în `product_ids`).
-                exact = [p for r in refs if r.outcome == "exact" for p in r.product_ids]
-                return self._named_read(self._search(act, index, name=names[0]), act, names, exact)
+                # produsele găsite, lângă celelalte ținte (în `product_ids`). Doar când TOATE
+                # țintele sunt ori folosibile, ori nume negăsite (recenzia): o țintă dispărută
+                # (`stale`), una fără nume sau una ambiguă fără `act_both` ar ieși din act fără
+                # nicio dezvăluire, deci atunci rămâne căutarea de azi.
+                plan = self._search(act, index, name=names[0])
+                both = self.gate.decision.verdict == "act_both"
+                kept: list[str] = []
+                promotable = len(names) == len(missing)
+                for r in refs:
+                    if r in missing:
+                        promotable = promotable and r.outcome == "not_found"
+                    elif r.outcome == "exact" or (both and r.outcome == "ambiguous"):
+                        kept += [p for p in r.product_ids if p not in kept]
+                    else:
+                        promotable = False
+                if not promotable:
+                    return plan
+                return self._named_read(plan, act, names, kept)
             if self._subject():
                 return self._search(act, index, subject_first=True)
             return self._plan("reply_only")
@@ -1018,10 +1038,15 @@ class _Planner:
             elif key == _BUDGET_MIN:
                 # NX-386 (`kernel.v7.1`): limita de jos dură devine `price_min` (constrângere
                 # tipizată pe calea planificată); una slabă rămâne gol, ca bugetul slab
-                if self._hard(need, PRICE_DIMENSION) and _usable_amount(value):
+                if (
+                    self._hard(need, PRICE_DIMENSION)
+                    and _usable_amount(value)
+                    and self._price_units()
+                ):
                     price_min = float(value)  # type: ignore[arg-type]
                     carried[PRICE_DIMENSION] = "filter"
                 else:
+                    # slab, sau pachetul n-are unitatea prețului: constrângerea n-ar rula (recenzia)
                     self._gap("price_min")
             elif self.needs.bounds_for(dimension) is not None:
                 self._gap("numeric_facet")
@@ -1125,6 +1150,13 @@ class _Planner:
             price_band=price_band,
             price_min=price_min,
         )
+
+    def _price_units(self) -> bool:
+        """NX-386: pachetul declară unitatea prețului, deci `price_min` devine constrângere tipizată
+        pe calea planificată (`catalog_tools._planned_constraints`)."""
+        units = getattr(self.pack, "units", None)
+        specs = getattr(units, "specs", None) or {}
+        return PRICE_DIMENSION in specs
 
     def _dimensions_said(self) -> frozenset[str]:
         """Dimensiunile schimbărilor ACCEPTATE ale turului (după re-rezolvarea validatorului). O

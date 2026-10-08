@@ -145,6 +145,27 @@ async def test_without_price_min_the_planned_query_has_no_constraint(lexical):
     assert not lexical[0].get("constraints")
 
 
+def test_without_a_price_unit_price_min_stays_a_gap():
+    """Recenzia: fără unitatea prețului în pachet constrângerea n-ar rula, deci golul rămâne."""
+    from src.agent.turn_planner import plan_turn
+    from tests.test_kernel_planner import _gate, _interp
+
+    pack = dataclasses.replace(fc.pack("sole-ro"), units=None)
+    planned = plan_turn(
+        _interp(acts=[{"kind": "find", "query": "crema"}]),
+        _state([_need("budget_min", 200.0, "hard")], shelf="ten-ingrijirea-tenului"),
+        (),
+        (),
+        _gate(),
+        changed=True,
+        pack=pack,
+        vocab=fc.vocabulary("sole-ro"),
+        locale="ro",
+    )
+    plan = planned.plans[planned.primary]
+    assert plan.search_args.price_min is None and "price_min" in planned.gaps
+
+
 def test_the_model_cannot_send_price_min():
     assert "price_min" in ct.PLANNER_ONLY_FIELDS
 
