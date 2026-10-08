@@ -17,7 +17,7 @@ import hashlib
 import logging
 from typing import TYPE_CHECKING, Any
 
-from src.agent import prompt_builder, turn_profile
+from src.agent import prompt_builder, tool_budget, turn_profile
 from src.agent.answer_plan_guard import enforce_answer_plan
 from src.agent.brain_models import UserParts, extract_obligations
 from src.agent.deterministic import (
@@ -596,6 +596,16 @@ def tool_loop_tools(
     return tool_names, tool_schemas(
         tool_names, examples, **tenant_enum_values(pack), need_menu=need_menu
     )
+
+
+def _without_mutations(schemas: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """NX-383: schemele buclei fără mutații (registrul `tool_budget`, unde un nume necunoscut e
+    mutație). PUR."""
+    return [
+        s
+        for s in schemas
+        if not tool_budget.spec_for(str(s.get("function", {}).get("name", ""))).is_mutation
+    ]
 
 
 def tool_loop_user_parts(
@@ -1180,9 +1190,18 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     tool_names, tools = tool_loop_tools(
         ctx.business, route.route.value, unrouted=unrouted, need_menu=need_menu
     )
+    # NX-383: un tur pe care kernelul l-a primit în modul SERVIT și nu l-a servit ajunge aici fără
+    # drept de scriere. Mutațiile trec doar prin executorul de coș al kernelului, pe ținte `exact`
+    # (I10); pe setul wide-2026-10-07 singurele două mutații de pe calea asta erau necerute (un
+    # produs ales de model pus în coș, o abonare pe «ok pa»). Modelul nu le vede, iar `run` le
+    # refuză dacă le cere totuși.
+    mutations_allowed = mode != "serve"
+    if not mutations_allowed:
+        tools = _without_mutations(tools)
+        tool_names = [n for n in tool_names if not tool_budget.spec_for(n).is_mutation]
     # Faza D (NX-143): tool executor cu stare explicită. Acumulatorii (produse/linkuri/sume/…) sunt
     # câmpuri ale lui `run`, nu `nonlocal`; `run.execute` e callback-ul buclei; citim `run.X` după.
-    run = ToolRun(ctx, deps)
+    run = ToolRun(ctx, deps, mutations_allowed=mutations_allowed)
 
     history = conversation_transcript(ctx.history, emit=ctx.emit, consumer="agent")
     context = context_blocks(ctx, consumer="agent")
@@ -1337,6 +1356,8 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
             # întors deja mai sus și și-l aplică singură (`brain.py`), deci nu există tur pe care
             # sufixul să se lipească de două ori.
             system, tools = _apply_turn_profile(ctx, system, tools, need_menu)
+            if not mutations_allowed:
+                tools = _without_mutations(tools)  # NX-383: profilul poate aduce unelte
             if getattr(get_settings(), "tool_loop_skip_prose_enabled", False):
                 prose = _ProseRoundGate(ctx, run, is_order=is_order)
                 final = await deps.llm.run_tool_loop(

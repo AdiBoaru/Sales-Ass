@@ -356,9 +356,12 @@ async def test_other_reply_only_stays_dark(electronics):
     deps = _deps(LoopLLM())
     outcome = _gate("must_ask", "no_subject")
     assert await kx.execute_read_plans(_ctx(electronics), deps, planned, outcome) is None
-    assert (
-        await kx.execute_read_plans(_ctx(electronics), deps, planned, _gate(), None, True) is None
-    )
+    assert await kx.execute_read_plans(_ctx(electronics), deps, planned, _gate()) is None
+    # NX-383: un tur care a cerut o scriere primește refuzul pe ORICE verdict (regula 0 a porții
+    # scoate coșul cu `act`); înainte rămânea pe v1, unde modelul a pus în coș un produs ales de el
+    ctx = _ctx(electronics)
+    assert await kx.execute_read_plans(ctx, deps, planned, _gate(), None, True) is True
+    assert ctx.reply.text == kx.kernel_sentence(electronics.pack, "ro", "mutation_not_exact")
 
 
 def _search_stub(monkeypatch, cat, ids, *, raises=None):

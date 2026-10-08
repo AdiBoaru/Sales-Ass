@@ -725,10 +725,12 @@ async def _run_plan(
     kind, ids = plan.executor, list(plan.product_ids)
     if kind == "reply_only":
         # Doar răspunsul unei MUTAȚII oprite de poartă fără întrebare (orice motiv: epuizat, țintă
-        # neexactă, fără opțiuni, fără șablon, întrebare deja pusă). Căderea pe v1 ar da turul unei
-        # bucle care are `cart_add`, exact pe turul pe care poarta l-a oprit (I10/I11, recenzia D2).
-        # Restul lui `reply_only` (din `chitchat`) rămâne pe v1.
-        if outcome.decision.verdict != "must_ask" or not mutating:
+        # neexactă, fără opțiuni, fără șablon, întrebare deja pusă, ținta care numește o
+        # proprietate). Căderea pe v1 ar da turul unei bucle care are `cart_add`, exact pe turul
+        # pe care poarta l-a oprit (I10/I11, recenzia D2). NX-383: pe orice verdict, nu doar
+        # `must_ask`: regula 0 a porții scoate coșul cu verdictul `act`. Restul lui `reply_only`
+        # (din `chitchat`) rămâne pe v1, fără unelte de mutație (`ToolRun.mutations_allowed`).
+        if not mutating:
             return None
         reason = outcome.decision.reason
         code = reason if reason in _REFUSED_MUTATION else "mutation_not_exact"
@@ -823,6 +825,10 @@ async def execute_read_plans(
         ctx, deps, plan, outcome, policy_for, mutating, exclude_shown=0 in planned.excludes_shown
     )
     if not verdict:
+        return verdict
+    if plan.executor == "reply_only":
+        # NX-383: refuzul mutației e tot răspunsul turului; dezvăluirea `invalid_target` a actului
+        # scos ar spune același lucru a doua oară.
         return verdict
     no_results = (
         plan.executor == "search" and ctx.retrieval is not None and not ctx.retrieval.products
