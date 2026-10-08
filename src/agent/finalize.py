@@ -916,6 +916,10 @@ class _RichOutcome:
 
     reply: RichReply | None
     model_items: int = 0
+    #: NX-382 faza 5: compozitorul a spus EXPLICIT că nimic din set nu răspunde (`set_fit=none`),
+    #: nu doar o listă goală. Refuzul se respectă și pe un set fără `relevance` (paginarea: o
+    #: rafinare fără argumente noi devine pagina 2, iar cardurile refuzate ajungeau pe ecran).
+    refused: bool = False
     #: NX-362: `intro`-ul SCRIS DE MODEL (scrubuit de compose), sau None când compose l-a
     #: înlocuit cu textul nostru (redirectul off-category) ori modelul n-a scris niciunul. Pe un
     #: refuz, doar ăsta poate fi servit drept răspuns: textul nostru ar vorbi în locul modelului.
@@ -1230,7 +1234,7 @@ async def _compose_recommend(
         empty = RichReply(
             intro=composed.served, items=[], pick=None, education=None, chips=[], disclaimer=None
         )
-        return _RichOutcome(reply=empty, model_items=0, model_intro=composed.served)
+        return _RichOutcome(reply=empty, model_items=0, model_intro=composed.served, refused=True)
     return _RichOutcome(reply=rich, model_items=len(rich.items), model_intro=rich.intro)
 
 
@@ -1469,6 +1473,8 @@ async def render(
         # NX-362: refuzul modelului, scris de EL pe calea bogată (`intro`, scrubuit de compose).
         # Singurul text al modelului care există când runda de proză a fost sărită (NX-312/359).
         refusal_intro: str | None = None
+        # NX-382 faza 5: refuzul EXPLICIT al compozitorului (`set_fit=none`), nu doar zero carduri.
+        explicit_refusal = False
         # NX-373: regulile magazinului cerute într-un tur mixt; le servește codul, nu compunerea.
         store_part = _mixed_store_rules(ctx, plan)
         # Calea BOGATĂ (model iZi): recomandare structurată → compose. Doar pe SALES.
@@ -1529,6 +1535,7 @@ async def render(
             else:
                 reason = "no-items-selected"
                 refusal_intro = outcome.model_intro
+                explicit_refusal = outcome.refused
             downgrade_reason = reason
             ctx.emit("rich_downgraded", reason=reason)
             if getattr(ctx, "trace", None) is not None:
@@ -1614,7 +1621,7 @@ async def render(
         # (`planner.build_plan`), deci setul lor determinist rămâne pe ecran, ca înainte.
         servable = products
         _relevance = getattr(getattr(ctx, "retrieval", None), "relevance", None)
-        if downgrade_reason == "no-items-selected" and _relevance is not None:
+        if downgrade_reason == "no-items-selected" and (_relevance is not None or explicit_refusal):
             model_prose = result.ok and bool(final) and reply == final
             servable = compose.named_products(reply, products) if model_prose else []
             ctx.emit(

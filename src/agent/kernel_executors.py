@@ -178,11 +178,21 @@ def _disclosure_text(
 ) -> str:
     """Frazele dezvăluirilor planului, în ordine, fiecare o singură dată. Fail-open. `skip` =
     planurile care n-au servit: dezvăluirile lor nu descriu răspunsul (NX-374, recenzia: pe un coș
-    picat, căutarea dependentă nu rulează, deci „n-am ținut cont la alegere" ar fi fals)."""
+    picat, căutarea dependentă nu rulează, deci „n-am ținut cont la alegere" ar fi fals).
+
+    NX-382 faza 5: o dezvăluire pe care a scris-o compozitorul (și al cărei text e chiar în
+    răspuns, `composer.composed_disclosures`) nu se mai pune a doua oară; „nu e potrivirea exactă"
+    nu se pune peste un răspuns fără niciun card (wide-2026-10-07: 10 ture)."""
+    from src.agent.composer import composed_disclosures  # noqa: PLC0415 — ciclul agent
+
     pack = getattr(ctx.business, "domain_pack", None)
+    told = composed_disclosures(ctx)
+    cards = _has_cards(getattr(ctx, "reply", None))
     out: list[str] = []
     for index, code in planned.disclosures:
-        if code in _REQUIRED or index in skip or code in drop:
+        if code in _REQUIRED or index in skip or code in drop or code in told:
+            continue
+        if code == "not_exact_match" and not cards:
             continue
         phrase = kernel_sentence(pack, ctx.language, code)
         if phrase is None:
@@ -191,6 +201,33 @@ def _disclosure_text(
         if phrase not in out:
             out.append(phrase)
     return " ".join(out)
+
+
+def _has_cards(reply: Any) -> bool:
+    """Răspunsul arată produse (carduri, recomandare bogată sau tabel). PUR."""
+    if reply is None:
+        return False
+    rich = getattr(reply, "rich", None)
+    cmp = getattr(reply, "comparison", None)
+    return bool(
+        getattr(reply, "products", None)
+        or (rich is not None and rich.items)
+        or (cmp is not None and cmp.columns)
+    )
+
+
+def _disclosures_of(planned: PlannedTurn) -> tuple[tuple[str, dict[str, Any]], ...]:
+    """NX-382 faza 5: dezvăluirile planului, ca `(cod, fapte)` pentru compozitor, o dată pe cod.
+    `need_unverifiable` poartă cheile nevoilor (NX-374, `disclosed_needs`). Fără `_REQUIRED`."""
+    out: dict[str, dict[str, Any]] = {}
+    for _index, code in planned.disclosures:
+        if code in _REQUIRED or code in out:
+            continue
+        facts: dict[str, Any] = {}
+        if code == "need_unverifiable" and planned.disclosed_needs:
+            facts["needs"] = list(planned.disclosed_needs)
+        out[code] = facts
+    return tuple(out.items())
 
 
 def _lead(text: str, current: str | None) -> str:
@@ -1268,6 +1305,9 @@ async def execute_read_plans(
     executorul a refuzat, `True` = a servit. `NoSentence` urcă la orchestrator. `policy_for` =
     politica de răspuns a orchestratorului, judecată pe produsele unei comparații (I12)."""
     plans = planned.plans
+    # NX-382 faza 5: compozitorul spune el dezvăluirile, ca obligații; fraza pachetului rămâne
+    # doar pentru ce n-a acoperit (`_disclosure_text`)
+    ctx.kernel_disclosures = _disclosures_of(planned)
     if len(plans) == 2 and plans[0].executor == "cart" and plans[0].product_ids:
         return await _serve_mutation_then(ctx, deps, planned, outcome, policy_for)
     if len(plans) != 1:

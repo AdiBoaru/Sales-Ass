@@ -676,6 +676,16 @@ class TurnContext:
     # `composer.compose`. Citită DOAR de `safety.compose.enforce`, care nu mai pune fraza codului
     # când propoziția e chiar în fiecare câmp randat. `None` = garanția NX-367 de azi.
     safety_referral_composed: str | None = None
+    # NX-382 faza 5: dezvăluirile planului kernelului (`PlannedTurn.disclosures`), ca `(cod,
+    # fapte)`, de spus în acest tur. Owner UNIC: `kernel_executors.execute_read_plans`, înaintea
+    # executorului. Compozitorul le primește ca obligații; `disclosures_composed` (owner UNIC:
+    # `composer.compose`) = codurile pe care le-a acoperit, verificat de poarta lui; fraza
+    # pachetului se pune doar pentru restul.
+    kernel_disclosures: tuple[tuple[str, dict[str, Any]], ...] = ()
+    disclosures_composed: frozenset[str] = frozenset()
+    # Textul (forma randată, `naturalize`) al ultimului răspuns acceptat de compozitor, owner
+    # `composer.compose`: o dezvăluire contează spusă doar dacă textul ăsta e chiar în răspuns.
+    composed_reply: str | None = None
     halt: bool = False  # owner: Gates (tăcere intenționată — early exit fără reply)
     # NX-368, owner: Gates. Mesajul a fost semnalat de moderare, dar turul continuă la agent: nu
     # intră în cache-ul partajat și nici în memoria clientului (aftercare).
