@@ -1790,6 +1790,7 @@ comparison_focus_enabled = true
 comparison_lead_llm_enabled = true
 comparison_narrative_enabled = true
 composer_detail_enabled = true
+composer_store_info_enabled = true
 content_status_filter_enabled = true
 conv_lock_enabled = true
 conversation_cart_enabled = false

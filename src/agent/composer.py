@@ -380,6 +380,21 @@ def _advice_ok(advice: str, products: Sequence[dict[str, Any]]) -> bool:
     return True
 
 
+def rule_prices(rules: Sequence[str]) -> frozenset[float]:
+    """Sumele de bani scrise în regulile magazinului (pragul de livrare, costul returului): un
+    răspuns care le redă e întemeiat. Același tipar de sumă ca validatorul (`_PRICE_RE`)."""
+    from src.agent.validator import _PRICE_RE, parse_amount  # noqa: PLC0415
+
+    out: set[float] = set()
+    for rule in rules:
+        for m in _PRICE_RE.finditer(rule):
+            try:
+                out.add(parse_amount(m.group(1) or m.group(2)))
+            except ValueError:
+                continue
+    return frozenset(out)
+
+
 def check(
     composed: Composed, inp: ComposeInput, *, facts: str, units: frozenset[str]
 ) -> tuple[Verdict, Composed]:
@@ -394,7 +409,8 @@ def check(
     reply, _dropped = _without_medical(composed.reply)
     if not reply:
         return Verdict(False, "medical_claim"), composed
-    verdict = detail_answer.check_answer(reply, list(inp.products), facts, units)
+    rules = rule_prices(inp.store_rules)
+    verdict = detail_answer.check_answer(reply, list(inp.products), facts, units, rules)
     if not verdict.ok:
         return Verdict(False, verdict.reason), composed
     items: list[tuple[str, str]] = []

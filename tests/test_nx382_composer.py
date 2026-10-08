@@ -408,3 +408,86 @@ async def test_no_referral_lead_without_a_question(electronics, catalog):
     ctx = _ctx(electronics, "detalii")
     await kx.execute_read_plans(ctx, _deps(llm), _planned(_detail(None)), _outcome())
     assert ctx.reply.text == "FISA STANDARD"
+
+
+# --- faza 2: regulile magazinului ----------------------------------------------------------------
+
+RULES = [
+    {"question": "Cat costa livrarea?", "answer": "Livrarea costa 15 lei, gratuita peste 149 lei."},
+    {"question": "Pot returna?", "answer": "Poti returna in 30 de zile de la primire."},
+]
+
+
+@pytest.fixture
+def store(monkeypatch, electronics):
+    from src.tools import faq_tools
+
+    monkeypatch.setattr(get_settings(), "composer_store_info_enabled", True)
+
+    async def rules(ctx, deps):
+        return [dict(r) for r in RULES]
+
+    monkeypatch.setattr(faq_tools, "load_rules", rules)
+    loops: list[frozenset[str]] = []
+
+    async def delegate(ctx, deps, allowed):
+        loops.append(allowed)
+        ctx.set_reply("BUCLA DE AZI", cacheable=False)
+        return True
+
+    monkeypatch.setattr(kx, "_delegate", delegate)
+    return loops
+
+
+def _faq_plan() -> TurnPlan:
+    return TurnPlan(executor="faq", product_ids=[], search_args=None, depends_on=None)
+
+
+async def test_a_store_question_is_answered_from_the_rules_in_the_models_words(store, electronics):
+    llm = ComposeLLM(_reply("Peste 149 lei livrarea e gratuită, altfel costă 15 lei."))
+    ctx = _ctx(electronics, "cat e transportul?")
+    assert await kx.execute_read_plans(ctx, _deps(llm), _planned(_faq_plan()), _outcome())
+    assert store == [] and ctx.reply.text.startswith("Peste 149 lei")
+    assert ctx.reply.cacheable is False
+    assert ctx.retrieval.store_only and not ctx.retrieval.catalog_read
+    system, user, _ = llm.calls[0]
+    assert "TASK store_info:" in system
+    assert "STORE RULES\n- Cat costa livrarea? -> Livrarea costa 15 lei" in user
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [
+        _reply("Livrarea e gratuită peste 99 lei."),  # sumă care nu e în reguli
+        _reply("Poți returna în 60 de zile."),  # cifră care nu e în reguli
+        RuntimeError("down"),
+    ],
+)
+async def test_an_ungrounded_store_answer_falls_back_to_todays_loop(store, electronics, reply):
+    ctx = _ctx(electronics, "cat e transportul?")
+    await kx.execute_read_plans(ctx, _deps(ComposeLLM(reply)), _planned(_faq_plan()), _outcome())
+    assert store and ctx.reply.text == "BUCLA DE AZI"
+
+
+async def test_without_rules_or_with_the_flag_off_todays_loop_answers(
+    store, electronics, monkeypatch
+):
+    from src.tools import faq_tools
+
+    async def none(ctx, deps):
+        return []
+
+    monkeypatch.setattr(faq_tools, "load_rules", none)
+    llm = ComposeLLM(_reply("Da."))
+    await kx.execute_read_plans(
+        _ctx(electronics, "x"), _deps(llm), _planned(_faq_plan()), _outcome()
+    )
+    monkeypatch.setattr(get_settings(), "composer_store_info_enabled", False)
+    await kx.execute_read_plans(
+        _ctx(electronics, "x"), _deps(llm), _planned(_faq_plan()), _outcome()
+    )
+    assert llm.calls == [] and len(store) == 2
+
+
+def test_rule_prices_are_grounded_for_the_store_answer():
+    assert cp.rule_prices(["Livrarea costa 15 lei, gratuita peste 149 lei."]) == {15.0, 149.0}

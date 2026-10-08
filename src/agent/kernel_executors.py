@@ -827,6 +827,40 @@ async def _compose_detail(
     return ctx.reply is not None
 
 
+async def _compose_store_info(ctx: TurnContext, deps: PipelineDeps) -> bool:
+    """NX-382 faza 2: o întrebare despre magazin, scrisă de compozitor din regulile ACTIVE (aduse
+    de cod, întregi, ca unealta `faq_lookup`). `False` = bucla restrânsă de azi (nicio regulă,
+    citire picată, model picat sau răspuns respins). Turul n-a citit catalogul (paranteza
+    NX-326)."""
+    from src.agent import composer  # noqa: PLC0415 — ciclul agent ↔ executori
+    from src.tools.faq_tools import load_rules  # noqa: PLC0415
+    from src.worker.context import conversation_transcript  # noqa: PLC0415
+
+    try:
+        rows = await load_rules(ctx, deps)
+    except Exception as e:  # noqa: BLE001 — P6: bucla de azi rămâne răspunsul
+        ctx.emit("composer", task="store_info", outcome="rules_failed", error=type(e).__name__)
+        return False
+    if not rows:
+        return False
+    rules = [f"{r['question'].strip()} -> {r['answer'].strip()}" for r in rows]
+    inp = composer.ComposeInput(task="store_info", store_rules=rules)
+    history = conversation_transcript(ctx.history, consumer="composer")
+    composed, _reason = await composer.compose(ctx, deps, inp, history=history)
+    if composed is None:
+        return False
+    ctx.retrieval = RetrievalResult(
+        products=[],
+        source="composer_store_info",
+        catalog_read=False,
+        read_beyond_catalog=True,
+        store_only=True,
+        store_read_ok=True,
+    )
+    ctx.set_reply(composed.served, cacheable=False)
+    return True
+
+
 def _confirmation(outcome: GateOutcome) -> str | None:
     question = outcome.decision.question
     return question if outcome.asked_kind == "noted" and question else None
@@ -881,6 +915,9 @@ async def _run_plan(
         return await _compare(ctx, deps, ids, policy_for) if len(ids) >= 2 else False
     if kind == "compare":
         return await _compare(ctx, deps, ids, policy_for)
+    if kind == "faq" and get_settings().composer_store_info_enabled:
+        if await _compose_store_info(ctx, deps):
+            return True
     if kind in DELEGATED_TOOLS:
         return await _delegate(ctx, deps, DELEGATED_TOOLS[kind])
     if kind == "bundle":

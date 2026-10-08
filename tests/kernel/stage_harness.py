@@ -66,6 +66,7 @@ FLAGS: dict[str, bool] = {
     "single_brain_enabled": False,
     # NX-382: testele de stagiu de dinainte verifică executorii de azi; compozitorul are testele lui
     "composer_detail_enabled": False,
+    "composer_store_info_enabled": False,
 }
 
 

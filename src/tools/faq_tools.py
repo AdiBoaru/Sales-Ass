@@ -67,6 +67,23 @@ def render_view(rows: list[dict[str, Any]]) -> str:
     return "\n".join(parts)
 
 
+async def load_rules(ctx: TurnContext, deps: PipelineDeps) -> list[dict[str, Any]]:
+    """Regulile ACTIVE ale tenantului pe limba turului, cu căderea pe `default_locale` sub flag.
+    Un singur proprietar pentru unealtă și pentru compozitor (NX-382), întregi, în plafonul
+    vederii."""
+    async with deps.db("faq_list") as conn:
+        rows = await list_active(conn, ctx.business.id, ctx.language, limit=MAX_FAQS)
+        default_locale = getattr(ctx.business, "default_locale", None)
+        if (
+            not rows
+            and get_settings().faq_locale_fallback_enabled
+            and default_locale
+            and default_locale != ctx.language
+        ):
+            rows = await list_active(conn, ctx.business.id, default_locale, limit=MAX_FAQS)
+    return _fitting(rows)
+
+
 @register("faq_lookup")
 async def faq_lookup_tool(ctx: TurnContext, deps: PipelineDeps, args: dict[str, Any]) -> ToolResult:
     """Setul de FAQ al tenantului pe limba turului. Setul gol pe limba turului cade pe

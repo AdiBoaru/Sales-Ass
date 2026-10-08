@@ -213,11 +213,14 @@ def check_answer(
     product: dict[str, Any] | list[dict[str, Any]],
     facts: str,
     units: frozenset[str] = frozenset({"%"}),
+    grounded_prices: frozenset[float] = frozenset(),
 ) -> Verdict:
     """Poarta de adevăr a răspunsului, legată de fișă. PURĂ (în afara flagurilor citite de
     porțile refolosite din `validator`). `product` = produsul răspunsului sau produsele unui text
-    care le numește pe mai multe (NX-382): prețul și stocul se judecă pe oricare dintre ele."""
-    products = list(product) if isinstance(product, list) else [product]
+    care le numește pe mai multe (NX-382): prețul și stocul se judecă pe oricare dintre ele.
+    `grounded_prices` = sumele din alte fapte ale turului (pragul de livrare dintr-o regulă a
+    magazinului, NX-382 faza 2). Fără produse, nu există afirmație de stoc de judecat."""
+    products = [p for p in (product if isinstance(product, list) else [product]) if p]
     from src.agent.validator import (  # noqa: PLC0415 — ciclul validator ↔ agent
         _links_ok,
         _prices_ok,
@@ -239,11 +242,11 @@ def check_answer(
         for k in ("list_price", "coupon_price")
         if isinstance(p.get(k), int | float) and not isinstance(p.get(k), bool)
     }
-    if not _prices_ok(text, products, extra):
+    if not _prices_ok(text, products, extra | set(grounded_prices)):
         return Verdict(False, "ungrounded_price")
     if not _numbers_grounded(text, facts, units):
         return Verdict(False, "ungrounded_number")
-    if not _stock_claim_ok(text, products):
+    if products and not _stock_claim_ok(text, products):
         return Verdict(False, "stock_claim")
     return Verdict(True)
 
