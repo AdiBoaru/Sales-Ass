@@ -143,7 +143,12 @@ def first_divergence(expected: dict[str, Any], actual: KernelTrace) -> Divergenc
     for name, attr in LAYERS:
         if name not in expected:
             continue
-        want, got = _plain(expected[name]), _plain(getattr(actual, attr))
+        label = expected[name]
+        if name == "interpretation" and isinstance(label, dict):
+            # NX-380: o etichetă scrisă înaintea unui câmp aditiv (`Act.question`) se compară în
+            # forma modelului, cu default-urile lui, nu ca dicționar căruia îi lipsește cheia.
+            label = TurnInterpretation.model_validate(label)
+        want, got = _plain(label), _plain(getattr(actual, attr))
         if name in _DERIVED:
             want, got = _without(want, _DERIVED[name]), _without(got, _DERIVED[name])
         if want != got:

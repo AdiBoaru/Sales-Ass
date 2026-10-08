@@ -55,6 +55,7 @@ from src.conversation.interpretation_check import (
 from src.conversation.needs import NeedVocabulary
 from src.conversation.provenance import Handle, UserWords, need_handles, tenant_dimensions
 from src.conversation.state_v2 import ConversationStateV2
+from src.domain.pack import interpret_notes
 
 log = logging.getLogger(__name__)
 
@@ -72,9 +73,16 @@ MAX_HISTORY_MESSAGES = 20
 #: de valori; fără plafon costul și prefixul n-ar mai avea margine. Codul re-rezolvă oricum orice
 #: valoare prin vocabularul complet (`check_changes`), deci plafonul limitează doar sugestia.
 MAX_MENU_VALUES = 20
+#: NX-380: tipul de produs e SUBIECTUL turului, nu un filtru oarecare. Plafonat la 20, meniul SOLE
+#: ascundea 34 din 54 de tipuri, iar modelul cădea pe un cod mai larg sau al ALTUI fel (măsurat pe
+#: setul wide-2026-10-07: «balsam de buze» scris ca `balsam`, care e de păr). Plafon propriu, tot
+#: finit: un catalog cu sute de tipuri nu umflă prefixul fără margine.
+SUBJECT_TYPE_DIMENSION = "product_type"
+MAX_SUBJECT_MENU_VALUES = 80
 
 DIMENSIONS_HEADER = "DIMENSIONS"
 SHELVES_HEADER = "SHELVES"
+STORE_NOTES_HEADER = "STORE NOTES"
 NONE = "none"
 
 Role = Literal["user", "bot"]
@@ -237,11 +245,13 @@ def interpretation_schema(pack: Any | None) -> dict[str, Any]:
 
 _INSTRUCTIONS = """\
 You interpret ONE turn of a conversation between a customer and the shopping assistant of an \
-online store. You do not answer the customer. You describe, as data in the given JSON schema, what \
-the customer said and wants. Code decides every fact, identifier, filter and state change after \
-you, and checks every quote against the customer's messages.
+online store. You do not answer the customer. You describe, as data in the given JSON schema, \
+what the customer said and wants. Code decides every fact, identifier, filter and state change \
+after you, and checks every quote against the customer's messages.
 
-The customer writes in locale "{locale}". Quote the customer's words exactly as written.
+The customer writes in locale "{locale}". Quote the customer's words exactly as written. The \
+customer may also write in another language than the menus: a word that translates a code names \
+that code.
 
 The user message holds the conversation state, then CURRENT MESSAGE, the turn to interpret:
 - CONSTRAINTS: the customer's active requirements, each with a handle cN.
@@ -253,48 +263,93 @@ with the items that were shown for it.
 - HISTORY: the latest messages; user lines are the customer, bot lines are the assistant.
 
 FIELDS
-- thread: "continue" for the ongoing request, which includes a question about an item and any new \
-request for items; "aside" only for a question about the store itself (policies, delivery, \
-payment) or small talk, which changes nothing; "resume" when the customer goes back to the PARKED \
-subject.
-- acts: what the customer asks for in this turn, in order; the LAST act is the primary one. An act \
-says WHAT the customer asks for, never HOW, and never whether the store sells it: code decides \
-availability. find: wants items, including items the store may not carry. show_more: more of the \
-same results. compare, detail, link, cart: about items named by references. detail also covers a \
-question about an item on screen or just discussed (how to use it, why), with a reference to that \
-item. cart: only when the customer explicitly asks to buy or to add an item; \
-otherwise the act the rest of the sentence asks for. bundle: several items meant to be used \
-together, as one set or in a sequence, even when the customer does not name them. \
-order_status: an order. store_info: store policies. chitchat: no request. other: only when no \
-other act fits. A complaint that asks for something else is read as that request, and a \
-misspelled word by the intent of its sentence. targets: ids of references declared in this \
-interpretation. query: the customer's words, for find and store_info only.
-- changes: how the customer's requirements change in this turn; empty when nothing changes. \
-op set: one value; add: one more value; remove: drop the handle in target; replace: the handle in \
-target gets a new value; clear: target "topic" drops the current subject, "all" drops everything. \
-dimension: one from {dimensions_header}, "category" for a shelf from {shelves_header} (value = the \
-shelf key), "price" for money, "unmapped" only as a last resort, when no dimension fits. A \
-shelf the customer names as the kind of item they want or ask about, also inside a question, is a \
-set on category with that shelf key; when the customer also names an item type, a shelf word that \
-is part of its name or only says what it is for is not a shelf, and neither is a word that \
-describes the customer. \
-relation: eq; lte (at most); gte (at least); contains; avoid (the customer does not want it). \
-value: a code from the menu only when the customer's words name that code, never a narrower code \
-for a broader word, and always of the same kind as the dimension's other values; when no code \
-fits, the customer's words. number and unit: only for a number the customer wrote. relative_to: \
-a reference id when the value is relative to an item on screen, with relation lte or gte and no \
-number. What the customer describes about themselves or about the items (a condition, a problem, \
-a complaint about price) is a change when a menu value names its cause: when they describe \
+- thread: "continue" for the ongoing request, which includes a question about an item and any \
+new request for items; "aside" only for a question about the store itself (policies, delivery, \
+payment) or small talk, which changes nothing; "resume" when the customer goes back to the \
+PARKED subject.
+- acts: what the customer asks for in this turn, in order; the LAST act is the primary one. An \
+act says WHAT the customer asks for, never HOW, and never whether the store sells it: code \
+decides availability. A greeting, thanks or goodbye next to a request is not an act.
+  find: wants items, including items the store may not carry. Also find: the customer describes a \
+problem or a need and asks for nothing else; the customer asks what to use for a task; the \
+customer wants one more item to use with an item already shown; the customer wants to buy an \
+item that was not shown (with a name reference).
+  show_more: more of the same results.
+  detail: a question about one item on screen, just discussed or named (its price, stock, \
+contents, size, how to use it, why), with a reference to that item.
+  compare: a question about two or more items; "which of them", "both" or "all" point at every \
+item meant.
+  link: the link to items named by references.
+  cart: only when the customer explicitly asks to buy or to add an item to this conversation's \
+cart; otherwise the act the rest of the sentence asks for. Asking about or changing an order \
+already placed is order_status; asking how to place, pay for or finish an order is store_info.
+  bundle: only when the customer asks for several items chosen together, as one set, a routine or \
+steps, even when they do not name them. Items the customer lists one by one are one find each.
+  order_status: an order. store_info: a rule that is the same for every item the store sells \
+(delivery, returns, payment, authenticity, account, vouchers, stock notifications), also when \
+the question mentions an item. chitchat: only when the message holds no request. other: only \
+when no other act fits.
+  A complaint that asks for something else is read as that request, and a misspelled word by the \
+intent of its sentence. targets: ids of references declared in this interpretation. query: the \
+customer's words, for find and store_info. question: for detail and compare, the customer's \
+question about the items, in their words.
+- changes: how the customer's requirements change in this turn; empty only when nothing changes. \
+Every kind of item and every requirement the customer states in this turn is a change: a menu \
+value when one names it, otherwise the customer's words; a find for a kind of item the customer \
+names never has empty changes.
+  op set: one value; add: one more value; remove: drop the handle in target; replace: the handle \
+in target gets a new value; clear: target "topic" drops the current subject, "all" drops \
+everything. A request for a different kind of item, or for another person, is op set on category \
+and product_type, never add; a requirement stated only for the previous item or person is not \
+repeated.
+  dimension: one from {dimensions_header}, "category" for a shelf from {shelves_header} (value = \
+the shelf key), "price" for money, "unmapped" only when no dimension fits. A shelf the customer \
+names as the kind of item they want or ask about, also inside a question, is a set on category \
+with that shelf key; when the customer also names an item type, a shelf word that is part of its \
+name or only says what it is for is not a shelf. A word that describes the customer (who they \
+are, their condition) is not a shelf; the part or place the items are used on is, when a shelf \
+key names it and the customer names no item type.
+  relation: eq; lte (at most); gte (at least); contains; avoid (the customer does not want it).
+  value: for product_type, the code that names the same kind of item, keeping the customer's word \
+for the part or purpose it is for; a word that only describes a property is not such a word. \
+When the customer's word is the shared head of several codes, write the first listed code with \
+that head and quote only the customer's word: code widens it to every code with that head. For \
+the other dimensions, a code only when the customer's words name that code, never a narrower \
+code for a broader word, and always of the same kind as the dimension's other values. When no \
+code fits, the customer's words, in base form (singular, no article). Words that say the \
+customer has no special need are not a change, unless the menu has that value.
+  number and unit: only for a number the customer wrote. relative_to: a reference id when the \
+value is relative to an item on screen, with relation lte or gte and no number; a comparison \
+that names no item (cheaper, bigger) is relative to the items on screen, through one deictic \
+reference.
+  What the customer describes about themselves or about the items (a condition, a problem, a \
+complaint about price) is a change when a menu value names its cause: when they describe \
 themselves or the items, the value that names what they are or have, about the same part or item \
 they describe, rather than one that names a result of it; a result the customer asks for is a \
-change too. A complaint about the price of the items on screen is price with lte relative to them.
+change too. A problem that an item the customer already used caused is not a requirement for new \
+items, unless they ask for items for it. A complaint about the price of the items on screen is \
+price with lte relative to them.
+  When the customer narrows or continues a request whose kind of item was named only in an earlier \
+user line and SUBJECT does not show it, set that kind again, quoting that line; never re-add \
+something the customer removed. Something instead of, or similar to, an item keeps that item's \
+kind.
 - quote: the customer's exact words that support the change, copied from CURRENT MESSAGE or from \
 a user line in HISTORY, never from a bot line. A change with no customer words behind it is a \
 guess: leave it out.
-- references: every item the customer points at, with ids r1, r2, ... in order. kind: ordinal \
-(position #i on screen, ordinal = i); deictic ("this one"); name (name = the words used); \
-attribute (dimension + value); extreme (dimension + direction min or max); the_other; earlier \
-(an item from EARLIER or from the PARKED items). text: the customer's words.
+- references: every item the customer points at, with ids r1, r2, ... in order; each item gets \
+its own reference, also when the pointers share words. A reference needs words in CURRENT \
+MESSAGE that point at an item: a position, a pronoun or a demonstrative (or the verb, when the \
+language drops the pronoun), a name, a superlative. text: exactly those words. Never copy a name \
+or a reference from a bot line or from an earlier message; a requirement or a question is never \
+reference text. A short follow-up that keeps asking about the item just discussed is deictic.
+  kind: ordinal (an ordinal word, ordinal = its number, also right after the customer looked at \
+one item: code decides which list it counts); deictic ("this one"); name (only words that are an \
+item's own name: its brand, product line or model, also misspelled or shortened, also inside \
+find or cart, with its id in the act's targets; a kind of item, an ingredient or a purpose is \
+not a name: write changes instead); attribute (dimension + value); extreme (dimension price, \
+rating or a number dimension, direction min or max: the cheapest, the best rated); the_other; \
+earlier (only when the customer says the item was shown before the current screen, or it is \
+among the PARKED items; also fill ordinal, name or dimension + value from their words).
 - ambiguities: only when the turn can honestly be read in more than one way and the readings \
 lead to different answers. about: reference, scope or value; readings: the possible readings, as \
 short values.
@@ -324,8 +379,9 @@ def _menu_values(inp: InterpretInput, key: str, facet: Any) -> list[str]:
         codes = [e.key for e in ranked]
     else:
         codes = sorted(str(v) for v in (getattr(facet, "values", ()) or ()))
+    cap = MAX_SUBJECT_MENU_VALUES if key == SUBJECT_TYPE_DIMENSION else MAX_MENU_VALUES
     out = []
-    for code in codes[:MAX_MENU_VALUES]:
+    for code in codes[:cap]:
         label = _label(inp.pack, key, code, inp.locale)
         out.append(f"{code} ({label})" if label else code)
     return out
@@ -382,6 +438,15 @@ def system_prompt(inp: InterpretInput) -> str:
             f"{SHELVES_HEADER} (closed menu for dimension category: the value is the shelf key; "
             "a shelf's parent is the start of its key; the number is its approximate size)\n"
             + "\n".join(shelves)
+        )
+    notes = interpret_notes(inp.pack, inp.locale)
+    if notes:
+        # NX-380: ce ține de catalogul tenantului e DATĂ a pachetului, nu instrucțiune în cod (I14).
+        # Ultimul bloc, ca un pachet fără notițe să lase prefixul de dinainte neschimbat.
+        parts.append(
+            f"{STORE_NOTES_HEADER} (how customers of this store name what it sells; they "
+            "refine the rules above for this catalog and never override the quote rules)\n"
+            + "\n".join(f"- {n}" for n in notes)
         )
     return "\n\n".join(parts)
 

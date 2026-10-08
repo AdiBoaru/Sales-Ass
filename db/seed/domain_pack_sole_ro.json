@@ -2065,5 +2065,21 @@
     }
   },
   "_bundle_executors_note": "NX-333 (kernel pasul 4b): unealta care servește actul `bundle` al kernelului, per rădăcină de raft sau `*`. Pe SOLE un pachet cerut de client („fă-mi o rutină”) e o rutină, deci `routine_plan`. Numele se validează la load contra TOOL_NAMES. Fără consumator până la pasul 6; aplicarea pe DB o rulează Adi (scripts/set_domain_pack.py --apply --backup).",
-  "bundle_executors": {"*": "routine_plan"}
+  "bundle_executors": {
+    "*": "routine_plan"
+  },
+  "_interpret_notes_note": "NX-380: notițele de magazin pentru interpretarea turului (promptul `interpret.v5`, blocul STORE NOTES). Instrucțiunile din cod sunt generice (poarta I14), deci ce ține de catalogul SOLE stă aici. Fiecare notiță e verificată pe catalog (2026-10-08): `balsam` = 30 de balsamuri de păr, `balsam de buze` 22; `machiaj-fata` = fond de ten, cushion, fard de obraz, corector, pudră; 75 de produse `crema de fata` sunt pe raftul de protecție solară, deci «de față» NU numește un raft. Scrise în engleza promptului, cu cuvintele clientului între «». Plafon: 12 notițe × 300 de caractere.",
+  "interpret_notes": {
+    "ro": [
+      "«de față» after an item type (cremă de față, ser de față, mască de față) says what the item is for; it is not a shelf. The shelf machiaj-fata holds face makeup only: foundation, cushion, blush, concealer, powder.",
+      "«ten» in «ten uscat», «ten gras», «ten sensibil» is the customer's skin: a skin_type value, never the shelf ten.",
+      "«balsam» alone is a hair conditioner (code balsam). A lip balm is «balsam de buze», a cleansing balm «balsam de curățare», a body balm «balsam pentru corp»: keep the customer's qualifier.",
+      "Around the eyes: eye creams and eye patches are care (shelf ten-ingrijirea-zonei-din-jurul-ochilor); eyeshadow, mascara and eyeliner are makeup (shelf machiaj-ochi).",
+      "«SPF», «protecție solară» and «cremă de soare» ask for sun protection: concerns sun_protection. A number right after SPF is the spf dimension, never a price.",
+      "Self-tanners and bronzers («autobronzant», «bronzer») are on the shelf protectie-solara-creme-autobronzante-si-bronzere.",
+      "Items for the body, hands or feet are on the shelf corp; creams and lotions for them on corp-ingrijirea-corpului.",
+      "Hair falling out («cădere», «îmi cade părul») is concerns hair_loss.",
+      "This store has no brand dimension: a brand the customer writes (COSRX, ANUA, SOME BY MI), also misspelled or shortened, is a name reference."
+    ]
+  }
 }

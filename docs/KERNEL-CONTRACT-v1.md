@@ -23,7 +23,21 @@ Versioning: the contract is `kernel.v1.0`. **Minor** (`v1.1`): additive schema f
 
 No invariant, ownership row or state rule changes in v1.2, so no replay gate is required. The open questions step 6 raised on I5 (the safety prune on `aside`), I20 (the cart on `cart_ref`) and I15a/I12 (`grounding_guard` does not run on the v1 composition) are decided in the PRs that need them (B and C), under the minor/major rule.
 
-**Current version: `kernel.v8.0` (MAJOR, NX-387, 2026-10-08).** The omissions of the same audit:
+**Current version: `kernel.v8.1` (minor, NX-380, 2026-10-08).** Two additive fields in the
+model-written schema. `Act.question` is the customer's question on a `detail` or `compare` act, in
+their words («does it have SPF?»): on the wide set of 2026-10-07, 72 `detail` turns were answered
+with the fixed product sheet because the question had nowhere to go. It has no consumer yet: the
+detail executor keeps serving the sheet until its own card reads the field, so this bump changes no
+behaviour downstream. `Reference.dimension` also accepts `rating` (`REFERENCE_ONLY_DIMENSIONS`): the
+resolver, the planner's sort and the answer policy already order by it as a product column, but the
+enum did not let the model write «the best rated». `StateChange.dimension` is unchanged (a rating is
+not a requirement that persists). The interpretation prompt moves to `interpret.v5` in the same PR
+(the rules come from the 398 non-ok turns of that set; the item-type menu is no longer capped at 20;
+the pack may add `interpret_notes`, shown as `STORE NOTES`). No meaning, invariant, ownership row or
+state rule changes, so no replay gate is required; the prompt itself is judged on an unseen set
+(NX-380).
+
+**`kernel.v8.0` (MAJOR, NX-387, 2026-10-08).** The omissions of the same audit:
 (1) validator: a word that resolves on ANOTHER dimension no longer contradicts a value whose HEAD
 word (first content word of its key or label, modulo the locale's inflection) the quote carries:
 «un luciu» is also a finish but is the head of „luciu de buze"; a name's tail is not enough («ten»
@@ -429,6 +443,7 @@ class Act(BaseModel):
     kind: ActKind
     targets: list[str]            # Reference ids declared in this interpretation (I22)
     query: str | None             # the user's words, for find / store_info
+    question: str | None          # (v6.3) the customer's question, for detail / compare
 
 class StateChange(BaseModel):
     op: Literal["set", "add", "remove", "replace", "clear"]
@@ -447,7 +462,7 @@ class Reference(BaseModel):       # a semantic proposal; code validates, may rec
     kind: Literal["ordinal", "deictic", "name", "attribute", "extreme", "the_other", "earlier"]
     ordinal: int | None
     name: str | None
-    dimension: str | None         # proposal; code resolves membership
+    dimension: str | None         # proposal; code resolves membership (v6.3: also "rating")
     value: str | None             # proposal; code resolves the canonical value
     direction: Literal["min", "max"] | None
 

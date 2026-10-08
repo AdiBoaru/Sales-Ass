@@ -77,6 +77,15 @@ def kernel_sentence(pack: object | None, locale: str | None, code: str) -> str |
     return phrase if isinstance(phrase, str) and phrase.strip() else None
 
 
+def interpret_notes(pack: object | None, locale: str | None) -> tuple[str, ...]:
+    """NX-380: notițele de magazin pentru interpretare, în limba turului (cu fallback pe limba de
+    bază), sau `()`. PUR."""
+    table = getattr(pack, "interpret_notes", None) or {}
+    lang = (locale or "").strip().lower()
+    notes = table.get(lang) or table.get(lang.split("-")[0]) or ()
+    return tuple(n for n in notes if isinstance(n, str) and n.strip())
+
+
 @dataclass(frozen=True)
 class FacetSpec:
     """O fațetă de DOMENIU surfacing-uită în comparație (Tier 2, IZI-parity). GENERIC: `key` =
@@ -206,6 +215,11 @@ class DomainPack:
     # frază, turul pleacă fără ea), fail-closed pe `no_results` (fără frază, kernelul nu servește
     # turul și răspunde calea v1). Kernelul nu ține nicio frază (P11).
     kernel_sentences: dict[str, dict[str, str]] = field(default_factory=dict)
+    # NX-380: notițele de MAGAZIN pentru interpretarea turului, `locale` → reguli scurte, arătate
+    # modelului sub `STORE NOTES`. Instrucțiunile adaptorului sunt generice (P11, poarta I14), deci
+    # ce ține de catalogul unui tenant (un raft omograf, o valoare de meniu pe care clienții o spun
+    # altfel) e dată, nu cod. Plafonate de loader; goale = promptul de dinainte, byte-identic.
+    interpret_notes: dict[str, tuple[str, ...]] = field(default_factory=dict)
     # NX-205: câmpurile OBLIGATORII per categorie — contractul de completitudine al catalogului.
     # Frunza BATE rădăcina (override, NU cumul — vezi `CategoryRequirements.required_for`): o
     # categorie de ochi cere `key_benefit`, dar NU moștenește `finish`-ul rădăcinii `machiaj`.

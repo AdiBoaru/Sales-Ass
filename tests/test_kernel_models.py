@@ -15,6 +15,7 @@ from pydantic import ValidationError
 from scripts import kernel_schema_snapshot as snap
 from src.conversation.interpretation import (
     KERNEL_CONTRACT_VERSION,
+    REFERENCE_ONLY_DIMENSIONS,
     UNIVERSAL_DIMENSIONS,
     AmbiguityDecision,
     AnswerPolicy,
@@ -131,7 +132,9 @@ def test_the_dimension_enum_is_the_pack_plus_universals_sorted():
     schema = build_interpretation_schema(["skin_type", "concerns"])
     enum = schema["$defs"]["StateChange"]["properties"]["dimension"]["anyOf"][0]["enum"]
     assert enum == sorted({"skin_type", "concerns", *UNIVERSAL_DIMENSIONS})
-    assert schema["$defs"]["Reference"]["properties"]["dimension"]["anyOf"][0]["enum"] == enum
+    # NX-380 (kernel.v6.3): o referință poate numi și dimensiunile-coloană (`rating`)
+    ref_enum = schema["$defs"]["Reference"]["properties"]["dimension"]["anyOf"][0]["enum"]
+    assert ref_enum == sorted({*enum, *REFERENCE_ONLY_DIMENSIONS})
 
 
 def test_the_schema_does_not_depend_on_dimension_order():

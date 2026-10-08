@@ -58,7 +58,11 @@ from src.domain.constraints import UnitRegistry
 #: `snapshot_id`: un prompt nou nu caută în cache-ul celui vechi și nu se compară cu el pe replay.
 #: NX-356: `v4.1` = instrucțiunile lui `v4`, neschimbate, cu replica botului netăiată în vedere.
 #: Crește ca turele dark (NX-353) de dinainte și de după să se poată despărți în raport.
-INTERPRET_PROMPT_VERSION = "interpret.v4.1"
+#: NX-380: `v5` = regulile scoase din cele 398 de ture ne-ok ale setului wide-2026-10-07 (granițele
+#: actelor, `question`, orice tip spus devine schimbare, umbrela de tip în loc de „never narrower”
+#: pe `product_type`, referințe doar din cuvintele turului, `name` doar pentru nume proprii,
+#: `earlier` cu poziție, `extreme` pe `rating`), meniul de tipuri întreg și `STORE NOTES`.
+INTERPRET_PROMPT_VERSION = "interpret.v5"
 
 #: `outcome`, în ordinea în care se decide (§3 din card): primul care se potrivește câștigă.
 #: `internal_error` (recenzia NX-335, P6) e în plus față de card: o intrare stricată (pachet,

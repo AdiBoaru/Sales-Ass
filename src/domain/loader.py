@@ -232,6 +232,43 @@ def _norm_kernel_sentences(raw: Any) -> dict[str, dict[str, str]]:
     return out
 
 
+#: NX-380: plafoanele notițelor de interpretare. Stau în prefixul cache-uibil al fiecărui tur, deci
+#: un pachet nu poate umfla promptul fără limită.
+MAX_INTERPRET_NOTES = 12
+MAX_INTERPRET_NOTE_CHARS = 300
+
+
+def _norm_interpret_notes(raw: Any) -> dict[str, tuple[str, ...]]:
+    """NX-380: `locale` → listă de notițe. Fail-closed PER NOTIȚĂ: una goală, cu rând nou sau
+    peste `MAX_INTERPRET_NOTE_CHARS` se aruncă și se loghează (rândul nou ar rupe forma blocului
+    din prompt); peste `MAX_INTERPRET_NOTES` restul se aruncă."""
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, tuple[str, ...]] = {}
+    for locale, notes in raw.items():
+        if not isinstance(locale, str) or not isinstance(notes, list):
+            continue
+        kept: list[str] = []
+        for i, note in enumerate(notes):
+            if not isinstance(note, str) or not note.strip():
+                continue
+            text = note.strip()
+            if "\n" in text or "\r" in text or len(text) > MAX_INTERPRET_NOTE_CHARS:
+                log.warning("interpret_notes[%s][%d] respinsă: rând nou sau prea lungă", locale, i)
+                continue
+            if len(kept) == MAX_INTERPRET_NOTES:
+                log.warning(
+                    "interpret_notes[%s]: peste %d notițe, restul aruncate",
+                    locale,
+                    MAX_INTERPRET_NOTES,
+                )
+                break
+            kept.append(text)
+        if kept:
+            out[locale.strip().lower()] = tuple(kept)
+    return out
+
+
 def _norm_detail_sections(raw: Any) -> tuple[SectionSpec, ...]:
     """Listă de `{kind, max_chars?}` → tuple[SectionSpec]. Intrare fără `kind` string, cu
     `max_chars` ne-întreg sau ≤ 0 → sărită (fail-safe per intrare, ca la fațete). Un `kind`
@@ -343,6 +380,7 @@ def load_domain_pack(business: BusinessConfig) -> DomainPack | None:
         # NX-332: forma INVERSĂ (locale → kind), cu validarea marcatorilor per șablon.
         clarify_templates=_norm_clarify_templates(merged.get("clarify_templates")),
         kernel_sentences=_norm_kernel_sentences(merged.get("kernel_sentences")),  # NX-336 C
+        interpret_notes=_norm_interpret_notes(merged.get("interpret_notes")),  # NX-380
         # NX-205: contractul de completitudine per categorie (fail-closed per intrare).
         required_attributes=build_category_requirements(merged.get("required_attributes")),
         # NX-262: semantica muchiilor din `product_relations` (fail-closed per intrare — o intrare
