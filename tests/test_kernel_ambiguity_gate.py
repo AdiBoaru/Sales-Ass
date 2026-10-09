@@ -579,7 +579,10 @@ def test_a_link_to_a_shared_name_answers_about_both(name):
 
 
 @pytest.mark.parametrize("name", PACKS)
-def test_five_ambiguous_candidates_on_a_read_ask_with_the_first_four(name):
+def test_five_ambiguous_candidates_on_a_read_ask_with_all_five(name):
+    """NX-385 (`w1_masca_noapte_utilizare#2`): pe `main` întrebarea numea primii patru din cinci,
+    deci produsul la care se gândea clientul putea lipsi din ea. Acum o numește pe fiecare. (Testul
+    vechi cerea exact tăierea: `shown[4] not in question`.)"""
     s = SPEC[name]
     step_ = step(
         name,
@@ -593,11 +596,44 @@ def test_five_ambiguous_candidates_on_a_read_ask_with_the_first_four(name):
     assert len(step_.resolved[0].product_ids) == 5
     out = step_.outcome
     assert verdict(out) == ("must_ask", "ambiguous_too_many")
-    shown = names(name, *s["five"])
-    for full in shown[:4]:
+    for full in names(name, *s["five"]):
         assert full in out.decision.question
-    assert shown[4] not in out.decision.question
     assert out.asked_key == target_question_key(s["five"])
+
+
+@pytest.mark.parametrize("name", PACKS)
+def test_four_ambiguous_candidates_on_a_read_answer_about_all_four(name):
+    """NX-385 (`w4_mixt_cushion_livrare#3`, `w5_corectie_laka#3`): patru candidați la o citire
+    («ce nuanțe are?») primeau o întrebare. Comparația îi arată pe toți patru, deci răspunsul
+    despre toți bate întrebarea."""
+    s = SPEC[name]
+    four = s["five"][:4]
+    out = step(
+        name,
+        f"Spune-mi mai multe despre {s['five_name']}.",
+        {
+            "acts": [{"kind": "detail", "targets": ["r1"]}],
+            "references": [ref("r1", "name", name=s["five_name"])],
+        },
+        on=four,
+    ).outcome
+    assert verdict(out) == ("act_both", "ambiguous_read")
+    assert out.decision.question is None
+
+
+def test_the_read_cap_is_what_the_comparison_shows():
+    """`MAX_READ_ALL` (NX-385) = câte coloane ține comparația pe care o servește executorul unei
+    citiri pe mai mulți candidați. Peste ea un „răspuns despre toți" ar tăia tăcut restul."""
+    from src.conversation.ambiguity_gate import MAX_READ_ALL
+    from src.worker.compose import build_comparison
+
+    rows = [
+        {"id": f"p{i}", "name": f"Produs {i}", "price": 10.0 * i, "attributes": {}}
+        for i in range(1, MAX_READ_ALL + 3)
+    ]
+    shown = build_comparison(rows, "ro")
+    assert shown is not None
+    assert len(shown.columns) == MAX_READ_ALL
 
 
 # --- regula 8: confirmarea unei nevoi implicite --------------------------------------------------
@@ -618,10 +654,39 @@ def _user(name: str) -> str:
     return "E pentru cineva drag." if name == "gifts" else "Vreau ceva închis."
 
 
+#: NX-385: o lectură concurentă a modelului pe aceeași dimensiune, prezentă pe ecran. Pe ecranul
+#: de confirmare (patru valori, câte una pe produs) cele două lecturi acoperă doar jumătate din
+#: ecran (câștig 0,25 < 0,30), deci întrebarea lecturilor nu se pune, iar confirmarea are motiv.
+RIVAL = {"electronics": "alb", "fashion": "bej", "furniture": "bej", "gifts": "el"}
+
+
+def _competing(name: str) -> dict:
+    _, value, _ = SPEC[name]["confirm"]
+    return {
+        **_implicit(name),
+        "ambiguities": [{"about": "value", "readings": [value, RIVAL[name]]}],
+    }
+
+
 @pytest.mark.parametrize("name", PACKS)
-def test_an_implicit_need_with_gain_is_confirmed_as_the_closing_line(name):
-    dim, value, on = SPEC[name]["confirm"]
+def test_an_implicit_need_is_applied_silently(name):
+    """NX-385 (`w3_barbati_ce_aveti#3`, `w5_un_cuvant_ser#2`): o nevoie `implicit` e moale (I7) și
+    doar ordonează (`prefer`). Pe `main` turul primea totuși «Să înțeleg că e vorba de X?» sub
+    produsele deja ordonate după X. Acum nu (testul vechi cerea confirmarea)."""
+    _, _, on = SPEC[name]["confirm"]
     step_ = step(name, _user(name), _implicit(name), on=on)
+    assert [c.provenance for c in step_.checked] == ["implicit"]
+    out = step_.outcome
+    assert verdict(out) == ("act", "clear")
+    assert (out.decision.question, out.asked_key, out.asked_kind) == (None, None, None)
+
+
+@pytest.mark.parametrize("name", PACKS)
+def test_an_implicit_need_the_readings_dispute_is_confirmed_as_the_closing_line(name):
+    """Confirmarea rămâne unde ipoteza chiar e în dispută: lecturile modelului se bat pe dimensiunea
+    nevoii (fără câștig pentru propria lor întrebare)."""
+    dim, value, on = SPEC[name]["confirm"]
+    step_ = step(name, _user(name), _competing(name), on=on)
     assert [c.provenance for c in step_.checked] == ["implicit"]
     out = step_.outcome
     assert verdict(out) == ("act", "confirm_implicit")
@@ -712,14 +777,16 @@ def test_i11_the_same_mutation_question_is_never_asked_beyond_the_cap_over_three
         resolve_between=resolve_between,
     )
     asked = [o for o in outcomes if o.decision.question is not None]
-    assert 1 <= len(asked) <= POLICY.max_attempts_per_key
+    assert 1 <= len(asked) <= POLICY.max_attempts_per_target
     assert all(o.decision.verdict == "must_ask" for o in outcomes)  # coșul nu trece niciodată
     key = target_question_key(s["pair"])
     assert all(o.asked_key == key for o in asked)
     if resolve_between:
-        assert len(asked) == POLICY.max_attempts_per_key
-        assert verdict(outcomes[-1]) == ("must_ask", "already_asked")
-        assert state.asked(key).attempts == POLICY.max_attempts_per_key
+        # NX-385: o întrebare despre o țintă se pune O dată (`max_attempts_per_target`); pe `main`
+        # aceeași întrebare ieșea de două ori (cheia generală are plafonul 2).
+        assert len(asked) == POLICY.max_attempts_per_target == 1
+        assert [verdict(o) for o in outcomes[1:]] == [("must_ask", "already_asked")] * 2
+        assert state.asked(key).attempts == POLICY.max_attempts_per_target
     else:
         assert [verdict(o)[1] for o in outcomes[1:]] == ["already_pending", "already_pending"]
 
@@ -727,10 +794,52 @@ def test_i11_the_same_mutation_question_is_never_asked_beyond_the_cap_over_three
 def test_i11_a_confirmation_is_noted_and_not_repeated_beyond_the_cap_over_three_turns():
     dim, _, on = SPEC["gifts"]["confirm"]
     outcomes, state = _three_turns(
-        "gifts", _implicit("gifts"), _user("gifts"), on=on, resolve_between=False
+        "gifts", _competing("gifts"), _user("gifts"), on=on, resolve_between=False
     )
-    assert [verdict(o)[1] for o in outcomes] == ["confirm_implicit", "confirm_implicit", "clear"]
+    # A treia oară nici lecturile (deja întrebate), nici confirmarea nu mai întreabă.
+    assert [verdict(o)[1] for o in outcomes] == [
+        "confirm_implicit",
+        "confirm_implicit",
+        "already_asked",
+    ]
+    assert outcomes[-1].decision.question is None
     assert state.asked(dim).attempts == POLICY.max_attempts_per_key
+
+
+@pytest.mark.parametrize(
+    ("name", "kind", "expected"),
+    [
+        ("furniture", "detail", ("act_both", "already_asked")),
+        ("electronics", "cart", ("must_ask", "already_asked")),
+    ],
+)
+def test_a_target_question_asked_once_is_not_asked_again(name, kind, expected):
+    """NX-385 (`w1_masca_noapte_utilizare#3`, `w4_mixt_cushion_livrare#3`): turul de după
+    întrebare n-a ales («și cât de des o pot pune?»), `question_answered` a închis întrebarea cu o
+    încercare, iar poarta a pus-o identic a doua oară (plafonul general e 2). Pe o țintă, a doua
+    oară o citire răspunde despre toți, iar o mutație rămâne oprită fără o nouă întrebare."""
+    on = SPEC[name]["five"] if kind == "detail" else SPEC[name]["pair"]
+    label = SPEC[name]["five_name"] if kind == "detail" else SPEC[name]["pair_name"]
+    base = _asked(screen(name, *on), target_question_key(on), 1)
+    out = step(
+        name,
+        f"Și {label}?",
+        {
+            "acts": [{"kind": kind, "targets": ["r1"]}],
+            "references": [ref("r1", "name", name=label)],
+        },
+        state=base,
+    ).outcome
+    assert verdict(out) == expected
+    assert out.decision.question is None and out.asked_key is None
+
+
+def test_a_non_target_key_keeps_the_general_cap():
+    """Plafonul de o întrebare e doar al țintelor: subiectul, conflictul și lecturile păstrează
+    `max_attempts_per_key` (o reformulare a clientului poate aduce altă valoare)."""
+    base = _asked(ConversationStateV2(), "subject", 1)
+    out = step("electronics", "Vreau ceva.", {"acts": [find()]}, state=base).outcome
+    assert verdict(out) == ("must_ask", "no_subject")
 
 
 # --- degradarea (P6) -----------------------------------------------------------------------------
@@ -1099,7 +1208,7 @@ def test_every_reason_emitted_by_the_suite_is_in_the_closed_vocabulary():
             },
             on=SPEC["furniture"]["five"],
         ),
-        lambda: step("gifts", _user("gifts"), _implicit("gifts"), on=SPEC["gifts"]["confirm"][2]),
+        lambda: step("gifts", _user("gifts"), _competing("gifts"), on=SPEC["gifts"]["confirm"][2]),
         lambda: step(
             "electronics",
             "Ceva sub 200 lei, dar minim 300 lei.",
@@ -1277,7 +1386,9 @@ def test_the_gate_declares_the_attributes_it_counts():
 
 def test_duplicate_names_are_not_offered_as_two_options():
     """Recenzia NX-332: pe SOLE există produse cu nume identic. „La care te referi: X și X?" nu e o
-    întrebare; sub două nume distincte, poarta nu întreabă (coșul tot nu se execută)."""
+    întrebare. NX-385: două nume identice se deosebesc prin faptul recitit care le desparte (aici
+    culoarea, o dimensiune de referință a pachetului), deci întrebarea are două opțiuni reale; coșul
+    tot nu se execută. (Testul vechi cerea un singur „Samsung Phone 1" în întrebare.)"""
     pair = SPEC["electronics"]["pair"]
     same = {pid: {"name": "Samsung Phone 1 128 GB"} for pid in pair}
     out = step(
@@ -1291,7 +1402,10 @@ def test_duplicate_names_are_not_offered_as_two_options():
         override=same,
     ).outcome
     assert out.decision.verdict == "must_ask"
-    assert out.decision.question is None or out.decision.question.count("Samsung Phone 1") == 1
+    question = out.decision.question
+    assert question is not None
+    assert "Samsung Phone 1 128 GB (negru)" in question
+    assert "Samsung Phone 1 128 GB (albastru)" in question
 
 
 def test_conflict_bounds_are_written_in_the_locale():
@@ -1410,3 +1524,211 @@ def test_a_passive_reading_verdict_does_not_hide_an_ambiguous_target(name):
         on=pair,
     ).outcome
     assert verdict(out) == ("act_both", "ambiguous_read")
+
+
+# --- NX-385: ținta la poartă, pe turele reale din `wide-2026-10-07` -------------------------------
+
+
+def test_a_read_on_an_ordinal_beyond_a_one_product_screen_is_not_an_answer_about_it():
+    """`w2_tint_rosu_ordinal_paginare#2`: «al treilea e mat sau lucios?» cu UN produs pe ecran.
+    Resolverul: `ambiguous` (`ordinal_out_of_range`, ca în contract) cu produsul de pe ecran drept
+    candidat; poarta: `act_both`, deci fișa produsului de pe ecran. Acum actul iese din plan ca o
+    țintă invalidă (dezvăluirea `invalid_target`), nu ca un răspuns despre alt produs."""
+    step_ = step(
+        "electronics",
+        "Al treilea e mai bun?",
+        {
+            "acts": [{"kind": "detail", "targets": ["r1"]}],
+            "references": [ref("r1", "ordinal", ordinal=3)],
+        },
+        on=("el-01",),
+    )
+    assert step_.resolved[0].reason == "ordinal_out_of_range"
+    out = step_.outcome
+    assert out.skipped_acts == (0,)
+    assert verdict(out) == ("act", "invalid_target")
+    plans = step_.planned.plans
+    assert all("el-01" not in p.product_ids for p in plans), plans
+
+
+def test_a_cart_on_an_ordinal_beyond_the_screen_never_executes():
+    """Pe o mutație regula rămâne I10: ținta nu e `exact`, deci coșul întreabă sau se oprește."""
+    step_ = step(
+        "electronics",
+        "Adaugă-l pe al treilea în coș.",
+        {
+            "acts": [{"kind": "cart", "targets": ["r1"]}],
+            "references": [ref("r1", "ordinal", ordinal=3)],
+        },
+        on=("el-01", "el-02"),
+    )
+    assert step_.outcome.decision.verdict == "must_ask"
+    assert all(p.executor != "cart" for p in step_.planned.plans)
+
+
+def test_a_cart_over_six_cards_offers_all_six():
+    """`w1_anua_scris_gresit_cos_cantitate#3`: «adaugă 2 bucăți în coș» fără țintă pe șase carduri;
+    întrebarea numea primele patru, deci produsul cerut putea lipsi. Acum le numește pe toate."""
+    six = ("el-01", "el-02", "el-03", "el-04", "el-05", "el-06")
+    out = step("electronics", "adauga 2 in cos", {"acts": [{"kind": "cart"}]}, on=six).outcome
+    assert verdict(out) == ("must_ask", "mutation_not_exact")
+    for full in names("electronics", *six):
+        assert full in out.decision.question
+    assert out.asked_key == target_question_key(six)
+
+
+def _many_facts(n: int, brands: tuple[str, ...]) -> ReferenceFacts:
+    return ReferenceFacts(
+        products={
+            f"p{i}": ProductFacts(
+                product_id=f"p{i}",
+                name=f"Produs {i}",
+                price=10.0 * i,
+                available=True,
+                brand=brands[i % len(brands)],
+            )
+            for i in range(1, n + 1)
+        }
+    )
+
+
+def _ambiguous_cart(ids: list[str], facts: ReferenceFacts, state: ConversationStateV2):
+    return decide_ambiguity(
+        TurnInterpretation(
+            thread="continue",
+            acts=[Act(kind="cart", targets=["r1"], query=None)],
+            changes=[],
+            references=[],
+            ambiguities=[],
+            corrects_previous_turn=False,
+        ),
+        [],
+        [
+            ResolvedRef(
+                ref_id="r1",
+                kind="name",
+                outcome="ambiguous",
+                product_ids=ids,
+                source="catalog",
+                reason="catalog_tie",
+            )
+        ],
+        state,
+        facts,
+        vocab=None,
+        pack=fc.pack("electronics"),
+        locale="ro",
+        policy=POLICY,
+    )
+
+
+def test_more_candidates_than_a_question_can_name_ask_on_a_dimension_that_covers_all():
+    """Peste `MAX_REFERENCE_OPTIONS` candidați întrebarea nu-i mai poate numi pe toți: se pune pe o
+    dimensiune de referință cunoscută pe TOȚI (aici marca), nu pe primii patru."""
+    from src.conversation.ambiguity_gate import MAX_REFERENCE_OPTIONS
+
+    n = MAX_REFERENCE_OPTIONS + 2
+    facts = _many_facts(n, ("Alfa", "Beta", "Gama"))
+    ids = list(facts.products)
+    out = _ambiguous_cart(ids, facts, ConversationStateV2(revision=1))
+    assert verdict(out) == ("must_ask", "mutation_not_exact")
+    for brand in ("Alfa", "Beta", "Gama"):
+        assert brand in out.decision.question
+    assert "Produs" not in out.decision.question
+    assert out.asked_key == target_question_key(ids)
+
+
+def test_without_a_covering_dimension_a_long_list_is_not_cut_to_a_few():
+    from src.conversation.ambiguity_gate import MAX_REFERENCE_OPTIONS
+
+    n = MAX_REFERENCE_OPTIONS + 2
+    facts = _many_facts(n, tuple(f"Marca{i}" for i in range(n)))  # fiecare altă marcă
+    out = _ambiguous_cart(list(facts.products), facts, ConversationStateV2(revision=1))
+    assert verdict(out) == ("must_ask", "no_options")
+    assert out.decision.question is None
+
+
+def test_same_names_are_told_apart_by_the_price_read_again():
+    """`w4_mixt_pasta_original#3`: carduri cu același nume de afișare ⇒ întrebarea „X și X?" (sau
+    `no_options`). Prețul recitit le deosebește."""
+    pair = SPEC["electronics"]["pair"]
+    same = {
+        "el-01": {"name": "Samsung Phone 1 128 GB", "attributes": {"brand": "Samsung"}},
+        "el-07": {"name": "Samsung Phone 1 128 GB", "attributes": {"brand": "Samsung"}},
+    }
+    out = step(
+        "electronics",
+        "adauga Samsung-ul in cos",
+        {
+            "acts": [{"kind": "cart", "targets": ["r1"]}],
+            "references": [ref("r1", "name", name="Samsung")],
+        },
+        on=pair,
+        override=same,
+    ).outcome
+    assert verdict(out) == ("must_ask", "mutation_not_exact")
+    assert "Samsung Phone 1 128 GB (1.500 lei)" in out.decision.question
+    assert "Samsung Phone 1 128 GB (3.000 lei)" in out.decision.question
+
+
+def test_a_cart_on_cards_nothing_read_tells_apart_never_executes():
+    """`w5_english_sunscreen#4`: două carduri identice pe tot ce citește turul (nume, preț, stoc,
+    atributele citite). Recenzia NX-385: faptele turului nu sunt toate faptele produsului (un
+    atribut necitit, memoria sau nuanța, le poate deosebi), deci coșul nu alege unul: o singură
+    etichetă ⇒ `no_options`, iar coșul rămâne oprit (fraza `mutation_not_exact`). Declarat."""
+    twin = {
+        "name": "Samsung Phone 1 128 GB",
+        "price": 1500,
+        "availability": "in_stock",
+        "attributes": {"brand": "Samsung"},
+    }
+    step_ = step(
+        "electronics",
+        "add the cheaper one to cart",
+        {
+            "acts": [{"kind": "cart", "targets": ["r1"]}],
+            "references": [ref("r1", "extreme", direction="min", dimension="price")],
+        },
+        on=SPEC["electronics"]["pair"],
+        override={"el-01": twin, "el-07": twin},
+    )
+    assert step_.resolved[0].outcome == "ambiguous"
+    assert verdict(step_.outcome) == ("must_ask", "no_options")
+    assert all(p.executor != "cart" for p in step_.planned.plans)
+
+
+def test_a_read_over_more_candidates_than_the_comparison_shows_asks_even_split_across_refs():
+    """Recenzia NX-385: plannerul unește candidații tuturor țintelor actului, deci două referințe
+    ambigue de câte trei (șase produse) nu sunt o citire „despre toți": se întreabă pe una."""
+    facts = _many_facts(6, ("Alfa",))
+    resolved = [
+        ResolvedRef(
+            ref_id=rid,
+            kind="name",
+            outcome="ambiguous",
+            product_ids=ids,
+            source="shown_now",
+            reason="name_shared",
+        )
+        for rid, ids in (("r1", ["p1", "p2", "p3"]), ("r2", ["p4", "p5", "p6"]))
+    ]
+    out = decide_ambiguity(
+        TurnInterpretation(
+            thread="continue",
+            acts=[Act(kind="compare", targets=["r1", "r2"], query=None)],
+            changes=[],
+            references=[],
+            ambiguities=[],
+            corrects_previous_turn=False,
+        ),
+        [],
+        resolved,
+        ConversationStateV2(revision=1),
+        facts,
+        vocab=None,
+        pack=fc.pack("electronics"),
+        locale="ro",
+        policy=POLICY,
+    )
+    assert verdict(out) == ("must_ask", "ambiguous_too_many")
+    assert out.asked_key == target_question_key(["p1", "p2", "p3"])

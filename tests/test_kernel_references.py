@@ -8,6 +8,7 @@ model, zero DB: faptele se construiesc offline (`tests/kernel/fixture_catalog.py
 from __future__ import annotations
 
 import random
+from dataclasses import replace
 
 import pytest
 
@@ -914,3 +915,138 @@ def test_the_loader_refuses_an_additive_facet_as_a_reference_dimension():
 def test_the_loader_default_and_the_declared_fixture_dimensions():
     assert fc.pack("gifts").reference_dimensions == DEFAULT_REFERENCE_DIMENSIONS
     assert fc.pack("electronics").reference_dimensions == ("brand", "color")
+
+
+# --- NX-385: regulile reparate pe setul `wide-2026-10-07` (doar pe sursele kernelului) ----------
+
+
+def kernel(*ids: str, pack_name: str = "electronics", **kw) -> ReferenceSources:
+    """Sursele căii kernelului (`sources_from_state` pune `kernel_rules`)."""
+    return ReferenceSources(shown_now=fc.shown(pack_name, *ids), kernel_rules=True, **kw)
+
+
+def test_an_old_focus_off_screen_does_not_beat_the_screen():
+    """`w2_autobronzant_incepator_manusa#4`: focusul era produsul de la turul 2, ecranul două alte
+    carduri, iar «cât costă una» s-a rezolvat pe focus. Acum decide ecranul: două carduri ⇒ ambiguu
+    pe ele; un card ⇒ el."""
+    r = one("electronics", ref("r1", "deictic"), kernel("el-01", "el-02", focus="el-05"))
+    assert (r.outcome, r.reason, r.product_ids, r.source) == (
+        "ambiguous",
+        "no_anchor",
+        ["el-01", "el-02"],
+        "shown_now",
+    )
+    single = one("electronics", ref("r1", "deictic"), kernel("el-03", focus="el-05"))
+    assert (single.outcome, single.reason, single.product_ids) == (
+        "exact",
+        "single_in_set",
+        ["el-03"],
+    )
+
+
+def test_the_v1_shortcut_sources_keep_the_old_focus_rule():
+    """I16: scurtăturile v1 își construiesc sursele fără `kernel_rules`, deci rămân ca pe `main`."""
+    r = one("electronics", ref("r1", "deictic"), screen("electronics", "el-01", focus="el-05"))
+    assert (r.outcome, r.product_ids, r.reason) == ("exact", ["el-05"], "focus")
+
+
+def test_a_focus_that_is_one_of_several_cards_is_one_of_them():
+    """`w5_schimba_subiect_revine#4`: comparația cu un produs similar a pus pe ecran ținta
+    (focusul) și partenerul, iar «pe aia o vreau în coș» s-a rezolvat pe țintă. Cu mai multe
+    carduri pe ecran focusul nu e o ancoră: starea nu spune dacă a fost ales după ecran sau e doar
+    unul dintre carduri (recenzia: un tur fără carduri la mijloc făcea dintr-o căutare nouă un ecran
+    „mai vechi")."""
+    r = one("electronics", ref("r1", "deictic"), kernel("el-01", "el-02", focus="el-01"))
+    assert (r.outcome, r.reason, r.product_ids) == ("ambiguous", "no_anchor", ["el-01", "el-02"])
+
+
+def test_a_focus_is_the_anchor_when_nothing_is_on_screen_or_it_is_the_screen():
+    empty = ReferenceSources(focus="el-05", kernel_rules=True)
+    r = one("electronics", ref("r1", "deictic"), empty)
+    assert (r.outcome, r.product_ids, r.source) == ("exact", ["el-05"], "shown_earlier")
+    alone = one("electronics", ref("r1", "deictic"), kernel("el-05", focus="el-05"))
+    assert (alone.product_ids, alone.reason, alone.source) == (["el-05"], "focus", "shown_now")
+    resumed = ReferenceSources(
+        shown_now=fc.shown("electronics", "el-01", "el-02"),
+        parked=fc.shown("electronics", "el-05"),
+        focus="el-05",
+        thread="resume",
+        kernel_rules=True,
+    )
+    r = one("electronics", ref("r1", "deictic"), resumed)
+    assert (r.product_ids, r.source) == (["el-05"], "parked")
+
+
+def test_earlier_without_a_position_over_several_lists_is_ambiguous_on_all_of_them():
+    """`w3_exfoliant_inainte_autobronzant#4`: «exfoliantul din prima listă» fără nimic structurat
+    ieșea ambiguu pe lista cea MAI RECENTĂ, deci produsul cerut nici nu era candidat."""
+    sources = ReferenceSources(
+        shown_now=fc.shown("gifts", "gi-01"),
+        shown_earlier=(
+            fc.shown("gifts", "gi-02", "gi-03", "gi-04"),
+            fc.shown("gifts", "gi-05", "gi-06"),
+        ),
+        parked=fc.shown("gifts", "gi-05", "gi-06"),  # setul parcat, același ca o listă veche
+        kernel_rules=True,
+    )
+    r = one("gifts", ref("r1", "earlier"), sources)
+    assert (r.outcome, r.reason) == ("ambiguous", "earlier_unspecified")
+    assert r.product_ids == ["gi-02", "gi-03", "gi-04", "gi-05", "gi-06"]
+    on_v1 = one("gifts", ref("r1", "earlier"), replace(sources, kernel_rules=False))
+    assert on_v1.product_ids == ["gi-02", "gi-03", "gi-04"]
+
+
+def test_earlier_with_a_position_counts_every_earlier_list():
+    lists = (
+        fc.shown("gifts", "gi-02", "gi-03", "gi-04"),
+        fc.shown("gifts", "gi-05"),  # un detaliu, nu o listă
+        fc.shown("gifts", "gi-06", "gi-07"),
+    )
+    sources = ReferenceSources(shown_earlier=lists, kernel_rules=True)
+    second = one("gifts", ref("r1", "earlier", ordinal=2), sources)
+    assert (second.outcome, second.reason) == ("ambiguous", "earlier_unspecified")
+    assert second.product_ids == ["gi-03", "gi-07"]
+    third = one("gifts", ref("r1", "earlier", ordinal=3), sources)
+    assert (third.outcome, third.reason, third.product_ids) == (
+        "exact",
+        "ordinal_in_set",
+        ["gi-04"],
+    )
+    beyond = one("gifts", ref("r1", "earlier", ordinal=5), sources)
+    assert (beyond.outcome, beyond.reason) == ("ambiguous", "ordinal_out_of_range")
+    only_one = ReferenceSources(shown_earlier=lists[:1], kernel_rules=True)
+    r = one("gifts", ref("r1", "earlier", ordinal=2), only_one)
+    assert (r.outcome, r.product_ids) == ("exact", ["gi-03"])
+
+
+_TWIN = {
+    "name": "Samsung Phone 1 128 GB",
+    "price": 1500,
+    "availability": "in_stock",
+    "attributes": {"brand": "Samsung"},
+}
+
+
+def test_a_tie_between_identical_cards_is_never_exact():
+    """Recenzia NX-385: o primă variantă strângea doi candidați identici pe faptele CITITE într-o
+    țintă `exact` (`same_product`), iar un atribut necitit (memoria, nuanța) putea pune în coș alt
+    produs. Faptele turului nu sunt toate faptele produsului: o egalitate rămâne ambiguă."""
+    twins = {"el-01": _TWIN, "el-07": _TWIN}
+    r = one(
+        "electronics",
+        ref("r1", "extreme", direction="min"),
+        kernel("el-01", "el-07"),
+        override=twins,
+    )
+    assert (r.outcome, r.reason, r.product_ids) == ("ambiguous", "extreme_tie", ["el-01", "el-07"])
+
+
+def test_sources_from_state_are_kernel_sources():
+    from src.conversation.references import sources_from_state
+    from src.conversation.state_v2 import ConversationStateV2, DisplayedRef, References
+
+    state = ConversationStateV2(
+        references=References(displayed_products=(DisplayedRef("el-01"),), selected_product="x"),
+    )
+    s = sources_from_state(state, "continue")
+    assert (s.kernel_rules, s.zoom_ordinals, s.focus) == (True, True, "x")

@@ -242,6 +242,7 @@ def sources_of(name: str, raw: dict[str, Any]) -> ReferenceSources:
         thread=raw.get("thread", "continue"),
         # Journey-urile sunt calea KERNELULUI (sursele ei vin din `sources_from_state`).
         zoom_ordinals=True,
+        kernel_rules=True,
     )
 
 

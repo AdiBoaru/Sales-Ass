@@ -31,8 +31,10 @@ from __future__ import annotations
 
 import hashlib
 import string
+from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from dataclasses import replace as _replace
 from typing import Literal, NamedTuple
 
 from src.catalog.render_text import display_name
@@ -61,6 +63,7 @@ from src.conversation.interpretation import (
 )
 from src.conversation.needs import NeedVocabulary
 from src.conversation.references import (
+    BRAND_DIMENSION,
     MUTATING_ACTS,
     ProductFacts,
     ReferenceFacts,
@@ -68,7 +71,8 @@ from src.conversation.references import (
     gate_act_targets,
 )
 from src.conversation.state_reducer import StateUpdateProposal
-from src.conversation.state_v2 import ConversationStateV2
+from src.conversation.state_v2 import MAX_DISPLAYED, ConversationStateV2
+from src.domain.pack import DEFAULT_REFERENCE_DIMENSIONS
 from src.web.localization import currency_word, format_amount
 
 Verdict = Literal["act", "resolve_from_context", "act_both", "must_ask"]
@@ -126,12 +130,28 @@ VALUE_MARKER = "value"
 
 #: Actele de CITIRE pe care poarta le lasă să răspundă despre mai mulți candidați.
 READ_ACTS: frozenset[str] = frozenset({"detail", "link", "compare"})
-#: Peste atâția candidați o citire „despre toate" nu mai e un răspuns, e un catalog.
+#: Peste atâția candidați o citire „despre toate" nu mai e un răspuns, e un catalog. Pragul
+#: plannerului pentru un `find` care numește un produs (NX-375); poarta folosește `MAX_READ_ALL`.
 MAX_ACT_BOTH = 3
 #: Câte opțiuni încap într-o întrebare: aceeași limită ca întrebarea de îngustare (NX-315).
 MAX_OPTIONS = NARROWING_MAX_VALUES
+#: NX-385: pe câți candidați răspunde o citire „despre toți" (`act_both`). Cât arată executorul:
+#: comparația ține patru coloane (`compose.build_comparison`), iar peste ele un răspuns „despre
+#: toți" ar tăia tăcut restul. Un test leagă cele două cifre.
+MAX_READ_ALL = 4
+#: NX-385: câte produse oferă o întrebare „la care te referi". Tot ce poate fi pe ecran
+#: (`MAX_DISPLAYED`): o listă tăiată la primele patru lăsa pe dinafară exact produsul la care se
+#: gândea clientul (`w1_masca_noapte_utilizare#2`, cinci produse, întrebarea numea patru). Peste
+#: plafon întrebarea se pune pe o dimensiune care îi desparte pe toți, nu pe o parte din nume.
+MAX_REFERENCE_OPTIONS = MAX_DISPLAYED
+#: Prefixul cheii unei întrebări despre o ȚINTĂ (`target_question_key`).
+REFERENCE_KEY_PREFIX = "ref:"
 
 PRICE = "price"
+BRAND = BRAND_DIMENSION
+#: NX-385: câte cuvinte din coada numelui întreg intră în eticheta care deosebește doi candidați cu
+#: același nume de afișare (nuanța, gramajul: „17N Vanilla", „150 ml").
+_TAIL_WORDS = 3
 #: Sursele unei nevoi care NU sunt cunoaștere: o ipoteză (`implicit`) sau o inferență a modelului.
 #: Pentru poarta `already_known` a lui `decide_clarification` nu contează ca „știm deja răspunsul":
 #: tocmai pe ele le confirmăm.
@@ -169,7 +189,7 @@ def target_question_key(product_ids: Sequence[str]) -> str:
     candidaților, SORTATE. Nu `ref:<ref_id>`: `r1` e local turului, deci aceeași întrebare ar primi
     altă cheie la turul următor, iar anti-bucla n-ar vedea-o."""
     digest = hashlib.sha1(",".join(sorted(set(product_ids))).encode("utf-8")).hexdigest()
-    return f"ref:{digest[:8]}"
+    return f"{REFERENCE_KEY_PREFIX}{digest[:8]}"
 
 
 # --- șabloanele ----------------------------------------------------------------------------------
@@ -269,6 +289,7 @@ class _Ask:
     total: int | None
     klass: _Class
     min_options: int = 2
+    max_options: int = MAX_OPTIONS
 
     @property
     def asks_verdict(self) -> Verdict:
@@ -325,17 +346,121 @@ class _Gate:
         )
 
     def _names(self, product_ids: Sequence[str]) -> tuple[str, ...]:
-        """Numele de afișare, fără repetiții: pe SOLE există produse cu nume identic (familii de
-        nuanțe), iar „La care te referi: GESKE SonicLift și GESKE SonicLift?" nu e o întrebare. Sub
-        două nume distincte, `_ask` coboară pe `no_options`."""
-        names: list[str] = []
-        for pid in product_ids:
-            if pid not in self.facts.products:
+        """Eticheta fiecărui candidat, fără repetiții. Numele de afișare întâi; pe SOLE există
+        produse cu același nume de afișare (familii de nuanțe și gramaje: „TIRTIR Mask Fit Red
+        Cushion" de două ori), iar „La care te referi: X și X?" nu e o întrebare. NX-385
+        (`w4_mixt_pasta_original#3`, `w5_english_sunscreen#4`): candidații cu același nume de
+        afișare primesc în paranteză faptul RECITIT care îi deosebește (`_distinguishers`, în
+        ordine, până devin distincte). Doi candidați pe care nimic citit nu-i deosebește au o
+        singură etichetă; sub două etichete, `_ask` coboară pe `no_options` (o mutație rămâne
+        oprită: faptele citite în tur nu sunt toate faptele produsului, deci nu se alege unul)."""
+        return tuple(dict.fromkeys(self._label_map(product_ids).values()))
+
+    def _label_map(self, product_ids: Sequence[str]) -> dict[str, str]:
+        """Eticheta fiecărui candidat RECITIT (`_names`), pe id, în ordinea candidaților."""
+        known = [
+            self.facts.products[pid]
+            for pid in dict.fromkeys(product_ids)
+            if pid in self.facts.products
+        ]
+        head = {f.product_id: display_name(f.name) or f.product_id for f in known}
+        labels = dict(head)
+        groups: dict[str, list[ProductFacts]] = {}
+        for f in known:
+            groups.setdefault(head[f.product_id], []).append(f)
+        for name, group in groups.items():
+            if len(group) < 2:
                 continue
-            name = display_name(self.facts.products[pid].name) or pid
-            if name not in names:
-                names.append(name)
-        return tuple(names)
+            parts: dict[str, list[str]] = {f.product_id: [] for f in group}
+            for describe in self._distinguishers(group):
+                values = {f.product_id: describe(f) for f in group}
+                if len(set(values.values())) < 2:
+                    continue  # la fel pe toți: nu deosebește nimic
+                for pid, value in values.items():
+                    if value:
+                        parts[pid].append(value)
+                if len({tuple(p) for p in parts.values()}) == len(group):
+                    break
+            for f in group:
+                if parts[f.product_id]:
+                    labels[f.product_id] = f"{name} ({', '.join(parts[f.product_id])})"
+        return labels
+
+    def _distinguishers(
+        self, group: Sequence[ProductFacts]
+    ) -> list[Callable[[ProductFacts], str | None]]:
+        """Faptele care pot deosebi produse cu același nume de afișare, în ordinea în care le-ar
+        citi clientul pe card: varianta, valorile dimensiunilor de referință ale pachetului
+        (tipul), prețul, apoi cuvintele din numele ÎNTREG pe care nu le au ceilalți (nuanța,
+        gramajul, pe care numele de afișare le taie). Toate vin din catalogul recitit în tur."""
+
+        def variant(f: ProductFacts) -> str | None:
+            return " / ".join(v for v in f.variant_labels if v) or None
+
+        def dimension(dim: str) -> Callable[[ProductFacts], str | None]:
+            source = self._source_key(dim)
+
+            def read(f: ProductFacts) -> str | None:
+                raw = f.brand if dim == BRAND else f.attributes.get(source)
+                items = raw if isinstance(raw, (list, tuple)) else [raw]
+                values = [self._value_label(dim, v) for v in items if isinstance(v, str) and v]
+                return " / ".join(values) or None
+
+            return read
+
+        def price(f: ProductFacts) -> str | None:
+            return self._quantity(PRICE, float(f.price)) if f.price is not None else None
+
+        def rating(f: ProductFacts) -> str | None:
+            # Ca pe card: steaua și nota cu o zecimală, în scrierea locale-i.
+            # Rotunjit întâi la o zecimală, ca pe card (4,96 ⇒ 5,0, nu 4,9).
+            value = round(float(f.rating), 1) if f.rating is not None else None
+            amount = format_amount(value, self.locale) if value is not None else None
+            return f"⭐{amount[:-1]}" if amount else None
+
+        words = {
+            f.product_id: [w for w in f.name.split() if any(c.isalnum() for c in w)] for f in group
+        }
+        common = set.intersection(*({w.casefold() for w in ws} for ws in words.values()))
+
+        def tail(f: ProductFacts) -> str | None:
+            own = [w for w in words[f.product_id] if w.casefold() not in common]
+            return " ".join(own[:_TAIL_WORDS]) or None
+
+        return [variant, *(dimension(d) for d in self._reference_dims()), price, rating, tail]
+
+    def _reference_dims(self) -> tuple[str, ...]:
+        dims = getattr(self.pack, "reference_dimensions", None)
+        return tuple(dims if dims is not None else DEFAULT_REFERENCE_DIMENSIONS)
+
+    def _dimension_options(
+        self, product_ids: Sequence[str]
+    ) -> tuple[tuple[str, ...], tuple[int, ...]]:
+        """NX-385: peste `MAX_REFERENCE_OPTIONS` candidați întrebarea nu-i mai poate numi pe toți,
+        iar o listă tăiată poate lăsa pe dinafară produsul la care se gândea clientul. Întrebarea se
+        pune atunci pe o dimensiune de referință a pachetului (marca, tipul) cunoscută pe TOȚI
+        candidații, cu 2..`MAX_OPTIONS` valori, cea cu câștigul cel mai mare: fiecare candidat e
+        acoperit de o opțiune. Fără una ⇒ `((), ())`, iar `_ask` coboară pe `no_options`."""
+        known = [self.facts.products[p] for p in product_ids if p in self.facts.products]
+        best: tuple[float, str, list[str], tuple[int, ...]] | None = None
+        for dim in self._reference_dims():
+            source = self._source_key(dim)
+            values = [f.brand if dim == BRAND else f.attributes.get(source) for f in known]
+            if not known or not all(isinstance(v, str) and v for v in values):
+                continue
+            counts = Counter(str(v) for v in values)
+            if not 2 <= len(counts) <= MAX_OPTIONS:
+                continue
+            ordered = sorted(counts, key=lambda v: (-counts[v], v))
+            partition = tuple(counts[v] for v in ordered)
+            gain = estimate_information_gain(len(known), partition)
+            if best is None or gain > best[0]:
+                best = (gain, dim, ordered, partition)
+        if best is None:
+            return (), ()
+        _, dim, ordered, partition = best
+        labels = tuple(v if dim == BRAND else self._value_label(dim, v) for v in ordered)
+        return labels, partition
 
     def _value_label(self, dimension: str, key: str) -> str:
         """Eticheta canonică a unei valori: a pachetului (localizată), apoi a vocabularului, apoi
@@ -394,7 +519,7 @@ class _Gate:
         """Opțiunile, anti-bucla, apoi șablonul. `on_decline(motiv)` decide verdictul când
         `decide_clarification` nu lasă întrebarea (câștig mic, cheie deja întrebată, întrebare în
         așteptare, răspuns deja știut); None = regula nu se aplică, poarta trece mai departe."""
-        labels = ask.labels[:MAX_OPTIONS]
+        labels = ask.labels[: ask.max_options]
         if len(labels) < ask.min_options:
             # Fără opțiuni nu există întrebare cu opțiuni: niciun `{options}` gol în text.
             return self._fallback(ask, "no_options")
@@ -405,7 +530,7 @@ class _Gate:
             partition=ask.partition,
         )
         decision = decide_clarification(
-            self.state, [candidate], total_candidates=ask.total, policy=self.policy
+            self.state, [candidate], total_candidates=ask.total, policy=self._policy_for(ask.key)
         )
         if not decision.ask and not self._hypothesis_only(ask, decision.reason):
             return on_decline(decision.reason)
@@ -417,6 +542,52 @@ class _Gate:
             AmbiguityDecision(verdict=ask.asks_verdict, reason=ask.reason, question=question),
             asked_key=ask.key,
             asked_kind=ask.asked_kind,
+        )
+
+    def _policy_for(self, key: str) -> ClarificationPolicy:
+        """NX-385 (I11, `w1_masca_noapte_utilizare#3`, `w4_mixt_cushion_livrare#3`): o întrebare
+        despre o ȚINTĂ („la care te referi") se pune o singură dată pe aceeași mulțime de candidați
+        (`ClarificationPolicy.max_attempts_per_target`). Un tur care nu răspunde la ea închide
+        întrebarea (`question_answered`), iar a doua întrebare identică e exact bucla pe care
+        clientul o resimte ca „nu ascultă". A doua oară o citire răspunde despre toți candidații,
+        iar o mutație rămâne oprită fără o nouă întrebare (`already_asked`)."""
+        if not key.startswith(REFERENCE_KEY_PREFIX):
+            return self.policy
+        cap = min(self.policy.max_attempts_per_key, self.policy.max_attempts_per_target)
+        return _replace(self.policy, max_attempts_per_key=cap)
+
+    def _target_ask(
+        self,
+        product_ids: Sequence[str],
+        *,
+        reason: str,
+        klass: _Class,
+        on_decline: Callable[[str], GateOutcome | None],
+    ) -> GateOutcome | None:
+        """Întrebarea „la care te referi" pe TOȚI candidații (NX-385), cu etichete care îi deosebesc
+        (`_names`). Peste `MAX_REFERENCE_OPTIONS` etichete, întrebarea se pune pe o dimensiune care
+        îi acoperă pe toți (`_dimension_options`), niciodată pe primii N. Cheia rămâne a mulțimii de
+        candidați, ca plannerul să pună exact candidații întrebării pe carduri."""
+        ids = list(dict.fromkeys(product_ids))
+        per_id = self._label_map(ids)
+        counts = Counter(per_id.values())
+        labels = tuple(dict.fromkeys(per_id.values()))
+        partition = tuple(counts[label] for label in labels)
+        if len(labels) > MAX_REFERENCE_OPTIONS:
+            labels, partition = self._dimension_options(ids)
+        return self._ask(
+            _Ask(
+                kind="reference",
+                key=target_question_key(ids),
+                labels=labels,
+                reason=reason,
+                candidate_reason="disambiguation",
+                partition=partition,
+                total=len(ids),
+                klass=klass,
+                max_options=MAX_REFERENCE_OPTIONS,
+            ),
+            on_decline=on_decline,
         )
 
     def _hypothesis_only(self, ask: _Ask, refused: str) -> bool:
@@ -466,20 +637,35 @@ class _Gate:
         checks = gate_act_targets(self.interp.acts, list(self.resolved.values()))
         # Regula 0: o țintă nedeclarată sau care numește o proprietate (I24) scoate ACTUL din plan,
         # nu turul. Restul actelor merg mai departe.
-        skipped = tuple(
-            sorted(
-                {
-                    c.act_index
-                    for c in checks
-                    if c.verdict in ("unknown_reference", "invalid_reference_target")
-                }
-            )
-        )
+        invalid = {
+            c.act_index
+            for c in checks
+            if c.verdict in ("unknown_reference", "invalid_reference_target")
+        }
+        skipped = tuple(sorted(invalid | self._out_of_range_reads()))
         acts = [(i, a) for i, a in enumerate(self.interp.acts) if i not in skipped]
         if skipped:
             self._note("invalid_target")
         outcome = self._rules(acts, [c for c in checks if c.act_index not in skipped])
         return outcome._replace(skipped_acts=skipped)
+
+    def _out_of_range_reads(self) -> set[int]:
+        """NX-385 (`w2_tint_rosu_ordinal_paginare#2`): «al treilea» pe un ecran cu UN produs.
+        Resolverul spune `ambiguous` cu motivul `ordinal_out_of_range` (contractul: un ordinal
+        dincolo de set e ambiguu), cu tot setul drept candidați. Dar clientul n-a numit niciunul
+        dintre ei: a numit o poziție care nu există. O citire „despre toți" ar fi răspunsul despre
+        ALT produs (pe turul real, singurul de pe ecran). Actul de citire iese din plan ca o țintă
+        invalidă (regula 0, dezvăluirea `invalid_target`); o mutație pe aceeași țintă rămâne a
+        regulii 1 (nu e `exact`, deci întreabă sau se oprește, I10)."""
+        out: set[int] = set()
+        for index, act in enumerate(self.interp.acts):
+            if act.kind not in READ_ACTS:
+                continue
+            for target in act.targets:
+                ref = self.resolved.get(target)
+                if ref is not None and ref.reason == "ordinal_out_of_range":
+                    out.add(index)
+        return out
 
     def _rules(self, acts: list[tuple[int, Act]], checks) -> GateOutcome:
         # Regula 2 nu depinde de acte: limitele care se contrazic sunt ale stării, deci se întreabă
@@ -524,17 +710,10 @@ class _Gate:
             # `gate_act_targets`, deci ar fi trecut drept `clear` (I10 încălcat). Nu există o țintă
             # `exact`: întrebarea se pune pe ecran, sau coșul se oprește fără ea.
             ids = [f.product_id for f in self._screen()]
-            return self._ask(
-                _Ask(
-                    kind="reference",
-                    key=target_question_key(ids),
-                    labels=self._names(ids[:MAX_OPTIONS]),
-                    reason="mutation_not_exact",
-                    candidate_reason="disambiguation",
-                    partition=(1,) * min(len(ids), MAX_OPTIONS),
-                    total=len(ids),
-                    klass="blocking",
-                ),
+            return self._target_ask(
+                ids,
+                reason="mutation_not_exact",
+                klass="blocking",
                 on_decline=self._declined("blocking", "mutation_not_exact"),
             )
         for check in checks:
@@ -546,17 +725,10 @@ class _Gate:
                 # kernel.v6.0 (recenzia): un ordinal numărat pe lista „în care s-a intrat” e `exact`
                 # pentru o citire, dar ecranul arată ALT produs. «Adaugă-l pe primul» pe un ecran de
                 # detaliu poate numi cardul de pe ecran sau primul din listă: pe coș nu ghicim.
-                return self._ask(
-                    _Ask(
-                        kind="reference",
-                        key=target_question_key(zoomed),
-                        labels=self._names(zoomed),
-                        reason="mutation_not_exact",
-                        candidate_reason="disambiguation",
-                        partition=(1,) * len(zoomed),
-                        total=len(zoomed),
-                        klass="blocking",
-                    ),
+                return self._target_ask(
+                    zoomed,
+                    reason="mutation_not_exact",
+                    klass="blocking",
                     on_decline=self._declined("blocking", "mutation_not_exact"),
                 )
             if check.verdict == "not_exact":
@@ -567,18 +739,10 @@ class _Gate:
                     # Nicio pereche de candidați pe țintă (un nume negăsit, un produs dispărut din
                     # catalog): întrebarea „la care te referi" se pune pe ecran, dacă are ce oferi.
                     ids = [f.product_id for f in self._screen()]
-                shown = ids[:MAX_OPTIONS]
-                return self._ask(
-                    _Ask(
-                        kind="reference",
-                        key=target_question_key(ids),
-                        labels=self._names(shown),
-                        reason="mutation_not_exact",
-                        candidate_reason="disambiguation",
-                        partition=(1,) * len(shown),
-                        total=len(ids),
-                        klass="blocking",
-                    ),
+                return self._target_ask(
+                    ids,
+                    reason="mutation_not_exact",
+                    klass="blocking",
                     on_decline=self._declined("blocking", "mutation_not_exact"),
                 )
             if ref is not None and ref.outcome == "exact" and ref.reason == "unavailable":
@@ -767,9 +931,10 @@ class _Gate:
         )
 
     def _ambiguous_reads(self, acts: list[tuple[int, Act]]) -> GateOutcome | None:
-        """Regulile 6 și 7: o țintă `ambiguous` la o citire. Până la trei candidați se răspunde
-        despre toți; peste, se întreabă pe primii patru. Condițiile sunt exclusive (toate ≤ 3 /
-        vreuna > 3), deci ordinea nu poate alege între două reguli aplicabile."""
+        """Regulile 6 și 7: o țintă `ambiguous` la o citire. Până la `MAX_READ_ALL` candidați se
+        răspunde despre toți (NX-385: cât arată comparația, nu trei); peste, se întreabă pe TOȚI
+        (`_target_ask`), niciodată pe primii patru. Condițiile sunt exclusive (toate ≤ plafon /
+        vreuna peste), deci ordinea nu poate alege între două reguli aplicabile."""
         ambiguous = [
             ref
             for _, act in acts
@@ -779,22 +944,36 @@ class _Gate:
         ]
         if not ambiguous:
             return None
-        too_many = next((r for r in ambiguous if len(r.product_ids) > MAX_ACT_BOTH), None)
+        too_many = next((r for r in ambiguous if len(r.product_ids) > MAX_READ_ALL), None)
+        if too_many is None:
+            # Recenzia NX-385: plafonul e al RĂSPUNSULUI, nu al unei referințe. Plannerul unește
+            # candidații tuturor țintelor actului (două referințe ambigue, 3 + 3), deci peste
+            # plafon se întreabă pe referința cu cei mai mulți candidați.
+            for _, act in acts:
+                if act.kind not in READ_ACTS:
+                    continue
+                refs = [r for t in act.targets if (r := self.resolved.get(t)) is not None]
+                union = {
+                    pid
+                    for r in refs
+                    if r.outcome in ("exact", "ambiguous")
+                    for pid in r.product_ids
+                }
+                if len(union) > MAX_READ_ALL:
+                    too_many = max(
+                        (r for r in refs if r.outcome == "ambiguous"),
+                        key=lambda r: len(r.product_ids),
+                        default=None,
+                    )
+                    if too_many is not None:
+                        break
         if too_many is None:
             return self._decide("act_both", "ambiguous_read")
         ids = [pid for pid in too_many.product_ids if pid in self.facts.products]
-        shown = ids[:MAX_OPTIONS]
-        return self._ask(
-            _Ask(
-                kind="reference",
-                key=target_question_key(ids),
-                labels=self._names(shown),
-                reason="ambiguous_too_many",
-                candidate_reason="disambiguation",
-                partition=(1,) * len(shown),
-                total=len(ids),
-                klass="read",
-            ),
+        return self._target_ask(
+            ids,
+            reason="ambiguous_too_many",
+            klass="read",
             on_decline=self._declined("read", "ambiguous_too_many"),
         )
 
@@ -803,13 +982,23 @@ class _Gate:
         pe setul curent ⇒ `act` + o întrebare de confirmare ca ultimă frază. Fără set (primul tur)
         nu se confirmă nimic: o confirmare fără dovadă că ar tăia ceva e o întrebare în plus.
         „Scrisă în acest tur" = `updated_revision` e revizia turului (regula reducerului,
-        `_written_by_previous_turn`)."""
+        `_written_by_previous_turn`).
+
+        NX-385 (`w3_barbati_ce_aveti#3`, `w5_un_cuvant_ser#2`): o nevoie `implicit` e moale
+        (I7), iar plannerul o duce în `prefer`, deci ORDONEAZĂ rezultatele, nu exclude nimic
+        (`kernel.v5.0`). O întrebare „Să înțeleg că e vorba de X?" sub produsele deja ordonate după
+        X confirmă o ipoteză care n-ar fi costat nimic dacă era greșită. Confirmarea rămâne doar
+        unde ipoteza ar decide ceva: o nevoie care filtrează (`hard`), sau o dimensiune pe care
+        lecturile modelului se bat (`_competing_dimensions`). Restul se aplică în tăcere."""
         if self.state.revision <= 0:
             return None
+        competing = self._competing_dimensions()
         for need in self.state.active_needs():
             if need.source != "user_implicit" or need.updated_revision != self.state.revision:
                 continue
             if not isinstance(need.normalized_value, str):
+                continue
+            if need.strength != "hard" and need.key not in competing:
                 continue
             partition, total = self._partition(need.key, None)
             if total is None:
@@ -833,6 +1022,20 @@ class _Gate:
             if outcome is not None:
                 return outcome
         return None
+
+    def _competing_dimensions(self) -> frozenset[str]:
+        """Dimensiunile pe care lecturile modelului (`scope`/`value`) duc la cel puțin două valori
+        diferite, citite O DATĂ prin vocabular (`_read_readings`). Fără vocabular, niciuna."""
+        if self.vocab is None:
+            return frozenset()
+        dims: set[str] = set()
+        for ambiguity in self.interp.ambiguities:
+            if ambiguity.about not in ("scope", "value"):
+                continue
+            values = _read_readings(ambiguity.readings, self.vocab, self.overlays).values
+            if len(values) > 1:
+                dims |= {d for d, _ in values}
+        return frozenset(dims)
 
 
 def lookup_attributes(
