@@ -251,7 +251,9 @@ fără întrebare (`family_single`); după o întrebare fără alegere, familia 
 `family_defaulted` (decizia lui Adi, 2026-10-09; machiajul intră în calcul și se întreabă).
 `routine_family`/`bundle_executor`/`subject_kinds` s-au mutat în `src/conversation/routine_family.py`
 (rol `pure`). Reluarea rutinei după răspuns e 389b, de aceea flagul `ROUTINE_FAMILY_QUESTION_ENABLED`
-rămâne stins. Card: [`tasks/stage1/NX-389.md`](tasks/stage1/NX-389.md); probă:
+rămâne stins. **Aprins de Adi pe 2026-10-09 (valoarea implicită `true`), înaintea verdictului pe
+setul nevăzut `routines-2026-10-09`, care rămâne de rulat.** Card:
+[`tasks/stage1/NX-389.md`](tasks/stage1/NX-389.md); probă:
 `pytest tests/test_nx389_routine_family_question.py -q`.
 **NX-389b/c — întrebarea ține minte rutina, iar răspunsul o face (același `kernel.v9.0`, prompt
 `interpret.v7`).** Memoria întrebării păstrează actul (`resume_route="bundle"`) și opțiunile

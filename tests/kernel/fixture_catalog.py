@@ -21,6 +21,7 @@ from typing import Any
 from src.agent.turn_planner import PlannedTurn, disclosure_memory, plan_turn
 from src.catalog.folding import fold_text
 from src.catalog.vocabulary import CATEGORY_DIMENSION, CatalogVocabulary, VocabEntry
+from src.config import Settings
 from src.conversation.ambiguity_gate import (
     GateOutcome,
     decide_ambiguity,
@@ -424,7 +425,12 @@ class KernelStep:
     planned: PlannedTurn | None = None
 
 
-GATE_POLICY = ClarificationPolicy()
+#: Politica porții ca în producție (`interpreted_turn._gate_policy`): flagul NX-389 urmează valoarea
+#: IMPLICITĂ din `Settings`, ca harnessul de stagiu (orchestratorul real) și lanțul pur să nu
+#: divergă când flagul se aprinde. Suitele care cer explicit o regulă își dau propria politică.
+GATE_POLICY = ClarificationPolicy(
+    routine_family_question=bool(Settings.model_fields["routine_family_question_enabled"].default)
+)
 
 
 #: NX-336: memoria întrebării are UN proprietar, în producție (`ambiguity_gate`).

@@ -71,8 +71,10 @@ def _interp(*changes, act="bundle") -> TurnInterpretation:
     )
 
 
-def _step(interp: TurnInterpretation, message: str = MESSAGE):
-    return kernel_step("sole-ro", ConversationStateV2(revision=1), interp, message, vocab=_vocab())
+def _step(interp: TurnInterpretation, message: str = MESSAGE, **kw):
+    return kernel_step(
+        "sole-ro", ConversationStateV2(revision=1), interp, message, vocab=_vocab(), **kw
+    )
 
 
 def _primary(step):
@@ -104,16 +106,24 @@ def test_a_routine_for_oily_skin_names_the_face_shelf_and_gets_the_face_family()
 
 def test_the_same_turn_without_the_shelf_is_todays_search():
     """Interpretarea de pe `interpret.v5` (traceul real), pe o nevoie fără familie în date
-    (`skin_type:oily`: față 73 / machiaj 153 / păr 35): fără raft, planul e căutarea de azi. Testul
-    fixează că reparația e a interpretării, nu o derivare din citat în kernel."""
-    step = _step(
-        _interp(
-            _change("routine_time", "pm", "de seara"), _change("skin_type", "oily", "ten gras")
-        ),
-        "fa-mi o rutina de seara pt ten gras",
+    (`skin_type:oily`: față 73 / machiaj 153 / păr 35): fără raft, kernelul nu derivă raftul din
+    citat. Cu întrebarea de familie stinsă, planul e căutarea de dinainte; aprinsă (NX-389, din
+    2026-10-09), botul întreabă pentru ce e rutina."""
+    from src.conversation.clarification_policy import ClarificationPolicy
+
+    turn = _interp(
+        _change("routine_time", "pm", "de seara"), _change("skin_type", "oily", "ten gras")
     )
-    assert step.state_after.topic.category_key is None
-    assert _primary(step).executor == "search"
+    off = _step(turn, "fa-mi o rutina de seara pt ten gras", policy=ClarificationPolicy())
+    assert off.state_after.topic.category_key is None
+    assert _primary(off).executor == "search"
+    on = _step(
+        turn,
+        "fa-mi o rutina de seara pt ten gras",
+        policy=ClarificationPolicy(routine_family_question=True),
+    )
+    assert on.state_after.topic.category_key is None
+    assert (on.outcome.decision.verdict, on.outcome.decision.reason) == ("must_ask", "no_family")
 
 
 def test_pores_already_give_the_face_family_through_the_need_map():
