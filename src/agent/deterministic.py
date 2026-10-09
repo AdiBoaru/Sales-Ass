@@ -77,7 +77,17 @@ from src.worker import compose
 from src.worker.text_scrub import has_medical_claim
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable
+
+    from src.models import Comparison
     from src.worker.runner import PipelineDeps
+
+    #: NX-382 faza 3: (tabelul determinist, produsele, fațetele) → (comparația compusă, chips) sau
+    #: `None` (narativul de azi).
+    Narrator = Callable[
+        [Comparison, list[dict[str, Any]], Any],
+        Awaitable[tuple[Comparison, list[str]] | None],
+    ]
 
 log = logging.getLogger(__name__)
 
@@ -614,8 +624,14 @@ async def serve_comparison(
     ids: list[str],
     *,
     withhold: Callable[[list[dict[str, Any]]], str | None] | None = None,
+    narrate: Narrator | None = None,
 ) -> bool:
     """Tabelul de comparație pe ID-uri DEJA rezolvate (extras pentru NX-236, ca `serve_reviews`).
+
+    `narrate` (NX-382 faza 3, calea kernelului): compozitorul unic scrie răspunsul, verdictul și
+    axele pe tabelul determinist, cu istoricul și întrebarea clientului; întoarce `(comparație,
+    chips)` sau `None` ⇒ narativul de azi (`compose_comparison`). Pe un verdict reținut (I12)
+    rămâne calea de azi, cu schema fără verdict.
 
     Aceleași porți ca pe calea text: safety gate, coerență de categorie, `build_comparison`. O
     acțiune opacă poartă `product_refs` explicite, deci reordonarea listei afișate între emitere
@@ -662,7 +678,12 @@ async def serve_comparison(
     note = withhold(products) if withhold is not None else None
     # Tabelul determinist e plasa; peste el, agentul compune axele pe care perechea chiar se
     # desparte + îndrumarea de sub tabel (respins/eșuat → exact tabelul de mai sus, P6).
-    if note is None:
+    narrated = await narrate(comparison, products, facets) if note is None and narrate else None
+    chips = _compare_chips(comparison.columns, ctx.language)
+    if narrated is not None:
+        comparison, written = narrated
+        chips = written or chips
+    elif note is None:
         comparison = await compose_comparison(
             deps.llm, ctx, comparison, products, facets=facets, query=(ctx.message.body or "")
         )
@@ -681,7 +702,7 @@ async def serve_comparison(
         comparison,
         text=compose.flatten_comparison(comparison, ctx.language),
         products=compose.comparison_cards(comparison),
-        chips=_compare_chips(comparison.columns, ctx.language),
+        chips=chips,
     )
     ctx.emit("agent_compared", n=len(comparison.columns), deterministic=True)
     return True

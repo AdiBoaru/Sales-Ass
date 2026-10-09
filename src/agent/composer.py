@@ -36,7 +36,7 @@ from src.agent import detail_answer
 from src.agent.voice import VOICE_RULES
 
 if TYPE_CHECKING:
-    from src.models import RichReply, TurnContext
+    from src.models import Comparison, RichReply, TurnContext
     from src.worker.runner import PipelineDeps
 
 TaskKind = Literal[
@@ -72,6 +72,12 @@ REASONS = (
     "ungrounded_rule",
     "not_a_question",
     "safety_referral_missing",
+    "unsourced_claim",
+)
+#: Recenzia fazei 3: garanția ca promisiune («garanție 2 ani», «drept de retur»), nu verbul («nu
+#: pot garanta», formularea pe care promptul o cere pentru ce nu se poate confirma).
+_WARRANTY_NOUN = re.compile(
+    r"\bgaran[țt]i[aeiu]\w*|\bwarrant(?:y|ies)\b|\bdrept\s+de\s+retur\b", re.IGNORECASE
 )
 #: NX-382 faza 2c: codul obligației de siguranță (contextul declarat de client, NX-173).
 SAFETY_REFERRAL = "safety_referral"
@@ -181,10 +187,18 @@ TASKS: Mapping[str, str] = {
         "customers say), not its whole sheet. `items` stays empty."
     ),
     "compare": (
-        "TASK compare: start with the answer to what the customer asked (which is more X, how they "
-        "differ in practice). If the items do different jobs, say each one's role and whether they "
-        "go together first. Then the 2-3 differences that matter for this customer, then which one "
-        "you would take for which kind of person."
+        "TASK compare: the products P1, P2… are shown side by side in a table under your text. "
+        "`text` (above the table, 2-4 sentences) starts with the answer to what the customer asked "
+        "(QUESTION, or their message): which one is more X, how they differ in practice. If the "
+        "items do different jobs, say each one's role and whether they go together. Do not walk "
+        "through the table. `verdict` (under the table, 1-3 sentences) says which one you would "
+        "take for which kind of person, using what the customer told you; when they asked what "
+        "you would take, pick one and say why. `axes` are the 2-5 rows of the table: only "
+        "dimensions on which the products really differ for this customer (how it feels, who it "
+        "suits, how it is used, what customers say), each with a short label and one cell per "
+        "product; every cell names its `source`, one of that product's COMPARISON SOURCES, and "
+        "says what that source says, in a few words, without prices or ratings (code adds those "
+        "rows). Never fill a row with the same thing said twice. `items` stays empty."
     ),
     "store_info": (
         "TASK store_info: answer from STORE RULES. A sentence that gives a number from a rule "
@@ -256,6 +270,10 @@ class Composed:
     items: tuple[tuple[str, str], ...]  # (product_id, reason), în ordinea modelului
     suggestions: tuple[str, ...]
     obligations_met: tuple[str, ...]
+    #: Faza 3, doar pe `compare`: verdictul de sub tabel și axele tabelului (celulele cu
+    #: `product_id` deja tradus din handle; le verifică `compare_narrative.assemble_axes`).
+    verdict: str = ""
+    axes: tuple[dict[str, Any], ...] = ()
 
     @property
     def served(self) -> str:
@@ -337,6 +355,27 @@ def schema(inp: ComposeInput) -> dict[str, Any]:
         "required": ["text", "general_advice", "items", "suggestions", "obligations_met"],
         "additionalProperties": False,
     }
+    if inp.task == "compare":
+        # faza 3: verdictul de sub tabel și axele lui, în același apel (un singur autor)
+        cell = {
+            "type": "object",
+            "properties": {
+                "handle": handle,
+                "source": {"type": "string"},
+                "text": {"type": "string"},
+            },
+            "required": ["handle", "source", "text"],
+            "additionalProperties": False,
+        }
+        axis = {
+            "type": "object",
+            "properties": {"label": {"type": "string"}, "cells": {"type": "array", "items": cell}},
+            "required": ["label", "cells"],
+            "additionalProperties": False,
+        }
+        body["properties"]["verdict"] = {"type": "string"}
+        body["properties"]["axes"] = {"type": "array", "items": axis}
+        body["required"] = [*body["required"], "verdict", "axes"]
     return {"name": SCHEMA_NAME, "strict": True, "schema": body}
 
 
@@ -369,7 +408,25 @@ def parse(raw: Any, inp: ComposeInput) -> Composed | None:
     met = tuple(str(c) for c in raw.get("obligations_met") or [])
     advice = raw.get("general_advice")
     advice = advice.strip() if isinstance(advice, str) else ""
-    return Composed(raw["text"].strip(), advice, tuple(items), suggestions, met)
+    verdict = raw.get("verdict")
+    verdict = verdict.strip() if isinstance(verdict, str) and inp.task == "compare" else ""
+    axes: list[dict[str, Any]] = []
+    for axis in (raw.get("axes") or []) if inp.task == "compare" else []:
+        if not isinstance(axis, dict):
+            continue
+        cells = [
+            {
+                "product_id": ids.get(str(c.get("handle")), str(c.get("handle"))),
+                "source": c.get("source"),
+                "text": c.get("text"),
+            }
+            for c in axis.get("cells") or []
+            if isinstance(c, dict)
+        ]
+        axes.append({"label": axis.get("label"), "cells": cells})
+    return Composed(
+        raw["text"].strip(), advice, tuple(items), suggestions, met, verdict, tuple(axes)
+    )
 
 
 _SPLIT = re.compile(r"(?<=[.!?])\s+")
@@ -415,6 +472,21 @@ def _advice_ok(advice: str, products: Sequence[dict[str, Any]]) -> bool:
         if name and name in folded:
             return False
     return True
+
+
+def unsourced(text: str, facts: str) -> bool:
+    """Recenzia fazei 3: o afirmație despre magazin pe care nicio sursă a sarcinii n-o poartă:
+    livrarea (aceleași tipare ca `grounding_guard`), un voucher când fișa n-are niciunul, o
+    garanție sau un drept de retur. Pe comparație treceau («ambele au livrare gratuită și
+    garanție»), fiindcă `check_answer` judecă doar cifre, prețuri, linkuri, stoc și medical. PUR."""
+    from src.agent.grounding_guard import _DELIVERY_RE, _PROMO_RE  # noqa: PLC0415
+
+    # o familie are sursă doar dacă faptele turului o poartă și ele (un FAQ de produs despre
+    # livrare, voucherul de pe fișă); altfel e o promisiune a magazinului fără sursă
+    return any(
+        pattern.search(text) and not pattern.search(facts)
+        for pattern in (_DELIVERY_RE, _WARRANTY_NOUN, _PROMO_RE)
+    )
 
 
 def rule_prices(rules: Sequence[str]) -> frozenset[float]:
@@ -529,7 +601,28 @@ def check(
         # P0: declarația nu ajunge; trimiterea la medic sau farmacist trebuie să fie în text, după
         # scoaterea propozițiilor medicale (o trimitere care afirmă că un produs e sigur a căzut)
         return Verdict(False, "safety_referral_missing"), composed
-    cleaned = Composed(reply, advice, tuple(items), composed.suggestions, composed.obligations_met)
+    verdict_text, _ = _without_medical(composed.verdict)
+    if verdict_text:
+        # faza 3: verdictul de sub tabel e o afirmație despre produse, judecată pe aceleași fapte
+        v = detail_answer.check_answer(verdict_text, list(inp.products), facts, units)
+        if not v.ok:
+            return Verdict(False, v.reason), composed
+    if inp.task != "store_info":
+        # recenzia fazei 3: livrarea, garanția, un voucher pe care fișa nu-l poartă; regulile
+        # magazinului au poarta lor (`rule_numbers_ok`), restul sarcinilor nu au sursă pentru ele
+        if any(unsourced(t, facts) for t in (reply, verdict_text, *(r for _p, r in items))):
+            return Verdict(False, "unsourced_claim"), composed
+        if advice and unsourced(advice, facts):
+            advice = ""
+    cleaned = Composed(
+        reply,
+        advice,
+        tuple(items),
+        composed.suggestions,
+        composed.obligations_met,
+        verdict_text,
+        composed.axes,
+    )
     return Verdict(True), cleaned
 
 
@@ -671,7 +764,12 @@ async def compose(
         ctx.emit("composer", outcome="rejected", reason=verdict.reason, **emit)
         return None, verdict.reason
     if safety is not None:
-        ctx.safety_referral_composed = referral_sentence(cleaned.reply, contexts, locale)
+        from src.agent.voice import naturalize  # noqa: PLC0415
+
+        # forma pe care o randează canalele (`set_reply` și câmpurile comparației trec prin
+        # `naturalize`): altfel `enforce` n-ar regăsi propoziția și ar pune fraza codului peste ea
+        sentence = referral_sentence(cleaned.reply, contexts, locale)
+        ctx.safety_referral_composed = naturalize(sentence) if sentence else None
     ctx.emit(
         "composer",
         outcome="composed",
@@ -715,6 +813,63 @@ def rich_reply(
         education=composed.advice or None,
         chips=wc._suggestion_chips(list(composed.suggestions)),
         disclaimer=(wc.disclaimer(ctx.language) if get_settings().ai_disclaimer_enabled else None),
+    )
+
+
+def comparison_sources(
+    products: Sequence[dict[str, Any]], facets: Sequence[Any], language: str | None
+) -> str:
+    """Faza 3: sursele citabile ale fiecărui produs (`compose.comparison_sheets`, aceeași fișă pe
+    care o verifică `compare_narrative.assemble_axes`), sub handle-ul lui. PUR."""
+    from src.worker import compose as wc  # noqa: PLC0415 — ciclul worker ↔ agent
+
+    sheets = wc.comparison_sheets(list(products), facets, language)
+    lines: list[str] = []
+    for handle, pid in handles(products).items():
+        sheet = sheets.get(pid) or {}
+        cited = "; ".join(f"{source}: {value}" for source, value in sheet.items())
+        lines.append(f"{handle}: {cited or 'none'}")
+    return "\n".join(lines)
+
+
+def comparison_reply(
+    ctx: TurnContext,
+    composed: Composed,
+    comparison: Comparison,
+    products: Sequence[dict[str, Any]],
+    facets: Sequence[Any],
+) -> Comparison:
+    """Faza 3: comparația din răspunsul compozitorului. Textul deasupra tabelului, verdictul și
+    sfatul general dedesubt. Axele modelului trec prin ACEEAȘI verificare pe celulă ca narativul de
+    azi (`compare_narrative.assemble_axes`: sursa trebuie să fie a produsului, cifre doar din fișă,
+    o axă egală pe toate coloanele cade), apoi prețul și ratingul scrise de cod. Fără nicio axă
+    păstrată, rândurile deterministe (`build_comparison`) rămân tabelul: celulele sunt fapte."""
+    from src.agent.compare_narrative import _allowed_numbers, assemble_axes  # noqa: PLC0415
+    from src.agent.voice import naturalize  # noqa: PLC0415
+    from src.models import Comparison as _Comparison  # noqa: PLC0415
+    from src.worker import compose as wc  # noqa: PLC0415
+
+    rows_in = list(products)
+    allowed = _allowed_numbers(ctx, comparison, rows_in, facets)
+    rows, rejected = assemble_axes(
+        {"axes": list(composed.axes)}, comparison, rows_in, allowed, facets, ctx.language
+    )
+    ctx.emit(
+        "composer_axes",
+        offered=len(composed.axes),
+        kept=len(rows),
+        rejected=sorted(f"{k}:{v}" for k, v in rejected.items()),
+    )
+    rows = [*rows, *wc.price_and_rating_rows(rows_in, ctx.language)] if rows else comparison.rows
+    closing = [naturalize(p) or "" for p in (composed.verdict, composed.advice) if p]
+    return _Comparison(
+        columns=comparison.columns,
+        rows=rows,
+        intro=naturalize(composed.reply) or comparison.intro,
+        subtitle=None,
+        closing=[c for c in closing if c],
+        common=comparison.common,
+        notes=comparison.notes,
     )
 
 

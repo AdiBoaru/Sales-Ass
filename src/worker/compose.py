@@ -1758,4 +1758,8 @@ def flatten_comparison(comparison: Comparison, language: str | None) -> str:
     lines = [comparison.intro, "", head] if comparison.intro else [head]
     for row in comparison.rows:
         lines.append(f"{row.label}: " + " · ".join(v or "—" for v in row.values))
+    # NX-382 (recenzia fazei 3): verdictul de sub tabel intră în textul salvat; altfel istoricul
+    # (și compozitorul, care construiește pe el) nu știe ce produs a ales botul
+    for paragraph in comparison.closing or []:
+        lines += ["", paragraph]
     return "\n".join(line for line in lines if line is not None).strip()

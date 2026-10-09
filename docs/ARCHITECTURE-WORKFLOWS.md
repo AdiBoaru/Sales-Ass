@@ -1792,6 +1792,7 @@ comparison_narrative_enabled = true
 composer_ask_enabled = true
 composer_cart_enabled = true
 composer_chitchat_enabled = true
+composer_compare_enabled = true
 composer_detail_enabled = true
 composer_no_results_enabled = true
 composer_safety_enabled = true
