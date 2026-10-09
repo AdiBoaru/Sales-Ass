@@ -136,6 +136,7 @@ KERNEL_EXECUTOR_EVENTS: frozenset[str] = frozenset(
         "composer",  # NX-382: idem pentru compozitor
         "composer_axes",  # NX-382 faza 3: axele tabelului scrise de compozitor
         "composer_variants",  # NX-382 faza 4: familiile de variante arătate o dată
+        "delegate_shown_prices",  # NX-391: prețurile seturilor arătate, recitite pentru validare
     }
 )
 #: Politica de răspuns a orchestratorului pe produsele unei comparații: (partenerii adăugați de
@@ -310,6 +311,55 @@ async def _compose(
         await render(ctx, deps, plan)
 
 
+#: NX-391: câte seturi arătate (ecranul + cele de mai devreme) își dau prețurile validării.
+_SHOWN_SETS = 3
+
+
+async def _shown_prices(ctx: TurnContext, deps: PipelineDeps) -> set[float]:
+    """NX-391: prețurile CURENTE ale produselor arătate clientului (ecranul și seturile de mai
+    devreme, după starea porții) și totalul fiecărui set (`validator.set_total`), recitite din
+    catalog în tur (I1). Pe bucla restrânsă modelul nu primește produse prin unelte, deci un
+    răspuns despre ce vede clientul («cât face tot», «cât costa crema») era judecat fără niciun
+    preț și respins ca inventat (`mixed-2026-10-09`, m2: totalul corect de 615 lei). Codul nu
+    citește cererea: dă faptele, iar modelul decide dacă răspunsul le folosește. Citirea picată ⇒
+    nicio sumă în plus (validarea de azi), numărat."""
+    from src.agent.validator import set_total  # noqa: PLC0415
+    from src.catalog.reference_facts import fetch_reference_facts  # noqa: PLC0415
+    from src.conversation.references import CatalogLookup  # noqa: PLC0415
+
+    view = getattr(ctx, "kernel_view", None)
+    refs = getattr(getattr(view, "gate_state", None), "references", None)
+    if refs is None:
+        return set()
+    sets = [
+        [d.product_id for d in items if d.product_id]
+        for items in (refs.displayed_products, *refs.recent_sets)
+    ][:_SHOWN_SETS]
+    ids = tuple(dict.fromkeys(i for s in sets for i in s))
+    if not ids:
+        return set()
+    try:
+        facts = await fetch_reference_facts(
+            deps, ctx.business.id, CatalogLookup(ids=ids), op="kernel_shown_prices"
+        )
+    except Exception:  # noqa: BLE001 — P6: validarea de azi, fără sumele ecranului
+        ctx.emit("delegate_shown_prices", outcome="unavailable")
+        return set()
+    out: set[float] = set()
+    for items in sets:
+        rows = [
+            {"id": pid, "price": facts.products[pid].price}
+            for pid in items
+            if pid in facts.products and facts.products[pid].price is not None
+        ]
+        out.update(round(float(r["price"]), 2) for r in rows)
+        total = set_total(rows)
+        if total is not None:
+            out.add(total)
+    ctx.emit("delegate_shown_prices", outcome="read", prices=len(out))
+    return out
+
+
 async def _delegate(ctx: TurnContext, deps: PipelineDeps, allowed: frozenset[str]) -> bool | None:
     """Bucla restrânsă (PR D1): bucla v1 de unelte, cu schema și `execute` limitate la `allowed`
     ∩ uneltele tenantului. Fără nicio unealtă permisă ⇒ `None` (calea v1)."""
@@ -359,6 +409,8 @@ async def _delegate(ctx: TurnContext, deps: PipelineDeps, allowed: frozenset[str
         ctx.emit("delegate_loop_failed", error=type(e).__name__)
         await fallback_stage(ctx, deps)
         return ctx.reply is not None
+    # NX-391: ce vede clientul (prețuri + totalul fiecărui set) e fapt pentru validator
+    run.grounded_prices.update(await _shown_prices(ctx, deps))
     plan = await build_plan(
         ctx,
         deps,
