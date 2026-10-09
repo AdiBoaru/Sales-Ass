@@ -608,7 +608,10 @@ async def test_disclosures_prefix_the_reply_once_and_missing_ones_are_counted(
     monkeypatch, electronics
 ):
     async def details(ctx, deps, pid, *, lead=None):
-        ctx.set_reply("detalii", cacheable=True)
+        # fișa are mereu cardul produsului (NX-382 faza 5: „nu e potrivirea exactă" doar peste
+        # carduri)
+        card = [{"product_id": pid, "name": "X", "price": 1.0}]
+        ctx.set_reply("detalii", products=card, cacheable=True)
 
     monkeypatch.setattr(kx.det, "serve_details", details)
     lead = kx.kernel_sentence(electronics.pack, "ro", "not_exact_match")

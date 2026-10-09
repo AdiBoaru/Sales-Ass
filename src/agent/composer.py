@@ -78,6 +78,33 @@ REASONS = (
 )
 #: Faza 4: cum răspunde setul cererii, spus de model (vocabular închis al schemei `recommend`).
 SET_FITS = ("fits", "partial", "none")
+#: Faza 5: ce înseamnă fiecare dezvăluire a planului kernelului (`PlannedTurn.disclosures`),
+#: spus modelului ca FAPT; o scrie el, în cuvintele lui. Un cod din afara tabelului rămâne pe
+#: fraza pachetului (`kernel_sentences`). Instrucțiuni generice, în engleză (P11).
+DISCLOSURES: Mapping[str, str] = {
+    "not_exact_match": (
+        "the exact product the customer named was not found as such; what is shown is the "
+        "closest the store has. Say so in a few words."
+    ),
+    "invalid_target": (
+        "part of the request pointed to a quality, not to a product, so that part could not be "
+        "done as asked. Say which part, briefly."
+    ),
+    "dropped_act": (
+        "the customer asked for more than one thing and one of them is not answered in this "
+        "reply. Say they can ask for it next."
+    ),
+    "no_target": (
+        "it is not clear which product the customer means for part of the request. Say so "
+        "briefly and ask which one."
+    ),
+    "need_unverifiable": (
+        "a requirement the customer stated (`needs`) cannot be checked on these products, so it "
+        "was not taken into account in the choice. Say so once, plainly."
+    ),
+}
+#: Sarcinile pe care o dezvăluire nu se spune (pe „n-am găsit" fraza spune deja tot, NX-374).
+_NO_DISCLOSURE_TASKS = frozenset({"no_results", "chitchat"})
 #: Recenzia fazei 3: garanția ca promisiune («garanție 2 ani», «drept de retur»), nu verbul («nu
 #: pot garanta», formularea pe care promptul o cere pentru ce nu se poate confirma).
 _WARRANTY_NOUN = re.compile(
@@ -776,6 +803,39 @@ def safety_note(ctx: TurnContext) -> tuple[str, str] | None:
     )
 
 
+def disclosure_obligations(ctx: TurnContext, inp: ComposeInput) -> tuple[Obligation, ...]:
+    """Faza 5: dezvăluirile planului (`ctx.kernel_disclosures`) ca obligații, fiecare cu sensul ei
+    (`DISCLOSURES`) și faptele ei. Doar codurile cunoscute, o dată, nu pe „n-am găsit" sau pe un
+    salut, și nu pe un cod pe care sarcina îl poartă deja."""
+    if inp.task in _NO_DISCLOSURE_TASKS:
+        return ()
+    have = {o.code for o in inp.obligations}
+    out: list[Obligation] = []
+    for code, facts in getattr(ctx, "kernel_disclosures", None) or ():
+        if code in DISCLOSURES and code not in have:
+            have.add(code)
+            out.append(Obligation(code, {"meaning": DISCLOSURES[code], **dict(facts)}))
+    return tuple(out)
+
+
+def composed_disclosures(ctx: Any) -> frozenset[str]:
+    """Dezvăluirile acoperite de compozitor, DOAR dacă textul lui e chiar în răspunsul randat
+    (`text`, `rich.intro`, `comparison.intro`): pe un refuz înlocuit cu mesajul de no-result, sau pe
+    o rezervă, ele n-au fost spuse. PUR."""
+    told = getattr(ctx, "disclosures_composed", None) or frozenset()
+    text = getattr(ctx, "composed_reply", None)
+    reply = getattr(ctx, "reply", None)
+    if not told or not text or reply is None:
+        return frozenset()
+    fields = [reply.text]
+    for shown in (getattr(reply, "rich", None), getattr(reply, "comparison", None)):
+        if shown is not None:
+            fields.append(getattr(shown, "intro", None))
+    from src.agent.voice import naturalize  # noqa: PLC0415 — idempotentă, deci comparabilă
+
+    return frozenset(told) if any(f and text in naturalize(f) for f in fields) else frozenset()
+
+
 def _referred_before(ctx: TurnContext) -> bool:
     """Un răspuns ANTERIOR al botului a trimis deja la medic sau farmacist. Citește doar textul
     botului din istoric (amprenta NX-173), niciodată cuvintele clientului."""
@@ -808,6 +868,9 @@ async def compose(
     note = safety_note(ctx)
     if note is not None:
         inp = replace(inp, extra_facts=(*inp.extra_facts, note))
+    told = disclosure_obligations(ctx, inp)
+    if told:
+        inp = replace(inp, obligations=(*inp.obligations, *told))
     contexts = frozenset(ctx.safety_decision.contexts) if safety is not None else frozenset()
     facts = facts_block(inp, pack, locale)
     system = system_prompt(inp.task, store=str(ctx.business.name or ""), locale=locale)
@@ -835,13 +898,16 @@ async def compose(
     if not verdict.ok:
         ctx.emit("composer", outcome="rejected", reason=verdict.reason, **emit)
         return None, verdict.reason
-    if safety is not None:
-        from src.agent.voice import naturalize  # noqa: PLC0415
+    from src.agent.voice import naturalize  # noqa: PLC0415
 
+    if safety is not None:
         # forma pe care o randează canalele (`set_reply` și câmpurile comparației trec prin
         # `naturalize`): altfel `enforce` n-ar regăsi propoziția și ar pune fraza codului peste ea
         sentence = referral_sentence(cleaned.reply, contexts, locale)
         ctx.safety_referral_composed = naturalize(sentence) if sentence else None
+    # faza 5: ce dezvăluiri a acoperit (poarta a verificat `obligations_met`) și textul lor
+    ctx.composed_reply = naturalize(cleaned.reply) or None
+    ctx.disclosures_composed = frozenset(o.code for o in told)
     ctx.emit(
         "composer",
         outcome="composed",

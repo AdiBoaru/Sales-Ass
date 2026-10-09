@@ -144,6 +144,9 @@ EXECUTOR_WRITABLE: tuple[str, ...] = (
     "retrieval",
     "safety_decision",
     "safety_referral_composed",  # NX-382 faza 2c: propoziția verificată a compozitorului
+    "kernel_disclosures",  # NX-382 faza 5: dezvăluirile planului, date compozitorului
+    "disclosures_composed",  # NX-382 faza 5: cele acoperite de compozitor
+    "composed_reply",  # NX-382 faza 5: textul compozitorului, ca să se știe dacă a fost servit
     "routine",
     "match_set",
     "answer_plan",
@@ -786,7 +789,12 @@ def _disclosure_memory(ctx: TurnContext, planned: PlannedTurn) -> tuple[StateUpd
 
     pack = getattr(ctx.business, "domain_pack", None)
     sentence = kernel_sentence(pack, ctx.language, "need_unverifiable")
-    if not _asked_in_reply(ctx.reply, sentence):
+    # NX-382 faza 5: dezvăluirea scrisă de compozitor (obligație verificată de poarta lui) e la fel
+    # de spusă ca fraza pachetului
+    from src.agent.composer import composed_disclosures  # noqa: PLC0415 — ciclul agent
+
+    told = "need_unverifiable" in composed_disclosures(ctx)
+    if not told and not _asked_in_reply(ctx.reply, sentence):
         return ()
     return disclosure_memory(planned, ctx.turn_id)
 

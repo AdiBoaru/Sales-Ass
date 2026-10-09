@@ -152,6 +152,11 @@
     },
     {
       "file": "src/agent/composer.py",
+      "function": "composed_disclosures",
+      "reason": "NX-382 faza 5: citeste RASPUNSUL botului (text, intro) ca sa stie daca textul compozitorului a fost servit; nu citeste cuvintele clientului si nu decide nimic despre tur."
+    },
+    {
+      "file": "src/agent/composer.py",
       "function": "_referred_before",
       "reason": "NX-382 faza 2c: citeste doar raspunsurile ANTERIOARE ale botului (amprenta trimiterii la medic NX-173), niciodata cuvintele clientului; decide doar daca obligatia de siguranta poate fi scurta (flag stins implicit)."
     },

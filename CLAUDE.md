@@ -713,6 +713,11 @@ compunerii bogate (`finalize._compose_recommend`): fișa întreagă citită o da
 variantele aceleiași familii arătate o dată (`composer.families`), rutina pe sloturi, verdictul pe
 set `set_fit` (o listă goală nu mai e refuz singură). Tot ce urmează compunerii în `render` rămâne.
 Flag `COMPOSER_RECOMMEND_ENABLED` (ON). Probă: `pytest tests/test_nx382_composer_4.py -q`.
+**Faza 5:** dezvăluirile planului kernelului (`ctx.kernel_disclosures`) sunt obligații ale
+compozitorului; fraza pachetului doar pentru ce n-a acoperit sau când textul lui n-a fost servit
+(`composer.composed_disclosures`); „nu e potrivirea exactă" nu se pune peste zero carduri; refuzul
+explicit (`set_fit=none`) se respectă și pe paginare; regula REFINE din `_RICH_RULES` nu mai cere
+„fără X". Frazele pachetului rămân doar rezerve (P6). Probă: `pytest tests/test_nx382_composer_5.py -q`.
 
 **NX-238 — retrievalul trece printr-un PORT, iar candidatul e inert (verdict `NOT-READY`).**
 `src/retrieval/` e contractul stabil pe care îl consumă NX-239: `RetrievalPort` + `RetrievalBundle`
