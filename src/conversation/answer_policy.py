@@ -228,6 +228,10 @@ def answer_policy(
     dimension = _extreme_dimension(act, references, vocab)
     if dimension is None:
         dimension = read_query(act, pack=pack, locale=locale).dimension
+    if dimension is None and act.question:
+        # NX-381 (kernel.v6.3): pe `compare`/`detail` cererea stă în `Act.question`, nu în `query`
+        # («care e mai hidratantă?»). Același cititor declarat, aceleași etichete de rând.
+        dimension = _read_query(act.question, _row_labels(pack, locale), locale).dimension
     if dimension is None:
         return None
     source = _source_key(pack, dimension)

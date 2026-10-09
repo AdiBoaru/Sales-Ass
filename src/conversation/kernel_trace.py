@@ -143,7 +143,12 @@ def first_divergence(expected: dict[str, Any], actual: KernelTrace) -> Divergenc
     for name, attr in LAYERS:
         if name not in expected:
             continue
-        want, got = _plain(expected[name]), _plain(getattr(actual, attr))
+        label = expected[name]
+        if name == "interpretation" and isinstance(label, dict):
+            # NX-380: o etichetă scrisă înaintea unui câmp aditiv (`Act.question`) se compară în
+            # forma modelului, cu default-urile lui, nu ca dicționar căruia îi lipsește cheia.
+            label = TurnInterpretation.model_validate(label, strict=True)
+        want, got = _plain(label), _plain(getattr(actual, attr))
         if name in _DERIVED:
             want, got = _without(want, _DERIVED[name]), _without(got, _DERIVED[name])
         if want != got:
@@ -225,6 +230,8 @@ def _redacted(trace: KernelTrace, redact: Callable[[str], str]) -> KernelTrace:
     def plan(p: TurnPlan) -> TurnPlan:
         # NX-386: numele negăsite sunt cuvintele clientului (P12), ca textul căutării
         p = p.model_copy(update={"names": [text(n) for n in p.names]}) if p.names else p
+        # NX-381: întrebarea clientului de pe plan e text de client, redactată ca `query`
+        p = p.model_copy(update={"question": text(p.question)}) if p.question else p
         args = p.search_args
         if args is None:
             return p
@@ -245,7 +252,13 @@ def _redacted(trace: KernelTrace, redact: Callable[[str], str]) -> KernelTrace:
     interpretation = i.model_copy(
         update={
             "acts": [
-                a.model_copy(update={"query": text(a.query), "targets": deep(a.targets)})
+                a.model_copy(
+                    update={
+                        "query": text(a.query),
+                        "question": text(a.question),  # NX-380: textul clientului
+                        "targets": deep(a.targets),
+                    }
+                )
                 for a in i.acts
             ],
             "changes": [change(c) for c in i.changes],

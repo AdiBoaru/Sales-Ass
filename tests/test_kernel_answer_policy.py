@@ -364,3 +364,21 @@ def test_the_category_row_label_is_not_a_deciding_dimension():
         act("compare", query="din ce categorie e fiecare"), pack=fc.pack("electronics"), locale="ro"
     )
     assert evidence.dimension is None
+
+
+def test_nx381_the_decisive_dimension_is_read_from_the_question_too():
+    """NX-381 (kernel.v6.3): pe `compare` cererea stă în `Act.question`, nu în `query`. Aceeași
+    etichetă de rând numește dimensiunea, deci politica oprește verdictul ca înainte."""
+    known = facts("electronics", "el-01", "el-02")
+    known["el-02"] = replace(
+        known["el-02"],
+        attributes={k: v for k, v in known["el-02"].attributes.items() if k != "screen"},
+    )
+    asked = Act(
+        kind="compare",
+        targets=["r1", "r2"],
+        query=None,
+        question="care e mai bun la ecran, primul sau al doilea?",
+    )
+    policy = run(asked, [exact("r1", "el-01"), exact("r2", "el-02")], known)
+    assert policy == AnswerPolicy(verdict_allowed=False, missing=["screen"])

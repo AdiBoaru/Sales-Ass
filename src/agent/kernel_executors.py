@@ -132,6 +132,7 @@ KERNEL_EXECUTOR_EVENTS: frozenset[str] = frozenset(
         "delegate_loop_failed",
         "kernel_second_plan_failed",
         "kernel_i10_blocked",
+        "detail_question",  # NX-381: măsurătoarea răspunsului rămâne și pe un tur căzut
     }
 )
 #: Politica de răspuns a orchestratorului pe produsele unei comparații: (partenerii adăugați de
@@ -749,6 +750,39 @@ async def _serve_mutation_then(
     return True
 
 
+async def _answer_detail(
+    ctx: TurnContext, deps: PipelineDeps, product_id: str, question: str
+) -> bool:
+    """NX-381: întrebarea clientului despre UN produs primește răspunsul compus din fișă
+    (`detail_answer`), cu cardul produsului dedesubt. Produsul se citește și trece prin poarta de
+    siguranță O SINGURĂ dată, ca în `serve_details` (I1: id-ul vine din plan); orice eșec servește
+    fișa de azi pe ACELAȘI produs (`gated`), deci nicio a doua citire și niciun eveniment de
+    siguranță dublat. Pe un claim medical respins, fișa vine cu trimiterea la medic sau farmacist
+    înainte: întrebarea era despre sănătate, iar fișa singură ar ocoli-o."""
+    from src.agent import detail_answer  # noqa: PLC0415 — ciclul agent ↔ executori
+    from src.safety.messages import refer_sentence  # noqa: PLC0415
+    from src.worker.context import conversation_transcript  # noqa: PLC0415
+
+    async with deps.db("detail_question_product") as conn:
+        products = await get_products_by_ids(conn, ctx.business.id, [product_id], limit=1)
+    products = SafetyPolicy.for_turn(ctx).gate(ctx, products, purpose="detail_intent")[0]
+    if products:
+        history = conversation_transcript(ctx.history, consumer="detail_question")
+        result = await detail_answer.answer_question(ctx, deps, products[0], question, history)
+        if result.answer is not None:
+            ctx.retrieval = RetrievalResult(products=products, source="detail_question")
+            ctx.set_reply(result.answer, products=_card_products(products, n=1), cacheable=False)
+            copy = det._detail_copy(ctx.language)
+            ctx.reply.suggestions = [copy["review_chip"], copy["link_chip"], copy["compare_chip"]]
+            return True
+        if result.reason == "medical_claim":
+            refer = refer_sentence(ctx.language)
+            await det.serve_details(ctx, deps, product_id, lead=lambda _p: refer, gated=products)
+            return ctx.reply is not None
+    await det.serve_details(ctx, deps, product_id, gated=products)
+    return ctx.reply is not None
+
+
 def _confirmation(outcome: GateOutcome) -> str | None:
     question = outcome.decision.question
     return question if outcome.asked_kind == "noted" and question else None
@@ -794,6 +828,8 @@ async def _run_plan(
         return True
     if kind == "detail":
         if len(ids) == 1:
+            if plan.question and get_settings().detail_question_answer_enabled:
+                return await _answer_detail(ctx, deps, ids[0], plan.question)
             await det.serve_details(ctx, deps, ids[0])
             return ctx.reply is not None
         return await _compare(ctx, deps, ids, policy_for) if len(ids) >= 2 else False
@@ -884,6 +920,10 @@ async def _serve_named(
         await det._handle_link_intent(ctx, deps, ids=ids)
         return True
     if plan.then in ("detail", "find") and len(ids) == 1:
+        if plan.question and get_settings().detail_question_answer_enabled:
+            # NX-381 pe actul promovat: «beauty of joseon relief sun conține alcool?» primește
+            # răspunsul la întrebare, nu fișa standard
+            return await _answer_detail(ctx, deps, ids[0], plan.question)
         await det.serve_details(ctx, deps, ids[0])
         return ctx.reply is not None
     # `detail` pe mai mulți candidați = comparația lor (ca `act_both` pe o citire). Recenzia (I12):

@@ -1805,6 +1805,7 @@ db_query_timing_enabled = false
 decision_axes_enabled = true
 demand_rollup_enabled = true
 detail_intent_enabled = true
+detail_question_answer_enabled = true
 domain_pack_enabled = true
 embed_job_enabled = true
 facet_search_enabled = true

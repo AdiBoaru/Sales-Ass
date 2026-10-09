@@ -99,7 +99,13 @@ from src.tools.catalog_tools import SearchArgs
 #: nenumită) nu e raft concurent; (2) reducerul: pe o cheie de LISTĂ se retrage valoarea, nu
 #: cheia; (3) `TurnPlan.steps` / `RoutineArgs.steps`: pașii numiți de client scopează rutina;
 #: (4) o citire fără țintă primește fraza `no_target`, nu calea v1; (5) traceul fallback-ului.
-KERNEL_CONTRACT_VERSION = "kernel.v8.0"
+#: `kernel.v8.1` (NX-380, MINOR): două câmpuri aditive în schema scrisă de model. `Act.question` =
+#: întrebarea clientului pe `detail`/`compare`, în cuvintele lui (NX-381: plannerul o copiază pe
+#: `TurnPlan.question`, iar executorul de `detail` răspunde la ea din fișă); `Reference.dimension`
+#: acceptă și `rating` (resolverul, plannerul și politica de răspuns îl ordonează deja ca
+#: dimensiune-coloană, dar enumul nu-l lăsa pe model să-l scrie: «cele mai bune recenzii»). Niciun
+#: invariant, rând de proprietate sau regulă de stare nu se schimbă.
+KERNEL_CONTRACT_VERSION = "kernel.v8.1"
 
 # --- scrise de model ----------------------------------------------------------------------------
 
@@ -123,6 +129,10 @@ ReferenceKind = Literal[
 #: Dimensiunile pe care le are ORICE tenant, în afara fațetelor pachetului. `unmapped` = nicio
 #: dimensiune nu se potrivește; codul o re-rezolvă o dată, la validare (contractul, „Provenance").
 UNIVERSAL_DIMENSIONS: tuple[str, ...] = ("category", "price", "unmapped")
+#: NX-380 (kernel.v6.3): dimensiuni pe care doar o REFERINȚĂ le poate numi (o coloană a produsului
+#: după care se ordonează, nu o cerință care se persistă). Aceeași cheie ca
+#: `references.RATING_DIMENSION`; modulul de față nu importă resolverul (rolul `pure`).
+REFERENCE_ONLY_DIMENSIONS: tuple[str, ...] = ("rating",)
 
 
 class _ModelWritten(BaseModel):
@@ -133,6 +143,10 @@ class Act(_ModelWritten):
     kind: ActKind
     targets: list[str]  # id-uri de `Reference` declarate în aceeași interpretare (I22)
     query: str | None  # cuvintele clientului, pentru find / store_info
+    # NX-380 (kernel.v6.3): întrebarea clientului pe detail / compare. Default doar pentru
+    # interpretările construite în cod sau în journey-uri; în schema pentru model e obligatoriu
+    # (`_strictify`), ca orice câmp scris de model.
+    question: str | None = None
 
 
 class StateChange(_ModelWritten):
@@ -262,6 +276,10 @@ class TurnPlan(_CodeWritten):
     #: `kernel.v8.0` (NX-387): pe un plan `bundle`, pașii numiți de client în tur (din tipurile
     #: lui, prin `routine_steps.by_product_type`), când sunt cel puțin doi ai familiei. Gol altfel.
     steps: list[str] = Field(default_factory=list)
+    #: `kernel.v8.1` (NX-381): întrebarea clientului (`Act.question`), copiată de planner pe planul
+    #: unui act `detail` / `compare`, ca executorul să răspundă la ea. Text de client: redactat în
+    #: trace. `None` pe orice alt plan.
+    question: str | None = None
 
 
 class AnswerPolicy(_CodeWritten):
@@ -285,6 +303,8 @@ def _strictify(node: Any) -> None:
         # `title` ar fi dispărut din schemă, rămânând în `required`).
         node.pop("title", None)
         node.pop("description", None)
+        # Un default (NX-380, `Act.question`) e al codului; în `strict` câmpul e obligatoriu.
+        node.pop("default", None)
         if node.get("type") == "object" and "properties" in node:
             node["required"] = sorted(node["properties"])
             node["additionalProperties"] = False
@@ -317,7 +337,10 @@ def build_interpretation_schema(dimensions: Sequence[str]) -> dict[str, Any]:
     enum = sorted({*UNIVERSAL_DIMENSIONS, *(d for d in dimensions if d)})
     schema = copy.deepcopy(TurnInterpretation.model_json_schema())
     defs = schema.get("$defs", {})
-    for name in ("StateChange", "Reference"):
-        defs[name]["properties"]["dimension"] = _enum_nullable_str(enum)
+    defs["StateChange"]["properties"]["dimension"] = _enum_nullable_str(enum)
+    # NX-380: o referință (`extreme`) poate ordona și după dimensiunile-coloană ale produsului.
+    defs["Reference"]["properties"]["dimension"] = _enum_nullable_str(
+        sorted({*enum, *REFERENCE_ONLY_DIMENSIONS})
+    )
     _strictify(schema)
     return schema

@@ -555,7 +555,7 @@ def test_the_adapter_holds_no_vertical_literal_and_the_check_can_fail():
 #: pierde la o rescriere, testul arată care.
 V2_RULES = {
     "1 actul e cererea, nu ce vinde magazinul": "never whether the store sells it",
-    "2 întrebarea despre un articol e detail": "detail also covers a question about an item",
+    "2 întrebarea despre un articol e detail": "detail: a question about one item on screen",
     "3 other doar când nu se potrivește nimic": "other: only when no other act fits",
     "4 aside doar magazin și conversație": '"aside" only for a question about the store itself',
     "5 ce descrie clientul devine schimbare": "is a change when a menu value names its cause",
@@ -575,7 +575,7 @@ def test_the_old_value_rule_is_replaced_not_duplicated():
     """Regula 6 ÎNLOCUIEȘTE formularea v1, ca promptul să nu spună două lucruri."""
     system = " ".join(ti.system_prompt(_input("electronics")).split())
     assert "a code from the menu when one fits" not in system
-    assert system.count("value: a code from the menu") == 1
+    assert system.count("value: for product_type") == 1
 
 
 # --- NX-339c: interpret.v3 = v2 cu regula 2 fără „whether it suits" și bundle reformulat --------
@@ -586,7 +586,7 @@ def test_v3_detail_rule_no_longer_covers_whether_an_item_suits():
     recomandare un `detail` (11 regresii pe A, 7 pe B). v3 o scoate, restul regulii rămâne."""
     system = " ".join(ti.system_prompt(_input("electronics")).split())
     assert "whether it suits" not in system
-    assert "(how to use it, why), with a reference to that item" in system
+    assert "detail: a question about one item on screen" in system
 
 
 @pytest.mark.parametrize("pack", ALL_PACKS)
@@ -594,7 +594,8 @@ def test_v3_bundle_covers_items_used_together_without_naming_them(pack):
     """Pe v2, „fă-mi o rutină" ieșea `find`: bundle cerea articolele numite. Formularea e generică
     (poarta I14 pe adaptor), fără cuvântul unui vertical."""
     system = " ".join(ti.system_prompt(_input(pack)).split())
-    assert "bundle: several items meant to be used together, as one set or in a sequence" in system
+    assert "bundle: only when the customer asks for several items chosen together" in system
+    assert "even when they do not name them" in system
     assert "bundle: a set of items that go together" not in system
 
 
@@ -630,9 +631,125 @@ def test_v4_keeps_every_v2_and_v3_rule(pack):
     """v4 ADAUGĂ trei reguli; nicio regulă de dinainte nu se pierde la rescriere."""
     system = " ".join(ti.system_prompt(_input(pack)).split())
     assert [rule for rule, anchor in V2_RULES.items() if anchor not in system] == []
-    assert "bundle: several items meant to be used together" in system
+    assert "bundle: only when the customer asks for several items chosen together" in system
 
 
-def test_the_prompt_version_is_v4_1():
-    """NX-356: instrucțiunile v4 neschimbate, vederea cu replica botului netăiată."""
-    assert ic.INTERPRET_PROMPT_VERSION == "interpret.v4.1"
+def test_the_prompt_version_is_v5():
+    """NX-380: regulile din setul wide-2026-10-07, meniul de tipuri întreg, `STORE NOTES`."""
+    assert ic.INTERPRET_PROMPT_VERSION == "interpret.v5"
+
+
+# --- NX-380: interpret.v5 = regulile din setul wide-2026-10-07 + meniul de tipuri + STORE NOTES ---
+
+#: Câte o frază-ancoră per regulă v5. Formulările sunt generice (I14): niciun cuvânt de vertical.
+V5_RULES = {
+    "find acoperă problema descrisă": "the customer describes a problem or a need",
+    "bundle doar pentru set, rutină, pași": "bundle: only when the customer asks for several items",
+    "coșul nu e comanda": "Asking about or changing an order already placed is order_status",
+    "store_info = regula comună tuturor produselor": "a rule that is the same for every item",
+    "question pe detail/compare": "question: for detail and compare",
+    "orice tip spus devine schimbare": "never has empty changes",
+    "alt fel de produs = set, nu add": "is op set on the dimensions the customer names for it",
+    "partea corpului numește raftul": "the part or place the items are used on is",
+    "umbrela de tip": "write the first listed code with that head",
+    "forma de bază": "in base form (singular, no article)",
+    "tipul de mai devreme se păstrează": "set that kind again, quoting that line",
+    "referințe doar din mesajul curent": "Never copy a name or a reference from a bot line",
+    "name doar pentru nume proprii": "only words that are an item's own name",
+    "earlier cu poziție": "also fill ordinal, name or dimension + value",
+    "extreme pe rating": "extreme (dimension price, rating",
+    "cuvântul tradus numește codul": "a word that translates a code names that code",
+}
+
+
+@pytest.mark.parametrize("pack", ALL_PACKS)
+def test_every_v5_rule_is_in_the_rendered_prompt(pack):
+    system = " ".join(ti.system_prompt(_input(pack)).split())
+    assert [rule for rule, anchor in V5_RULES.items() if anchor not in system] == []
+    # v5 rescrie, nu pierde: regulile v2 și v4 rămân
+    assert [rule for rule, anchor in V2_RULES.items() if anchor not in system] == []
+    assert [rule for rule, anchor in V4_RULES.items() if anchor not in system] == []
+
+
+def test_v5_keeps_never_narrower_only_outside_the_item_type():
+    """Regula „never a narrower code for a broader word" făcea din «cremă» `unmapped` pe tip,
+    opusul umbrelei NX-350. Rămâne pentru celelalte dimensiuni, o singură dată."""
+    system = " ".join(ti.system_prompt(_input("sole-ro")).split())
+    assert system.count("never a narrower code for a broader word") == 1
+    assert "For the other dimensions, a code only when" in system
+
+
+def test_the_item_type_menu_has_its_own_cap():
+    """Plafonat la 20, meniul SOLE ascundea 34 din 54 de tipuri (setul wide-2026-10-07)."""
+    inp = _input("sole-ro")
+    many = tuple(VocabEntry(f"t{i:03d}", f"t{i:03d}", 5) for i in range(200))
+    vocab = CatalogVocabulary(
+        business_id="b", dimensions={**inp.vocab.dimensions, "product_type": many}
+    )
+    system = ti.system_prompt(dataclasses.replace(inp, vocab=vocab))
+    line = next(ln for ln in system.splitlines() if ln.startswith("- product_type:"))
+    assert line.count(", ") + 1 == ti.MAX_SUBJECT_MENU_VALUES
+    assert ti.MAX_SUBJECT_MENU_VALUES > ti.MAX_MENU_VALUES
+
+
+def _with_notes(name: str, notes: dict[str, tuple[str, ...]]) -> ti.InterpretInput:
+    inp = _input(name)
+    return dataclasses.replace(inp, pack=dataclasses.replace(inp.pack, interpret_notes=notes))
+
+
+@pytest.mark.parametrize("pack", replay.FIXTURE_PACKS)
+def test_without_store_notes_the_prompt_has_no_notes_block(pack):
+    assert ti.STORE_NOTES_HEADER not in ti.system_prompt(_input(pack))
+
+
+def test_the_sole_pack_brings_its_store_notes():
+    """Pachetul SOLE din seed (`fc.pack("sole-ro")`) poartă notițele, deci promptul le arată."""
+    system = ti.system_prompt(_input("sole-ro"))
+    assert ti.STORE_NOTES_HEADER in system
+    assert ti.system_prompt(_with_notes("sole-ro", {})).count(ti.STORE_NOTES_HEADER) == 0
+
+
+def test_store_notes_are_the_last_block_and_leave_the_rest_unchanged():
+    plain = ti.system_prompt(_with_notes("sole-ro", {}))
+    noted = ti.system_prompt(_with_notes("sole-ro", {"ro": ("Prima notiță.", "A doua notiță.")}))
+    assert noted.startswith(plain + "\n\n" + ti.STORE_NOTES_HEADER)
+    assert noted.endswith("- Prima notiță.\n- A doua notiță.")
+
+
+def test_store_notes_follow_the_locale_with_a_base_language_fallback():
+    inp = _with_notes("sole-ro", {"ro": ("Notița ro.",), "en": ("Note en.",)})
+    assert "Notița ro." in ti.system_prompt(dataclasses.replace(inp, locale="ro-RO"))
+    assert "Note en." not in ti.system_prompt(dataclasses.replace(inp, locale="ro-RO"))
+    assert ti.STORE_NOTES_HEADER not in ti.system_prompt(dataclasses.replace(inp, locale="hu"))
+
+
+def test_the_schema_asks_for_the_question_and_allows_rating_only_on_references():
+    schema = ti.interpretation_schema(fc.pack("sole-ro"))["schema"]
+    act = schema["$defs"]["Act"]
+    assert "question" in act["required"] and "default" not in act["properties"]["question"]
+    ref_dims = schema["$defs"]["Reference"]["properties"]["dimension"]["anyOf"][0]["enum"]
+    change_dims = schema["$defs"]["StateChange"]["properties"]["dimension"]["anyOf"][0]["enum"]
+    assert "rating" in ref_dims and "rating" not in change_dims
+    assert ref_dims == sorted(ref_dims)
+
+
+def test_an_interpretation_without_question_still_parses():
+    """Journey-urile și interpretările construite în cod n-au câmpul; modelul îl trimite mereu."""
+    interp = TurnInterpretation.model_validate(
+        {
+            "thread": "continue",
+            "acts": [{"kind": "detail", "targets": [], "query": None}],
+            "changes": [],
+            "references": [],
+            "ambiguities": [],
+            "corrects_previous_turn": False,
+        }
+    )
+    assert interp.acts[0].question is None
+
+
+def test_store_notes_change_the_snapshot_id():
+    """Recenzia NX-380: turele cu și fără notițe trebuie să se despartă în raport (R2)."""
+    plain = _with_notes("sole-ro", {})
+    noted = _with_notes("sole-ro", {"ro": ("o notiță",)})
+    assert ic.snapshot_id(plain.pack, plain.vocab) != ic.snapshot_id(noted.pack, noted.vocab)

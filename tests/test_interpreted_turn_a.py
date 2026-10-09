@@ -470,7 +470,7 @@ async def test_the_dark_turn_writes_the_trace_and_returns_false(monkeypatch, ele
     assert run.reached and run.branch_result is False
     assert run.llm.loops, "calea v1 a răspuns"
     trace = KernelTrace.model_validate(run.ctx.trace["kernel"])
-    assert trace.contract_version == KERNEL_CONTRACT_VERSION == "kernel.v8.0"
+    assert trace.contract_version == KERNEL_CONTRACT_VERSION == "kernel.v8.1"
     assert trace.executor == "none" and trace.plan.executor == "search"
     assert trace.plans == [trace.plan] and trace.truncated is False
     assert "kernel_fallback" not in run.ctx.trace
@@ -763,7 +763,10 @@ def test_the_trace_is_redacted_before_it_is_stored():
     mail, phone = "ana.pop@example.com", "0722 123 456"
     interp = TurnInterpretation(
         thread="continue",
-        acts=[Act(kind="find", targets=["r1"], query=f"scrie-mi la {mail}")],
+        acts=[
+            Act(kind="find", targets=["r1"], query=f"scrie-mi la {mail}"),
+            Act(kind="detail", targets=["r1"], query=None, question=f"ajunge la {phone}?"),
+        ],
         changes=[
             StateChange(
                 op="add",

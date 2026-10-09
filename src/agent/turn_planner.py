@@ -132,6 +132,8 @@ DELEGATE_TOOLS: frozenset[str] = frozenset(
 
 #: Actele de citire care cer o țintă; pe un nume negăsit devin căutare (contractul + NX-333).
 _READ_ACTS: frozenset[str] = frozenset({"detail", "link", "compare"})
+#: NX-381: actele pe care clientul pune o întrebare despre produse (`Act.question`, kernel.v6.3).
+_ASKING_ACTS: frozenset[str] = frozenset({"detail", "compare"})
 #: Actele fără țintă, cu executorul lor fix.
 _FIXED: Mapping[str, Executor] = {
     "store_info": "faq",
@@ -843,9 +845,16 @@ class _Planner:
         kind = then or act.kind
         if plan.executor != "search" or kind not in ("detail", "link", "compare", "find"):
             return plan
-        return plan.model_copy(
-            update={"then": kind, "names": names, "product_ids": list(dict.fromkeys(exact))}
-        )
+        update: dict[str, object] = {
+            "then": kind,
+            "names": names,
+            "product_ids": list(dict.fromkeys(exact)),
+        }
+        if act.question and kind in ("detail", "compare", "find"):
+            # NX-381: întrebarea clientului merge cu actul promovat («… conține alcool?»), ca
+            # executorul de detaliu să răspundă la ea, nu să servească fișa
+            update["question"] = act.question
+        return plan.model_copy(update=update)
 
     def _show_more(self, act: Act, index: int) -> TurnPlan:
         if not self.changed and self.state.active_search:
@@ -903,7 +912,12 @@ class _Planner:
         if not ids:
             self._disclose(index, "no_target")
             return self._plan("reply_only")
-        return self._plan(act.kind, ids)  # type: ignore[arg-type]
+        plan = self._plan(act.kind, ids)  # type: ignore[arg-type]
+        if act.kind in _ASKING_ACTS and act.question:
+            # NX-381 (kernel.v6.3): întrebarea merge la executor ca VALOARE; plannerul nu ramifică
+            # pe ea (planul e decis mai sus, pe referințe și pe verdictul porții).
+            plan = plan.model_copy(update={"question": act.question})
+        return plan
 
     def _name(self, ref_id: str) -> str | None:
         ref = self.refs.get(ref_id)

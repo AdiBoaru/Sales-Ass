@@ -492,14 +492,21 @@ async def serve_details(
     product_id: str,
     *,
     lead: Callable[[dict[str, Any]], str | None] | None = None,
+    gated: list[dict[str, Any]] | None = None,
 ) -> None:
     """Detaliile unui produs DEJA rezolvat (vezi `serve_reviews` pentru de ce e extras).
 
     `lead` (NX-316 `fit_question`): o frază calculată din produsul PROASPĂT citit, pusă înaintea
-    detaliilor. Primește produsul după safety gate, deci nu poate răspunde despre unul exclus."""
-    async with deps.db("detail_intent_product") as conn:
-        products = await get_products_by_ids(conn, ctx.business.id, [product_id], limit=1)
-    products = SafetyPolicy.for_turn(ctx).gate(ctx, products, purpose="detail_intent")[0]
+    detaliilor. Primește produsul după safety gate, deci nu poate răspunde despre unul exclus.
+
+    `gated` (NX-381): produsul DEJA citit și trecut prin poarta de siguranță în acest tur (de
+    răspunsul la întrebare); fără el, a doua citire ar re-emite evenimentul de blocare."""
+    if gated is None:
+        async with deps.db("detail_intent_product") as conn:
+            products = await get_products_by_ids(conn, ctx.business.id, [product_id], limit=1)
+        products = SafetyPolicy.for_turn(ctx).gate(ctx, products, purpose="detail_intent")[0]
+    else:
+        products = list(gated)
     if not products:
         ctx.set_reply(_detail_copy(ctx.language)["unavailable"], cacheable=False)
         ctx.emit("detail_intent", served=0, reason="unavailable")

@@ -63,7 +63,7 @@ gate-ul NX-210**. Direcția aprobată către care migrăm:
 
 **Înghețate până la GO-ul de la NX-210:** enforcement-ul QuerySpec/Match Gate (NX-188, NX-189).
 
-**Kernelul conversațional — contractul `kernel.v1.0` (înghețat 2026-09-25, NORMATIV; azi `kernel.v6.2`: MAJOR la v2.0, NX-336 PR B, sensul lui I5; minor la v2.1, NX-336 D3, `TurnPlan.family`; MAJOR la v3.0, NX-348, sensul unei schimbări de subiect; MAJOR la v4.0, NX-350, un tip spus vag devine umbrelă, nu tipul subiectului; MAJOR la v5.0, NX-352, nevoia spusă e filtru relaxabil, căutarea se compune din ce a validat kernelul, «mai ieftin» ambiguu = mediana; minor la v5.1, NX-349, fațetele da/nu; MAJOR la v6.0, NX-364, ordinalul după detaliu, flexiunea în proveniență, excluderea și banda de preț; minor la v6.1, NX-374, dezvăluirea `need_unverifiable`; minor la v6.2, NX-375, `find` caută pe numele produsului numit; porțile de replay derogate de Adi).**
+**Kernelul conversațional — contractul `kernel.v1.0` (înghețat 2026-09-25, NORMATIV; azi `kernel.v8.1`: MAJOR la v2.0, NX-336 PR B, sensul lui I5; minor la v2.1, NX-336 D3, `TurnPlan.family`; MAJOR la v3.0, NX-348, sensul unei schimbări de subiect; MAJOR la v4.0, NX-350, un tip spus vag devine umbrelă, nu tipul subiectului; MAJOR la v5.0, NX-352, nevoia spusă e filtru relaxabil, căutarea se compune din ce a validat kernelul, «mai ieftin» ambiguu = mediana; minor la v5.1, NX-349, fațetele da/nu; MAJOR la v6.0, NX-364, ordinalul după detaliu, flexiunea în proveniență, excluderea și banda de preț; minor la v6.1, NX-374, dezvăluirea `need_unverifiable`; minor la v6.2, NX-375, `find` caută pe numele produsului numit; MAJOR la v7.0, NX-384, felul nemapat, raftul pe propriul nume, «nu vreau X»; minor la v7.1, NX-386, produsul numit și comparația cu o țintă; MAJOR la v8.0, NX-387, omisiunile; minor la v8.1, NX-380, `Act.question` și `rating` la referințe; porțile de replay derogate de Adi).**
 Sursa: [`docs/KERNEL-CONTRACT-v1.md`](docs/KERNEL-CONTRACT-v1.md); designul din care vine, ca
 referință: [`docs/KERNEL-DESIGN.md`](docs/KERNEL-DESIGN.md). Modelul scrie O interpretare a turului
 (`TurnInterpretation`: acte, schimbări de stare adresate prin handle, referințe, ambiguități); codul
@@ -656,6 +656,28 @@ tur (raftul, bugetul, nevoile și tipul vechi ies, cu golul `name_unscoped`), ia
 subiect pentru poartă. Declarat: o descriere etichetată `name` de model e căutată ca nume (niciun
 semnal structural n-o deosebește de un nume scris parțial). Card:
 [`tasks/stage1/NX-375.md`](tasks/stage1/NX-375.md); probă: `pytest tests/test_nx375_find_named_product.py -q`.
+
+**NX-380 — `kernel.v8.1` (minor; scris ca v6.3, mutat peste v8.0 la merge) + promptul `interpret.v5`: regulile vin din greșelile reale, iar ce e al
+magazinului e dată.** Cele 398 de ture ne-ok din `wide-2026-10-07`, cu interpretarea brută a fiecăruia
+(`conversation_traces.diagnostics.model_io`), etichetate pe strat: cod 188, interpretare 90, schemă/meniu
+87, date 30. Schema: `Act.question` (întrebarea de pe `detail`/`compare`, FĂRĂ consumator încă: fișa
+rămâne fixă până la cardul executorului) și `rating` în `Reference.dimension` (`REFERENCE_ONLY_DIMENSIONS`).
+Meniul `product_type` are plafon propriu (80; la 20 ascundea 34 din 54 de tipuri SOLE). Instrucțiunile v5
+(generice, I14): granițele actelor, orice tip spus devine schimbare, umbrela de tip în locul lui „never
+narrower” pe `product_type`, referințe doar din cuvintele turului, `name` doar pentru nume proprii, `earlier`
+cu poziție. Notițele de magazin sunt `DomainPack.interpret_notes[locale]` (≤ 12 × 300 de caractere),
+blocul `STORE NOTES`; cele SOLE sunt în `db/seed/domain_pack_sole_ro.json`, verificate pe catalog, iar
+aplicarea în DB o rulează Adi. Regula GO (R1 pe seturile etichetate, R2 pe un set nou de producție) e
+pre-înregistrată în card. Card: [`tasks/stage1/NX-380.md`](tasks/stage1/NX-380.md); probă:
+`pytest tests/test_turn_interpreter.py tests/test_nx380_interpret_notes.py -q`.
+**NX-381 — întrebarea despre un produs primește un răspuns din fișă.** Plannerul copiază
+`Act.question` pe `TurnPlan.question` (`detail`/`compare`, redactat în trace); executorul de `detail`
+cu o întrebare răspunde prin `src/agent/detail_answer.py`: faptele = fișa pe care o citește clientul,
+UN apel de model, poartă de ADEVĂR legată de fișă (claim medical, link, preț, cifră absentă din fișă și
+din întrebare, stoc), nu lista de cuvinte a validatorului de proză. Orice eșec servește fișa de azi;
+politica de răspuns citește dimensiunea decisivă și din `question`. Flag
+`DETAIL_QUESTION_ANSWER_ENABLED` (ON). Card: [`tasks/stage1/NX-381.md`](tasks/stage1/NX-381.md); probă:
+`pytest tests/test_nx381_detail_question.py -q`.
 
 **NX-238 — retrievalul trece printr-un PORT, iar candidatul e inert (verdict `NOT-READY`).**
 `src/retrieval/` e contractul stabil pe care îl consumă NX-239: `RetrievalPort` + `RetrievalBundle`
