@@ -3,7 +3,8 @@
 Cluster PUR, determinist (zero I/O, zero `TurnContext`/`deps`/DB): predicate peste
 `reply: str` + `products` (ref-uri retrievate) + linkuri/sume grounded de bot. Verifică structural
 că botul NU inventează preț/link/număr/claim:
-  • `_prices_ok`   — fiecare preț cu valută ∈ prețuri retrievate (+ variante) SAU sumă grounded.
+  • `_prices_ok`   — fiecare preț cu valută ∈ prețuri retrievate (+ variante, + totalul setului,
+    NX-391) SAU sumă grounded.
   • `_links_ok`    — fiecare URL ∈ product_url retrievat SAU link generat în tur (checkout_link).
   • `_bare_numbers_ok` — cifrele «grele» fără valută sunt grounded (NX-91; whitelist `_SAFE_BARE`).
   • `_claims_ok`   — fără superlativ/claim de text neverificabil (NX-117; gated fail-open).
@@ -72,6 +73,22 @@ def _budget(text: str) -> float | None:
     return float(val) if val else None
 
 
+def set_total(products: list[dict[str, Any]]) -> float | None:
+    """NX-391: TOTALUL unui set de produse (prețul fiecărui produs o dată), când setul are cel puțin
+    două produse cu preț cunoscut; altfel None. E un fapt ca prețul unui produs: clientul întreabă
+    cât costă toate, oricum ar formula, iar modelul răspunde cu suma (pe `mixed-2026-10-09`, m2:
+    „615 lei”, corect, respins ca preț inventat). Doar totalul ÎNTREG, nu orice submulțime: cu
+    șase produse ar fi 57 de sume rotunde, iar un preț inventat pentru un singur produs ar trece
+    doar fiindcă se nimerește egal cu două prețuri adunate (poarta anti-injecție, NX-121)."""
+    seen: dict[str, float] = {}
+    for i, p in enumerate(products):
+        if p.get("price") is None:
+            continue
+        key = str(p.get("id") or p.get("product_id") or f"#{i}")
+        seen.setdefault(key, round(float(p["price"]), 2))
+    return round(sum(seen.values()), 2) if len(seen) >= 2 else None
+
+
 def _allowed_prices(products: list[dict[str, Any]]) -> list[float]:
     # NX-118: include prețurile per-variantă (hidratate pe read path) — un „149 lei" pentru
     # varianta de 100ml NU mai e respins de validator (avea doar scalarul min(variant)).
@@ -84,6 +101,9 @@ def _allowed_prices(products: list[dict[str, Any]]) -> list[float]:
                 v = var.get(key)
                 if v is not None:
                     out.append(round(float(v), 2))
+    total = set_total(products)
+    if total is not None:
+        out.append(total)  # NX-391: totalul setului e un fapt
     return out
 
 
@@ -151,6 +171,9 @@ def _allowed_numbers(products: list[dict[str, Any]], grounded_prices: set[float]
                 v = var.get(key)
                 if v is not None:
                     allowed.add(round(float(v), 2))
+    total = set_total(products)
+    if total is not None:
+        allowed.add(total)  # NX-391: același fapt scris fără valută («615»)
     return allowed
 
 
