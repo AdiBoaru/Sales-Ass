@@ -33,6 +33,7 @@ FALLBACK_REASONS = frozenset(
     {
         "model_error",
         "model_unsupported",
+        "round_timeout",
         "no_answer",
         "gate_failed",
         "timeout",
@@ -40,6 +41,15 @@ FALLBACK_REASONS = frozenset(
         "internal",
     }
 )
+
+
+def _diagnostic(event: Any) -> bool:
+    """NX-401: evenimentele care rămân și când agentul cade: rundele lui și cele ale clientului de
+    model (reîncercări, apeluri lente). Fără ele, primul blocaj din producție (42,5 s, apoi plasa)
+    n-a putut fi explicat: ștergerea ramurii le luase cu ea."""
+    return event.type == "assistant_round" or event.type.startswith("llm_")
+
+
 #: Câte mesaje anterioare vede agentul (fereastra încărcată e de 20 cu cel curent).
 HISTORY_MESSAGES = 19
 
@@ -61,6 +71,8 @@ class _Run:
     #: Uneltele turului, puse aici imediat ce există: o cădere în mijlocul turului trebuie să
     #: vadă mutațiile deja făcute.
     tools: Any = None
+    last_round_ms: int = 0
+    last_round_attempts: int = 1
 
 
 async def run_assistant_turn(ctx: Any, deps: Any) -> bool:
@@ -91,7 +103,9 @@ async def run_assistant_turn(ctx: Any, deps: Any) -> bool:
         return True
     facts = tools.facts if tools is not None else None
     mutated = bool(facts and facts.mutated)
+    kept = [e for e in ctx.events[events_before:] if _diagnostic(e)]
     del ctx.events[events_before:]
+    ctx.events.extend(kept)
     ctx.trace.pop("assistant", None)
     try:
         saved.restore(ctx)
@@ -202,17 +216,7 @@ async def _serve(ctx: Any, deps: Any, settings: Any, run: _Run) -> Tools:
             choice: Any = (
                 {"type": "function", "name": "answer"} if run.rounds >= budget else "required"
             )
-            try:
-                resp = await llm.respond_round(
-                    instructions=system,
-                    input=items,
-                    tools=schemas,
-                    effort=settings.llm_reasoning_effort_assistant,
-                    tool_choice=choice,
-                )
-            except Exception as e:  # noqa: BLE001 — furnizor căzut, cerere refuzată, model nedeclarat
-                log.warning("assistant: runda de model a picat: %s", type(e).__name__)
-                raise _Fallback("model_error") from e
+            resp = await _round(ctx, llm, settings, run, system, items, schemas, choice)
             if resp is None:
                 raise _Fallback("budget")
             _count_usage(run, resp)
@@ -221,6 +225,14 @@ async def _serve(ctx: Any, deps: Any, settings: Any, run: _Run) -> Tools:
                 items.append(item.model_dump(exclude_none=True))
                 if getattr(item, "type", None) == "function_call":
                     calls.append(item)
+            ctx.emit(
+                "assistant_round",
+                n=run.rounds,
+                outcome="ok",
+                ms=run.last_round_ms,
+                attempts=run.last_round_attempts,
+                calls=[c.name for c in calls],
+            )
             for call in calls:
                 if final is not None:
                     # Răspunsul e acceptat: ce a mai cerut modelul în aceeași rundă (o mutație
@@ -266,6 +278,55 @@ async def _serve(ctx: Any, deps: Any, settings: Any, run: _Run) -> Tools:
     memory.notes = final.notes or memory.notes
     ctx.state_patch["assistant"] = memory.to_state()
     return tools
+
+
+async def _round(
+    ctx: Any,
+    llm: Any,
+    settings: Any,
+    run: _Run,
+    system: str,
+    items: list[Any],
+    schemas: list[dict[str, Any]],
+    choice: Any,
+) -> Any:
+    """O rundă de model sub plafonul ei (`ASSISTANT_ROUND_TIMEOUT_S`), reîncercată O dată dacă
+    furnizorul nu răspunde în timp. Un apel blocat nu mai consumă tot turul: a doua încercare
+    pleacă imediat, iar dacă și ea stă, turul cade pe calea de azi cu motivul `round_timeout`."""
+    for attempt in (1, 2):
+        started = time.monotonic()
+        run.last_round_attempts = attempt
+        try:
+            resp = await asyncio.wait_for(
+                llm.respond_round(
+                    instructions=system,
+                    input=items,
+                    tools=schemas,
+                    effort=settings.llm_reasoning_effort_assistant,
+                    tool_choice=choice,
+                ),
+                timeout=settings.assistant_round_timeout_s,
+            )
+        except TimeoutError:
+            ms = round((time.monotonic() - started) * 1000)
+            ctx.emit("assistant_round", n=run.rounds, outcome="timeout", ms=ms, attempts=attempt)
+            log.warning("assistant: runda %s a depășit %s s", run.rounds, ms / 1000)
+            continue
+        except Exception as e:  # noqa: BLE001 — furnizor căzut, cerere refuzată, model nedeclarat
+            ms = round((time.monotonic() - started) * 1000)
+            ctx.emit(
+                "assistant_round",
+                n=run.rounds,
+                outcome="error",
+                ms=ms,
+                attempts=attempt,
+                error=type(e).__name__,
+            )
+            log.warning("assistant: runda de model a picat: %s", type(e).__name__)
+            raise _Fallback("model_error") from e
+        run.last_round_ms = round((time.monotonic() - started) * 1000)
+        return resp
+    raise _Fallback("round_timeout")
 
 
 def _check(

@@ -2020,6 +2020,12 @@ class Settings(BaseSettings):
     assistant_max_rounds: int = Field(
         default=6, ge=1, le=10, validation_alias="ASSISTANT_MAX_ROUNDS"
     )
+    # NX-401: plafonul unei RUNDE de model (secunde). Un apel blocat la furnizor e tăiat aici și
+    # reîncercat O dată, în loc să consume tot turul (primul tur după deploy: 42,5 s fără niciun
+    # token, apoi plasa). Măsurat pe trafic: o rundă normală durează 1,5-7 s.
+    assistant_round_timeout_s: float = Field(
+        default=20.0, gt=0, le=60, validation_alias="ASSISTANT_ROUND_TIMEOUT_S"
+    )
     # Plafonul de timp al turului agentului (secunde). Depășit ⇒ calea de azi răspunde.
     assistant_turn_timeout_s: float = Field(
         default=45.0, gt=0, le=120, validation_alias="ASSISTANT_TURN_TIMEOUT_S"

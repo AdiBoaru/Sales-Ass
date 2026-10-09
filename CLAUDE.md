@@ -806,6 +806,11 @@ parte (fără să pice la boot). Suitele căilor de dinainte rulează cu agentul
 (`tests/conftest.py`), fiindcă măsoară plasa lui. Kernelul NU se șterge (decizia lui
 Adi). Card: [`tasks/stage1/NX-396.md`](tasks/stage1/NX-396.md); probă:
 `pytest tests/test_nx396_assistant.py -q`.
+**NX-401** (după primele ture din producție): o recomandare arată 2-4 produse pe nevoia spusă (prompt
+`assistant.v2`), o rundă de model are plafonul ei (`ASSISTANT_ROUND_TIMEOUT_S`, 20 s, reîncercată o
+dată, apoi `round_timeout`), iar `assistant_round` + evenimentele `llm_*` rămân și când agentul
+cade (primul blocaj, 42,5 s fără token, nu putuse fi explicat). Card:
+[`tasks/stage1/NX-401.md`](tasks/stage1/NX-401.md).
 
 **NX-238 — retrievalul trece printr-un PORT, iar candidatul e inert (verdict `NOT-READY`).**
 `src/retrieval/` e contractul stabil pe care îl consumă NX-239: `RetrievalPort` + `RetrievalBundle`
