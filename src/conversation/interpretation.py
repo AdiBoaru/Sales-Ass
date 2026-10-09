@@ -105,7 +105,15 @@ from src.tools.catalog_tools import SearchArgs
 #: acceptă și `rating` (resolverul, plannerul și politica de răspuns îl ordonează deja ca
 #: dimensiune-coloană, dar enumul nu-l lăsa pe model să-l scrie: «cele mai bune recenzii»). Niciun
 #: invariant, rând de proprietate sau regulă de stare nu se schimbă.
-KERNEL_CONTRACT_VERSION = "kernel.v8.1"
+#: `kernel.v9.0` (NX-389, MAJOR): o regulă nouă a porții. O rutină (`bundle`) fără familie, fără
+#: raft în subiect, întreabă pentru ce e (cheia `routine_family`, motivele `no_family` /
+#: `family_readings`), între familiile pe care catalogul le poate servi
+#: (`routine_steps.family_counts_by_need`); o singură familie servibilă o decide fără întrebare
+#: (`family_single`), iar după o întrebare la care clientul n-a ales, familia majoritară cu
+#: dezvăluirea `family_defaulted` (I11: familia se întreabă o dată). Câmpuri aditive:
+#: `GateOutcome.routine_family` / `family_labels`, `PlannedTurn.family_labels`. Schema scrisă de
+#: model e neschimbată. Flag `ROUTINE_FAMILY_QUESTION_ENABLED` (stins = regula de azi).
+KERNEL_CONTRACT_VERSION = "kernel.v9.0"
 
 # --- scrise de model ----------------------------------------------------------------------------
 

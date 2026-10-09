@@ -55,6 +55,7 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -179,6 +180,15 @@ class RoutineSpec:
     #: spuse. E o dată DERIVATĂ din catalog (`scripts/derive_family_by_need.py`: familia care poartă
     #: majoritatea clară a produselor cu nevoia), nu o regulă în cod.
     family_by_need: dict[str, str] = field(default_factory=dict)
+    #: NX-389 (`kernel.v9.0`): nevoie → familie → câte produse servibile cu pas de rutină o poartă.
+    #: OPȚIONAL, DERIVAT de același script. Poarta întreabă familia unei rutini doar între familiile
+    #: care o pot servi (`min_family_products`), fără niciun query pe drumul turului.
+    family_counts_by_need: dict[str, dict[str, int]] = field(default_factory=dict)
+    #: NX-389: familie → câte produse servibile cu pas de rutină are, pentru o rutină cerută fără
+    #: nicio nevoie cunoscută.
+    family_counts: dict[str, int] = field(default_factory=dict)
+    #: NX-389: sub atâtea produse o familie nu poate servi o rutină (pragul derivării, `MIN_COUNT`).
+    min_family_products: int = 15
 
     def label_of(self, step: str, locale: str | None = None) -> str:
         """Eticheta afișabilă a unui pas. Fallback: cheia humanizată (`_` → spațiu, capitalizat).
@@ -436,6 +446,30 @@ def build_spec(raw: Any) -> RoutineSpec:
             raise RoutineStepConfigError(f"family_by_need[{need!r}] = {fam!r} nu e o familie")
         family_by_need[f"{dimension.strip()}:{value.strip()}"] = fam
 
+    family_counts_by_need: dict[str, dict[str, int]] = {}
+    raw_counts = raw.get("family_counts_by_need") or {}
+    if not isinstance(raw_counts, dict):
+        raise RoutineStepConfigError("routine_steps.family_counts_by_need trebuie să fie obiect")
+    for need, by_family in raw_counts.items():
+        dimension, sep, value = (
+            (need or "").partition(":") if isinstance(need, str) else ("", "", "")
+        )
+        if not sep or not dimension.strip() or not value.strip():
+            raise RoutineStepConfigError(
+                f"family_counts_by_need: cheie invalidă {need!r} (dimensiune:valoare)"
+            )
+        family_counts_by_need[f"{dimension.strip()}:{value.strip()}"] = _family_counts(
+            by_family, families, f"family_counts_by_need[{need!r}]"
+        )
+    family_counts = _family_counts(raw.get("family_counts") or {}, families, "family_counts")
+    min_family_products = raw.get("min_family_products", 15)
+    if (
+        not isinstance(min_family_products, int)
+        or isinstance(min_family_products, bool)
+        or min_family_products < 1
+    ):
+        raise RoutineStepConfigError("routine_steps.min_family_products trebuie să fie întreg ≥ 1")
+
     step_stems: dict[str, tuple[str, ...]] = {}
     raw_stems = raw.get("step_stems") or {}
     if not isinstance(raw_stems, dict):
@@ -460,7 +494,24 @@ def build_spec(raw: Any) -> RoutineSpec:
         step_stems=step_stems,
         family_by_shelf=family_by_shelf,
         family_by_need=family_by_need,
+        family_counts_by_need=family_counts_by_need,
+        family_counts=family_counts,
+        min_family_products=min_family_products,
     )
+
+
+def _family_counts(raw: Any, families: Mapping[str, Any], where: str) -> dict[str, int]:
+    """`familie → număr de produse` (NX-389), cu familiile declarate și numere ≥ 0."""
+    if not isinstance(raw, dict):
+        raise RoutineStepConfigError(f"routine_steps.{where} trebuie să fie obiect")
+    out: dict[str, int] = {}
+    for fam, n in raw.items():
+        if fam not in families:
+            raise RoutineStepConfigError(f"{where}[{fam!r}] nu e o familie")
+        if not isinstance(n, int) or isinstance(n, bool) or n < 0:
+            raise RoutineStepConfigError(f"{where}[{fam!r}] = {n!r} nu e un număr de produse")
+        out[fam] = n
+    return out
 
 
 EMPTY_ROUTINE_STEPS = RoutineSpec(families={}, by_product_type={})
@@ -468,7 +519,17 @@ EMPTY_ROUTINE_STEPS = RoutineSpec(families={}, by_product_type={})
 #: Cheile care ADAUGĂ o comportare, fără ca absența lor să schimbe ce funcționa înainte. Sunt
 #: singurele pe care `load_routine_steps` le poate arunca separat — vezi docstringul lui.
 _OPTIONAL_KEYS: frozenset[str] = frozenset(
-    {"priority", "step_time", "time_markers", "step_stems", "family_by_shelf", "family_by_need"}
+    {
+        "priority",
+        "step_time",
+        "time_markers",
+        "step_stems",
+        "family_by_shelf",
+        "family_by_need",
+        "family_counts_by_need",
+        "family_counts",
+        "min_family_products",
+    }
 )
 
 

@@ -1280,6 +1280,11 @@ def test_every_reason_emitted_by_the_suite_is_in_the_closed_vocabulary():
         resolve_between=False,
     )
     seen |= {o.decision.reason for o in outcomes}
+    # NX-389: familia unei rutini fără familie (întrebată, din lecturi, singura, niciuna, deja
+    # întrebată), pe pachetul SOLE cu numărătorile de familie.
+    from tests.test_nx389_routine_family_question import reason_scenarios
+
+    seen |= {build().outcome.decision.reason for build in reason_scenarios()}
     # Lecturi pe o dimensiune pe care clientul a spus-o deja explicit.
     seen.add(
         step(

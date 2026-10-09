@@ -11,7 +11,8 @@
         "src/conversation/delta.py",
         "src/conversation/ambiguity_gate.py",
         "src/conversation/answer_policy.py",
-        "src/conversation/interpretation_check.py"
+        "src/conversation/interpretation_check.py",
+        "src/conversation/routine_family.py"
       ]
     },
     "planner": {

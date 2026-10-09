@@ -58,6 +58,7 @@ KERNEL_SENTENCE_CODES: frozenset[str] = frozenset(
         "store_info_unavailable",
         "store_info_rest_unconfirmed",
         "need_unverifiable",
+        "family_defaulted",
     }
 )
 #: Singurele coduri cu un marcator, fiecare exact o dată (loaderul respinge orice alt marcator):

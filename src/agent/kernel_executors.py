@@ -226,6 +226,10 @@ def _disclosures_of(planned: PlannedTurn) -> tuple[tuple[str, dict[str, Any]], .
         facts: dict[str, Any] = {}
         if code == "need_unverifiable" and planned.disclosed_needs:
             facts["needs"] = list(planned.disclosed_needs)
+        if code == "family_defaulted" and planned.family_labels:
+            # NX-389: etichetele rafturilor (date ale catalogului), cea aleasă întâi
+            facts["built_for"] = planned.family_labels[0]
+            facts["other_options"] = list(planned.family_labels[1:])
         out[code] = facts
     return tuple(out.items())
 

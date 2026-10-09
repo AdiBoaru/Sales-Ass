@@ -327,6 +327,7 @@ def _gate_policy(pack: Any | None) -> ClarificationPolicy:
         vocabulary=NeedVocabulary.from_pack(pack),
         min_information_gain=s.clarification_min_information_gain,
         max_attempts_per_key=s.clarify_max_attempts,
+        routine_family_question=s.routine_family_question_enabled,
     )
 
 

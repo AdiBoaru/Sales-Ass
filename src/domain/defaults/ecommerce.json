@@ -14,13 +14,14 @@
       "en": "The product sheet does not list {slot} among its recommendations."
     }
   },
-  "_clarify_templates_note": "NX-332 (kernel pasul 4a): frazele intrebarilor de clarificare, locale -> kind -> fraza. {options} se completeaza de server din etichete canonice (vocabular, pachet) sau din numele de afisare ale produselor recitite din catalog, legate cu list_glue, niciodata din textul modelului. reference/scope/value sunt valorile lui Ambiguity.about, subject/confirm/conflict/generic sunt chei de date, iar bound_lte/bound_gte sunt etichetele limitelor din intrebarea de conflict (exact un {value}). Un sablon cu alt marcator e respins la load. Fara liniuta de pauza si fara punct si virgula (P13).",
+  "_clarify_templates_note": "NX-332 (kernel pasul 4a): frazele intrebarilor de clarificare, locale -> kind -> fraza. {options} se completeaza de server din etichete canonice (vocabular, pachet) sau din numele de afisare ale produselor recitite din catalog, legate cu list_glue, niciodata din textul modelului. reference/scope/value sunt valorile lui Ambiguity.about, subject/family/confirm/conflict/generic sunt chei de date (family: NX-389, pentru ce e o rutina fara familie), iar bound_lte/bound_gte sunt etichetele limitelor din intrebarea de conflict (exact un {value}). Un sablon cu alt marcator e respins la load. Fara liniuta de pauza si fara punct si virgula (P13).",
   "clarify_templates": {
     "ro": {
       "reference": "La care te referi dintre {options}?",
       "scope": "Mă gândesc la {options}. La care te referi?",
       "value": "Care dintre acestea te interesează: {options}?",
       "subject": "Ce cauți? Am {options}.",
+      "family": "Pentru ce să fie rutina: {options}?",
       "confirm": "Să înțeleg că e vorba de {options}?",
       "conflict": "Am două limite care nu se împacă: {options}. Care rămâne?",
       "generic": "Poți să-mi spui mai exact? Mă gândesc la {options}.",
@@ -32,6 +33,7 @@
       "scope": "I'm thinking of {options}. Which one do you mean?",
       "value": "Which of these are you after: {options}?",
       "subject": "What are you looking for? I have {options}.",
+      "family": "What should the routine be for: {options}?",
       "confirm": "Just to check, is it {options}?",
       "conflict": "I have two limits that don't fit together: {options}. Which one stays?",
       "generic": "Could you tell me a bit more? I'm thinking of {options}.",
@@ -39,7 +41,7 @@
       "bound_gte": "at least {value}"
     }
   },
-  "_kernel_sentences_note": "NX-336 PR C: frazele turului interpretat, locale -> cod -> fraza fara niciun marcator. Codurile sunt vocabular inchis (KERNEL_SENTENCE_CODES): dezvaluirile plannerului (not_exact_match, invalid_target, dropped_act, no_target) si raspunsul unei cautari fara rezultate (no_results), plus verdict_unknown si verdict_unknown_any: inchiderea unei comparatii pe care politica de raspuns nu o lasa sa aleaga (I12). verdict_unknown e singurul cod cu un marcator, {dimension} exact o data, completat de server cu eticheta de rand a fatetei, citata ca atare (o eticheta de rand nu e mereu substantiv); verdict_unknown_any e fraza fara eticheta (ratingul nu e o fateta). D2: cart_added ({product} = numele scurt al produsului adaugat, exact o data), cart_failed, iar mutation_unavailable si mutation_not_exact raspund unei mutatii refuzate de poarta fara intrebare. NX-372: raspunsul unui tur care a citit doar regulile magazinului si n-a putut raspunde din ele (si pe calea v1), in locul mesajului de cautare fara produse, dupa ce s-a citit de fapt: store_info_unknown cand citirea a mers si n-a adus nicio regula (singurul caz in care se poate spune ca regulile nu au informatia), store_info_unconfirmed cand s-au citit reguli dar niciuna nu s-a putut servi (fara sa afirme ca lipseste), store_info_unavailable cand toate citirile au picat, store_info_rest_unconfirmed dupa regulile servite, pentru restul intrebarii. NX-374 (kernel.v6.1): need_unverifiable spune ca o cerinta rostita in tur nu se poate verifica din datele produselor. O dezvaluire lipsa inseamna turul fara ea; no_results lipsa inseamna ca turul fara rezultate nu e servit de kernel si raspunde calea v1. Fara liniuta de pauza si fara punct si virgula (P13), fara promisiuni pe care nu le onoreaza nimeni.",
+  "_kernel_sentences_note": "NX-336 PR C: frazele turului interpretat, locale -> cod -> fraza fara niciun marcator. Codurile sunt vocabular inchis (KERNEL_SENTENCE_CODES): dezvaluirile plannerului (not_exact_match, invalid_target, dropped_act, no_target) si raspunsul unei cautari fara rezultate (no_results), plus verdict_unknown si verdict_unknown_any: inchiderea unei comparatii pe care politica de raspuns nu o lasa sa aleaga (I12). verdict_unknown e singurul cod cu un marcator, {dimension} exact o data, completat de server cu eticheta de rand a fatetei, citata ca atare (o eticheta de rand nu e mereu substantiv); verdict_unknown_any e fraza fara eticheta (ratingul nu e o fateta). D2: cart_added ({product} = numele scurt al produsului adaugat, exact o data), cart_failed, iar mutation_unavailable si mutation_not_exact raspund unei mutatii refuzate de poarta fara intrebare. NX-372: raspunsul unui tur care a citit doar regulile magazinului si n-a putut raspunde din ele (si pe calea v1), in locul mesajului de cautare fara produse, dupa ce s-a citit de fapt: store_info_unknown cand citirea a mers si n-a adus nicio regula (singurul caz in care se poate spune ca regulile nu au informatia), store_info_unconfirmed cand s-au citit reguli dar niciuna nu s-a putut servi (fara sa afirme ca lipseste), store_info_unavailable cand toate citirile au picat, store_info_rest_unconfirmed dupa regulile servite, pentru restul intrebarii. NX-374 (kernel.v6.1): need_unverifiable spune ca o cerinta rostita in tur nu se poate verifica din datele produselor. NX-389 (kernel.v9.0): family_defaulted spune ca rutina s-a facut pentru familia cu cele mai multe produse, fiindca clientul n-a ales dupa intrebare (rezerva textului scris de compozitor). O dezvaluire lipsa inseamna turul fara ea; no_results lipsa inseamna ca turul fara rezultate nu e servit de kernel si raspunde calea v1. Fara liniuta de pauza si fara punct si virgula (P13), fara promisiuni pe care nu le onoreaza nimeni.",
   "kernel_sentences": {
     "ro": {
       "not_exact_match": "Nu am găsit exact produsul pe care l-ai numit, așa că îți arăt ce am cel mai aproape.",
@@ -57,7 +59,8 @@
       "store_info_unconfirmed": "Nu pot să-ți confirm sigur asta acum. Îmi spui altfel ce vrei să afli?",
       "store_info_unavailable": "Nu pot citi acum regulile magazinului, așa că nu ți-o pot confirma. Încearcă din nou peste puțin.",
       "store_info_rest_unconfirmed": "Pentru restul întrebării nu am un răspuns sigur.",
-      "need_unverifiable": "Una dintre cerințele tale nu o pot verifica din datele produselor, așa că n-am putut ține cont de ea la alegere."
+      "need_unverifiable": "Una dintre cerințele tale nu o pot verifica din datele produselor, așa că n-am putut ține cont de ea la alegere.",
+      "family_defaulted": "Ți-am făcut rutina pentru varianta cu cele mai multe produse potrivite. Dacă o voiai pentru altceva, spune-mi."
     },
     "en": {
       "not_exact_match": "I couldn't find the exact product you named, so here is what comes closest.",
@@ -75,7 +78,8 @@
       "store_info_unconfirmed": "I can't confirm that for sure right now. Could you ask me another way?",
       "store_info_unavailable": "I can't read the store's rules right now, so I can't confirm it. Please try again in a moment.",
       "store_info_rest_unconfirmed": "For the rest of your question I don't have a sure answer.",
-      "need_unverifiable": "I can't check one of your requirements against the product data, so I couldn't take it into account."
+      "need_unverifiable": "I can't check one of your requirements against the product data, so I couldn't take it into account.",
+      "family_defaulted": "I built the routine for the option with the most matching products. If you wanted it for something else, just tell me."
     }
   },
   "_chip_templates_note": "NX-296: copy-ul chips-urilor, per mutare si per locale. Un chip e MESAJUL pe care clientul il retrimite la apasare, deci se scrie la persoana I, in vocea lui. {slot} se completeaza de server din catalog (fraza de meniu, nume scurt de produs, prag de pret), niciodata de model. Mutare fara sablon = mutare care nu se ofera (P11: limba e configuratie, nu constanta in cod). Moneda face parte din sablon fiindca e a tenantului.",
