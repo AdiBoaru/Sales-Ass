@@ -2090,6 +2090,21 @@ async def sibling_categories(
     return [r["name"] for r in rows]
 
 
+async def list_brand_names(conn: asyncpg.Connection, business_id: str) -> list[str]:
+    """NX-396: mărcile cu produse active ale tenantului, în ordine alfabetică (meniul închis al
+    agentului unic: prefix de cache stabil). `business_id = $1` pe ambele tabele (P7)."""
+    rows = await conn.fetch(
+        """
+        select distinct b.name from products p
+          join brands b on b.id = p.brand_id and b.business_id = p.business_id
+         where p.business_id = $1 and p.status = 'active'
+         order by b.name
+        """,
+        business_id,
+    )
+    return [str(r["name"]) for r in rows if r["name"]]
+
+
 async def list_category_names(conn: asyncpg.Connection, business_id: str) -> list[tuple[str, int]]:
     """Categoriile SERVABILE ale tenantului, cu MĂRIMEA lor — groundarea promptului agentului
     (NX-78, principiul 9). `order by name` → ordine deterministă (prefix de cache stabil).

@@ -5,11 +5,11 @@
 
 Fiecare loc din `src/**/*.py` care scrie starea conversației (v1 sau v2), derivat MECANIC prin `ast` (nu grep). Pregătește I3/I20 din [`docs/KERNEL-CONTRACT-v1.md`](KERNEL-CONTRACT-v1.md): pasul 3 nu poate face din reducer singurul scriitor peste o stare pe care o mai scriu și alții, fără să știe cine sunt aceia.
 
-**Totaluri:** 169 scriitori găsiți, 106 intrări de soartă declarate, 8 `unresolved`.
+**Totaluri:** 171 scriitori găsiți, 108 intrări de soartă declarate, 10 `unresolved`.
 - `becomes_proposal`: 0
 - `executor_output`: 9
 - `retired`: 16
-- `stays`: 144
+- `stays`: 146
 
 ## `needs_topic` -- nevoi + subiect/raft
 
@@ -117,6 +117,7 @@ Fiecare loc din `src/**/*.py` care scrie starea conversației (v1 sau v2), deriv
 
 | Scriitor (fișier:funcție) | Cale | Formă AST | Cheie brută | De ce | Soartă |
 | --- | --- | --- | --- | --- | --- |
+| `src/assistant/turn.py:_reply` | v1 | `patch_subscript` | `active_search` | NX-396: un tur servit de agentul unic cu carduri inchide sesiunea de paginare a caii v1 (`active_search = None`), ca un «mai arata-mi» cazut pe v1 sa nu pagineze un pool vechi. Agentul pagineaza singur, prin `exclude`. | `stays` |
 | `src/evals/golden.py:advance_turn` | v1 | `assign` | `active_search` | Harness de teste (`ScriptedLLM`/golden): re-implementeaza DELIBERAT merge-ul lui `processor._build_new_state`/`_turn_proposals` ca sa avanseze starea intre ture scriptate, fara DB/worker real. Nu ruleaza in pipeline-ul de productie -- invariantele I3/I20 vizeaza pipeline-ul, nu dublura de test; daca productia isi schimba mecanismul de scriere, harness-ul se actualizeaza separat, dar nu e el insusi o tinta a pasului 3. | `stays` |
 | `src/tools/catalog_tools.py:_search` | v1 | `patch_mutating_call` | `active_search` | Tool-ul de cautare scrie/sterge `ctx.state_patch["active_search"]` (sesiunea de paginare) ca parte din executia cautarii -- iesire de executor, permisa explicit de I20. NX-333: corpul comun al uneltei (`search_products_tool`, intrarea modelului) si al plannerului (`run_planned_search`), deci acelasi scriitor pe ambele cai. | `executor_output` |
 | `src/tools/catalog_tools.py:_search` | v1 | `patch_subscript` | `active_search` | Tool-ul de cautare scrie/sterge `ctx.state_patch["active_search"]` (sesiunea de paginare) ca parte din executia cautarii -- iesire de executor, permisa explicit de I20. NX-333: corpul comun al uneltei (`search_products_tool`, intrarea modelului) si al plannerului (`run_planned_search`), deci acelasi scriitor pe ambele cai. | `executor_output` |
@@ -220,6 +221,12 @@ Fiecare loc din `src/**/*.py` care scrie starea conversației (v1 sau v2), deriv
 | `src/conversation/state_v2.py:serialize` | v2 | `dataclasses_replace` | `passthrough` | Acelasi `shrink`, jumatatea `passthrough` (coșul e ultimul sacrificat, `safety` niciodata singur) -- mecanism de buget al reducerului. | `stays` |
 | `src/worker/processor.py:_build_state_v2` | v2 | `dataclasses_replace` | `passthrough` | Acelasi `_build_state_v2`: `passthrough` carata verbatim din starea de baza + `state_patch` pentru cheile nemodelate de v2 (`cart` legacy, `safety`) -- mecanismul care garanteaza ca o migrare de format nu rescrie date pe care cardul asta nu le detine (P3). | `stays` |
 
+## `assistant` -- assistant
+
+| Scriitor (fișier:funcție) | Cale | Formă AST | Cheie brută | De ce | Soartă |
+| --- | --- | --- | --- | --- | --- |
+| `src/assistant/turn.py:_serve` | v1 | `patch_subscript` | `assistant` | NX-396: memoria agentului unic (handle-urile produselor si notele despre ce a spus clientul), cheie proprie, purtata de v2 ca passthrough (`PASSTHROUGH_KEYS`). Singurul scriitor e agentul, pe turul servit. | `stays` |
+
 ## `unresolved` -- acces dinamic, nu se poate rezolva static
 
 | Fișier:funcție | Motiv |
@@ -232,4 +239,6 @@ Fiecare loc din `src/**/*.py` care scrie starea conversației (v1 sau v2), deriv
 | `src/agent/kernel_executors.py:_restore_second_plan` | `dynamic_patch_update_arg` |
 | `src/agent/tool_executor.py:_absorb_planned` | `dynamic_patch_update_arg` |
 | `src/agent/tool_executor.py:_execute_serialized` | `dynamic_patch_update_arg` |
+| `src/assistant/tools.py:_mutation` | `dynamic_patch_update_arg` |
+| `src/assistant/turn.py:run_assistant_turn` | `dynamic_patch_update_arg` |
 

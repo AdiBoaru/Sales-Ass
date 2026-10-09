@@ -20,6 +20,7 @@ PACKAGES = [
     "src.proactive",
     "src.gdpr",
     "src.jobs",
+    "src.assistant",
 ]
 
 

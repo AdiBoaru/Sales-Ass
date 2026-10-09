@@ -59,6 +59,7 @@ LLM_CALLS: frozenset[str] = frozenset(
         "run_tool_loop",
         "run_tool_loop_structured",
         "tool_round",
+        "respond_round",
         "embed",
         "moderate",
         "describe_image",

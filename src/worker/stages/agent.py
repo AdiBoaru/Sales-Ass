@@ -1130,6 +1130,17 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     # NX-338: chip-ul se judecă pe FAPT (`chip_recognized`), nu pe servire (`chip_move`, None cu
     # `CHIP_MOVES_V2_ENABLED` stins), altfel apăsările ar ajunge la modelul de interpretare.
     s = get_settings()
+    # NX-396 (NX-394 Faza 2): agentul unic, ca RAMURĂ înaintea kernelului, pe conversațiile din
+    # procentul sticky. Intră orice tur cu text în afara unui buton semnat (o decizie, nu text):
+    # apăsările de chip și paginarea le înțelege agentul. `False` = contextul restaurat, iar turul
+    # merge mai jos exact ca azi. Import leneș: flag stins = zero import.
+    assistant = "off"
+    if s.assistant_agent_enabled and action_command(ctx) is None:
+        from src.assistant.turn import assistant_mode, run_assistant_turn  # noqa: PLC0415
+
+        assistant = assistant_mode(s, ctx.business, ctx.conversation_id)
+        if assistant == "serve" and await run_assistant_turn(ctx, deps):
+            return
     eligible = (
         ctx.state_v2 is not None
         and action_command(ctx) is None
@@ -1197,7 +1208,9 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     # (I10); pe setul wide-2026-10-07 singurele două mutații de pe calea asta erau necerute (un
     # produs ales de model pus în coș, o abonare pe «ok pa»). Modelul nu le vede, iar `run` le
     # refuză dacă le cere totuși.
-    mutations_allowed = conversation_mode != "serve"
+    # NX-396: la fel într-o conversație a agentului unic: un tur căzut pe calea asta (agentul a
+    # picat, poate după o mutație) nu mai scrie nimic.
+    mutations_allowed = conversation_mode != "serve" and assistant != "serve"
     if not mutations_allowed:
         tools = _without_mutations(tools)
         tool_names = [n for n in tool_names if not tool_budget.spec_for(n).is_mutation]

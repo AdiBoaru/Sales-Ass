@@ -899,6 +899,40 @@ class LLMClient:
         _note_incomplete(resp)
         return resp
 
+    async def respond_round(
+        self,
+        *,
+        instructions: str,
+        input: list[Any],  # noqa: A002 — numele câmpului din API-ul Responses
+        tools: list[dict[str, Any]],
+        effort: str,
+        tool_choice: str | dict[str, Any] = "required",
+        model: str | None = None,
+    ) -> Any | None:
+        """NX-396 — O rundă a agentului unic pe `/v1/responses`. Întoarce răspunsul BRUT, ca
+        apelantul să păstreze toate elementele de ieșire (raționamentul criptat inclus) în runda
+        următoare; `None` = runda refuzată de bugetul turului (NX-241).
+
+        Același drum ca orice apel de model: `_respond` → `_guarded` (retry, ceasul NX-311,
+        `per_call`, captura `model_io`), plus ce nu face `_respond` singur: spanul `model`
+        (NX-300), totalurile de usage și costul (`record_chat`) și consumul din buget."""
+        if not _round_admitted():
+            return None
+        mdl = model or self.model_agent
+        before = _usage_snapshot()
+        with turn_latency.span("model"):
+            resp = await self._respond(
+                effort=effort,
+                model=mdl,
+                instructions=instructions,
+                input=input,
+                tools=tools,
+                tool_choice=tool_choice,
+            )
+        usage.record_chat(resp, mdl)
+        _charge_usage(before)
+        return resp
+
     async def tool_round(
         self,
         system: str,

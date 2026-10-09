@@ -59,7 +59,8 @@ def _is_chat_call(node: ast.AST) -> bool:
     return (
         isinstance(node, ast.Call)
         and isinstance(node.func, ast.Attribute)
-        and node.func.attr == "_chat"
+        # NX-396: și geamănul de pe `/v1/responses` (bucla agentului unic).
+        and node.func.attr in ("_chat", "_respond")
     )
 
 

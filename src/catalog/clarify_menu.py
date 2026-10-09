@@ -116,6 +116,15 @@ CHIP_PRODUCERS: dict[str, str] = {
         "model. Sub `CHIP_MOVES_V1_ENABLED` stins, chips-urile rămân cele de la `compose.assemble` "
         "(intrarea NEANCORATĂ de mai jos), deci gaura nu e închisă, e OCOLITĂ sub flag."
     ),
+    # ── scrise de MODEL, cu poarta de adevăr (NX-396, decizia lui Adi din 2026-10-09) ────────
+    "src/assistant/turn.py::_reply": (
+        "NX-396: agentul unic scrie sugestiile din conversație (decizia 1 din NX-394 §8). Pe web "
+        "apăsarea retrimite textul ca mesaj NOU, iar agentul îl înțelege ca pe orice mesaj, deci "
+        "nu e nevoie de o mutare cu dovadă: sugestia nu e o comandă executată de cod. Poarta "
+        "e `assistant/gate.check_answer`: fiecare sugestie trece prin `validate_prose` (preț, "
+        "link, afirmație medicală sau neverificabilă ⇒ scoasă), plafonul de lungime web și "
+        "`chip_slots`. Declarat: o sugestie poate numi un produs care nu e în faptele turului."
+    ),
     # ── ancorate prin CONSTRUCȚIE: textul vine din date reale ───────────────────────────────
     "src/agent/deterministic.py::_handle_review_intent": (
         "`_review_choice_chips(refs)` numește produse tocmai AFIȘATE (setul afișat + produsul "
