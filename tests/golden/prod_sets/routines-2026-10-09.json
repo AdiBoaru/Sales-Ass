@@ -1,0 +1,310 @@
+{
+  "version": "routines-2026-10-09",
+  "note": "scris de un agent fără acces la cod, analize sau carduri; cereri de rutină, cu `routine_target` per tur",
+  "conversations": [
+    {
+      "id": "r1_ten_gras_seara_buget",
+      "covers": "Rutină de ten gras rafinată pe moment și buget, apoi o întrebare despre livrare.",
+      "turns": [
+        {
+          "message": "buna, vreau o rutina pentru ten gras",
+          "expect": "Construiește direct o rutină de îngrijire a tenului gras (curățare, tonifiere sau ser, cremă ușoară, protecție solară pentru dimineață), cu produse din catalog potrivite tenului gras, fără să întrebe pentru ce zonă este.",
+          "routine_target": "said"
+        },
+        {
+          "message": "doar pt seara",
+          "expect": "Refă rutina pentru seară, tot pentru ten gras, scoate protecția solară și păstrează pașii de seară (demachiere sau curățare, tratament, cremă).",
+          "routine_target": "said"
+        },
+        {
+          "message": "si sa nu treaca de 200 lei toata",
+          "expect": "Ajustează rutina de seară pentru ten gras astfel încât suma prețurilor tuturor produselor să fie de cel mult 200 lei și spune totalul.",
+          "routine_target": "said"
+        },
+        {
+          "message": "cat costa livrarea?",
+          "expect": "Răspunde la costul livrării din regulile magazinului (inclusiv pragul de livrare gratuită, dacă există), fără să reconstruiască rutina.",
+          "routine_target": "none"
+        }
+      ]
+    },
+    {
+      "id": "r2_par_uscat_pasi_numiti",
+      "covers": "Rutină pentru păr uscat cu pașii numiți de client, o preferință în plus și un accesoriu separat.",
+      "turns": [
+        {
+          "message": "rutina pt par uscat: sampon, balsam si masca",
+          "expect": "Propune exact cei trei pași ceruți (șampon, balsam, mască) pentru păr uscat, câte un produs de păr din catalog pentru fiecare, cu ordinea de folosire.",
+          "routine_target": "said"
+        },
+        {
+          "message": "daca se poate fara sulfati sampnul",
+          "expect": "Înlocuiește șamponul cu unul fără sulfați pentru păr uscat dacă există în catalog (sau spune onest că nu poate confirma), păstrând balsamul și masca.",
+          "routine_target": "said"
+        },
+        {
+          "message": "ok si o perie buna pt descurcat?",
+          "expect": "Recomandă o perie de descurcat din catalog (sau spune că nu are) fără să trateze cererea ca o rutină nouă și fără să schimbe rutina de păr deja propusă.",
+          "routine_target": "none"
+        }
+      ]
+    },
+    {
+      "id": "r3_corp_dupa_dus",
+      "covers": "Rutină de corp după duș, clar cerută, cu un buget adăugat ulterior.",
+      "turns": [
+        {
+          "message": "imi trebuie o rutina de corp dupa dus, simt pielea ca se strange",
+          "expect": "Construiește o rutină de îngrijire a corpului (gel de duș blând, eventual exfoliant, loțiune sau cremă de corp hidratantă) cu produse de corp din catalog, nu de față.",
+          "routine_target": "said"
+        },
+        {
+          "message": "sub 150 lei tot",
+          "expect": "Ajustează rutina de corp astfel încât totalul să fie sub 150 lei, păstrând pașii de după duș, și spune totalul.",
+          "routine_target": "said"
+        },
+        {
+          "message": "exfoliantul cat de des il folosesc?",
+          "expect": "Răspunde cât de des se folosește exfoliantul din rutina propusă, din informațiile produsului sau ca sfat general, fără să schimbe rutina.",
+          "routine_target": "none"
+        }
+      ]
+    },
+    {
+      "id": "r4_machiaj_zi_accesorii",
+      "covers": "Rutină de machiaj de zi, urmată de accesorii cerute individual care nu sunt o rutină nouă.",
+      "turns": [
+        {
+          "message": "vreau o rutina de machiaj de zi, ceva natural pt birou",
+          "expect": "Propune o rutină de machiaj de zi lejer (de exemplu bază sau cushion, corector, mascara, ruj sau balsam colorat) cu produse de machiaj din catalog, în ordinea aplicării.",
+          "routine_target": "said"
+        },
+        {
+          "message": "si o pensula de contur",
+          "expect": "Recomandă una sau câteva pensule de contur din catalog ca produs separat, fără să refacă sau să înlocuiască rutina de machiaj.",
+          "routine_target": "none"
+        },
+        {
+          "message": "si un burete de machiaj",
+          "expect": "Recomandă un burete de machiaj din catalog (sau spune că nu are), fără să construiască o rutină nouă.",
+          "routine_target": "none"
+        },
+        {
+          "message": "in cat timp ajunge in cluj?",
+          "expect": "Răspunde cu termenul de livrare din regulile magazinului, fără să inventeze un termen care nu e în reguli.",
+          "routine_target": "none"
+        }
+      ]
+    },
+    {
+      "id": "r5_pete_alege_fata",
+      "covers": "Rutină cerută doar pe problema petelor, cu o întrebare scurtă, apoi alegerea feței și momentul zilei.",
+      "turns": [
+        {
+          "message": "fa-mi o rutina pentru pete",
+          "expect": "Pune o singură întrebare scurtă despre zona pentru care e rutina (ten sau corp), fără să listeze deja produse de corp și de față amestecate.",
+          "routine_target": "unclear"
+        },
+        {
+          "message": "pentru fata",
+          "expect": "Construiește o rutină de îngrijire a tenului pentru pete pigmentare (curățare, ser depigmentant, cremă, protecție solară) cu produse de față din catalog.",
+          "routine_target": "answer"
+        },
+        {
+          "message": "o vreau si de dimineata si de seara",
+          "expect": "Împarte rutina de ten pentru pete în pașii de dimineață (cu protecție solară) și cei de seară, păstrând produsele potrivite pentru pete.",
+          "routine_target": "said"
+        }
+      ]
+    },
+    {
+      "id": "r6_acnee_ambele",
+      "covers": "Rutină pentru acnee fără zonă, clientul răspunde „ambele” și apoi o cere și pe a doua.",
+      "turns": [
+        {
+          "message": "o rutina pentru acnee",
+          "expect": "Întreabă scurt dacă rutina e pentru față sau pentru corp (spate, piept), o singură întrebare.",
+          "routine_target": "unclear"
+        },
+        {
+          "message": "ambele",
+          "expect": "Construiește una dintre rutine (de obicei cea de față pentru acnee) și se oferă să o facă și pe cea de corp, fără să amestece produsele într-o singură listă.",
+          "routine_target": "answer"
+        },
+        {
+          "message": "da fa-o si pe cea de corp",
+          "expect": "Construiește rutina de corp pentru acnee (de exemplu gel de duș cu acid salicilic, loțiune ușoară) cu produse de corp din catalog, fără să repete rutina de față.",
+          "routine_target": "said"
+        }
+      ]
+    },
+    {
+      "id": "r7_vreau_rutina_alege_tu",
+      "covers": "Cerere de rutină fără nicio precizare, clientul lasă alegerea asistentului, apoi întreabă de total.",
+      "turns": [
+        {
+          "message": "vreau o rutina",
+          "expect": "Întreabă o singură dată, scurt, pentru ce e rutina (ten, păr, corp sau machiaj), eventual cu opțiunile ca sugestii.",
+          "routine_target": "unclear"
+        },
+        {
+          "message": "nu stiu, alege tu",
+          "expect": "Alege rutina cea mai uzuală (îngrijirea tenului de bază: curățare, hidratare, protecție solară), spune clar că a ales tenul și de ce, și o construiește din catalog.",
+          "routine_target": "answer"
+        },
+        {
+          "message": "si cat costa toata?",
+          "expect": "Spune totalul exact al produselor din rutina propusă, calculat din prețurile din catalog.",
+          "routine_target": "none"
+        }
+      ]
+    },
+    {
+      "id": "r8_piele_uscata_livrare",
+      "covers": "Rutină pentru piele uscată (față sau corp), clientul ignoră întrebarea și întreabă de livrare, apoi alege corpul.",
+      "turns": [
+        {
+          "message": "rutina pentru piele uscata",
+          "expect": "Întreabă scurt dacă rutina e pentru ten sau pentru corp, fără să construiască încă rutina.",
+          "routine_target": "unclear"
+        },
+        {
+          "message": "da livrati si in weekend?",
+          "expect": "Răspunde la întrebarea despre livrare din regulile magazinului (sau spune onest că nu are informația) fără să forțeze rutina și fără să repete insistent întrebarea.",
+          "routine_target": "answer"
+        },
+        {
+          "message": "a, si rutina e pt corp",
+          "expect": "Construiește o rutină de îngrijire a corpului pentru piele uscată (gel de duș sau ulei de duș blând, loțiune sau unt de corp bogat) cu produse de corp din catalog.",
+          "routine_target": "answer"
+        }
+      ]
+    },
+    {
+      "id": "r9_dus_apoi_rutina",
+      "covers": "Clientul descrie întâi pielea uscată după duș, apoi cere o rutină fără să repete zona.",
+      "turns": [
+        {
+          "message": "mi se usuca rau pielea dupa dus mai ales pe picioare",
+          "expect": "Recomandă produse de corp hidratante (loțiune, cremă sau unt de corp) din catalog sau pune o întrebare scurtă despre preferințe, fără să propună produse de față.",
+          "routine_target": "none"
+        },
+        {
+          "message": "fa mi o rutina",
+          "expect": "Construiește o rutină de corp pentru piele uscată după duș (spălare blândă, hidratare imediată, eventual exfoliere ușoară), fără să întrebe din nou zona, pentru că clientul a spus deja că e vorba de corp.",
+          "routine_target": "said"
+        },
+        {
+          "message": "uleiul de dus e bun si pt piele sensibila?",
+          "expect": "Răspunde din fișa produsului dacă uleiul de duș propus e potrivit pentru piele sensibilă, sau spune onest că fișa nu precizează.",
+          "routine_target": "none"
+        }
+      ]
+    },
+    {
+      "id": "r10_renunta_la_rutina",
+      "covers": "Cerere de rutină neclară, clientul renunță la rutină și cere un singur produs.",
+      "turns": [
+        {
+          "message": "fa mi o rutina pt piele deshidratata",
+          "expect": "Întreabă scurt dacă rutina e pentru ten sau pentru corp.",
+          "routine_target": "unclear"
+        },
+        {
+          "message": "las-o, nu mai vreau",
+          "expect": "Nu construiește nicio rutină, confirmă scurt și lasă loc clientului să ceară altceva, fără să insiste.",
+          "routine_target": "answer"
+        },
+        {
+          "message": "vreau doar o crema de maini buna",
+          "expect": "Recomandă creme de mâini din catalog, fără să le prezinte ca parte dintr-o rutină.",
+          "routine_target": "none"
+        }
+      ]
+    },
+    {
+      "id": "r11_fara_rutina_un_produs",
+      "covers": "Client care refuză explicit o rutină și vrea un singur produs pentru tenul lui.",
+      "turns": [
+        {
+          "message": "am ten mixt dar n am rabdare de rutine, vreau un singur produs",
+          "expect": "Recomandă un singur produs (sau câteva alternative pentru același pas) pentru ten mixt, de exemplu o cremă hidratantă ușoară, fără să propună o rutină în mai mulți pași.",
+          "routine_target": "none"
+        },
+        {
+          "message": "ceva ce pun dimineata si gata, poate si cu spf",
+          "expect": "Recomandă o cremă de față pentru ten mixt cu protecție solară, dacă există în catalog, tot ca produs unic, nu ca rutină.",
+          "routine_target": "none"
+        }
+      ]
+    },
+    {
+      "id": "r12_scalp_matreata",
+      "covers": "Rutină pentru scalp cu mătreață, clară ca zonă, cu întrebări de folosire după.",
+      "turns": [
+        {
+          "message": "salut, o rutina pt scalp cu matreata? ma si mananca",
+          "expect": "Construiește o rutină de îngrijire a părului și scalpului pentru mătreață (șampon antimătreață, tratament sau ser de scalp, balsam pe lungimi) cu produse de păr din catalog, fără afirmații medicale.",
+          "routine_target": "said"
+        },
+        {
+          "message": "care din astea se foloseste doar de 2 ori pe saptamana?",
+          "expect": "Spune care produs din rutina propusă se folosește mai rar, din informațiile produselor, fără să construiască altă rutină.",
+          "routine_target": "none"
+        },
+        {
+          "message": "si pot sa le folosesc daca am parul vopsit?",
+          "expect": "Răspunde din fișele produselor dacă sunt potrivite pentru păr vopsit sau spune onest ce nu e precizat, eventual propune o alternativă pentru păr vopsit.",
+          "routine_target": "none"
+        }
+      ]
+    },
+    {
+      "id": "r13_dimineata_spf_buget",
+      "covers": "Rutină de dimineață pentru ten uscat cu SPF și buget, urmată de un produs adăugat și o întrebare de retur.",
+      "turns": [
+        {
+          "message": "rutina de dimineata pt ten uscat cu spf, maxim 200 lei toata",
+          "expect": "Construiește o rutină de dimineață pentru ten uscat care se termină cu protecție solară, cu totalul de cel mult 200 lei, și spune totalul.",
+          "routine_target": "said"
+        },
+        {
+          "message": "mai vreau si un balsam de buze",
+          "expect": "Recomandă un balsam de buze din catalog ca produs separat, fără să refacă rutina de dimineață și fără să o numească rutină nouă.",
+          "routine_target": "none"
+        },
+        {
+          "message": "pot returna daca nu ma impac cu crema?",
+          "expect": "Răspunde cu politica de retur din regulile magazinului, inclusiv pentru produsele cosmetice deschise, fără să inventeze condiții.",
+          "routine_target": "none"
+        }
+      ]
+    },
+    {
+      "id": "r14_seara_buget_fara_zona",
+      "covers": "Rutină de seară cu buget dar fără zonă, alegerea feței păstrează momentul și bugetul, apoi o a doua rutină de păr.",
+      "turns": [
+        {
+          "message": "o rutina de seara sub 150 de lei",
+          "expect": "Întreabă scurt pentru ce e rutina de seară (ten, păr sau corp), fără să construiască încă rutina.",
+          "routine_target": "unclear"
+        },
+        {
+          "message": "pt fata",
+          "expect": "Construiește o rutină de seară pentru îngrijirea tenului (demachiere sau curățare, tratament sau ser, cremă de noapte) cu totalul sub 150 lei, fără protecție solară.",
+          "routine_target": "answer"
+        },
+        {
+          "message": "si una pt par cand ai timp, tot ieftina",
+          "expect": "Construiește separat o rutină de păr cu prețuri mici (șampon, balsam, eventual mască), fără să schimbe rutina de ten deja propusă.",
+          "routine_target": "said"
+        },
+        {
+          "message": "multumesc mult!",
+          "expect": "Răspunde scurt și cald, fără să mai propună produse sau rutine noi.",
+          "routine_target": "none"
+        }
+      ]
+    }
+  ]
+}

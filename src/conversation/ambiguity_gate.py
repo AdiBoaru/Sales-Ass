@@ -71,6 +71,7 @@ from src.conversation.references import (
     gate_act_targets,
 )
 from src.conversation.routine_family import (
+    RESUME_BUNDLE,
     WILDCARD,
     family_of_shelf,
     routine_family,
@@ -201,6 +202,9 @@ class GateOutcome(NamedTuple):
     routine_family: str | None = None
     #: NX-389: etichetele familiilor servibile, cea aleasă întâi (pentru dezvăluire și întrebare).
     family_labels: tuple[str, ...] = ()
+    #: NX-389b: cheile rafturilor opțiunilor întrebării de familie, în aceeași ordine ca etichetele;
+    #: memoria întrebării le ține (`options_refs`), iar răspunsul se recunoaște pe ele.
+    family_options: tuple[str, ...] = ()
 
 
 def target_question_key(product_ids: Sequence[str]) -> str:
@@ -351,6 +355,7 @@ class _Gate:
         #: NX-389: familia aleasă fără întrebare (`GateOutcome.routine_family`) și etichetele ei
         self.family_choice: str | None = None
         self.family_labels: tuple[str, ...] = ()
+        self.family_options: tuple[str, ...] = ()
 
     # --- utilitare -------------------------------------------------------------------------------
 
@@ -678,7 +683,9 @@ class _Gate:
                 routine_family=self.family_choice, family_labels=self.family_labels
             )
         elif outcome.asked_key == ROUTINE_FAMILY_KEY:
-            outcome = outcome._replace(family_labels=self.family_labels)
+            outcome = outcome._replace(
+                family_labels=self.family_labels, family_options=self.family_options
+            )
         return outcome._replace(skipped_acts=skipped)
 
     def _out_of_range_reads(self) -> set[int]:
@@ -949,6 +956,7 @@ class _Gate:
             self._note("family_unservable")
             return None
         self.family_labels = tuple(self._shelf_label(o.shelf) for o in options)
+        self.family_options = tuple(o.shelf for o in options)
         if len(options) == 1:
             self.family_choice = options[0].family
             self._note("family_single")
@@ -1219,12 +1227,17 @@ def memory_proposal(outcome: GateOutcome, turn_id: str) -> StateUpdateProposal |
     if outcome.asked_key is None:
         return None
     if outcome.asked_kind == "pending":
+        routine = outcome.asked_key == ROUTINE_FAMILY_KEY and bool(outcome.family_options)
+        # NX-389b: întrebarea de familie ține minte ACTUL (rutina) și opțiunile (cheile rafturilor),
+        # ca răspunsul să reia rutina (`routine_family.resume_routine`)
         return StateUpdateProposal(
             "set_pending_question",
             key=outcome.asked_key,
             reason=outcome.decision.reason,
             source="policy",
             turn_id=turn_id,
+            options_refs=outcome.family_options if routine else (),
+            resume_route=RESUME_BUNDLE if routine else None,
         )
     return StateUpdateProposal(
         "note_asked", key=outcome.asked_key, source="policy", turn_id=turn_id

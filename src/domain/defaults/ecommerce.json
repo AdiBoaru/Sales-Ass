@@ -5,6 +5,8 @@
     "framing": {"ro": "Ți-am ales {types}.", "en": "I picked out {types} for you."},
     "routine_framing": {"ro": "Rutina ta, în ordine: {steps}.", "en": "Your routine, in order: {steps}."},
     "list_glue": {"ro": " și ", "en": " and "},
+    "routine_offer": {"ro": "Fa-mi si rutina pentru {slot}", "en": "Make me the routine for {slot} too"},
+    "routine_choice": {"ro": "Pentru {slot}", "en": "For {slot}"},
     "fit_yes": {
       "ro": "Da, fișa produsului menționează {slot} printre recomandări.",
       "en": "Yes, the product sheet lists {slot} among its recommendations."

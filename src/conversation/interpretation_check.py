@@ -64,7 +64,9 @@ from src.domain.constraints import UnitRegistry
 #: `earlier` cu poziție, `extreme` pe `rating`), meniul de tipuri întreg și `STORE NOTES`.
 #: NX-388: `v6` = într-un `bundle`, partea despre care clientul își descrie starea e și raftul ei
 #: («rutină pentru ten gras» ⇒ raftul `ten`, deci familia rutinei).
-INTERPRET_PROMPT_VERSION = "interpret.v6"
+#: NX-389b: `v7` = blocul PENDING arată actul întrebării și opțiunile ei (chei), iar răspunsul care
+#: alege o numește ca atare; «nu știu» repetă actul întrebării.
+INTERPRET_PROMPT_VERSION = "interpret.v7"
 
 #: `outcome`, în ordinea în care se decide (§3 din card): primul care se potrivește câștigă.
 #: `internal_error` (recenzia NX-335, P6) e în plus față de card: o intrare stricată (pachet,

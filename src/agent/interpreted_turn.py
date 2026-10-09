@@ -68,6 +68,7 @@ from src.conversation.references import (
     resolve_references,
     sources_from_state,
 )
+from src.conversation.routine_family import answer_topic, kept_checked, resume_routine
 from src.conversation.state_reducer import (
     ReducedState,
     ReducerPolicy,
@@ -346,6 +347,14 @@ class _Chain:
     planned: PlannedTurn
     primary: str | None = None
     policy_for: PolicyFor | None = None
+    #: NX-389b: interpretarea EFECTIVĂ a lanțului (după `resume_routine`), pe care se decide și
+    #: execuția; `interpreted.interpretation` rămâne cea a modelului, pentru trace și evenimente.
+    effective: TurnInterpretation | None = None
+
+
+def _effective(chain: Any) -> TurnInterpretation | None:
+    """Interpretarea pe care se decide execuția (NX-389b: cea efectivă, altfel a modelului)."""
+    return getattr(chain, "effective", None) or chain.interpreted.interpretation
 
 
 class _VocabularyUnavailable(Exception):
@@ -469,7 +478,7 @@ def _mutating_turn(chain: _Chain) -> bool:
     acoperire mai mare» ⇒ ținta numea o proprietate, poarta a scos coșul cu verdictul `act`, iar
     bucla v1 a pus în coș un produs ales de model). O mutație scoasă lângă o cerere de citire lasă
     citirea să fie servită (dezvăluirea `invalid_target` spune restul)."""
-    interp = chain.interpreted.interpretation
+    interp = _effective(chain)
     if interp is None:
         return False
     skipped = set(chain.outcome.skipped_acts)
@@ -484,7 +493,7 @@ def _social_turn(chain: _Chain) -> bool:
     """NX-382 faza 2c: turul e DOAR `chitchat` (un salut, o mulțumire, un rămas-bun), fără niciun
     act scos de poartă. Pe `reply_only` îl răspunde compozitorul, nu bucla v1 (de acolo a venit
     abonarea la stoc pe «ok pa», NX-383)."""
-    interp = chain.interpreted.interpretation
+    interp = _effective(chain)
     if interp is None or chain.outcome.skipped_acts or not interp.acts:
         return False
     # recenzia 2c: «mersi, apropo am tenul gras» schimbă starea, iar un «da» spus unei oferte are
@@ -497,7 +506,7 @@ def _social_turn(chain: _Chain) -> bool:
 def _dropped_request(chain: _Chain) -> bool:
     """Poarta a scos și o cerere care NU scrie (regula 0). Pe un refuz de mutație, dezvăluirea
     `invalid_target` o spune clientului; fără ea, refuzul coșului e tot răspunsul (NX-383)."""
-    interp = chain.interpreted.interpretation
+    interp = _effective(chain)
     if interp is None:
         return False
     skipped = set(chain.outcome.skipped_acts)
@@ -524,7 +533,7 @@ def _target_lost(chain: _Chain) -> bool:
     o țintă s-a pierdut FĂRĂ dezvăluire (`_read` din planner dezvăluie doar un nume negăsit sau o
     țintă `stale`). Servit, turul ar compara ancora cu un similar ales de cod sau ar arăta detaliul
     doar al uneia (recenzia C2, P1), deci rămâne `dark`: calea v1 răspunde."""
-    interp = chain.interpreted.interpretation
+    interp = _effective(chain)
     act = _primary_act(interp, chain.outcome) if interp is not None else None
     planned = chain.planned
     plan = planned.plans[planned.primary]
@@ -565,6 +574,10 @@ async def _chain(
     validated = interpreted.validated
     assert interp is not None and validated is not None  # `outcome == "ok"`
     state = inp.state
+    # NX-389b: un tur care răspunde la întrebarea de familie continuă rutina; interpretarea brută
+    # rămâne a traceului, lanțul merge pe cea efectivă (actul și rafturile hotărâte de cod)
+    interp, resumed = resume_routine(interp, state)
+    checked = kept_checked(validated.checked, interp) if resumed else validated.checked
     pack, vocab, locale = inp.pack, inp.vocab, inp.locale
     needs = NeedVocabulary.from_pack(pack)
     handles = handles_of(inp)
@@ -585,7 +598,7 @@ async def _chain(
     )
     delta = to_delta(
         interp,
-        validated.checked,
+        checked,
         resolved,
         known,
         handles=handles,
@@ -594,6 +607,8 @@ async def _chain(
     )
     # „Schimbări în tur" = propunerile de nevoi; închiderea întrebării nu e o schimbare (plannerul
     # adaugă singur `resume` și semnalele `inferred`, contractul v1.1).
+    # NX-389b: raftul ales intră în subiect ÎNAINTEA verificării perechii (raft, tip)
+    delta = answer_topic(delta, resumed, ctx.turn_id)
     delta = await _with_pair_compatibility(deps, ctx.business.id, delta, state, vocab)
     changed = bool(delta.proposals)
     answered = question_answered(state, delta.thread, ctx.turn_id)
@@ -611,7 +626,7 @@ async def _chain(
     )
     outcome = decide_ambiguity(
         interp,
-        validated.checked,
+        checked,
         resolved,
         reduced.state,
         known,
@@ -630,7 +645,8 @@ async def _chain(
         pack=pack,
         vocab=vocab,
         locale=locale,
-        checked=accepted_changes(validated.checked, delta),
+        checked=accepted_changes(checked, delta),
+        resumed=resumed,
     )
     return _Chain(
         interpreted=interpreted,
@@ -643,6 +659,7 @@ async def _chain(
         planned=planned,
         primary=primary,
         policy_for=_policy_for(interp, resolved, outcome, inp),
+        effective=interp if resumed else None,
     )
 
 
@@ -815,7 +832,7 @@ def kernel_turn_of(chain: _Chain, ctx: TurnContext, saved: ContextSnapshot) -> K
     făcut executorii: delta (cu `resolve_question` pe o întrebare vie, §1), referințele rezolvate,
     ținta principală, corecția, memoria întrebării (doar dacă a fost pusă) și propunerile
     executorilor."""
-    interp = chain.interpreted.interpretation
+    interp = _effective(chain)
     assert interp is not None
     return KernelTurn(
         delta=chain.delta,

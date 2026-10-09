@@ -41,8 +41,21 @@ is built for the family with the most products and the planner discloses it (`fa
 with the shelf labels in `PlannedTurn.family_labels`). Additive fields: `GateOutcome.routine_family`,
 `GateOutcome.family_labels`, `PlannedTurn.family_labels`; template kind `family`; sentence code
 `family_defaulted`. The model-written schema is unchanged. Behind `ROUTINE_FAMILY_QUESTION_ENABLED`
-(off = today's rule, byte-identical). Remembering the routine across the question and planning it on
-the answer is NX-389b. The replay gate is requested from Adi in the PR.
+(off = today's rule, byte-identical). **The question remembers the routine (NX-389b, same
+version):** the pending question keeps the act (`resume_route = "bundle"`) and its options as shelf
+keys (`options_refs`), and the interpretation sees them (`PENDING: routine_family (act: bundle;
+options: …)`, prompt `interpret.v7`). On the next turn CODE decides that the turn continues the
+routine (`routine_family.resume_routine`), not the act the model wrote for a short answer: a turn
+that is not an aside, whose acts are all answers (`find`, `bundle`, `other`, `chitchat`, no
+targets), with no item type and no shelf outside the options, becomes one `bundle`. The chosen
+option is matched by KEY only (a sub-shelf whose root is another option is not that option), enters
+the subject as the customer's fact (`user_explicit`, like a v1 clarification answer) even when the
+validator rejected a homograph quote, and the budget said with the request stays the routine's cap.
+Several options named («both»): the routine for the first in option order, the others offered as
+chips (`TurnPlan.offer`). No option chosen: only a repeated `bundle` («you choose») resumes, then
+the majority family with `family_defaulted`; a refusal or small talk starts nothing. The question's
+answer chips come from the pack (`answer_shape_templates.routine_choice` / `routine_offer`). The
+replay gate is requested from Adi in the PR.
 
 **`kernel.v8.1` (minor, NX-380, 2026-10-08).** Two additive fields in the
 model-written schema. `Act.question` is the customer's question on a `detail` or `compare` act, in

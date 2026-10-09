@@ -55,6 +55,7 @@ from src.conversation.references import (
     resolve_references,
     sources_from_state,
 )
+from src.conversation.routine_family import answer_topic, resume_routine
 from src.conversation.state_reducer import (
     ReducerPolicy,
     StateUpdateProposal,
@@ -455,6 +456,8 @@ def kernel_step(
     (fixture-ul n-are executor)."""
     loaded = loaded or pack(name)
     voc: CatalogVocabulary | None = vocabulary(name) if vocab is True else (vocab or None)
+    # NX-389b: un tur care răspunde la întrebarea de familie continuă rutina (ca orchestratorul)
+    interpretation, resumed = resume_routine(interpretation, state)
     needs = NeedVocabulary.from_pack(loaded)
     reducer_policy = ReducerPolicy(vocabulary=needs)
     handles = need_handles(state.needs, needs)
@@ -486,6 +489,7 @@ def kernel_step(
     delta = to_delta(
         interpretation, checked, resolved, known, handles=handles, needs=needs, turn_id=turn_id
     )
+    delta = answer_topic(delta, resumed, turn_id)
     if pairs is not None:
         # NX-348: aceeași verificare a perechii (raft, tip) ca orchestratorul, pe catalogul dat.
         from src.catalog.subject_pairs import mark_pairs  # noqa: PLC0415
@@ -550,6 +554,7 @@ def kernel_step(
         vocab=voc,
         locale=locale,
         checked=accepted_changes(checked, delta),
+        resumed=resumed,
     )
     executor = _executor_proposals(name, shown_ids, planned)
     after = reduce_turn(state, delta, executor, resolved, primary, corrects, reducer_policy).state

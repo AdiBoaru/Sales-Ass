@@ -111,8 +111,10 @@ from src.tools.catalog_tools import SearchArgs
 #: (`routine_steps.family_counts_by_need`); o singură familie servibilă o decide fără întrebare
 #: (`family_single`), iar după o întrebare la care clientul n-a ales, familia majoritară cu
 #: dezvăluirea `family_defaulted` (I11: familia se întreabă o dată). Câmpuri aditive:
-#: `GateOutcome.routine_family` / `family_labels`, `PlannedTurn.family_labels`. Schema scrisă de
-#: model e neschimbată. Flag `ROUTINE_FAMILY_QUESTION_ENABLED` (stins = regula de azi).
+#: `GateOutcome.routine_family` / `family_labels` / `family_options`, `PlannedTurn.family_labels`,
+#: `TurnPlan.offer`. NX-389b: întrebarea ține minte actul și opțiunile, iar CODUL reia rutina la
+#: răspuns (`routine_family.resume_routine`). Schema scrisă de model e neschimbată. Flag
+#: `ROUTINE_FAMILY_QUESTION_ENABLED` (stins = regula de azi).
 KERNEL_CONTRACT_VERSION = "kernel.v9.0"
 
 # --- scrise de model ----------------------------------------------------------------------------
@@ -288,6 +290,10 @@ class TurnPlan(_CodeWritten):
     #: unui act `detail` / `compare`, ca executorul să răspundă la ea. Text de client: redactat în
     #: trace. `None` pe orice alt plan.
     question: str | None = None
+    #: `kernel.v9.0` (NX-389b): pe un plan `bundle` reluat după întrebarea de familie, etichetele
+    #: celorlalte familii pe care clientul le-a numit («ambele»): executorul oferă rutina lor după
+    #: (un chip). Gol altfel.
+    offer: list[str] = Field(default_factory=list)
 
 
 class AnswerPolicy(_CodeWritten):

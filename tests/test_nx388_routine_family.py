@@ -182,7 +182,7 @@ def test_the_probe_names_the_layer_that_lost_the_family():
 
 
 def test_the_prompt_version_moved():
-    assert INTERPRET_PROMPT_VERSION == "interpret.v6"
+    assert int(INTERPRET_PROMPT_VERSION.removeprefix("interpret.v").split(".")[0]) >= 6
 
 
 def test_the_prompt_says_the_part_a_routine_is_for_is_a_shelf():

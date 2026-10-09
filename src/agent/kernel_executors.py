@@ -81,7 +81,7 @@ from src.agent.tool_executor import ToolRun
 from src.agent.turn_planner import DELEGATE_TOOLS
 from src.catalog.render_text import display_name
 from src.config import get_settings
-from src.conversation.ambiguity_gate import MAX_ACT_BOTH
+from src.conversation.ambiguity_gate import MAX_ACT_BOTH, ROUTINE_FAMILY_KEY
 from src.conversation.answer_policy import dimension_label
 from src.conversation.references import name_in_results
 from src.db.queries.catalog import get_products_by_ids
@@ -641,6 +641,12 @@ async def _ask(ctx: TurnContext, deps: PipelineDeps, plan: TurnPlan, outcome: Ga
             rows = await get_products_by_ids(conn, ctx.business.id, ids, limit=len(ids))
         rows = SafetyPolicy.for_turn(ctx).gate(ctx, rows, purpose="kernel_ask")[0]
     text = question
+    facts: dict[str, Any] = {"question_to_ask": question}
+    routine = outcome.asked_key == ROUTINE_FAMILY_KEY and bool(outcome.family_labels)
+    if routine:
+        # NX-389c: întrebarea e despre CE e rutina cerută, cu opțiunile ei (etichete de raft)
+        facts["about"] = "what the routine the customer asked for is for"
+        facts["options"] = list(outcome.family_labels)
     if get_settings().composer_ask_enabled:
         from src.agent import composer  # noqa: PLC0415 — ciclul agent ↔ executori
         from src.worker.context import conversation_transcript  # noqa: PLC0415
@@ -648,16 +654,35 @@ async def _ask(ctx: TurnContext, deps: PipelineDeps, plan: TurnPlan, outcome: Ga
         inp = composer.ComposeInput(
             task="ask",
             products=rows,
-            obligations=[composer.Obligation("ask", {"question_to_ask": question})],
+            obligations=[composer.Obligation("ask", facts)],
         )
         history = conversation_transcript(ctx.history, consumer="composer")
         composed, _reason = await composer.compose(ctx, deps, inp, history=history)
         if composed is not None:
             text = composed.served
-    ctx.set_clarify(text, field="kernel", resume_route="sales")
+    chips = _family_choices(ctx, outcome.family_labels) if routine else None
+    ctx.set_clarify(text, field="kernel", resume_route="sales", suggestions=chips)
     if rows and ctx.reply is not None:
         ctx.reply.products = _card_products(rows, n=len(rows))
     return True
+
+
+#: NX-389c: șablonul chip-ului care răspunde la întrebarea de familie («Pentru ten»), din
+#: `DomainPack.answer_shape_templates` (textul chip-ului e mesajul clientului, P11).
+ROUTINE_CHOICE_CHIP = "routine_choice"
+
+
+def _family_choices(ctx: TurnContext, labels: Sequence[str]) -> list[str] | None:
+    """Chips-urile opțiunilor întrebării de familie, în ordinea lor. Fără șablon: niciun chip."""
+    from src.agent.voice import naturalize  # noqa: PLC0415
+
+    table = (getattr(_pack(ctx), "answer_shape_templates", None) or {}).get(ROUTINE_CHOICE_CHIP)
+    template = (table or {}).get((ctx.language or "").split("-")[0])
+    if not template or "{slot}" not in template:
+        return None
+    return [naturalize(template.format(slot=label.lower())) for label in labels][
+        : get_settings().chip_slots
+    ]
 
 
 async def _composed_no_results(ctx: TurnContext, deps: PipelineDeps, plan: TurnPlan) -> str | None:
@@ -1233,7 +1258,38 @@ async def _bundle(ctx: TurnContext, deps: PipelineDeps, plan: TurnPlan) -> bool 
     if not result.ok or not run.retrieved:
         return False
     await _compose(ctx, deps, run, list(run.retrieved), page=False)
+    if plan.offer:
+        _offer_routines(ctx, plan.offer)
     return ctx.reply is not None
+
+
+#: NX-389b: cheia șablonului care oferă rutina altei familii (`DomainPack.answer_shape_templates`;
+#: nu `chip_templates`, al cărui vocabular e închis pe mutările NX-296).
+ROUTINE_OFFER_CHIP = "routine_offer"
+
+
+def _offer_routines(ctx: TurnContext, labels: Sequence[str]) -> None:
+    """NX-389b («ambele»): rutina s-a făcut pentru prima familie aleasă, iar celelalte se oferă ca
+    chips, primele. Textul chip-ului e MESAJUL pe care clientul îl retrimite («Fă-mi și rutina
+    pentru corp»), deci vine din șablonul pachetului, în limba turului (P11); fără șablon, nicio
+    ofertă (compozitorul n-a promis-o)."""
+    from src.agent.voice import naturalize  # noqa: PLC0415
+    from src.models import Chip  # noqa: PLC0415
+
+    reply = ctx.reply
+    table = (getattr(_pack(ctx), "answer_shape_templates", None) or {}).get(ROUTINE_OFFER_CHIP)
+    table = table or {}
+    template = table.get((ctx.language or "").split("-")[0])
+    if reply is None or not template or "{slot}" not in template:
+        return
+    texts = [naturalize(template.format(slot=label.lower())) for label in labels]
+    cap = get_settings().chip_slots
+    rich = getattr(reply, "rich", None)
+    if rich is not None:
+        kept = [c for c in rich.chips if c.label not in texts]
+        rich.chips = [*(Chip(label=t, payload=t) for t in texts), *kept][:cap]
+        return
+    reply.suggestions = [*texts, *(c for c in reply.suggestions if c not in texts)][:cap]
 
 
 async def _serve_named(

@@ -203,6 +203,17 @@ def _subject(inp: InterpretInput) -> list[str]:
     return [*lines, f"PARKED: {name}", f"parked items: {items}"]
 
 
+def _pending(pending: Any) -> str:
+    """NX-389b: întrebarea în așteptare, cu actul pentru care a fost pusă și opțiunile ei (chei),
+    când le are (întrebarea de familie a unei rutini). Fără ele, doar cheia, ca înainte."""
+    if pending is None:
+        return NONE
+    if not (pending.resume_route and pending.options_refs):
+        return str(pending.target_key)
+    options = ", ".join(pending.options_refs)
+    return f"{pending.target_key} (act: {pending.resume_route}; options: {options})"
+
+
 def render_view(inp: InterpretInput) -> str:
     """Vederea turului (PURĂ): blocurile în ordine fixă, fiecare cu eticheta lui, `none` când e
     gol. Mesajul curent NU e aici: vine o singură dată, la sfârșitul mesajului `user`."""
@@ -219,7 +230,7 @@ def render_view(inp: InterpretInput) -> str:
         ["SUBJECT", *_subject(inp)],
         ["ON SCREEN", *(screen or [NONE])],
         ["EARLIER", *(earlier or [NONE])],
-        [f"PENDING: {pending.target_key if pending is not None else NONE}"],
+        [f"PENDING: {_pending(pending)}"],
         ["HISTORY", *(history or [NONE])],
     ]
     return "\n".join("\n".join(block) for block in blocks)
@@ -259,7 +270,10 @@ The user message holds the conversation state, then CURRENT MESSAGE, the turn to
 with the items that were shown for it.
 - ON SCREEN: the items shown last, by position #i.
 - EARLIER: item sets shown before the current screen, the most recent first.
-- PENDING: the question the assistant is waiting on, if any.
+- PENDING: the question the assistant is waiting on, if any, with the act it was asked for and \
+its options when it has them. An answer that chooses names one of those options: write it as that \
+option (for a shelf, a set on category with that option key). When the customer leaves the choice \
+to you or says they do not know, write the act of the question with no change for it.
 - HISTORY: the latest messages; user lines are the customer, bot lines are the assistant.
 
 FIELDS

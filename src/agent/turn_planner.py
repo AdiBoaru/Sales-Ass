@@ -73,6 +73,7 @@ from src.conversation.references import (
     find_name_reference,
 )
 from src.conversation.routine_family import (
+    ResumedRoutine,
     bundle_executor,
     routine_family,
     subject_kinds,
@@ -402,8 +403,10 @@ class _Planner:
         vocab: CatalogVocabulary | None,
         locale: str,
         checked: Sequence[CheckedChange] | None = None,
+        resumed: ResumedRoutine | None = None,
     ) -> None:
         self.interp = interp
+        self.resumed = resumed
         self.checked = tuple(checked) if checked is not None else None
         self.state = state
         self.ranking = tuple(ranking)
@@ -744,7 +747,9 @@ class _Planner:
         # ne-`enforce_ready`, rămâne ordonare aici (recenzia NX-352: «rutina de seară» ar fi exclus
         # produsele `am_pm` din fiecare pas).
         args = self._search_args(phrase, act, product_name=None, relaxable=False, index=index)
-        if args.price_max is not None and not self._sum_asked_this_turn():
+        if args.price_max is not None and not (
+            self._sum_asked_this_turn() or self._sum_asked_at_question()
+        ):
             # bugetul conversației (al unui produs, «o cremă sub 50») nu plafonează suma rutinei
             args = args.model_copy(update={"price_max": None})
             self._gap("routine_budget")
@@ -767,7 +772,15 @@ class _Planner:
             depends_on=None,
             family=family,
             steps=self._asked_steps(family),
+            offer=self._family_offer(),
         )
+
+    def _family_offer(self) -> list[str]:
+        """NX-389b («ambele»): etichetele celorlalte familii numite la răspuns, oferite după."""
+        if self.resumed is None or not self.resumed.others:
+            return []
+        labels = {e.key: e.label for e in (self.vocab.categories if self.vocab else ())}
+        return [labels.get(key, key) for key in self.resumed.others]
 
     def _asked_steps(self, family: str) -> list[str]:
         """NX-387 (`kernel.v8.0`): pașii pe care îi NUMEȘTE clientul în tur («vreau o rutină:
@@ -792,6 +805,15 @@ class _Planner:
                         found.append(step)
                     break
         return found if len(found) >= 2 else []
+
+    def _sum_asked_at_question(self) -> bool:
+        """NX-389b: pe turul care răspunde la întrebarea de familie, bugetul spus la CEREREA
+        rutinei (turul întrebării, aceeași revizie ca întrebarea) e plafonul rutinei; fără reluare,
+        o sumă de acum câteva ture rămâne a unui produs (D3)."""
+        if self.resumed is None:
+            return False
+        need = self.state.need_for(_BUDGET_MAX)
+        return need is not None and need.updated_revision == self.resumed.asked_at_revision
 
     def _sum_asked_this_turn(self) -> bool:
         """Clientul a spus o SUMĂ în turul ăsta (o limită de preț cu număr, nu relativă la un
@@ -1274,6 +1296,7 @@ def plan_turn(
     vocab: CatalogVocabulary | None,
     locale: str,
     checked: Sequence[CheckedChange] | None = None,
+    resumed: ResumedRoutine | None = None,
 ) -> PlannedTurn:
     """PUR. Planul unui tur interpretat.
 
@@ -1283,7 +1306,10 @@ def plan_turn(
     separă paginarea de o rafinare. `checked` (NX-352) = schimbările VALIDATE ale turului: doar
     cele acceptate pot scoate cuvinte din textul căutării (recenzia NX-352: o schimbare respinsă nu
     are voie să consume cererea). Fără ele, schimbările brute, tratate ca spuse (teste, sonde
-    vechi). Nu ridică niciodată, iar o intrare fără nimic de făcut dă `reply_only` (P6)."""
+    vechi). Nu ridică niciodată, iar o intrare fără nimic de făcut dă `reply_only` (P6).
+    `resumed` (NX-389b) = turul răspunde la întrebarea de familie a unei rutini
+    (`routine_family.resume_routine`): bugetul spus la întrebare rămâne al rutinei, iar celelalte
+    familii numite se oferă după."""
     return _Planner(
         interp,
         state,
@@ -1295,6 +1321,7 @@ def plan_turn(
         vocab=vocab,
         locale=locale,
         checked=checked,
+        resumed=resumed,
     ).run()
 
 

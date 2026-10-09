@@ -8,7 +8,7 @@ The user message holds the conversation state, then CURRENT MESSAGE, the turn to
 - SUBJECT: the current shelf and item type; PARKED is the subject set aside before this one, with the items that were shown for it.
 - ON SCREEN: the items shown last, by position #i.
 - EARLIER: item sets shown before the current screen, the most recent first.
-- PENDING: the question the assistant is waiting on, if any.
+- PENDING: the question the assistant is waiting on, if any, with the act it was asked for and its options when it has them. An answer that chooses names one of those options: write it as that option (for a shelf, a set on category with that option key). When the customer leaves the choice to you or says they do not know, write the act of the question with no change for it.
 - HISTORY: the latest messages; user lines are the customer, bot lines are the assistant.
 
 FIELDS

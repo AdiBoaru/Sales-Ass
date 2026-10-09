@@ -21,5 +21,11 @@
   "conversations": 12,
   "messages": 49,
   "frozen": "2026-10-07, scris de un agent fără acces la cod, analize sau seturile anterioare; are `expect` per tur; ținta: release 419c73a (NX-379)"
+ },
+ "routines-2026-10-09.json": {
+  "sha256": "e64d27351a6f089b3ca0ab734a8d204ac6022762a728d890b59187eeb70a1b36",
+  "conversations": 14,
+  "messages": 44,
+  "frozen": "2026-10-09, scris de un agent fără acces la cod, analize sau carduri; are `expect` și `routine_target` per tur; verdictul NX-389 (regula GO din card); nu se citește înaintea rulării"
  }
 }

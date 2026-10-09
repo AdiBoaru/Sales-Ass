@@ -735,6 +735,13 @@
       "field": "needs_topic",
       "why": "NX-331: SINGURUL scriitor al vederii v1 pe siturile mutate (`constraints[key]`), derivata dintr-o propunere `set_need`. Ramane pana la retragerea formatului v1.",
       "fate": "stays"
+    },
+    {
+      "file": "src/conversation/routine_family.py",
+      "function": "answer_topic",
+      "field": "needs_topic",
+      "why": "NX-389b: raspunsul la intrebarea de familie a unei rutini (o optiune din meniul NOSTRU, aleasa de client) devine `set_topic` pe raftul ales, `user_explicit`, ca raspunsul la o clarificare pe calea v1 -- chiar cand validatorul a respins citatul omograf. O propunere typed in `TurnDelta`, aplicata doar de reducer (I3).",
+      "fate": "stays"
     }
   ]
 }
