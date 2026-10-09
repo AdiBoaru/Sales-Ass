@@ -141,7 +141,6 @@ def _named_part(
     interp: TurnInterpretation,
     checked: Sequence[CheckedChange],
     subject: Sequence[CheckedChange],
-    umbrella: Sequence[tuple[str, ...]],
     rejected: Sequence[CheckedChange],
 ) -> tuple[str, CheckedChange] | None:
     """NX-390 (`kernel.v10.0`): pe o rutină (`bundle`), raftul rădăcină numit în fraza unei nevoi
@@ -151,10 +150,13 @@ def _named_part(
     gras, adică machiajul. Regula de prompt NX-388 cerea modelului să scrie raftul, dar nu e o
     garanție; dovada e a validatorului (`CheckedChange.shelf`).
 
-    Se aplică doar când turul nu are un raft spus EXPLICIT și nici un tip de produs (clientul a
-    numit atunci ce vrea), doar pe un singur raft numit, iar un raft scris de model ne-explicit
-    (ghicit) cedează locul celui numit de client. `(raft, schimbarea care l-a numit)` sau None."""
-    if not any(a.kind == _BUNDLE for a in interp.acts) or umbrella:
+    Se aplică doar când turul nu are un raft spus EXPLICIT și nici un tip de produs spus clar
+    (clientul a numit atunci ce vrea), doar pe un singur raft numit, iar un raft scris de model
+    ne-explicit (ghicit) cedează locul celui numit de client. Tipurile spuse vag (umbrela, NX-350:
+    «un toner, o cremă») nu spun pentru ce e rutina, deci raftul se adaugă lângă ele (setul
+    `mixed-2026-10-09`, m5: «rutina de dimineata pt ten sensibil: un demachiant, un toner si o
+    crema cu spf» a primit întrebarea de familie). `(raft, schimbarea care l-a numit)` sau None."""
+    if not any(a.kind == _BUNDLE for a in interp.acts):
         return None
     if any(c.dimension == PRODUCT_TYPE or c.provenance == "explicit" for c in subject):
         return None
@@ -451,26 +453,16 @@ def to_delta(
             continue
         proposals += made
 
-    named = _named_part(interp, checked, subject, umbrella, rejected)
+    named = _named_part(interp, checked, subject, rejected)
     if named is not None:
-        shelf, lead = named
-        if not subject:
-            proposals.insert(0, None)  # type: ignore[arg-type]  # locul propunerii de subiect
-        subject = []
+        # un raft ghicit de model cedează locul celui numit de client; umbrela tipurilor spuse vag
+        # («un toner, o cremă») rămâne și se adaugă pe aceeași propunere de subiect
+        subject = [c for c in subject if c.dimension != CATEGORY]
         counters["subject_from_named_part"] = 1
-        proposals = [
-            StateUpdateProposal(
-                "set_topic",
-                category_key=shelf,
-                product_type=None,
-                **_common(lead, _SOURCE_BY_PROVENANCE["explicit"], turn_id),
-            )
-            if p is None
-            else p
-            for p in proposals
-        ]
+        if not any(p is None for p in proposals):
+            proposals.insert(0, None)  # type: ignore[arg-type]  # locul propunerii de subiect
 
-    if subject or umbrella:
+    if subject or umbrella or named is not None:
         made = _subject_proposal(subject, turn_id, counters) if subject else None
         if umbrella and umbrella_lead is not None:
             if any(s.dimension == PRODUCT_TYPE for s in subject):
@@ -487,6 +479,18 @@ def to_delta(
                 )
             else:
                 made = replace(made, type_umbrella=codes)
+        if named is not None:
+            shelf, lead = named
+            made = (
+                replace(made, category_key=shelf)
+                if made is not None
+                else StateUpdateProposal(
+                    "set_topic",
+                    category_key=shelf,
+                    product_type=None,
+                    **_common(lead, _SOURCE_BY_PROVENANCE["explicit"], turn_id),
+                )
+            )
         proposals = [made if p is None else p for p in proposals]
     return TurnDelta(
         thread=thread,
