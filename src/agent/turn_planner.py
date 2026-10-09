@@ -40,7 +40,6 @@ from src.catalog.query_terms import (
 )
 from src.catalog.vocabulary import (
     CatalogVocabulary,
-    topic_root_of,
 )
 from src.conversation.ambiguity_gate import MAX_ACT_BOTH, GateOutcome, target_question_key
 from src.conversation.answer_policy import read_query
@@ -73,8 +72,13 @@ from src.conversation.references import (
     VARIANT_DIMENSION,
     find_name_reference,
 )
+from src.conversation.routine_family import (
+    bundle_executor,
+    routine_family,
+    subject_kinds,
+)
 from src.conversation.state_reducer import StateUpdateProposal
-from src.conversation.state_v2 import HARD_CAPABLE_SOURCES, ConversationStateV2, Need, Topic
+from src.conversation.state_v2 import HARD_CAPABLE_SOURCES, ConversationStateV2, Need
 from src.domain.facets import FacetType
 from src.domain.routine_steps import SEP
 from src.tools.base import CATALOG_READ_TOOLS
@@ -94,7 +98,13 @@ DISCLOSURES: tuple[str, ...] = (
     # `kernel.v6.1` (NX-374): o nevoie SPUSĂ în tur (`explicit`) pe care nicio fațetă a catalogului
     # nu o poate verifica (golul `unsupported_need`): clientul află că n-a contat la alegere.
     "need_unverifiable",
+    # `kernel.v9.0` (NX-389, D2): rutina fără familie s-a făcut pe familia cu cele mai multe
+    # produse, fiindcă întrebarea fusese deja pusă și clientul n-a ales; clientul află pe ce
+    # (`PlannedTurn.family_labels`) și că poate cere alta.
+    "family_defaulted",
 )
+#: Motivele porții pe care familia unei rutini e aleasă fără răspunsul clientului (NX-389).
+_FAMILY_DEFAULTED_REASONS = frozenset({"already_asked", "already_pending"})
 #: Vocabularul ÎNCHIS al lui `PlannedTurn.gaps`: ce n-a putut purta `SearchArgs`, plus coborârile
 #: care nu sunt tăcere (P6): o întrebare fără text, o căutare fără cuvinte, un subiect lipsă.
 GAPS: tuple[str, ...] = (
@@ -142,8 +152,6 @@ _FIXED: Mapping[str, Executor] = {
     "other": "delegate",
 }
 _SEARCHING: frozenset[str] = frozenset({"search", "bundle"})
-#: Cheia de pachet care servește `bundle` pe orice raft.
-WILDCARD = "*"
 #: Dimensiunea tipului de produs (`Topic.product_type`), eticheta subiectului fără raft.
 PRODUCT_TYPE = "product_type"
 #: Dimensiunea raftului (`Topic.category_key`).
@@ -170,6 +178,9 @@ class PlannedTurn:
     #: NX-374 (recenzia A2): cheile nevoilor spuse de dezvăluirea `need_unverifiable` a turului.
     #: Orchestratorul scrie memoria lor (`disclosure_memory`) doar dacă fraza a ajuns la client.
     disclosed_needs: tuple[str, ...] = ()
+    #: NX-389: etichetele familiilor servibile ale rutinei, cea pe care s-a făcut întâi (faptele
+    #: dezvăluirii `family_defaulted`).
+    family_labels: tuple[str, ...] = ()
 
 
 def _read_act_query(
@@ -632,6 +643,7 @@ class _Planner:
             primary=primary,
             excludes_shown=paging,
             disclosed_needs=tuple(self.disclosed_needs),
+            family_labels=self.gate.family_labels if self.gate.routine_family else (),
         )
 
     def _ask(self, kept: list[tuple[int, Act]]) -> TurnPlan:
@@ -707,7 +719,8 @@ class _Planner:
                 return self._plan("reply_only")
             return self._plan("cart", list(dict.fromkeys(ids)))
         # `bundle`: executorul îl declară pachetul (SOLE: `routine_plan`); fără el, o căutare.
-        if bundle_executor(self.state, pack=self.pack, vocab=self.vocab) is not None:
+        family = self.gate.routine_family
+        if bundle_executor(self.state, pack=self.pack, vocab=self.vocab, family=family) is not None:
             return self._bundle(act, index)
         return self._search(act, index)
 
@@ -717,6 +730,12 @@ class _Planner:
         preferințele; I2, I7) și ancora = prima țintă `exact` a actului. Fără familie declarată,
         planul rămâne `bundle` fără argumente, deci pe calea de azi."""
         family = routine_family(self.state, pack=self.pack, vocab=self.vocab)
+        if family is None and self.gate.routine_family is not None:
+            # NX-389: familia decisă de poartă (singura servibilă, sau cea majoritară după o
+            # întrebare la care clientul n-a ales, spusă de dezvăluire)
+            family = self.gate.routine_family
+            if self.gate.decision.reason in _FAMILY_DEFAULTED_REASONS:
+                self._disclose(index, "family_defaulted")
         if family is None:
             return self._plan("bundle")
         ids = [p for ref in self._refs_of(act) if ref.outcome == "exact" for p in ref.product_ids]
@@ -1302,85 +1321,6 @@ def disclosure_memory(planned: PlannedTurn, turn_id: str) -> tuple[StateUpdatePr
         )
         for key in planned.disclosed_needs
     )
-
-
-def bundle_executor(
-    state: ConversationStateV2, *, pack: object | None, vocab: CatalogVocabulary | None
-) -> str | None:
-    """Numele uneltei care servește `bundle` pe subiectul stării, sau None: fără subiect, sau fără
-    intrare în `DomainPack.bundle_executors` pentru rădăcina raftului, raft sau `"*"`. PUR; pasul 6
-    îl cheamă ca să afle CE unealtă execută planul `bundle`. Fără subiect: doar intrarea `"*"`, și
-    doar când nevoile stării dau familia rutinei (NX-386)."""
-    topic = state.topic
-    table = getattr(pack, "bundle_executors", None)
-    if not isinstance(table, Mapping) or not table:
-        return None
-    if not topic.has_subject:
-        # NX-386 (`kernel.v7.1`): fără subiect, executorul general al pachetului, DOAR când nevoile
-        # dau familia rutinei (`routine_family`, regula 4); altfel o căutare, ca până acum
-        if WILDCARD in table and routine_family(state, pack=pack, vocab=vocab) is not None:
-            return str(table[WILDCARD])
-        return None
-    usable = vocab if vocab is not None and not vocab.is_empty() else None
-    root = topic_root_of(usable, topic.category_key) if usable is not None else None
-    for key in (root, topic.category_key, WILDCARD):
-        if key and key in table:
-            return str(table[key])
-    return None
-
-
-def routine_family(
-    state: ConversationStateV2, *, pack: object | None, vocab: CatalogVocabulary | None
-) -> str | None:
-    """Familia rutinei pentru subiectul stării. PUR. Ordinea, de la cel mai precis la cel mai
-    grosier (recenzia D3):
-
-    1. TIPUL subiectului, prin `routine_steps.by_product_type` (tipul → `familie:pas`): o «cremă de
-       față» e a rutinei de față chiar pe raftul `machiaj-fata` (NX-313: „Fata" e machiaj);
-    2. cheia raftului în `family_by_shelf` (o intrare pe un subraft bate rădăcina lui);
-    3. rădăcina raftului în `family_by_shelf`.
-
-    4. NX-386 (`kernel.v7.1`): fără tip și fără raft cu familie, nevoile ACTIVE ale stării, prin
-       `routine_steps.family_by_need` (dată derivată din catalog), doar când toate cele cunoscute
-       duc la aceeași familie («o rutină de seară pentru pete» ⇒ fața).
-
-    `None` fără nicio potrivire: planul `bundle` rămâne pe calea de azi."""
-    spec = getattr(pack, "routine_steps", None)
-    families = getattr(spec, "families", None) or {}
-    by_type = getattr(spec, "by_product_type", None) or {}
-    # NX-350: tipurile subiectului (`subject_kinds`: tipul spus clar, altfel umbrela; un tip DEDUS
-    # nu bate umbrela). Mai multe decid familia doar când TOATE cele cunoscute sunt ale aceleiași.
-    seen = {str(by_type[k]).partition(SEP)[0] for k in subject_kinds(state.topic) if k in by_type}
-    if len(seen) == 1 and next(iter(seen)) in families:
-        return next(iter(seen))
-    key = state.topic.category_key
-    table = getattr(spec, "family_by_shelf", None)
-    if key and isinstance(table, Mapping) and table:
-        usable = vocab if vocab is not None and not vocab.is_empty() else None
-        root = topic_root_of(usable, key) if usable is not None else None
-        for shelf in (key, root):
-            if shelf and shelf in table:
-                return str(table[shelf])
-    by_need = getattr(spec, "family_by_need", None) or {}
-    if key or not isinstance(by_need, Mapping) or not by_need:
-        # un raft numit fără familie nu e luat de nevoi: clientul a spus unde, iar ce nu e o
-        # familie de rutină (ex. un raft de accesorii) rămâne pe calea de azi
-        return None
-    found = {
-        str(by_need[f"{n.key}:{n.normalized_value}"])
-        for n in state.active_needs()
-        if isinstance(n.normalized_value, str) and f"{n.key}:{n.normalized_value}" in by_need
-    }
-    if len(found) == 1 and next(iter(found)) in families:
-        return next(iter(found))
-    return None
-
-
-def subject_kinds(topic: Topic) -> tuple[str, ...]:
-    """NX-350: tipurile pe care le ordonează subiectul. Fără tip spus clar, UMBRELA (toate codurile
-    cuvântului clientului); un tip DEDUS de cod nu o bate (recenzia NX-350, constatarea 7)."""
-    stated = topic.product_type if not (topic.type_learned and topic.type_umbrella) else None
-    return (stated,) if stated else topic.type_umbrella
 
 
 __all__ = [

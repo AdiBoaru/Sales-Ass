@@ -70,6 +70,12 @@ from src.conversation.references import (
     find_name_reference,
     gate_act_targets,
 )
+from src.conversation.routine_family import (
+    WILDCARD,
+    family_of_shelf,
+    routine_family,
+    routine_family_options,
+)
 from src.conversation.state_reducer import StateUpdateProposal
 from src.conversation.state_v2 import MAX_DISPLAYED, ConversationStateV2
 from src.domain.pack import DEFAULT_REFERENCE_DIMENSIONS
@@ -94,6 +100,11 @@ GATE_REASONS: tuple[str, ...] = (
     # subiectul
     "no_subject",
     "no_subject_low_gain",
+    # NX-389 (`kernel.v9.0`): familia unei rutini fără familie
+    "no_family",
+    "family_readings",
+    "family_single",
+    "family_unservable",
     # lecturile
     "same_reading",
     "readings_differ",
@@ -118,6 +129,7 @@ TEMPLATE_KINDS: tuple[str, ...] = (
     "scope",
     "value",
     "subject",
+    "family",
     "confirm",
     "conflict",
     "generic",
@@ -146,6 +158,8 @@ MAX_READ_ALL = 4
 MAX_REFERENCE_OPTIONS = MAX_DISPLAYED
 #: Prefixul cheii unei întrebări despre o ȚINTĂ (`target_question_key`).
 REFERENCE_KEY_PREFIX = "ref:"
+#: NX-389: cheia întrebării de familie a unei rutini (memoria ei, anti-bucla I11).
+ROUTINE_FAMILY_KEY = "routine_family"
 
 PRICE = "price"
 BRAND = BRAND_DIMENSION
@@ -182,6 +196,11 @@ class GateOutcome(NamedTuple):
     asked_key: str | None = None
     asked_kind: Literal["pending", "noted"] | None = None
     skipped_acts: tuple[int, ...] = ()
+    #: NX-389: familia unei rutini fără familie, decisă de poartă fără întrebare: singura familie
+    #: servibilă, sau cea majoritară după ce întrebarea a fost deja pusă (`family_defaulted`).
+    routine_family: str | None = None
+    #: NX-389: etichetele familiilor servibile, cea aleasă întâi (pentru dezvăluire și întrebare).
+    family_labels: tuple[str, ...] = ()
 
 
 def target_question_key(product_ids: Sequence[str]) -> str:
@@ -329,6 +348,9 @@ class _Gate:
         self.glue = _glue(pack, locale)
         self.overlays = facet_overlays(pack, self.vocab.facet_names) if self.vocab else None
         self.notes: list[str] = []
+        #: NX-389: familia aleasă fără întrebare (`GateOutcome.routine_family`) și etichetele ei
+        self.family_choice: str | None = None
+        self.family_labels: tuple[str, ...] = ()
 
     # --- utilitare -------------------------------------------------------------------------------
 
@@ -551,6 +573,10 @@ class _Gate:
         întrebarea (`question_answered`), iar a doua întrebare identică e exact bucla pe care
         clientul o resimte ca „nu ascultă". A doua oară o citire răspunde despre toți candidații,
         iar o mutație rămâne oprită fără o nouă întrebare (`already_asked`)."""
+        if key == ROUTINE_FAMILY_KEY:
+            # NX-389 (D2, Adi 2026-10-09): familia se întreabă O dată; a doua oară rutina se face pe
+            # familia cu cele mai multe produse și i se spune clientului (`family_defaulted`)
+            return _replace(self.policy, max_attempts_per_key=1)
         if not key.startswith(REFERENCE_KEY_PREFIX):
             return self.policy
         cap = min(self.policy.max_attempts_per_key, self.policy.max_attempts_per_target)
@@ -647,6 +673,12 @@ class _Gate:
         if skipped:
             self._note("invalid_target")
         outcome = self._rules(acts, [c for c in checks if c.act_index not in skipped])
+        if outcome.decision.verdict != "must_ask" and self.family_choice is not None:
+            outcome = outcome._replace(
+                routine_family=self.family_choice, family_labels=self.family_labels
+            )
+        elif outcome.asked_key == ROUTINE_FAMILY_KEY:
+            outcome = outcome._replace(family_labels=self.family_labels)
         return outcome._replace(skipped_acts=skipped)
 
     def _out_of_range_reads(self) -> set[int]:
@@ -676,6 +708,7 @@ class _Gate:
                 lambda: self._mutation(acts, checks),
                 self._conflict,
                 lambda: self._subject(acts[-1][1]),
+                lambda: self._family(acts[-1][1]),
                 self._readings,
                 lambda: self._ambiguous_reads(acts),
                 self._confirm,
@@ -883,6 +916,89 @@ class _Gate:
             ),
             on_decline=self._subject_declined,
         )
+
+    def _family(self, primary: Act) -> GateOutcome | None:
+        """NX-389 (`kernel.v9.0`): o rutină (`bundle`) fără familie întreabă pentru ce e, între
+        familiile care o pot servi. Se aplică doar fără raft în subiect (un raft numit fără familie
+        nu e o rutină, NX-386), doar cu executorul general de rutină al pachetului și doar cu
+        flagul (`ClarificationPolicy.routine_family_question`).
+
+        Criteriul NU e câștigul de informație: pe o rutină răspunsul nu îngustează un set, alege
+        altul (față și corp sunt rutini disjuncte). Se întreabă când cel puțin două familii au
+        destule produse pentru nevoile turului (`routine_family_options`); una singură ⇒ rutina pe
+        ea, fără întrebare (`family_single`); niciuna ⇒ calea de azi (`family_unservable`).
+
+        Lecturile modelului despre raft (`about=scope`, două rafturi cu familii diferite) bat
+        statistica pe catalog: ele vorbesc despre ACEST client («pielea uscată după duș»: față sau
+        corp), deci se întreabă între ele chiar când nevoile ar da o familie."""
+        if not self.policy.routine_family_question or primary.kind != "bundle":
+            return None
+        table = getattr(self.pack, "bundle_executors", None)
+        if not isinstance(table, Mapping) or WILDCARD not in table:
+            return None
+        if self.state.topic.category_key:
+            return None
+        read = self._scope_families()
+        if read is None and routine_family(self.state, pack=self.pack, vocab=self.vocab):
+            return None
+        if self.vocab is None:
+            self._note("vocabulary_unavailable")
+            return None
+        options = routine_family_options(self.state, pack=self.pack, families=read)
+        if not options:
+            self._note("family_unservable")
+            return None
+        self.family_labels = tuple(self._shelf_label(o.shelf) for o in options)
+        if len(options) == 1:
+            self.family_choice = options[0].family
+            self._note("family_single")
+            return None
+        majority = options[0].family
+
+        def declined(reason: str) -> GateOutcome:
+            # Deja întrebat (sau altă întrebare vie): rutina pe familia majoritară, spusă
+            # clientului de plan (`family_defaulted`), niciodată a doua întrebare (I11, D2).
+            self.family_choice = majority
+            return self._decide("act", reason)
+
+        return self._ask(
+            _Ask(
+                kind="family",
+                key=ROUTINE_FAMILY_KEY,
+                labels=self.family_labels,
+                reason="family_readings" if read is not None else "no_family",
+                candidate_reason="missing_required",
+                partition=tuple(o.count for o in options),
+                total=None,
+                klass="blocking",
+            ),
+            on_decline=declined,
+        )
+
+    def _scope_families(self) -> tuple[str, ...] | None:
+        """Familiile rafturilor din lecturile `scope` ale modelului, când sunt cel puțin două
+        diferite; altfel None (lecturile nu privesc familia, regula lor rămâne a `_readings`)."""
+        if self.vocab is None:
+            return None
+        found: list[str] = []
+        for ambiguity in self.interp.ambiguities:
+            if ambiguity.about != "scope":
+                continue
+            for dimension, key in _read_readings(
+                ambiguity.readings, self.vocab, self.overlays
+            ).values:
+                if dimension != CATEGORY_DIMENSION:
+                    continue
+                family = family_of_shelf(key, pack=self.pack, vocab=self.vocab)
+                if family is not None and family not in found:
+                    found.append(family)
+        return tuple(found) if len(found) >= 2 else None
+
+    def _shelf_label(self, key: str) -> str:
+        for entry in self.vocab.categories if self.vocab is not None else ():
+            if entry.key == key:
+                return entry.label
+        return key
 
     def _subject_declined(self, reason: str) -> GateOutcome:
         # Sub prag sau deja întrebat: `act`. O a treia întrebare de subiect e bucla (I11), iar un
@@ -1142,6 +1258,7 @@ __all__ = [
     "MAX_ACT_BOTH",
     "MAX_OPTIONS",
     "READ_ACTS",
+    "ROUTINE_FAMILY_KEY",
     "TEMPLATE_KINDS",
     "GateOutcome",
     "decide_ambiguity",

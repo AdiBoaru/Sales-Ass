@@ -63,7 +63,7 @@ gate-ul NX-210**. Direcția aprobată către care migrăm:
 
 **Înghețate până la GO-ul de la NX-210:** enforcement-ul QuerySpec/Match Gate (NX-188, NX-189).
 
-**Kernelul conversațional — contractul `kernel.v1.0` (înghețat 2026-09-25, NORMATIV; azi `kernel.v8.1`: MAJOR la v2.0, NX-336 PR B, sensul lui I5; minor la v2.1, NX-336 D3, `TurnPlan.family`; MAJOR la v3.0, NX-348, sensul unei schimbări de subiect; MAJOR la v4.0, NX-350, un tip spus vag devine umbrelă, nu tipul subiectului; MAJOR la v5.0, NX-352, nevoia spusă e filtru relaxabil, căutarea se compune din ce a validat kernelul, «mai ieftin» ambiguu = mediana; minor la v5.1, NX-349, fațetele da/nu; MAJOR la v6.0, NX-364, ordinalul după detaliu, flexiunea în proveniență, excluderea și banda de preț; minor la v6.1, NX-374, dezvăluirea `need_unverifiable`; minor la v6.2, NX-375, `find` caută pe numele produsului numit; MAJOR la v7.0, NX-384, felul nemapat, raftul pe propriul nume, «nu vreau X»; minor la v7.1, NX-386, produsul numit și comparația cu o țintă; MAJOR la v8.0, NX-387, omisiunile; minor la v8.1, NX-380, `Act.question` și `rating` la referințe; porțile de replay derogate de Adi).**
+**Kernelul conversațional — contractul `kernel.v1.0` (înghețat 2026-09-25, NORMATIV; azi `kernel.v9.0`: MAJOR la v2.0, NX-336 PR B, sensul lui I5; minor la v2.1, NX-336 D3, `TurnPlan.family`; MAJOR la v3.0, NX-348, sensul unei schimbări de subiect; MAJOR la v4.0, NX-350, un tip spus vag devine umbrelă, nu tipul subiectului; MAJOR la v5.0, NX-352, nevoia spusă e filtru relaxabil, căutarea se compune din ce a validat kernelul, «mai ieftin» ambiguu = mediana; minor la v5.1, NX-349, fațetele da/nu; MAJOR la v6.0, NX-364, ordinalul după detaliu, flexiunea în proveniență, excluderea și banda de preț; minor la v6.1, NX-374, dezvăluirea `need_unverifiable`; minor la v6.2, NX-375, `find` caută pe numele produsului numit; MAJOR la v7.0, NX-384, felul nemapat, raftul pe propriul nume, «nu vreau X»; minor la v7.1, NX-386, produsul numit și comparația cu o țintă; MAJOR la v8.0, NX-387, omisiunile; minor la v8.1, NX-380, `Act.question` și `rating` la referințe; MAJOR la v9.0, NX-389, întrebarea de familie a unei rutini; porțile de replay derogate de Adi).**
 Sursa: [`docs/KERNEL-CONTRACT-v1.md`](docs/KERNEL-CONTRACT-v1.md); designul din care vine, ca
 referință: [`docs/KERNEL-DESIGN.md`](docs/KERNEL-DESIGN.md). Modelul scrie O interpretare a turului
 (`TurnInterpretation`: acte, schimbări de stare adresate prin handle, referințe, ambiguități); codul
@@ -240,6 +240,19 @@ din cele 10 (prin `pores`/`redness`) și e comisă în seed. Declarat: 8 cereri 
 pensula de contur») sunt etichetate `bundle`. Sonda: `scripts/nx388_routine_family_probe.py` (read-only,
 raport local `reports/nx388/`). Card: [`tasks/stage1/NX-388.md`](tasks/stage1/NX-388.md); probă:
 `pytest tests/test_nx388_routine_family.py -q`.
+**NX-389a — `kernel.v9.0` (MAJOR): o rutină fără familie întreabă pentru ce e (flag OFF).** Regula
+`_family` a porții: un `bundle` fără raft în subiect și fără familie (tip, raft, `family_by_need`)
+întreabă între familiile pe care catalogul le poate servi pentru nevoile turului
+(`routine_steps.family_counts_by_need`, derivate de `derive_family_by_need.py`, ≥
+`min_family_products`), cheia `routine_family`, întrebată O dată. Criteriul nu e câștigul ≥ 0,30:
+față și corp sunt rutine disjuncte, iar pragul ar fi refuzat «pielea uscată după duș» (242/39).
+Lecturile `scope` ale modelului bat statistica (`family_readings`); o singură familie servibilă decide
+fără întrebare (`family_single`); după o întrebare fără alegere, familia majoritară + dezvăluirea
+`family_defaulted` (decizia lui Adi, 2026-10-09; machiajul intră în calcul și se întreabă).
+`routine_family`/`bundle_executor`/`subject_kinds` s-au mutat în `src/conversation/routine_family.py`
+(rol `pure`). Reluarea rutinei după răspuns e 389b, de aceea flagul `ROUTINE_FAMILY_QUESTION_ENABLED`
+rămâne stins. Card: [`tasks/stage1/NX-389.md`](tasks/stage1/NX-389.md); probă:
+`pytest tests/test_nx389_routine_family_question.py -q`.
 **NX-334 — direcția unei limite numerice ajunge neschimbată în stare.** Pe pașii 3a/3b «minim 256
 GB» se persista `storage lte 256`: delta păstra relația doar pe preț, iar orice fațetă numerică era
 plafon. Acum o dimensiune numerică are DOUĂ chei, ca bugetul (`<fațetă>_min` / `<fațetă>_max`,

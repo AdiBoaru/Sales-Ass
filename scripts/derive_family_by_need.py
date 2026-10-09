@@ -87,36 +87,77 @@ where p.business_id = $1
 """
 
 
-async def _rows(business_id: str) -> tuple[list[tuple[str, str, str]], tuple[str, ...]]:
+def family_counts_by_need(
+    rows: Iterable[tuple[str, str, str]], families: Iterable[str]
+) -> dict[str, dict[str, int]]:
+    """NX-389: `(dimensiune, valoare, familie)` per produs → `dimensiune:valoare` → familie →
+    câte produse. PUR. Doar familiile declarate; ordinea e deterministă (cheie, apoi familie)."""
+    known = set(families)
+    counts: dict[str, collections.Counter[str]] = collections.defaultdict(collections.Counter)
+    for dimension, value, family in rows:
+        if family in known and dimension and value:
+            counts[f"{dimension}:{value}"][family] += 1
+    return {need: dict(sorted(by_family.items())) for need, by_family in sorted(counts.items())}
+
+
+_TOTALS_SQL = """
+select split_part(p.attributes->>'routine_step', ':', 1) as family, count(*)::int as n
+from products p
+where p.business_id = $1
+  and p.status = 'active'
+  and p.attributes ? 'routine_step'
+group by 1
+"""
+
+
+async def _rows(
+    business_id: str,
+) -> tuple[list[tuple[str, str, str]], tuple[str, ...], dict[str, int]]:
     from src.db.connection import tenant_conn  # noqa: PLC0415
     from src.db.queries.businesses import load_business  # noqa: PLC0415
 
     async with tenant_conn(business_id) as conn:
         biz = await load_business(conn, business_id)
         rows = await conn.fetch(_SQL, business_id, list(NEED_FACETS))
+        totals = await conn.fetch(_TOTALS_SQL, business_id)
     pack = getattr(biz, "domain_pack", None)
     families = tuple((getattr(getattr(pack, "routine_steps", None), "families", None) or {}).keys())
-    return [(r["dimension"], r["value"], r["family"]) for r in rows], families
+    by_family = {str(r["family"]): int(r["n"]) for r in totals}
+    return [(r["dimension"], r["value"], r["family"]) for r in rows], families, by_family
 
 
-def _write(path: pathlib.Path, mapping: Mapping[str, str]) -> None:
+def _write(
+    path: pathlib.Path,
+    mapping: Mapping[str, str],
+    counts: Mapping[str, Mapping[str, int]],
+    totals: Mapping[str, int],
+) -> None:
     pack = json.loads(path.read_text(encoding="utf-8"))
     steps = pack.setdefault("routine_steps", {})
     steps["family_by_need"] = dict(mapping)
+    steps["family_counts_by_need"] = {k: dict(v) for k, v in counts.items()}
+    steps["family_counts"] = dict(totals)
+    steps["min_family_products"] = MIN_COUNT
     path.write_text(json.dumps(pack, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 async def _main(args: argparse.Namespace) -> int:
-    rows, families = await _rows(args.business)
+    rows, families, totals = await _rows(args.business)
     if args.write:
         seed = json.loads(pathlib.Path(args.write).read_text(encoding="utf-8"))
         families = list(((seed.get("routine_steps") or {}).get("families") or {}).keys())
     mapping = family_by_need(rows, families)
+    counts = family_counts_by_need(rows, families)
+    totals = {f: n for f, n in sorted(totals.items()) if f in set(families)}
     print(json.dumps(mapping, ensure_ascii=False, indent=2))
     print(f"{len(mapping)} nevoi cu familie, din {len({(d, v) for d, v, _ in rows})} măsurate")
+    print(f"produse cu pas de rutină pe familie: {totals}")
     if args.write:
-        _write(pathlib.Path(args.write), mapping)
-        print(f"scris în {args.write} (routine_steps.family_by_need); aplicarea în DB e separată")
+        _write(pathlib.Path(args.write), mapping, counts, totals)
+        print(
+            f"scris în {args.write} (routine_steps.family_by_need, family_counts_by_need, "
+            "family_counts, min_family_products); aplicarea în DB e separată"
+        )
     return 0
 
 

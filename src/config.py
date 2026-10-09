@@ -2002,6 +2002,12 @@ class Settings(BaseSettings):
     clarification_min_information_gain: float = Field(
         default=0.30, validation_alias="CLARIFICATION_MIN_INFORMATION_GAIN"
     )
+    # NX-389 (`kernel.v9.0`): pe calea kernelului, o rutină fără familie întreabă pentru ce e
+    # (față, păr, corp, machiaj), între familiile pe care catalogul le poate servi. Stins = regula
+    # de azi (căutare sau calea v1). Se aprinde după verdictul pe setul nevăzut (cardul NX-389).
+    routine_family_question_enabled: bool = Field(
+        default=False, validation_alias="ROUTINE_FAMILY_QUESTION_ENABLED"
+    )
     # Fapte sensibile în memorie (NX-230): fără consimțământ/politică nu se PERSISTĂ nimic
     # sensibil — turul le poate folosi request-scoped, starea nu le primește.
     conversation_sensitive_memory_enabled: bool = Field(

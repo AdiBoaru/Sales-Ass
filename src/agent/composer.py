@@ -102,6 +102,10 @@ DISCLOSURES: Mapping[str, str] = {
         "a requirement the customer stated (`needs`) cannot be checked on these products, so it "
         "was not taken into account in the choice. Say so once, plainly."
     ),
+    "family_defaulted": (
+        "the customer did not say what the routine is for, so it was built for `built_for`. Say "
+        "so once and say they can ask for one of `other_options` instead."
+    ),
 }
 #: Sarcinile pe care o dezvăluire nu se spune (pe „n-am găsit" fraza spune deja tot, NX-374).
 _NO_DISCLOSURE_TASKS = frozenset({"no_results", "chitchat"})

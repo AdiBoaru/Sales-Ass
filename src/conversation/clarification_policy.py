@@ -77,6 +77,9 @@ class ClarificationPolicy:
     #: un nume, nu o valoare pe care clientul o poate reformula, deci a doua întrebare identică nu
     #: aduce nimic: o citire răspunde despre toți, o mutație se oprește (I10, I11).
     max_attempts_per_target: int = 1
+    #: NX-389 (`kernel.v9.0`): o rutină fără familie întreabă pentru ce e (poarta kernelului,
+    #: `ambiguity_gate._family`). Stins = regula de azi (căutare sau calea v1), byte-identic.
+    routine_family_question: bool = False
 
 
 def estimate_information_gain(total_candidates: int, partition: Sequence[int]) -> float:

@@ -23,7 +23,28 @@ Versioning: the contract is `kernel.v1.0`. **Minor** (`v1.1`): additive schema f
 
 No invariant, ownership row or state rule changes in v1.2, so no replay gate is required. The open questions step 6 raised on I5 (the safety prune on `aside`), I20 (the cart on `cart_ref`) and I15a/I12 (`grounding_guard` does not run on the v1 composition) are decided in the PRs that need them (B and C), under the minor/major rule.
 
-**Current version: `kernel.v8.1` (minor, NX-380, 2026-10-08).** Two additive fields in the
+**Current version: `kernel.v9.0` (MAJOR, NX-389, 2026-10-09).** A new ambiguity-gate rule for a
+routine (`bundle`) whose family (face, hair, body, makeup) nothing decides: no shelf in the subject,
+no family from the item type, and no clear family from the needs (`family_by_need`). The gate asks
+what the routine is for (key `routine_family`, reason `no_family`), offering only the families the
+catalog can serve for the turn's active needs: the pack's `routine_steps.family_counts_by_need`
+(families summed over the known needs, or `family_counts` when none is known), each with at least
+`min_family_products` products and a shelf in `family_by_shelf`. The criterion is NOT information
+gain: on a routine the answer does not narrow a set, it picks a different one (face and body
+routines are disjoint), so the 0.30 gain gate would refuse exactly the real case («dry skin after
+the shower»: 242 face products against 39 body). The model's `scope` readings that resolve to two
+or more families beat the catalog statistics (reason `family_readings`): they are about this
+customer. One servable family decides without a question (`family_single`, carried as
+`GateOutcome.routine_family`); none keeps today's plan (`family_unservable`). The family is asked
+once (I11, `max_attempts_per_key = 1` on that key): asked already and still undecided, the routine
+is built for the family with the most products and the planner discloses it (`family_defaulted`,
+with the shelf labels in `PlannedTurn.family_labels`). Additive fields: `GateOutcome.routine_family`,
+`GateOutcome.family_labels`, `PlannedTurn.family_labels`; template kind `family`; sentence code
+`family_defaulted`. The model-written schema is unchanged. Behind `ROUTINE_FAMILY_QUESTION_ENABLED`
+(off = today's rule, byte-identical). Remembering the routine across the question and planning it on
+the answer is NX-389b. The replay gate is requested from Adi in the PR.
+
+**`kernel.v8.1` (minor, NX-380, 2026-10-08).** Two additive fields in the
 model-written schema. `Act.question` is the customer's question on a `detail` or `compare` act, in
 their words («does it have SPF?»): on the wide set of 2026-10-07, 72 `detail` turns were answered
 with the fixed product sheet because the question had nowhere to go. The planner copies it onto the
