@@ -53,11 +53,18 @@ class ScriptedLLM:
 
 class FakeTools(ap.Tools):
     async def _search_catalog(self, a):
-        out = []
-        for r in ROWS:
-            self.conv.facts[r["id"]] = r
-            out.append(ap._row_view(self.conv.handle_of(r["id"]), r))
-        return {"found": len(ROWS), "products": out}
+        return {"found": len(ROWS), "products": self._remember(ROWS)}
+
+
+def _ans(text, show=(), **kw):
+    """Argumentele lui `answer` în forma strictă (NX-395)."""
+    return {
+        "text": text,
+        "cards": [{"handle": h, "reason": ""} for h in show],
+        "suggestions": kw.get("suggestions", []),
+        "comparison": kw.get("comparison"),
+        "notes": kw.get("notes", ""),
+    }
 
 
 def _tools(conv=None):
@@ -91,12 +98,13 @@ def test_a_value_outside_the_menu_is_refused_with_a_hint():
 
 async def test_only_a_shown_product_goes_to_the_cart():
     tools, conv = _tools()
+    conv.handle_of("u1")
     out = json.loads(await tools.run("add_to_cart", {"handle": "P1"}))
     assert out == {
         "ok": False,
         "error": "only a product you showed to the customer can go to the cart",
     }
-    conv.handles["P1"] = "u1"
+    conv.handle_of("u1")
     conv.shown.append("P1")
     out = json.loads(await tools.run("add_to_cart", {"handle": "P1", "quantity": 2}))
     assert out["ok"] and conv.cart == {"P1": 2}
@@ -124,13 +132,13 @@ async def test_a_turn_searches_then_answers_with_cards():
             Item(type="reasoning", encrypted_content="x"),
             _call("search_catalog", {"query": "crema"}, "c1"),
         ],
-        [_call("answer", {"text": "Îți recomand prima, 100 lei.", "show": ["P1", "P9"]}, "c2")],
+        [_call("answer", _ans("Îți recomand prima, 100 lei.", ["P1"]), "c2")],
     )
     tools, conv = _tools()
     out = await ap.run_turn(llm, tools, conv, "vreau o crema", store="SOLE", effort="low")
     assert out["ok"] and out["rounds"] == 2
     assert out["text"] == "Îți recomand prima, 100 lei."
-    assert [p["handle"] for p in out["products"]] == ["P1"], "un handle necunoscut nu devine card"
+    assert [p["handle"] for p in out["products"]] == ["P1"]
     assert out["gate"] == []
     assert [c["tool"] for c in out["tools"]] == ["search_catalog", "answer"]
     # runda a doua primește raționamentul și ieșirea uneltei din runda întâi
@@ -138,14 +146,19 @@ async def test_a_turn_searches_then_answers_with_cards():
     assert {"type": "reasoning", "encrypted_content": "x"} in second
     outputs = [i for i in second if isinstance(i, dict) and i.get("type") == "function_call_output"]
     assert outputs and json.loads(outputs[0]["output"])["found"] == 2
-    assert conv.shown == ["P1"] and conv.history[-1] == ("asistent", "Îți recomand prima, 100 lei.")
+    assert conv.shown == ["P1"]
+    assert conv.history[-1] == {
+        "role": "asistent",
+        "text": "Îți recomand prima, 100 lei.",
+        "shown": ["P1"],
+    }
 
 
 async def test_the_next_turn_sees_the_shown_products_and_the_history():
     llm = ScriptedLLM(
         [_call("search_catalog", {"query": "crema"}, "c1")],
-        [_call("answer", {"text": "Uite.", "show": ["P2"]}, "c2")],
-        [_call("answer", {"text": "Costă 50 lei.", "show": []}, "c3")],
+        [_call("answer", _ans("Uite.", ["P2"]), "c2")],
+        [_call("answer", _ans("Costă 50 lei."), "c3")],
     )
     tools, conv = _tools()
     await ap.run_turn(llm, tools, conv, "vreau o crema", store="SOLE", effort="low")
@@ -161,7 +174,8 @@ async def test_a_turn_without_an_answer_is_reported_not_invented():
     tools, conv = _tools()
     out = await ap.run_turn(ScriptedLLM(*rounds), tools, conv, "x", store="SOLE", effort="low")
     assert out["ok"] is False and out["rounds"] == ap.MAX_ROUNDS
-    assert conv.history == []
+    assert out["error"] == "no_answer" and out["served"] is False
+    assert [m["role"] for m in conv.history] == ["client"], "nimic servit, nimic inventat"
 
 
 def test_the_total_of_an_earlier_set_and_the_clients_budget_are_not_flagged():
