@@ -62,7 +62,9 @@ from src.domain.constraints import UnitRegistry
 #: actelor, `question`, orice tip spus devine schimbare, umbrela de tip în loc de „never narrower”
 #: pe `product_type`, referințe doar din cuvintele turului, `name` doar pentru nume proprii,
 #: `earlier` cu poziție, `extreme` pe `rating`), meniul de tipuri întreg și `STORE NOTES`.
-INTERPRET_PROMPT_VERSION = "interpret.v5"
+#: NX-388: `v6` = într-un `bundle`, partea despre care clientul își descrie starea e și raftul ei
+#: («rutină pentru ten gras» ⇒ raftul `ten`, deci familia rutinei).
+INTERPRET_PROMPT_VERSION = "interpret.v6"
 
 #: `outcome`, în ordinea în care se decide (§3 din card): primul care se potrivește câștigă.
 #: `internal_error` (recenzia NX-335, P6) e în plus față de card: o intrare stricată (pachet,

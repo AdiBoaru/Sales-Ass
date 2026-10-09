@@ -634,9 +634,10 @@ def test_v4_keeps_every_v2_and_v3_rule(pack):
     assert "bundle: only when the customer asks for several items chosen together" in system
 
 
-def test_the_prompt_version_is_v5():
-    """NX-380: regulile din setul wide-2026-10-07, meniul de tipuri întreg, `STORE NOTES`."""
-    assert ic.INTERPRET_PROMPT_VERSION == "interpret.v5"
+def test_the_prompt_version_is_v6():
+    """NX-380: `v5` = regulile din setul wide-2026-10-07, meniul de tipuri întreg, `STORE NOTES`;
+    NX-388: `v6` = partea despre care clientul își descrie starea e raftul ei într-un `bundle`."""
+    assert ic.INTERPRET_PROMPT_VERSION == "interpret.v6"
 
 
 # --- NX-380: interpret.v5 = regulile din setul wide-2026-10-07 + meniul de tipuri + STORE NOTES ---

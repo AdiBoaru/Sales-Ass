@@ -1031,7 +1031,12 @@
   "_variant_of_note": "NX-269/270 — alte nuante ale aceluiasi produs. `neighbors`: nuantele sunt vecini directi, nu un drum („alta nuanta a altei nuante\" nu adauga nimic). E felul IEFTIN si REVERSIBIL de a lega nuantele, in locul restructurarii catalogului pe produs-parinte cu variante reale (varianta (b) din NX-269): sursa insasi trateaza fiecare nuanta ca produs separat, deci restructurarea ar fi cost mare cu beneficiu incert. Tipul trebuie DECLARAT aici, nu doar admis de schema (migrarea 048): un tip nedeclarat nu crapa, cade tacut pe comportamentul implicit, deci diferenta dintre „am declarat\" si „ruleaza\" ar fi invizibila — capcana care a prins deja o data pachetul SOLE, cu un `purpose` inexistent respins fail-closed si logat.",
   "routine_steps": {
     "_family_by_shelf_note": "NX-336 D3: raftul radacina (primul segment din categories.path) -> familia rutinei, pe calea interpretata. Un raft fara intrare (Barbati, Copii) lasa rutina pe calea de azi, unde modelul alege familia.",
-    "family_by_shelf": {"ten": "fata", "par": "par", "corp": "corp", "machiaj": "machiaj"},
+    "family_by_shelf": {
+      "ten": "fata",
+      "par": "par",
+      "corp": "corp",
+      "machiaj": "machiaj"
+    },
     "families": {
       "fata": [
         "curatare",
@@ -1350,6 +1355,15 @@
     "_step_time_note": "NX-292: pasul relevant DOAR intr-un moment al zilei. Fara el, o rutina de seara ar cere protectie solara si, negasind-o potrivita, ar raporta un gol M-bM-^@M-^T un pas `lipsa` care de fapt nu se aplica. Derivat: pas peste 80% intr-o cohorta si sub 25% in cealalta. Doar `protectie` trece testul (97,3% / 10,7%); restul ramane `both`, care e si default-ul prudent.",
     "step_time": {
       "protectie": "am"
+    },
+    "family_by_need": {
+      "concerns:barrier": "fata",
+      "concerns:dullness": "fata",
+      "concerns:hair_damage": "par",
+      "concerns:hair_loss": "par",
+      "concerns:pores": "fata",
+      "concerns:redness": "fata",
+      "concerns:scalp_care": "par"
     }
   },
   "_routine_steps_note": "NX-280. Pasul dintr-o rutina, derivat din `product_type` (deja pe 2.088/2.758) cu `scripts/derive_routine_step.py`. Cheia e COMPUSA `familie:pas`: „sampon” si „gel de curatare” sunt amandoua curatare, dar in rutine diferite, iar o scara liniara unica ar lasa un sampon in rutina fetei. Ordinea pasilor E indexul din `families` — nu se declara separat, ca sa nu existe doua surse pentru acelasi adevar. `fata:protectie` nu are tipuri: se ajunge la el doar prin `promotions` (`spf` prezent), fiindca nu exista `product_type = „protectie solara”`. Promovarea e MARGINITA la familie: nemarginita, ar muta 48 de produse din familia lor (35 baza de machiaj, 9 de corp, 4 balsamuri de buze) — o lotiune de corp cu SPF nu e un pas din rutina fetei. `ambiguous` e DISTINCT de `not_a_step`: un «set» nu e un pas (afirmatie), o «lotiune de fata» e sigur un pas dar nu se stie care (ignoranta) — cele 18 se imprastie pe sase categorii. Amandoua nu primesc pas; difera in RAPORT, unde o scapare cere reparatie iar o ambiguitate declarata e o decizie luata.",
