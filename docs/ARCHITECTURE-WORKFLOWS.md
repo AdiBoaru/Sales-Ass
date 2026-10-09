@@ -1891,6 +1891,7 @@ routine_arg_provenance_enabled = true
 routine_dense_ordinals_enabled = true
 routine_enabled = true
 routine_evidence_required = true
+routine_family_question_enabled = false
 safety_contraindications_enabled = true
 safety_medical_guardrail_enabled = true
 safety_referral_short_after_first = false
