@@ -1052,6 +1052,9 @@ async def _serve_named(
         await det._handle_link_intent(ctx, deps, ids=ids)
         return True
     if plan.then in ("detail", "find") and len(ids) == 1:
+        if get_settings().composer_detail_enabled:
+            # NX-382: ca orice detaliu pe un produs, îl scrie compozitorul (cu sau fără întrebare)
+            return await _compose_detail(ctx, deps, ids[0], plan.question)
         if plan.question and get_settings().detail_question_answer_enabled:
             # NX-381 pe actul promovat: «beauty of joseon relief sun conține alcool?» primește
             # răspunsul la întrebare, nu fișa standard
