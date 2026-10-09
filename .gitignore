@@ -93,6 +93,10 @@ reports/nx363/
 reports/nx360/
 # NX-366: rapoartele de replay (id-uri de tur, amprente de răspuns) rămân LOCALE.
 reports/nx366/
+# NX-388: sonda pe cererile de rutină (texte de client, id-uri de tur) rămâne LOCALĂ.
+reports/nx388/
+# Backup-urile pachetului de domeniu (`set_domain_pack.py --backup`) sunt stare de operare, nu sursă.
+reports/domain_pack_backups/
 .env.new
 
 # Spațiu local de lucru (hărți, note, rapoarte personale) — niciodată în git

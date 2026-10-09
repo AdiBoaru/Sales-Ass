@@ -230,6 +230,16 @@ clientului, o valoare nouă nu e reînviere (tombstone-urile de cod blochează c
 (4) o citire fără țintă (`no_target`) primește fraza pachetului, nu v1; (5) traceul unui fallback
 după lanț rămâne sub `kernel_fallback.chain`. Card: [`tasks/stage1/NX-387.md`](tasks/stage1/NX-387.md);
 probă: `pytest tests/test_nx387_validator_and_reducer.py -q`.
+**NX-388 — «rutină pentru ten gras» are familia feței (`interpret.v6`, contractul neschimbat).** Pe
+47 de ture cu act `bundle`, cele 10 cereri «rutină … ten X» pierdeau raftul în INTERPRETARE: modelul
+scria doar `skin_type` din „ten gras”, fiindcă regula promptului citea cuvântul ca stare a clientului,
+deci `routine_family` n-avea familie și planul devenea căutare (2 produse, 4 SPF). Acum, într-un
+`bundle`, partea despre care clientul își descrie starea e și raftul ei (regulă generică, doar pe
+`bundle`; căutările rămân neschimbate). Harta `family_by_need` aplicată pe 2026-10-09 acoperea deja 7
+din cele 10 (prin `pores`/`redness`) și e comisă în seed. Declarat: 8 cereri de UN produs («si o
+pensula de contur») sunt etichetate `bundle`. Sonda: `scripts/nx388_routine_family_probe.py` (read-only,
+raport local `reports/nx388/`). Card: [`tasks/stage1/NX-388.md`](tasks/stage1/NX-388.md); probă:
+`pytest tests/test_nx388_routine_family.py -q`.
 **NX-334 — direcția unei limite numerice ajunge neschimbată în stare.** Pe pașii 3a/3b «minim 256
 GB» se persista `storage lte 256`: delta păstra relația doar pe preț, iar orice fațetă numerică era
 plafon. Acum o dimensiune numerică are DOUĂ chei, ca bugetul (`<fațetă>_min` / `<fațetă>_max`,
