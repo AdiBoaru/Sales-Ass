@@ -229,6 +229,7 @@ class Conversation:
     handles: dict[str, str] = field(default_factory=dict)  # handle -> product_id
     facts: dict[str, dict[str, Any]] = field(default_factory=dict)  # product_id -> rând
     shown: list[str] = field(default_factory=list)  # handle-uri, în ordinea arătării
+    shown_sets: list[list[str]] = field(default_factory=list)  # cardurile fiecărui tur
     cart: dict[str, int] = field(default_factory=dict)  # handle -> cantitate
     history: list[tuple[str, str]] = field(default_factory=list)  # (rol, text)
 
@@ -408,16 +409,31 @@ def _check(value: Any, menu: tuple[str, ...], name: str) -> None:
 
 
 def truth_gate(
-    text: str, products: list[dict[str, Any]], shown: list[dict[str, Any]], cart_total: float | None
+    text: str,
+    products: list[dict[str, Any]],
+    shown_sets: list[list[dict[str, Any]]],
+    cart_total: float | None,
+    client_text: str = "",
 ) -> list[str]:
     """Aceleași porți ca producția, pe toate produsele citite de agent în conversație. Sumele
-    permise în plus: totalul cardurilor turului (NX-391) și totalul coșului simulat."""
-    from src.agent.validator import _links_ok, _prices_ok, set_total  # noqa: PLC0415
+    permise în plus: totalul fiecărui set arătat (NX-391: pe producție, ecranul și seturile de mai
+    devreme), totalul coșului simulat și sumele scrise de CLIENT (bugetul lui, citat înapoi).
+    Prima rulare (2026-10-09) a semnalat fals totalul corect al rutinei de la turul anterior
+    (400 lei) și bugetul «sub 100 lei»."""
+    from src.agent.validator import (  # noqa: PLC0415
+        _PRICE_RE,
+        _links_ok,
+        _prices_ok,
+        parse_amount,
+        set_total,
+    )
     from src.worker.text_scrub import has_medical_claim  # noqa: PLC0415
 
     reasons = []
     rows = [{"id": p.get("id"), "price": p.get("price"), "url": p.get("url")} for p in products]
-    sums = {s for s in (set_total(shown), cart_total) if s is not None}
+    sums = {s for s in (*(set_total(x) for x in shown_sets), cart_total) if s is not None}
+    for m in _PRICE_RE.finditer(client_text):
+        sums.add(parse_amount(m.group(1) or m.group(2)))
     if not _prices_ok(text, rows, sums):
         reasons.append("ungrounded_price")
     if not _links_ok(text, rows):
@@ -490,6 +506,9 @@ async def run_turn(
     for h in show:
         if h not in conv.shown:
             conv.shown.append(h)
+    if show:
+        conv.shown_sets.append(list(show))
+    client_said = " ".join(t for role, t in conv.history if role == "client") + " " + message
     conv.history += [("client", message), ("asistent", text)]
     products = [conv.facts.get(conv.handles[h], {}) for h in show]
     return {
@@ -506,8 +525,15 @@ async def run_turn(
         "gate": truth_gate(
             text,
             list(conv.facts.values()),
-            [{"id": p.get("id"), "price": p.get("price")} for p in products],
+            [
+                [
+                    {"id": conv.handles[h], "price": conv.facts[conv.handles[h]].get("price")}
+                    for h in x
+                ]
+                for x in conv.shown_sets
+            ],
             _cart_total(conv),
+            client_said,
         ),
         "cart": dict(conv.cart),
     }
@@ -565,6 +591,10 @@ def markdown(report: dict[str, Any]) -> str:
 
 
 async def run(args: argparse.Namespace) -> int:
+    # Ordinea producției: pachetul conversației înaintea catalogului. Importat primul,
+    # `src.db.queries.catalog` intră într-un import circular (rularea din 2026-10-09: primul tur a
+    # picat cu ImportError, restul au mers).
+    import src.conversation  # noqa: F401, PLC0415
     from src.agent.llm import get_llm  # noqa: PLC0415
     from src.db.connection import admin_conn, close_pool, get_pool, tenant_conn  # noqa: PLC0415
     from src.db.queries.businesses import load_business  # noqa: PLC0415

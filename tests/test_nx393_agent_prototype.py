@@ -106,13 +106,13 @@ async def test_only_a_shown_product_goes_to_the_cart():
 
 
 def test_an_invented_price_is_flagged_and_the_shown_total_is_not():
-    assert ap.truth_gate("Costă 77 lei.", ROWS, ROWS, None) == ["ungrounded_price"]
-    assert ap.truth_gate("Amândouă fac 150 lei.", ROWS, ROWS, None) == []
-    assert ap.truth_gate("Prima costă 100 lei.", ROWS, ROWS[:1], None) == []
+    assert ap.truth_gate("Costă 77 lei.", ROWS, [ROWS], None) == ["ungrounded_price"]
+    assert ap.truth_gate("Amândouă fac 150 lei.", ROWS, [ROWS], None) == []
+    assert ap.truth_gate("Prima costă 100 lei.", ROWS, [ROWS[:1]], None) == []
 
 
 def test_a_medical_claim_is_flagged():
-    assert "medical_claim" in ap.truth_gate("Tratează acneea.", ROWS, ROWS, None)
+    assert "medical_claim" in ap.truth_gate("Tratează acneea.", ROWS, [ROWS], None)
 
 
 # --- bucla unui tur ------------------------------------------------------------------------------
@@ -162,3 +162,21 @@ async def test_a_turn_without_an_answer_is_reported_not_invented():
     out = await ap.run_turn(ScriptedLLM(*rounds), tools, conv, "x", store="SOLE", effort="low")
     assert out["ok"] is False and out["rounds"] == ap.MAX_ROUNDS
     assert conv.history == []
+
+
+def test_the_total_of_an_earlier_set_and_the_clients_budget_are_not_flagged():
+    """Rularea din 2026-10-09: totalul corect al rutinei arătate la turul anterior (400 lei) și
+    bugetul spus de client («sub 100 lei») ieșeau ca prețuri inventate."""
+    earlier = [
+        {"id": "a", "price": 100.0},
+        {"id": "b", "price": 120.0},
+        {"id": "c", "price": 90.0},
+        {"id": "d", "price": 90.0},
+    ]
+    assert ap.truth_gate("În total, 400 de lei.", earlier, [earlier, []], None) == []
+    assert (
+        ap.truth_gate("Sub 100 lei am găsit una.", ROWS[1:], [ROWS[1:]], None, "sub 100 lei") == []
+    )
+    assert ap.truth_gate("Sub 100 lei am găsit una.", ROWS[1:], [ROWS[1:]], None, "") == [
+        "ungrounded_price"
+    ]
