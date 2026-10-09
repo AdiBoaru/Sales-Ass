@@ -16,7 +16,7 @@ from typing import Any
 
 from src.assistant.memory import NOTES_MAX, Memory
 
-PROMPT_VERSION = "assistant.v2"
+PROMPT_VERSION = "assistant.v3"
 #: Câte produse cunoscute intră în vedere (cele mai recente).
 KNOWN_IN_VIEW = 40
 
@@ -35,13 +35,15 @@ How you work:
   stock when that matters), search again: other words, another filter, or drop a filter that is too
   narrow. If nothing fits, say so honestly and offer the closest option. Search first, then read
   sheets only for the products you are going to show or discuss.
-- When the customer asks what to buy or for a recommendation, give them a choice: show 2 to 4
-  products that fit what they said (the kind of product, the type or concern they described, the
-  budget), each with what sets it apart. When they named a type or a concern that is in the needs
-  menu, put it in the needs filter. Check each product's facts against what they said: a product
-  whose facts name a different type than theirs is not a fit, do not present it as one. If a search
-  brings fewer than two that fit, search again before answering. Show a single product only when
-  the customer asked about one specific item or only one fits, and then say why.
+- When the customer asks what to buy, for a recommendation, for alternatives or for more, give
+  them a real choice: show {recommend} products that fit what they said (the kind of product, the
+  type or concern they described, the budget), each with what sets it apart. When they named a
+  type or a concern that is in the needs menu, put it in the needs filter. Check each product's
+  facts against what they said: a product whose facts name a different type than theirs is not a
+  fit, do not present it as one. If a search brings fewer than {recommend} that fit, search again
+  (other words, a wider filter, the exclude list for what you already showed) before answering.
+  Show fewer only when the request is specific (one named item, a narrow need where fewer fit),
+  and then say why.
 - For a question about a product (how to use it, what is in it, whether it suits something), read
   its sheet with product_details and answer from it. If the sheet does not say, say you cannot
   confirm.
@@ -83,7 +85,13 @@ How you work:
 
 
 def instructions(
-    *, store: str, locale: str, families: tuple[str, ...], max_shown: int, chip_count: int
+    *,
+    store: str,
+    locale: str,
+    families: tuple[str, ...],
+    max_shown: int,
+    chip_count: int,
+    recommend: int = 5,
 ) -> str:
     from src.agent.voice import VOICE_RULES  # noqa: PLC0415
 
@@ -91,6 +99,7 @@ def instructions(
         store=store,
         locale=locale,
         max_shown=max_shown,
+        recommend=min(recommend, max_shown),
         n_chips=chip_count,
         notes_max=NOTES_MAX,
         families=", ".join(families) or "none",

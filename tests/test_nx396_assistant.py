@@ -990,5 +990,29 @@ def test_the_instructions_ask_for_a_choice_that_fits_the_stated_need():
     text = aturn.instructions(
         store="SOLE", locale="ro", families=("fata",), max_shown=6, chip_count=5
     )
-    assert "show 2 to 4" in text and "needs filter" in text
+    text = " ".join(text.split())
+    assert "show 5 products that fit" in text and "needs filter" in text
+    assert "fewer than 5 that fit, search again" in text
     assert "different type than theirs is not a fit" in text
+
+
+def test_the_recommendation_size_is_a_setting_capped_by_the_card_slots():
+    """NX-402: 5 la o cerere generală (decizia lui Adi), din setare, sub plafonul de carduri."""
+    from src.config import Settings
+
+    assert Settings.model_fields["assistant_recommend_cards"].default == 5
+    three = aturn.instructions(
+        store="SOLE", locale="ro", families=(), max_shown=6, chip_count=5, recommend=3
+    )
+    assert "show 3 products that fit" in three
+    capped = aturn.instructions(
+        store="SOLE", locale="ro", families=(), max_shown=4, chip_count=5, recommend=8
+    )
+    assert "show 4 products that fit" in capped
+
+
+async def test_the_turn_passes_the_recommendation_size(monkeypatch):
+    monkeypatch.setattr(get_settings(), "assistant_recommend_cards", 4)
+    llm = ScriptedLLM([_call("answer", _ans("Salut!"), "c1")])
+    await _run(llm, _ctx("salut"))
+    assert "show 4 products that fit" in llm.calls[0]["instructions"]

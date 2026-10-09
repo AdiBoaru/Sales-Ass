@@ -811,6 +811,9 @@ Adi). Card: [`tasks/stage1/NX-396.md`](tasks/stage1/NX-396.md); probă:
 dată, apoi `round_timeout`), iar `assistant_round` + evenimentele `llm_*` rămân și când agentul
 cade (primul blocaj, 42,5 s fără token, nu putuse fi explicat). Card:
 [`tasks/stage1/NX-401.md`](tasks/stage1/NX-401.md).
+**NX-402:** la o cerere GENERALĂ de recomandare agentul arată 5 produse potrivite
+(`ASSISTANT_RECOMMEND_CARDS`, decizia lui Adi; NX-401 cerea 2-4, iar modelul alegea 1-2), mai
+puține doar la o cerere specifică, cu motivul spus (prompt `assistant.v3`).
 
 **NX-238 — retrievalul trece printr-un PORT, iar candidatul e inert (verdict `NOT-READY`).**
 `src/retrieval/` e contractul stabil pe care îl consumă NX-239: `RetrievalPort` + `RetrievalBundle`
