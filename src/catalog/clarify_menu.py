@@ -157,6 +157,17 @@ CHIP_PRODUCERS: dict[str, str] = {
         "`composer.rich_reply` (pașii oferiți) și sunt suprascrise de mutările "
         "`_apply_move_chips` (NX-296)."
     ),
+    "src/agent/kernel_executors.py::_ask": (
+        "NX-389c: pe întrebarea de familie a unei rutini, câte un chip pe OPȚIUNE («Pentru ten»): "
+        "șablonul pachetului (`answer_shape_templates.routine_choice`) completat cu eticheta "
+        "raftului din vocabularul catalogului, deci doar familiile servibile alese de poartă "
+        "(`routine_family_options`). Apăsarea răspunde la întrebare."
+    ),
+    "src/agent/kernel_executors.py::_offer_routines": (
+        "NX-389b («ambele»): rutina celeilalte familii numite la răspuns, din șablonul pachetului "
+        "(`answer_shape_templates.routine_offer`) cu eticheta raftului; familia e una dintre "
+        "opțiunile servibile ale întrebării (`TurnPlan.offer`)."
+    ),
     "src/agent/kernel_executors.py::_answer_detail": (
         "NX-381: aceleași trei chip-uri de copy fix ca `serve_details` (`_detail_copy`), sub "
         "răspunsul la întrebarea despre produsul deja în context. Fără nume de catalog în text."

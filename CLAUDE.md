@@ -253,6 +253,16 @@ fără întrebare (`family_single`); după o întrebare fără alegere, familia 
 (rol `pure`). Reluarea rutinei după răspuns e 389b, de aceea flagul `ROUTINE_FAMILY_QUESTION_ENABLED`
 rămâne stins. Card: [`tasks/stage1/NX-389.md`](tasks/stage1/NX-389.md); probă:
 `pytest tests/test_nx389_routine_family_question.py -q`.
+**NX-389b/c — întrebarea ține minte rutina, iar răspunsul o face (același `kernel.v9.0`, prompt
+`interpret.v7`).** Memoria întrebării păstrează actul (`resume_route="bundle"`) și opțiunile
+(`options_refs` = chei de raft), arătate modelului în PENDING. CODUL decide reluarea
+(`routine_family.resume_routine`): un tur ne-aside, doar cu acte de răspuns fără ținte, fără tip și
+fără raft din afara opțiunilor, devine `bundle`. Opțiunea se potrivește pe CHEIE (un subraft nu e
+opțiunea), intră în subiect ca fapt al clientului chiar pe un citat omograf (`answer_topic`, înaintea
+verificării perechii), iar bugetul spus la cerere rămâne plafonul rutinei. «ambele» ⇒ prima opțiune +
+chip `routine_offer` (`TurnPlan.offer`). Fără alegere, doar `bundle` repetat reia (majoritara +
+`family_defaulted`); un refuz nu pornește nimic. Întrebarea are chips de răspuns (`routine_choice`),
+iar compozitorul primește `about` + `options`. Probă: `pytest tests/test_nx389b_routine_resume.py -q`.
 **NX-334 — direcția unei limite numerice ajunge neschimbată în stare.** Pe pașii 3a/3b «minim 256
 GB» se persista `storage lte 256`: delta păstra relația doar pe preț, iar orice fațetă numerică era
 plafon. Acum o dimensiune numerică are DOUĂ chei, ca bugetul (`<fațetă>_min` / `<fațetă>_max`,

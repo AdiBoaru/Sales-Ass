@@ -122,6 +122,7 @@ def family_step(
         loaded=pack or sole_pack(),
         vocab=shelves_vocab(),
         policy=policy,
+        answer_pending=True,
     )
 
 

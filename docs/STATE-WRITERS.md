@@ -5,11 +5,11 @@
 
 Fiecare loc din `src/**/*.py` care scrie starea conversației (v1 sau v2), derivat MECANIC prin `ast` (nu grep). Pregătește I3/I20 din [`docs/KERNEL-CONTRACT-v1.md`](KERNEL-CONTRACT-v1.md): pasul 3 nu poate face din reducer singurul scriitor peste o stare pe care o mai scriu și alții, fără să știe cine sunt aceia.
 
-**Totaluri:** 167 scriitori găsiți, 105 intrări de soartă declarate, 8 `unresolved`.
+**Totaluri:** 168 scriitori găsiți, 106 intrări de soartă declarate, 8 `unresolved`.
 - `becomes_proposal`: 0
 - `executor_output`: 9
 - `retired`: 16
-- `stays`: 142
+- `stays`: 143
 
 ## `needs_topic` -- nevoi + subiect/raft
 
@@ -51,6 +51,7 @@ Fiecare loc din `src/**/*.py` care scrie starea conversației (v1 sau v2), deriv
 | `src/conversation/delta.py:to_delta` | v2 | `proposal_call` | `_structural_proposals() -> supersede` | NX-330 (pasul 3a al kernelului): traducerea interpretarii VALIDATE in propuneri typed -- forma tinta a contractului (I3): starea se schimba doar prin propuneri, iar singurul care le aplica e reducerul. Sursa e proveniența calculata de cod (`provenance.py`), deci `inferred` nu produce propunere (I23). Fara apelant in productie pana la pasul 6. | `stays` |
 | `src/conversation/delta.py:to_delta` | v2 | `proposal_call` | `_subject_proposal() -> set_topic` | NX-330 (pasul 3a al kernelului): traducerea interpretarii VALIDATE in propuneri typed -- forma tinta a contractului (I3): starea se schimba doar prin propuneri, iar singurul care le aplica e reducerul. Sursa e proveniența calculata de cod (`provenance.py`), deci `inferred` nu produce propunere (I23). Fara apelant in productie pana la pasul 6. | `stays` |
 | `src/conversation/delta.py:to_delta` | v2 | `proposal_constructor` | `set_topic` | NX-330 (pasul 3a al kernelului): traducerea interpretarii VALIDATE in propuneri typed -- forma tinta a contractului (I3): starea se schimba doar prin propuneri, iar singurul care le aplica e reducerul. Sursa e proveniența calculata de cod (`provenance.py`), deci `inferred` nu produce propunere (I23). Fara apelant in productie pana la pasul 6. | `stays` |
+| `src/conversation/routine_family.py:answer_topic` | v2 | `proposal_constructor` | `set_topic` | NX-389b: raspunsul la intrebarea de familie a unei rutini (o optiune din meniul NOSTRU, aleasa de client) devine `set_topic` pe raftul ales, `user_explicit`, ca raspunsul la o clarificare pe calea v1 -- chiar cand validatorul a respins citatul omograf. O propunere typed in `TurnDelta`, aplicata doar de reducer (I3). | `stays` |
 | `src/conversation/state_reducer.py:_apply_correction` | v2 | `dataclasses_replace` | `needs` | NX-331: reducerul e SINGURUL scriitor al starii v2 (I3); functia e un pas pur al lui (rol `reducer` in tests/kernel_modules.json). Regula de corectie (I21): retrage cu `correction` nevoile implicite scrise de turul anterior pe dimensiunea contrazisa. | `stays` |
 | `src/conversation/state_reducer.py:_apply_correction` | v2 | `dataclasses_replace` | `revocations` | NX-331: reducerul e SINGURUL scriitor al starii v2 (I3); functia e un pas pur al lui (rol `reducer` in tests/kernel_modules.json). Regula de corectie (I21): retrage cu `correction` nevoile implicite scrise de turul anterior pe dimensiunea contrazisa. | `stays` |
 | `src/conversation/state_reducer.py:_apply_umbrella` | v2 | `dataclasses_replace` | `topic` | NX-350 (kernel.v4.0): umbrela unui tip spus vag. Cand ce spune clientul nu se suprapune cu ce spusese (tip spus clar in afara umbrelei, umbrele disjuncte), cere alt fel de produs: subiect nou pe acelasi raft, iar nevoile subiectului se parcheaza (aceeasi regula ca orice schimbare de subiect). Scris DOAR de reducer. | `stays` |
