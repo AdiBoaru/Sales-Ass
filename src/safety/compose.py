@@ -42,6 +42,29 @@ def already_has_sentence(text: str | None) -> bool:
     return any(f in t for f in _FINGERPRINTS)
 
 
+#: NX-382 faza 2c (recenzia): o trimitere SCRISĂ DE MODEL numește și medicul, ca fraza codului
+#: („medicul sau farmacistul"). Amprenta singură ar fi primit «Farmacistul tău o să fie mulțumit».
+_DOCTOR_STEMS = ("medic", "doctor", "orvos")
+#: Câte cuvinte dinaintea farmacistului se caută o negație («nu e nevoie să mergi la farmacist»).
+_NEGATION_WINDOW = 6
+
+
+def is_model_referral(sentence: str, locale: str | None) -> bool:
+    """O propoziție scrisă de model care TRIMITE la medic sau farmacist (NX-382 faza 2c): amprenta
+    farmacistului, rădăcina medicului, și nicio negație a locale-i (`query_terms.
+    negation_markers`) în cele `_NEGATION_WINDOW` cuvinte dinaintea farmacistului. PUR. Nu
+    judecă un claim medical: acela îl scoate `has_medical_claim`, înainte."""
+    from src.catalog.folding import fold_text  # noqa: PLC0415
+    from src.catalog.query_terms import negation_markers  # noqa: PLC0415
+
+    words = re.findall(r"\w+", fold_text(sentence or ""))
+    at = next((i for i, w in enumerate(words) if any(f in w for f in _FINGERPRINTS)), None)
+    if at is None or not any(w.startswith(_DOCTOR_STEMS) for w in words):
+        return False
+    window = set(words[max(0, at - _NEGATION_WINDOW) : at])
+    return not (window & negation_markers(locale))
+
+
 def model_hint(decision: Any) -> str:
     """Hint-ul MINIM dat modelului când un context de siguranță e activ: o linie, ca framing-ul
     lui comercial să fie coerent („în sarcină, aș merge pe ceva simplu…") în loc să pară că
@@ -112,18 +135,31 @@ def enforce(ctx: Any) -> None:
     if _already_enforced(reply, rich, cmp, sentence):
         # A doua trecere a runnerului (ieșire timpurie): nimic de adăugat, nimic de raportat.
         return
-    # „Golit" = excluderea a lăsat setul turului GOL (nimic păstrat), nu e niciun card, nicio
-    # întrebare deschisă, iar turul n-a citit nimic în afara catalogului (o regulă a magazinului,
-    # o comandă): atunci proza modelului vorbește doar despre un set golit de noi.
-    retrieval = getattr(ctx, "retrieval", None)
-    emptied = (
-        bool(getattr(decision, "blocked", None))
-        and not getattr(decision, "kept", None)
-        and not _has_cards(reply)
-        and not getattr(reply, "pending_question", None)
-        and not getattr(retrieval, "read_beyond_catalog", False)
-    )
-    if emptied:
+    composed = getattr(ctx, "safety_referral_composed", None)
+    if (
+        composed
+        # o excludere o spune MEREU codul (recenzia 2c): ce s-a lăsat deoparte nu se verifică
+        and not getattr(decision, "blocked", None)
+        and not _emptied(ctx, decision, reply)
+        and _already_enforced(reply, rich, cmp, composed)
+    ):
+        # NX-382 faza 2c: trimiterea a scris-o compozitorul, iar poarta lui a verificat-o (după
+        # scoaterea propozițiilor medicale). Ea e chiar în fiecare câmp randat, deci fraza codului
+        # ar fi a doua. Un set golit de excludere rămâne al codului (NX-367): acolo proza modelului
+        # vorbește despre un set golit de noi. Idempotent: a doua trecere nu mai emite.
+        reported = any(
+            e.type == "safety_sentence_enforced" for e in (getattr(ctx, "events", None) or [])
+        )
+        if not reported:
+            ctx.emit(
+                "safety_sentence_enforced",
+                contexts=list(getattr(decision, "contexts", ()) or []),
+                blocked=len(getattr(decision, "blocked", ()) or []),
+                unavailable=False,
+                outcome="composed",
+            )
+        return
+    if _emptied(ctx, decision, reply):
         # NX-367: excluderea a golit setul, deci proza modelului vorbește despre un set golit de
         # noi („nu am găsit seruri cu retinol în catalog"). Răspunsul e al codului.
         own = f"{sentence} {messages.alternatives_offer(locale)}"
@@ -158,6 +194,20 @@ def enforce(ctx: Any) -> None:
         blocked=len(getattr(decision, "blocked", ()) or []),
         unavailable=bool(getattr(decision, "unavailable", False)),
         outcome=outcome,
+    )
+
+
+def _emptied(ctx: Any, decision: Any, reply: Any) -> bool:
+    """„Golit" = excluderea a lăsat setul turului GOL (nimic păstrat), nu e niciun card, nicio
+    întrebare deschisă, iar turul n-a citit nimic în afara catalogului (o regulă a magazinului,
+    o comandă): atunci proza modelului vorbește doar despre un set golit de noi."""
+    retrieval = getattr(ctx, "retrieval", None)
+    return (
+        bool(getattr(decision, "blocked", None))
+        and not getattr(decision, "kept", None)
+        and not _has_cards(reply)
+        and not getattr(reply, "pending_question", None)
+        and not getattr(retrieval, "read_beyond_catalog", False)
     )
 
 

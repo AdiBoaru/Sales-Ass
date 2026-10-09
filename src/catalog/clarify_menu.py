@@ -145,6 +145,12 @@ CHIP_PRODUCERS: dict[str, str] = {
         "recenziile, linkul, comparația cu un produs similar), despre produsul deja în context. "
         "Apăsarea retrimite textul, pe care îl interpretează modelul 1."
     ),
+    "src/agent/composer.py::rich_reply": (
+        "NX-382 faza 2c: chip-urile răspunsului cu carduri al compozitorului sunt cele din "
+        "`Composed.suggestions`: cel mult câte unul pe pas OFERIT de cod (`ComposeInput."
+        "offered_moves`, plafonat în `composer.parse`), formulat de model. Fără pași oferiți, "
+        "lista e goală (pe coș, azi). Același contract ca `_compose_detail`."
+    ),
     "src/agent/kernel_executors.py::_answer_detail": (
         "NX-381: aceleași trei chip-uri de copy fix ca `serve_details` (`_detail_copy`), sub "
         "răspunsul la întrebarea despre produsul deja în context. Fără nume de catalog în text."

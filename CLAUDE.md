@@ -694,6 +694,15 @@ medical, handle-uri, obligații). Codul scrie text doar când modelul pică. Faz
 produs (cu sau fără întrebare); fazele 2-5 mută ASK, NOT_FOUND, NO_RESULTS, CART, STORE_INFO, COMPARE,
 RECOMMEND și scot frazele fixe. Flag `COMPOSER_DETAIL_ENABLED` (ON). Card:
 [`tasks/stage1/NX-382.md`](tasks/stage1/NX-382.md); probă: `pytest tests/test_nx382_composer.py -q`.
+**Faza 2c:** confirmarea coșului (obligația `cart_change`, complementarele ca candidați aleși de
+model, pe cardul hidratat de `compose.hydrated_item`), turul doar `chitchat`
+(`interpreted_turn._social_turn`) și trimiterea la medic sau farmacist pe un context de siguranță
+(obligația `safety_referral`, verificată după scoaterea propozițiilor medicale; `enforce` nu mai pune
+fraza codului peste propoziția verificată, `ctx.safety_referral_composed`). Registrul indisponibil și
+setul golit (NX-367) rămân ale codului. `has_medical_claim` prinde acum și «sigură în sarcină» /
+«potrivită pentru însărcinate». Flaguri `COMPOSER_CART_ENABLED`, `COMPOSER_CHITCHAT_ENABLED`,
+`COMPOSER_SAFETY_ENABLED` (ON), `SAFETY_REFERRAL_SHORT_AFTER_FIRST` (OFF, decizia lui Adi). Probă:
+`pytest tests/test_nx382_composer_2c.py -q`.
 
 **NX-238 — retrievalul trece printr-un PORT, iar candidatul e inert (verdict `NOT-READY`).**
 `src/retrieval/` e contractul stabil pe care îl consumă NX-239: `RetrievalPort` + `RetrievalBundle`

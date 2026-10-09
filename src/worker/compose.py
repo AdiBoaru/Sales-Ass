@@ -17,6 +17,7 @@ scrub dur. Garanția anti-halucinație:
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from dataclasses import asdict, replace
 from typing import TYPE_CHECKING, Any
 
@@ -616,6 +617,79 @@ def _select_pick(
     return None
 
 
+def hydrated_item(
+    ctx: TurnContext,
+    p: dict[str, Any],
+    *,
+    reason: str | None,
+    routine_by_product: Mapping[str, Any] | None = None,
+) -> tuple[RichItem, str | None]:
+    """Cardul unui produs, cu toate faptele lui hidratate din catalog (preț, preț de listă, rating,
+    badge, link, imagine, variante, detalii), plus motivul DAT. Întoarce și felul badge-ului
+    DERIVAT (doar el poate fi suprimat pe set, `_suppress_common_badges`). Extras din `assemble`
+    (NX-382): compozitorul pune motivul lui, deja verificat pe fapte, pe ACELAȘI card."""
+    settings = get_settings()
+    pack = getattr(ctx.business, "domain_pack", None)
+    badge_rules = pack.badge_rules if pack else None
+    set_relative = bool(getattr(settings, "set_relative_badges_enabled", False))
+    pid = str(p["id"])
+    rc = p.get("review_count")
+    eff = float(p["price"])
+    lp = p.get("list_price")  # preț de listă DOAR la reducere reală (SQL: case when on_sale)
+    # Full-eMAG: badge cu TON semantic (deal→danger, top→info) + `details` extins din ai_summary
+    # (catalog, medical-guarded, cap 400). `seeded` (badge pre-curat) n-are kind → fără ton.
+    seeded = _safe_badge(p.get("badge"))
+    kind = (
+        derive_badge_kind(
+            p,
+            badge_rules,
+            coupon_enabled=getattr(settings, "card_coupon_enabled", False),
+            set_relative=set_relative,
+        )
+        if (settings.card_badges_enabled and not seeded)
+        else None
+    )
+    # NX-292: pe un tur de rutină, eticheta pasului BATE badge-ul derivat. „Super Preț" pe al
+    # treilea card dintr-o secvență nu ajută pe nimeni să potrivească proza cu produsul, iar
+    # „Curățare" e singurul lucru care face cardul lizibil fără să reciteşti textul. Eticheta e
+    # a PACHETULUI (fallback: cheia humanizată), nu un dicționar românesc în cod.
+    step_ref = (routine_by_product or {}).get(pid)
+    label_rules = badge_rules if set_relative else None
+    ai = " ".join((p.get("ai_summary") or "").split())[:400]
+    if step_ref is not None:
+        badge, tone, derived = step_ref.label, "info", None
+    else:
+        badge = seeded or badge_label(kind, ctx.language, p, label_rules)
+        tone, derived = (BADGE_TONE.get(kind) if kind else None), kind
+    item = RichItem(
+        product_id=pid,
+        name=display_name(p["name"]),
+        size=size_label(p["name"]),
+        price=eff,
+        reason=reason,
+        url=p.get("url"),
+        image=p.get("image"),
+        rating=float(p["rating"]) if p.get("rating") is not None else None,
+        review_count=int(rc) if rc else None,
+        badge=badge,
+        badge_tone=tone,
+        list_price=float(lp) if lp is not None and float(lp) > eff else None,
+        currency=getattr(pack, "currency", None),  # Full-eMAG: moneda pe card (din DomainPack)
+        details=ai if (ai and not _unsafe_medical(ai)) else None,
+        variants=_card_variants(p),
+    )
+    return item, derived
+
+
+def suppress_common_badges(
+    ctx: TurnContext, items: list[RichItem], derived_kinds: dict[str, str | None]
+) -> list[RichItem]:
+    """NX-318 pe set, pentru apelanții din afara lui `assemble` (compozitorul): doar cu flagul."""
+    if not getattr(get_settings(), "set_relative_badges_enabled", False):
+        return items
+    return _suppress_common_badges(ctx, items, derived_kinds)
+
+
 def assemble(
     ctx: TurnContext,
     j: dict[str, Any],
@@ -634,18 +708,11 @@ def assemble(
     # NX-118: stoc availability-aware — orice „în stoc" din proza modelului (reason/pick/intro/
     # education) cade dacă NICIUN produs retrievat nu e pe stoc (gated fail-open de kill-switch).
     stock_present = _stock_available(retrieved)
-    # IZI: badge DERIVAT (Top Favorit / Super Preț) din semnale reale, prin pragurile DomainPack.
-    # Badge-ul pre-seedat curat (rar) are prioritate; gated de kill-switch (OFF → vechi).
-    settings = get_settings()
-    badges_on = settings.card_badges_enabled
-    pack = getattr(ctx.business, "domain_pack", None)
-    badge_rules = pack.badge_rules if pack else None
     # NX-318: badge relativ la SET (+ rating shrunk și pragul de voucher al pachetului).
-    set_relative = bool(getattr(settings, "set_relative_badges_enabled", False))
+    set_relative = bool(getattr(get_settings(), "set_relative_badges_enabled", False))
     # Felul badge-ului DERIVAT per card (nu cel pre-seedat, nu eticheta de pas de rutină): doar
     # el poate fi suprimat, fiindcă doar el e o judecată a noastră despre produs.
     derived_kinds: dict[str, str | None] = {}
-    currency = getattr(pack, "currency", None)  # Full-eMAG: moneda pe card (din DomainPack)
     # NX-292: secvența turului, dacă `routine_plan` a compus una. Owner unic = tool-ul; aici e
     # citită, niciodată scrisă. None ⇒ tot ce urmează se comportă exact ca înainte.
     routine = getattr(ctx, "routine", None)
@@ -705,70 +772,13 @@ def assemble(
         it = llm_items.get(pid, {})
         idx = it.get("pro_index")
         anchor = _recommendation_anchor(p, idx)
-        rc = p.get("review_count")
-        eff = float(p["price"])
-        lp = p.get("list_price")  # preț de listă DOAR la reducere reală (SQL: case when on_sale)
-        # Full-eMAG: badge cu TON semantic (deal→danger, top→info) + `details` extins din ai_summary
-        # (catalog, medical-guarded, cap 400). `seeded` (badge pre-curat) n-are kind → fără ton.
-        seeded = _safe_badge(p.get("badge"))
-        kind = (
-            derive_badge_kind(
-                p,
-                badge_rules,
-                coupon_enabled=getattr(settings, "card_coupon_enabled", False),
-                set_relative=set_relative,
-            )
-            if (badges_on and not seeded)
-            else None
-        )
-        # NX-292: pe un tur de rutină, eticheta pasului BATE badge-ul derivat. „Super Preț" pe al
-        # treilea card dintr-o secvență nu ajută pe nimeni să potrivească proza cu produsul, iar
-        # „Curățare" e singurul lucru care face cardul lizibil fără să reciteşti textul. Eticheta e
-        # a PACHETULUI (fallback: cheia humanizată), nu un dicționar românesc în cod.
-        step_ref = routine_by_product.get(pid)
-        derived_kinds[pid] = None if step_ref is not None else kind
-        label_rules = badge_rules if set_relative else None
         grounded = grounded_identifiers(p)  # NX-313: „complex v11" din fișă e un nume
-        ai = " ".join((p.get("ai_summary") or "").split())[:400]
-        if step_ref is not None:
-            return RichItem(
-                product_id=pid,
-                name=display_name(p["name"]),
-                size=size_label(p["name"]),
-                price=eff,
-                reason=_drop_unfounded_stock(
-                    _join_reason(scrub_prose(it.get("fit_clause"), grounded), anchor), stock_present
-                ),
-                url=p.get("url"),
-                image=p.get("image"),
-                rating=float(p["rating"]) if p.get("rating") is not None else None,
-                review_count=int(rc) if rc else None,
-                badge=step_ref.label,
-                badge_tone="info",
-                list_price=float(lp) if lp is not None and float(lp) > eff else None,
-                currency=currency,
-                details=ai if (ai and not _unsafe_medical(ai)) else None,
-                variants=_card_variants(p),
-            )
-        return RichItem(
-            product_id=pid,
-            name=display_name(p["name"]),
-            size=size_label(p["name"]),
-            price=eff,
-            reason=_drop_unfounded_stock(
-                _join_reason(scrub_prose(it.get("fit_clause"), grounded), anchor), stock_present
-            ),
-            url=p.get("url"),
-            image=p.get("image"),
-            rating=float(p["rating"]) if p.get("rating") is not None else None,
-            review_count=int(rc) if rc else None,
-            badge=seeded or badge_label(kind, ctx.language, p, label_rules),
-            badge_tone=BADGE_TONE.get(kind) if kind else None,
-            list_price=float(lp) if lp is not None and float(lp) > eff else None,
-            currency=currency,
-            details=ai if (ai and not _unsafe_medical(ai)) else None,
-            variants=_card_variants(p),
+        reason = _drop_unfounded_stock(
+            _join_reason(scrub_prose(it.get("fit_clause"), grounded), anchor), stock_present
         )
+        item, kind = hydrated_item(ctx, p, reason=reason, routine_by_product=routine_by_product)
+        derived_kinds[pid] = kind
+        return item
 
     # NX-292 — pe un tur de rutină, ordinea cardurilor e a SLOTURILOR, nu a rankingului.
     #

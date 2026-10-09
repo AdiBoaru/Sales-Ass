@@ -197,11 +197,18 @@ _TREAT_VERB = re.compile(
 )
 # Verdict de SIGURANȚĂ în sarcină/alăptare (ambele ordine). „recomandat" NU e cuvânt de siguranță:
 # ar prinde redirectarea SIGURĂ „îți recomand să consulți medicul în sarcină" (fals-pozitiv).
+# NX-382 (recenzia 2c): «crema e sigură în sarcină» și «e potrivită pentru femeile însărcinate»
+# treceau (doar masculinul „sigur" era prins). Formele lui „sigur", nu „siguranța"; „potrivit" doar
+# urmat DIRECT de context («potrivit în sarcină»), nu oriunde lângă el («în sarcină, aș merge pe
+# ceva simplu și potrivit pentru ten sensibil»), și nu „nepotrivit". Fals-pozitivul costă o
+# propoziție (pe compozitor: fraza de siguranță a codului), fals-negativul e un claim P0 servit.
+_PREG_CONTEXT = r"(sarcin|insarcin|gravid|alapt|pregnan|breastfeed|nursing)"
+_PREG_SAFE_CLAIM = r"\b(sigur[aei]?|safe|fara risc|poti folosi|se poate folosi)\b"
 _PREG_SAFE = re.compile(
-    r"(sigur|safe|fara risc|poti folosi|se poate folosi)\b.{0,30}"
-    r"(sarcin|insarcin|alaptar|pregnan|breastfeed|nursing)"
-    r"|(sarcin|insarcin|alaptar|pregnan|breastfeed|nursing).{0,30}"
-    r"(sigur|safe|fara risc|poti folosi|se poate folosi)"
+    rf"{_PREG_SAFE_CLAIM}.{{0,30}}{_PREG_CONTEXT}"
+    rf"|{_PREG_CONTEXT}.{{0,30}}{_PREG_SAFE_CLAIM}"
+    rf"|\bpotrivit\w*\s+(?:si\s+)?(?:pentru|in|la)\s+(?:\w+\s+){{0,2}}{_PREG_CONTEXT}"
+    rf"|\bsuitable\s+(?:for|during|in)\s+(?:\w+\s+){{0,2}}{_PREG_CONTEXT}"
 )
 # Garanție ABSOLUTĂ de inocuitate (nu „testat dermatologic", care e claim cosmetic uzual).
 _ALLERGEN_FREE = re.compile(

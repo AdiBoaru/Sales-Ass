@@ -143,6 +143,7 @@ EXECUTOR_WRITABLE: tuple[str, ...] = (
     "reply",
     "retrieval",
     "safety_decision",
+    "safety_referral_composed",  # NX-382 faza 2c: propoziția verificată a compozitorului
     "routine",
     "match_set",
     "answer_plan",
@@ -475,6 +476,20 @@ def _mutating_turn(chain: _Chain) -> bool:
     return dropped and all(a.kind in _NO_REQUEST for a in kept)
 
 
+def _social_turn(chain: _Chain) -> bool:
+    """NX-382 faza 2c: turul e DOAR `chitchat` (un salut, o mulțumire, un rămas-bun), fără niciun
+    act scos de poartă. Pe `reply_only` îl răspunde compozitorul, nu bucla v1 (de acolo a venit
+    abonarea la stoc pe «ok pa», NX-383)."""
+    interp = chain.interpreted.interpretation
+    if interp is None or chain.outcome.skipped_acts or not interp.acts:
+        return False
+    # recenzia 2c: «mersi, apropo am tenul gras» schimbă starea, iar un «da» spus unei oferte are
+    # o referință; nu sunt doar un salut
+    if interp.changes or interp.references:
+        return False
+    return all(a.kind in _NO_REQUEST for a in interp.acts)
+
+
 def _dropped_request(chain: _Chain) -> bool:
     """Poarta a scos și o cerere care NU scrie (regula 0). Pe un refuz de mutație, dezvăluirea
     `invalid_target` o spune clientului; fără ea, refuzul coșului e tot răspunsul (NX-383)."""
@@ -727,6 +742,7 @@ async def execute_plans(
     policy_for: PolicyFor | None = None,
     mutating: bool = False,
     dropped_request: bool = False,
+    social: bool = False,
 ) -> bool | None:
     """Seam-ul executorilor: rulează planurile turului (cu decizia porții, a cărei întrebare o pune
     executorul `ask` sau compunerea, la confirmare). `None` = niciun executor pentru plan (turul
@@ -740,7 +756,7 @@ async def execute_plans(
     from src.agent.kernel_executors import execute_read_plans  # noqa: PLC0415 — ciclul agent
 
     return await execute_read_plans(
-        ctx, deps, planned, outcome, policy_for, mutating, dropped_request
+        ctx, deps, planned, outcome, policy_for, mutating, dropped_request, social=social
     )
 
 
@@ -844,6 +860,7 @@ async def _serve(
             chain.policy_for,
             _mutating_turn(chain),
             _dropped_request(chain),
+            _social_turn(chain),
         )
     except NoSentence as e:
         ctx.emit("kernel_sentence_missing", code=e.code)

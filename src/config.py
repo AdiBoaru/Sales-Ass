@@ -1327,6 +1327,26 @@ class Settings(BaseSettings):
     composer_no_results_enabled: bool = Field(
         default=True, validation_alias="COMPOSER_NO_RESULTS_ENABLED"
     )
+    # NX-382 faza 2c: confirmarea coșului (cu complementarele alese de model, sau niciunul) și
+    # răspunsul la un salut / mulțumire / rămas-bun (`reply_only` dintr-un tur doar `chitchat`) le
+    # scrie compozitorul. Orice eșec ⇒ textul de azi (fraza pachetului + cross-sell-ul v1;
+    # chitchat-ul pe calea v1, fără unelte de mutație, NX-383). OFF → textul de azi, byte-identic.
+    composer_cart_enabled: bool = Field(default=True, validation_alias="COMPOSER_CART_ENABLED")
+    composer_chitchat_enabled: bool = Field(
+        default=True, validation_alias="COMPOSER_CHITCHAT_ENABLED"
+    )
+    # NX-382 faza 2c: pe un context de siguranță declarat (NX-173), trimiterea la medic sau
+    # farmacist o scrie compozitorul (obligația `safety_referral`), iar poarta lui verifică că e în
+    # text, după scoaterea propozițiilor medicale; atunci `safety.compose.enforce` nu mai pune fraza
+    # codului peste ea. Respins ⇒ rezerva turului + fraza garantată NX-367. Pe registrul
+    # indisponibil (fail-closed) și pe căile care nu trec prin compozitor fraza rămâne a codului.
+    composer_safety_enabled: bool = Field(default=True, validation_alias="COMPOSER_SAFETY_ENABLED")
+    # Decizia lui Adi (deschisă 2026-10-08): după primul tur cu trimiterea la medic, compozitorul
+    # poate scrie o amintire scurtă (tot cu medicul sau farmacistul). Stins = fraza întreagă pe
+    # fiecare tur, ca azi.
+    safety_referral_short_after_first: bool = Field(
+        default=False, validation_alias="SAFETY_REFERRAL_SHORT_AFTER_FIRST"
+    )
     # NX-326 (kernel v1.0, pasul 0): scurtăturile de link și comparație servesc produsele NUMITE în
     # mesaj (`reference_resolver.named_targets`), nu tot ecranul (B1) și nici primele două carduri
     # (B2). NX-316 o făcea doar pentru chip-urile recunoscute; aceeași frază tastată servea
