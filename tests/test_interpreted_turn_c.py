@@ -336,14 +336,16 @@ async def test_a_missing_verdict_sentence_leaves_the_closing_empty_and_counts(
     assert {"code": "verdict_unknown", "turn_id": "t0"} in _events(ctx, "kernel_sentence_missing")
 
 
-async def test_compare_on_a_single_target_uses_the_similar_partner(monkeypatch, electronics):
-    """C2: o țintă ⇒ partenerul similar (ca chip-ul NX-319), iar politica îl judecă și pe el."""
+async def test_compare_on_a_single_target_uses_a_same_type_partner(monkeypatch, electronics):
+    """C2 (NX-386): o țintă singură, fără alt produs în setul ei ⇒ partenerul din graf, DOAR de
+    același tip sau substitut; politica îl judecă și pe el."""
     _spy_compose(monkeypatch)
     anchor, partner = _pair(electronics)
 
     async def candidates(conn, business_id, anchor_id):
         assert anchor_id == anchor
-        return [{"id": partner, "name": electronics.items[partner]["name"], "anchor_name": "x"}]
+        name = electronics.items[partner]["name"]
+        return [{"id": partner, "name": name, "anchor_name": "x", "same_type": True}]
 
     monkeypatch.setattr(kx.det, "similar_candidates", candidates)
     judged = []
@@ -359,24 +361,57 @@ async def test_compare_on_a_single_target_uses_the_similar_partner(monkeypatch, 
     assert [c.product_id for c in ctx.reply.comparison.columns] == [anchor, partner]
 
 
-async def test_compare_on_a_single_target_without_a_partner_refuses(electronics):
+async def test_a_partner_of_another_kind_is_never_compared(monkeypatch, electronics):
+    """NX-386, `w3_doar_coreean_par#3`: partenerul din graf era un prosop. Un candidat care nu e
+    nici substitut, nici de același tip, nu se compară: detaliul țintei, fără partener inventat."""
+    anchor, partner = _pair(electronics)
+
+    async def candidates(conn, business_id, anchor_id):
+        return [{"id": partner, "name": "Prosop", "anchor_name": "x", "same_type": False}]
+
+    monkeypatch.setattr(kx.det, "similar_candidates", candidates)
     ctx = _ctx(electronics)
-    planned = _planned(_plan(executor="compare", product_ids=("p1",)))
-    assert await kx.execute_read_plans(ctx, _deps(), planned, _outcome()) is False
-    # recenzia C2: evenimentul e al kernelului, deci rămâne și pe turul căzut
-    assert "kernel_similar_partner" in kx.KERNEL_EXECUTOR_EVENTS
+    planned = _planned(_plan(executor="compare", product_ids=(anchor,)))
+    assert await kx.execute_read_plans(ctx, _deps(), planned, _outcome()) is True
+    assert ctx.reply.comparison is None
     assert {"found": False, "n": 0, "turn_id": "t0"} in _events(ctx, "kernel_similar_partner")
+    assert _events(ctx, "kernel_compare_single")
+    assert "kernel_similar_partner" in kx.KERNEL_EXECUTOR_EVENTS
+
+
+async def test_a_single_target_on_a_list_is_compared_with_its_list(monkeypatch, electronics):
+    """NX-386, `w4_compara_numit_apoi_cos#2`: ținta stă într-un set arătat ⇒ comparația cu restul
+    setului (cel mult doi), fără graf și fără un produs pe care clientul nu l-a văzut."""
+    from src.agent.interpreted_turn import KernelView
+    from src.conversation.state_v2 import DisplayedRef, References
+
+    _spy_compose(monkeypatch)
+    ids = list(electronics.items)[:4]
+
+    async def no_graph(*a, **kw):
+        raise AssertionError("graful nu se citește când ținta are un set")
+
+    monkeypatch.setattr(kx.det, "similar_candidates", no_graph)
+    screen = tuple(DisplayedRef(product_id=i, name=electronics.items[i]["name"]) for i in ids)
+    gate = ConversationStateV2(references=References(displayed_products=screen))
+    ctx = _ctx(electronics)
+    ctx.kernel_view = KernelView(gate_state=gate, subject_is_new=False)
+    planned = _planned(_plan(executor="compare", product_ids=(ids[1],)))
+    assert await kx.execute_read_plans(ctx, _deps(), planned, _outcome()) is True
+    assert [c.product_id for c in ctx.reply.comparison.columns] == [ids[1], ids[0], ids[2]]
 
 
 async def test_the_similar_partner_obeys_the_v1_kill_switch(monkeypatch, electronics):
-    """`COMPARE_WITH_SIMILAR_ENABLED` stins oprește și calea kernelului, fără nicio citire."""
+    """`COMPARE_WITH_SIMILAR_ENABLED` stins nu citește graful: detaliul țintei."""
     from src.config import get_settings
 
     monkeypatch.setattr(get_settings(), "compare_with_similar_enabled", False)
     deps = _deps()
-    planned = _planned(_plan(executor="compare", product_ids=("p1",)))
-    assert await kx.execute_read_plans(_ctx(electronics), deps, planned, _outcome()) is None
-    assert deps.db.ops == []
+    anchor, _ = _pair(electronics)
+    ctx = _ctx(electronics)
+    planned = _planned(_plan(executor="compare", product_ids=(anchor,)))
+    assert await kx.execute_read_plans(ctx, deps, planned, _outcome()) is True
+    assert "similar_candidates" not in deps.db.ops
 
 
 def test_a_dimension_without_a_label_gets_the_generic_sentence(electronics):

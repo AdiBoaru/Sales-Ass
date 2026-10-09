@@ -75,6 +75,7 @@ from src.domain.constraints import (
     ENFORCING_SOURCES,
     MATCH,
     MISMATCH,
+    OP_GTE,
     OP_LTE,
     REASON_INFERRED,
     SOURCE_MODEL,
@@ -189,10 +190,20 @@ class SearchArgs(BaseModel):
     # pool jumătatea mai ieftină a ce se potrivește cererii (până la mediana prețurilor lui), după
     # fuziune, deci relevanța rămâne ordinea. `None` ⇒ nimic nu se schimbă.
     price_band: Literal["low"] | None = None
+    # `price_min` (kernel.v7.1, NX-386): limita de JOS a prețului, dintr-un `budget_min` dur al
+    # stării («peste 200 de lei»). Pe calea planificată devine constrângerea tipizată `gte` pe
+    # fațeta de preț (NX-266), deci se relaxează odată cu `price_max`. `None` ⇒ nimic.
+    price_min: float | None = Field(default=None, ge=0)
 
 
 #: NX-333: câmpurile pe care le scrie DOAR plannerul. Intrarea modelului nu le poate purta.
-PLANNER_ONLY_FIELDS: tuple[str, ...] = ("rank_terms", "prefer", "exclude", "price_band")
+PLANNER_ONLY_FIELDS: tuple[str, ...] = (
+    "rank_terms",
+    "prefer",
+    "exclude",
+    "price_band",
+    "price_min",
+)
 
 
 class DetailArgs(BaseModel):
@@ -1778,6 +1789,27 @@ def _typed_constraints(ctx: TurnContext, a: SearchArgs) -> _Constraints:
     )
 
 
+def _planned_constraints(ctx: TurnContext, a: SearchArgs) -> _Constraints:
+    """NX-386 (`kernel.v7.1`): pe calea PLANIFICATĂ numerele nu se mai citesc din mesaj (le-a
+    validat kernelul); singura constrângere tipizată e `price_min`, dintr-un `budget_min` dur al
+    stării, ca limită `gte` pe fațeta de preț (aceeași validare și legare ca NX-266). Fără
+    `price_min`, fără unități de preț în pachet, sau cu o valoare respinsă ⇒ nimic (golul
+    `price_min` al plannerului rămâne singurul semn), deci SQL-ul e cel de azi."""
+    if a.price_min is None:
+        return _Constraints()
+    pack = getattr(ctx.business, "domain_pack", None)
+    units = getattr(pack, "units", None)
+    if pack is None or units is None or not units.specs:
+        return _Constraints()
+    proposed, rejection = constraint_from_value(
+        _PRICE_FACET, OP_GTE, a.price_min, units=units, source=SOURCE_USER
+    )
+    if proposed is None:
+        return _Constraints(rejected=(rejection,) if rejection is not None else ())
+    bounds, rejected = bind_constraints([proposed], pack.facets)
+    return _Constraints(bounds=bounds, rejected=rejected)
+
+
 def _facet_label(ctx: TurnContext, key: str) -> str:
     """Eticheta de afișare a fațetei în limba turului (din registrul tipizat, NX-186). Fără pachet
     sau fără etichetă → cheia, care e tot un cuvânt lizibil. P11: eticheta vine din date."""
@@ -2382,7 +2414,7 @@ async def _search(
         ] or None
     # NX-266: numerele cererii, tipizate. Cu flagul stins e `_Constraints()` gol, deci tot ce
     # urmează (fp, scară, SQL, plasă) e byte-identic cu azi.
-    tc = _Constraints() if planned else _typed_constraints(ctx, a)
+    tc = _planned_constraints(ctx, a) if planned else _typed_constraints(ctx, a)
     # Migrarea lui `budget_max`: când prețul a devenit constrângere tipizată, NU mai pleacă și ca
     # `price_max` — ar fi același predicat de două ori, iar valoarea autoritară trebuie să fie una
     # singură. Predicatul rezultat e echivalent (fațeta declară `missing_value: skip`, adică un

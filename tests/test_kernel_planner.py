@@ -659,13 +659,20 @@ def test_c2_electronics_units_price_is_hard_and_storage_is_a_gap():
     assert planned.gaps == ("numeric_facet",)
 
 
-def test_a_budget_min_is_a_gap_and_never_reaches_search_args():
-    needs = (_need("budget_min", 1000.0, "hard"),)
+def test_a_hard_budget_min_is_price_min_and_a_soft_one_a_gap():
+    """NX-386 (`kernel.v7.1`): un `budget_min` dur devine `price_min` (constrângerea tipizată a
+    căutării planificate); unul slab rămâne golul `price_min`, ca bugetul slab."""
+    hard = (_need("budget_min", 1000.0, "hard"),)
     planned = _plan(
-        "electronics", _interp(acts=[{"kind": "find"}]), _state("telefoane", needs=needs)
+        "electronics", _interp(acts=[{"kind": "find"}]), _state("telefoane", needs=hard)
     )
     args = _search(planned)
-    assert args.price_max is None and planned.gaps == ("price_min",)
+    assert (args.price_min, args.price_max) == (1000.0, None) and "price_min" not in planned.gaps
+    soft = (_need("budget_min", 1000.0, "soft"),)
+    planned = _plan(
+        "electronics", _interp(acts=[{"kind": "find"}]), _state("telefoane", needs=soft)
+    )
+    assert _search(planned).price_min is None and planned.gaps == ("price_min",)
 
 
 def test_a_soft_budget_never_becomes_price_max_through_the_real_chain():
@@ -809,7 +816,7 @@ def test_a_variant_asked_and_not_found_is_a_gap():
 def test_every_gap_code_is_in_the_closed_vocabulary(name):
     needs = (
         _need("budget_max", 100.0, "soft"),
-        _need("budget_min", 10.0, "hard"),
+        _need("budget_min", 10.0, "soft"),
         _need("restriction", "x", "hard"),
         _need("use_case", "y"),
     )

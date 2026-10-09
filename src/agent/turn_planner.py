@@ -99,7 +99,7 @@ DISCLOSURES: tuple[str, ...] = (
 #: care nu sunt tăcere (P6): o întrebare fără text, o căutare fără cuvinte, un subiect lipsă.
 GAPS: tuple[str, ...] = (
     "soft_budget",  # buget `soft` / `inferred`: niciodată `price_max` (I7)
-    "price_min",  # `SearchArgs` n-are `price_min`
+    "price_min",  # un `budget_min` slab (NX-386: unul dur e `SearchArgs.price_min`)
     "exclusion",  # `SearchArgs` n-are excluderi
     "numeric_facet",  # un prag pe o fațetă numerică (NX-334: `<fațetă>_min` / `_max`)
     "variant",  # o variantă cerută și negăsită: starea nu ține o variantă
@@ -735,6 +735,10 @@ class _Planner:
             self._gap("exclusion")
         if args.price_band:
             self._gap("soft_budget")
+        if args.price_min is not None:
+            # NX-386 (recenzia): `RoutineArgs` n-are limită de jos
+            args = args.model_copy(update={"price_min": None})
+            self._gap("price_min")
         return TurnPlan(
             executor="bundle",
             product_ids=list(dict.fromkeys(ids))[:1],
@@ -797,7 +801,26 @@ class _Planner:
         name = self._name(ref.id)
         if name is None:
             return None
-        return self._search(act, index, name=name, name_only=True)
+        plan = self._search(act, index, name=name, name_only=True)
+        # NX-386: produsul găsit după nume e răspunsul, ca rândul `exact` de mai sus; doar unul
+        # singur (`then=find`): pe un `find` o descriere etichetată `name` nu devine un detaliu
+        return self._named_read(plan, act, [name], [], then="find")
+
+    def _named_read(
+        self,
+        plan: TurnPlan,
+        act: Act,
+        names: list[str],
+        exact: list[str],
+        then: str | None = None,
+    ) -> TurnPlan:
+        """NX-386: căutarea pe nume poartă actul cerut și numele de rezolvat (`then`/`names`)."""
+        kind = then or act.kind
+        if plan.executor != "search" or kind not in ("detail", "link", "compare", "find"):
+            return plan
+        return plan.model_copy(
+            update={"then": kind, "names": names, "product_ids": list(dict.fromkeys(exact))}
+        )
 
     def _show_more(self, act: Act, index: int) -> TurnPlan:
         if not self.changed and self.state.active_search:
@@ -822,9 +845,28 @@ class _Planner:
         missing = [r for r in refs if _lost(r)]
         if missing:
             self._disclose(index, "not_exact_match")
-            name = self._name(missing[0].ref_id)
-            if name is not None:
-                return self._search(act, index, name=name)
+            names = [n for r in missing if (n := self._name(r.ref_id)) is not None]
+            if names:
+                # NX-386 (`kernel.v7.1`): căutarea după PRIMUL nume e rezerva de azi; executorul
+                # caută și restul, iar când rezultatele poartă numele servește actul cerut pe
+                # produsele găsite, lângă celelalte ținte (în `product_ids`). Doar când TOATE
+                # țintele sunt ori folosibile, ori nume negăsite (recenzia): o țintă dispărută
+                # (`stale`), una fără nume sau una ambiguă fără `act_both` ar ieși din act fără
+                # nicio dezvăluire, deci atunci rămâne căutarea de azi.
+                plan = self._search(act, index, name=names[0])
+                both = self.gate.decision.verdict == "act_both"
+                kept: list[str] = []
+                promotable = len(names) == len(missing)
+                for r in refs:
+                    if r in missing:
+                        promotable = promotable and r.outcome == "not_found"
+                    elif r.outcome == "exact" or (both and r.outcome == "ambiguous"):
+                        kept += [p for p in r.product_ids if p not in kept]
+                    else:
+                        promotable = False
+                if not promotable:
+                    return plan
+                return self._named_read(plan, act, names, kept)
             if self._subject():
                 return self._search(act, index, subject_first=True)
             return self._plan("reply_only")
@@ -961,6 +1003,7 @@ class _Planner:
         said = self._dimensions_said() if this_turn_only else frozenset()
         unscoped = False
         price_max: float | None = None
+        price_min: float | None = None
         brand: str | None = None
         concerns: list[str] = []
         features: list[str] = []
@@ -993,7 +1036,18 @@ class _Planner:
                 else:
                     self._gap("soft_budget")
             elif key == _BUDGET_MIN:
-                self._gap("price_min")
+                # NX-386 (`kernel.v7.1`): limita de jos dură devine `price_min` (constrângere
+                # tipizată pe calea planificată); una slabă rămâne gol, ca bugetul slab
+                if (
+                    self._hard(need, PRICE_DIMENSION)
+                    and _usable_amount(value)
+                    and self._price_units()
+                ):
+                    price_min = float(value)  # type: ignore[arg-type]
+                    carried[PRICE_DIMENSION] = "filter"
+                else:
+                    # slab, sau pachetul n-are unitatea prețului: constrângerea n-ar rula (recenzia)
+                    self._gap("price_min")
             elif self.needs.bounds_for(dimension) is not None:
                 self._gap("numeric_facet")
             elif spec is not None and spec.kind is NeedKind.EXCLUSION:
@@ -1094,7 +1148,15 @@ class _Planner:
             prefer=prefer,
             exclude=exclude,
             price_band=price_band,
+            price_min=price_min,
         )
+
+    def _price_units(self) -> bool:
+        """NX-386: pachetul declară unitatea prețului, deci `price_min` devine constrângere tipizată
+        pe calea planificată (`catalog_tools._planned_constraints`)."""
+        units = getattr(self.pack, "units", None)
+        specs = getattr(units, "specs", None) or {}
+        return PRICE_DIMENSION in specs
 
     def _dimensions_said(self) -> frozenset[str]:
         """Dimensiunile schimbărilor ACCEPTATE ale turului (după re-rezolvarea validatorului). O
@@ -1208,12 +1270,17 @@ def bundle_executor(
 ) -> str | None:
     """Numele uneltei care servește `bundle` pe subiectul stării, sau None: fără subiect, sau fără
     intrare în `DomainPack.bundle_executors` pentru rădăcina raftului, raft sau `"*"`. PUR; pasul 6
-    îl cheamă ca să afle CE unealtă execută planul `bundle`."""
+    îl cheamă ca să afle CE unealtă execută planul `bundle`. Fără subiect: doar intrarea `"*"`, și
+    doar când nevoile stării dau familia rutinei (NX-386)."""
     topic = state.topic
-    if not topic.has_subject:
-        return None
     table = getattr(pack, "bundle_executors", None)
     if not isinstance(table, Mapping) or not table:
+        return None
+    if not topic.has_subject:
+        # NX-386 (`kernel.v7.1`): fără subiect, executorul general al pachetului, DOAR când nevoile
+        # dau familia rutinei (`routine_family`, regula 4); altfel o căutare, ca până acum
+        if WILDCARD in table and routine_family(state, pack=pack, vocab=vocab) is not None:
+            return str(table[WILDCARD])
         return None
     usable = vocab if vocab is not None and not vocab.is_empty() else None
     root = topic_root_of(usable, topic.category_key) if usable is not None else None
@@ -1234,7 +1301,11 @@ def routine_family(
     2. cheia raftului în `family_by_shelf` (o intrare pe un subraft bate rădăcina lui);
     3. rădăcina raftului în `family_by_shelf`.
 
-    `None` fără subiect sau fără nicio potrivire: planul `bundle` rămâne pe calea de azi."""
+    4. NX-386 (`kernel.v7.1`): fără tip și fără raft cu familie, nevoile ACTIVE ale stării, prin
+       `routine_steps.family_by_need` (dată derivată din catalog), doar când toate cele cunoscute
+       duc la aceeași familie («o rutină de seară pentru pete» ⇒ fața).
+
+    `None` fără nicio potrivire: planul `bundle` rămâne pe calea de azi."""
     spec = getattr(pack, "routine_steps", None)
     families = getattr(spec, "families", None) or {}
     by_type = getattr(spec, "by_product_type", None) or {}
@@ -1245,13 +1316,24 @@ def routine_family(
         return next(iter(seen))
     key = state.topic.category_key
     table = getattr(spec, "family_by_shelf", None)
-    if not key or not isinstance(table, Mapping) or not table:
+    if key and isinstance(table, Mapping) and table:
+        usable = vocab if vocab is not None and not vocab.is_empty() else None
+        root = topic_root_of(usable, key) if usable is not None else None
+        for shelf in (key, root):
+            if shelf and shelf in table:
+                return str(table[shelf])
+    by_need = getattr(spec, "family_by_need", None) or {}
+    if key or not isinstance(by_need, Mapping) or not by_need:
+        # un raft numit fără familie nu e luat de nevoi: clientul a spus unde, iar ce nu e o
+        # familie de rutină (ex. un raft de accesorii) rămâne pe calea de azi
         return None
-    usable = vocab if vocab is not None and not vocab.is_empty() else None
-    root = topic_root_of(usable, key) if usable is not None else None
-    for shelf in (key, root):
-        if shelf and shelf in table:
-            return str(table[shelf])
+    found = {
+        str(by_need[f"{n.key}:{n.normalized_value}"])
+        for n in state.active_needs()
+        if isinstance(n.normalized_value, str) and f"{n.key}:{n.normalized_value}" in by_need
+    }
+    if len(found) == 1 and next(iter(found)) in families:
+        return next(iter(found))
     return None
 
 

@@ -657,6 +657,9 @@
       "plans": [
         {
           "executor": "search",
+          "product_ids": [
+            "el-01"
+          ],
           "search_args": {
             "category": "telefoane",
             "product_name": "Nokia Lumia 800",
