@@ -452,14 +452,41 @@ _TARGETED: frozenset[str] = frozenset({"compare", "detail"})
 _MUTATING: frozenset[str] = frozenset({"cart"})
 
 
+#: Actele care nu cer nimic: rămase singure lângă o mutație scoasă de poartă, turul tot cerea doar
+#: scrierea.
+_NO_REQUEST: frozenset[str] = frozenset({"chitchat"})
+
+
 def _mutating_turn(chain: _Chain) -> bool:
-    """Interpretarea turului are un act care SCRIE, printre actele rămase după poartă: pe un refuz
-    al porții fără întrebare, răspunsul e al kernelului, niciodată o buclă v1 cu `cart_add`."""
+    """Turul a cerut o scriere: un act care SCRIE printre actele rămase după poartă, SAU o mutație
+    scoasă de poartă (regula 0, I24) lângă care n-a rămas nicio altă cerere. Pe un `reply_only`
+    răspunsul e atunci al kernelului, niciodată o buclă v1 cu `cart_add` (NX-383: «il iau pe ala cu
+    acoperire mai mare» ⇒ ținta numea o proprietate, poarta a scos coșul cu verdictul `act`, iar
+    bucla v1 a pus în coș un produs ales de model). O mutație scoasă lângă o cerere de citire lasă
+    citirea să fie servită (dezvăluirea `invalid_target` spune restul)."""
     interp = chain.interpreted.interpretation
     if interp is None:
         return False
     skipped = set(chain.outcome.skipped_acts)
-    return any(a.kind in MUTATING_ACTS for i, a in enumerate(interp.acts) if i not in skipped)
+    kept = [a for i, a in enumerate(interp.acts) if i not in skipped]
+    if any(a.kind in MUTATING_ACTS for a in kept):
+        return True
+    dropped = any(a.kind in MUTATING_ACTS for i, a in enumerate(interp.acts) if i in skipped)
+    return dropped and all(a.kind in _NO_REQUEST for a in kept)
+
+
+def _dropped_request(chain: _Chain) -> bool:
+    """Poarta a scos și o cerere care NU scrie (regula 0). Pe un refuz de mutație, dezvăluirea
+    `invalid_target` o spune clientului; fără ea, refuzul coșului e tot răspunsul (NX-383)."""
+    interp = chain.interpreted.interpretation
+    if interp is None:
+        return False
+    skipped = set(chain.outcome.skipped_acts)
+    return any(
+        a.kind not in MUTATING_ACTS and a.kind not in _NO_REQUEST
+        for i, a in enumerate(interp.acts)
+        if i in skipped
+    )
 
 
 def _mutations_exact(chain: _Chain) -> bool:
@@ -699,6 +726,7 @@ async def execute_plans(
     outcome: GateOutcome,
     policy_for: PolicyFor | None = None,
     mutating: bool = False,
+    dropped_request: bool = False,
 ) -> bool | None:
     """Seam-ul executorilor: rulează planurile turului (cu decizia porții, a cărei întrebare o pune
     executorul `ask` sau compunerea, la confirmare). `None` = niciun executor pentru plan (turul
@@ -711,7 +739,9 @@ async def execute_plans(
     `NoSentence` (fraza fail-closed lipsă din pachet) urcă la `_serve`."""
     from src.agent.kernel_executors import execute_read_plans  # noqa: PLC0415 — ciclul agent
 
-    return await execute_read_plans(ctx, deps, planned, outcome, policy_for, mutating)
+    return await execute_read_plans(
+        ctx, deps, planned, outcome, policy_for, mutating, dropped_request
+    )
 
 
 def _question_memory(ctx: TurnContext, outcome: GateOutcome) -> tuple[StateUpdateProposal, ...]:
@@ -807,7 +837,13 @@ async def _serve(
     _apply_turn_view(ctx, chain.state, chain.reduced.state, chain.delta.thread)
     try:
         verdict = await execute_plans(
-            ctx, deps, chain.planned, chain.outcome, chain.policy_for, _mutating_turn(chain)
+            ctx,
+            deps,
+            chain.planned,
+            chain.outcome,
+            chain.policy_for,
+            _mutating_turn(chain),
+            _dropped_request(chain),
         )
     except NoSentence as e:
         ctx.emit("kernel_sentence_missing", code=e.code)

@@ -15,12 +15,14 @@ emite din `execute` (cu `turn_id`, P10); args-urile sunt whitelisted (`_safe_too
 from __future__ import annotations
 
 import asyncio
+import json
 from collections.abc import Collection
 from dataclasses import dataclass, field
 from time import perf_counter
 from typing import TYPE_CHECKING, Any
 
 from src.agent import tool_budget
+from src.agent.tool_definitions import TOOL_NAMES
 from src.config import get_settings
 from src.db.provider import is_shared_connection
 from src.models import TurnContext
@@ -31,6 +33,10 @@ from src.tools.base import ARGS_REJECTED, CATALOG_READ_TOOLS, STORE_READ_TOOLS, 
 
 if TYPE_CHECKING:
     from src.worker.runner import PipelineDeps
+
+#: NX-383: ce primește modelul când cere o mutație pe o rulare fără drept de scriere: structură,
+#: nu frază (P11), ca refuzul allowlist-ului din `kernel_executors`.
+_MUTATION_REFUSED = json.dumps({"ok": False, "error": "tool_not_allowed"})
 
 _TOOL_ARG_WHITELIST: dict[str, tuple[str, ...]] = {
     "search_products": (
@@ -155,6 +161,11 @@ class ToolRun:
     cart_snapshot: Any = None
     # NX-211: server-owned IDs for mutations that returned ok=True.
     successful_action_ids: set[str] = field(default_factory=set)
+    # NX-383: `False` = bucla v1 de după un tur pe care kernelul l-a interpretat și nu l-a servit.
+    # Acolo scrierile trec DOAR prin executorul de coș al kernelului, pe ținte `exact` (I10); o
+    # unealtă de mutație cerută de model primește un refuz structurat și nu rulează. Owner: cine
+    # construiește rularea (`agent_stage`).
+    mutations_allowed: bool = True
     # Shared asyncpg connections only support one active operation at a time. The LLM adapter may
     # dispatch several calls together, so serialize this run's DB access and state mutations.
     _execution_lock: asyncio.Lock = field(default_factory=asyncio.Lock, init=False, repr=False)
@@ -268,6 +279,14 @@ class ToolRun:
         active, apelul trece întâi prin ADMISSION (plafon de tool calls / mutații / timp rămas) și
         apoi prin poarta read-mutation. Un refuz e TYPED și ajunge la model ca text scurt și onest,
         nu ca timeout: modelul trebuie să încheie cu ce are, nu să reîncerce."""
+        if not self.mutations_allowed and tool_budget.spec_for(name).is_mutation:
+            # NX-383: refuzul ÎNAINTEA oricărei admisii sau citiri; un nume necunoscut e mutație
+            # pentru registru (fail-closed), deci nu trece nici el.
+            self.ctx.emit("mutation_tool_refused", name=name if name in TOOL_NAMES else "unknown")
+            if name in ("cart_add", "checkout_link"):
+                # NX-137: comerțul refuzat în tur ⇒ compunerea nu oferă chip-ul care îl promite
+                self.failed_commerce.add(name)
+            return _MUTATION_REFUSED
         ledger = turn_budget.current()
         d = deadline.current()
         if ledger is None and d is None:

@@ -184,6 +184,16 @@ al oracolului (pe cheie, contrazicea NX-331/337). Oracolul pe nevoie a găsit ci
 cauză: un tombstone pe cheie, șters de parcare, de altă valoare sau de `clear all`, iar retragerea din
 turul unui schimb lovea nevoia reluată. Acum retragerile se țin pe valoare, poarta `revoked_key` e și
 pe valoare, ținta e valoarea handle-ului. Card: [`tasks/stage1/NX-379.md`](tasks/stage1/NX-379.md).
+**NX-383 — un tur interpretat de kernel nu scrie niciodată prin calea v1 (I10, P0).** Pe setul wide,
+«il iau pe ala cu acoperire mai mare»: poarta a scos coșul (I24) cu verdictul `act`, garda servea
+refuzul doar pe `must_ask`, iar bucla v1 a pus în coș un produs ales de model; singura altă mutație
+de pe calea v1 după kernel a fost o abonare pe «ok pa». Acum un tur al cărui singur act era o mutație
+scoasă de poartă primește fraza `mutation_not_exact` pe orice verdict, iar într-o conversație servită
+bucla v1 n-are drept de scriere pe niciun tur, inclusiv apăsările de chip (`ToolRun.mutations_allowed`
+pe modul conversației, mutațiile scoase din scheme și refuzate la `execute`, `mutation_tool_refused`).
+Turul căzut rămâne turul cu flagul stins (I16) în afara unei mutații cerute. Dark-ul rămâne neatins. Card:
+[`tasks/stage1/NX-383.md`](tasks/stage1/NX-383.md); probă:
+`pytest tests/test_nx383_no_mutation_after_kernel.py -q`.
 **NX-334 — direcția unei limite numerice ajunge neschimbată în stare.** Pe pașii 3a/3b «minim 256
 GB» se persista `storage lte 256`: delta păstra relația doar pe preț, iar orice fațetă numerică era
 plafon. Acum o dimensiune numerică are DOUĂ chei, ca bugetul (`<fațetă>_min` / `<fațetă>_max`,
