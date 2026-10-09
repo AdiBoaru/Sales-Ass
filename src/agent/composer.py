@@ -107,6 +107,16 @@ DISCLOSURES: Mapping[str, str] = {
         "so once and say they can ask for one of `other_options` instead."
     ),
 }
+#: NX-392: dezvăluiri care NU se spun clientului, ci îi spun compozitorului ce nu e partea lui:
+#: o notă în FAPTE (tiparul `safety_note`), nu o obligație. Instrucțiuni generice (P11).
+DISCLOSURE_NOTES: Mapping[str, tuple[str, str]] = {
+    "store_answered_apart": (
+        "STORE PART",
+        "The customer also asked about the store itself (a store rule such as delivery, returns "
+        "or payment). The store answers that part in a separate paragraph just before your text. "
+        "Do not write about it, and do not say that it is unknown.",
+    ),
+}
 #: Sarcinile pe care o dezvăluire nu se spune (pe „n-am găsit" fraza spune deja tot, NX-374).
 _NO_DISCLOSURE_TASKS = frozenset({"no_results", "chitchat"})
 #: Recenzia fazei 3: garanția ca promisiune («garanție 2 ani», «drept de retur»), nu verbul («nu
@@ -822,6 +832,15 @@ def disclosure_obligations(ctx: TurnContext, inp: ComposeInput) -> tuple[Obligat
     return tuple(out)
 
 
+def disclosure_notes(ctx: TurnContext) -> tuple[tuple[str, str], ...]:
+    """NX-392: notele planului (`DISCLOSURE_NOTES`) din `ctx.kernel_disclosures`, o dată pe cod."""
+    out: dict[str, tuple[str, str]] = {}
+    for code, _facts in getattr(ctx, "kernel_disclosures", None) or ():
+        if code in DISCLOSURE_NOTES and code not in out:
+            out[code] = DISCLOSURE_NOTES[code]
+    return tuple(out.values())
+
+
 def composed_disclosures(ctx: Any) -> frozenset[str]:
     """Dezvăluirile acoperite de compozitor, DOAR dacă textul lui e chiar în răspunsul randat
     (`text`, `rich.intro`, `comparison.intro`): pe un refuz înlocuit cu mesajul de no-result, sau pe
@@ -872,6 +891,9 @@ async def compose(
     note = safety_note(ctx)
     if note is not None:
         inp = replace(inp, extra_facts=(*inp.extra_facts, note))
+    notes = disclosure_notes(ctx)
+    if notes:
+        inp = replace(inp, extra_facts=(*inp.extra_facts, *notes))
     told = disclosure_obligations(ctx, inp)
     if told:
         inp = replace(inp, obligations=(*inp.obligations, *told))

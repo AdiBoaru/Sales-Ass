@@ -70,7 +70,7 @@ from __future__ import annotations
 import copy
 import json
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 
 from src.agent import deterministic as det
@@ -78,7 +78,7 @@ from src.agent.fallbacks import _card_products
 from src.agent.observability import agent_prompt_event
 from src.agent.tool_definitions import TOOL_NAMES
 from src.agent.tool_executor import ToolRun
-from src.agent.turn_planner import DELEGATE_TOOLS
+from src.agent.turn_planner import DELEGATE_TOOLS, TURN_LEVEL
 from src.catalog.render_text import display_name
 from src.config import get_settings
 from src.conversation.ambiguity_gate import MAX_ACT_BOTH, ROUTINE_FAMILY_KEY
@@ -137,6 +137,7 @@ KERNEL_EXECUTOR_EVENTS: frozenset[str] = frozenset(
         "composer_axes",  # NX-382 faza 3: axele tabelului scrise de compozitor
         "composer_variants",  # NX-382 faza 4: familiile de variante arătate o dată
         "delegate_shown_prices",  # NX-391: prețurile seturilor arătate, recitite pentru validare
+        "kernel_store_and_read",  # NX-392: turul mixt magazin + produse, servit de kernel
     }
 )
 #: Politica de răspuns a orchestratorului pe produsele unei comparații: (partenerii adăugați de
@@ -1173,22 +1174,8 @@ async def _compose_store_info(ctx: TurnContext, deps: PipelineDeps) -> bool:
     de cod, întregi, ca unealta `faq_lookup`). `False` = bucla restrânsă de azi (nicio regulă,
     citire picată, model picat sau răspuns respins). Turul n-a citit catalogul (paranteza
     NX-326)."""
-    from src.agent import composer  # noqa: PLC0415 — ciclul agent ↔ executori
-    from src.tools.faq_tools import load_rules  # noqa: PLC0415
-    from src.worker.context import conversation_transcript  # noqa: PLC0415
-
-    try:
-        rows = await load_rules(ctx, deps)
-    except Exception as e:  # noqa: BLE001 — P6: bucla de azi rămâne răspunsul
-        ctx.emit("composer", task="store_info", outcome="rules_failed", error=type(e).__name__)
-        return False
-    if not rows:
-        return False
-    rules = [f"{r['question'].strip()} -> {r['answer'].strip()}" for r in rows]
-    inp = composer.ComposeInput(task="store_info", store_rules=rules)
-    history = conversation_transcript(ctx.history, consumer="composer")
-    composed, _reason = await composer.compose(ctx, deps, inp, history=history)
-    if composed is None:
+    served = await _store_answer(ctx, deps)
+    if served is None:
         return False
     ctx.retrieval = RetrievalResult(
         products=[],
@@ -1198,8 +1185,96 @@ async def _compose_store_info(ctx: TurnContext, deps: PipelineDeps) -> bool:
         store_only=True,
         store_read_ok=True,
     )
-    ctx.set_reply(composed.served, cacheable=False)
+    ctx.set_reply(served, cacheable=False)
     return True
+
+
+async def _store_answer(ctx: TurnContext, deps: PipelineDeps) -> str | None:
+    """Răspunsul compozitorului din regulile ACTIVE ale magazinului (toate, aduse de cod; modelul
+    alege ce regulă răspunde, oricum ar fi formulată întrebarea), sau `None`: nicio regulă, citire
+    picată, model picat sau răspuns respins. Nu atinge răspunsul turului."""
+    from src.agent import composer  # noqa: PLC0415 — ciclul agent ↔ executori
+    from src.tools.faq_tools import load_rules  # noqa: PLC0415
+    from src.worker.context import conversation_transcript  # noqa: PLC0415
+
+    try:
+        rows = await load_rules(ctx, deps)
+    except Exception as e:  # noqa: BLE001 — P6: bucla de azi rămâne răspunsul
+        ctx.emit("composer", task="store_info", outcome="rules_failed", error=type(e).__name__)
+        return None
+    if not rows:
+        return None
+    rules = [f"{r['question'].strip()} -> {r['answer'].strip()}" for r in rows]
+    inp = composer.ComposeInput(task="store_info", store_rules=rules)
+    history = conversation_transcript(ctx.history, consumer="composer")
+    composed, _reason = await composer.compose(ctx, deps, inp, history=history)
+    return composed.served if composed is not None else None
+
+
+#: NX-392: nota compozitorului de produse pe un tur mixt (`composer.DISCLOSURE_NOTES`).
+_STORE_APART = "store_answered_apart"
+
+
+def _store_and_read(planned: PlannedTurn) -> int | None:
+    """NX-392: indexul planului de produse într-un tur mixt magazin + citire: exact două planuri,
+    unul `faq` (actul `store_info`, scris de model) și unul de citire care nu e alt `faq`, coș
+    sau `reply_only`. None în rest. Turul e recunoscut din planuri, nu din cuvinte."""
+    plans = planned.plans
+    if len(plans) != 2 or sum(p.executor == "faq" for p in plans) != 1:
+        return None
+    index = 0 if plans[1].executor == "faq" else 1
+    if plans[index].executor not in READ_EXECUTORS - {"faq", "cart", "reply_only"}:
+        return None
+    return index
+
+
+async def _serve_store_and_read(
+    ctx: TurnContext,
+    deps: PipelineDeps,
+    planned: PlannedTurn,
+    index: int,
+    outcome: GateOutcome,
+    policy_for: PolicyFor | None,
+    mutating: bool,
+    dropped_request: bool,
+) -> bool | None:
+    """NX-392: un tur mixt («livrați în X? și vreau un Y»), servit de kernel. Pe `main` două planuri
+    fără mutație cădeau pe calea v1, unde bucla căuta doar produse, iar fraza compozitorului despre
+    magazin era tăiată (NX-373): partea de magazin dispărea. Acum: întâi răspunsul de magazin
+    (compozitorul, din regulile active), apoi planul de produse, cu nota că partea de magazin e
+    răspunsă separat; răspunsul de magazin se pune ÎNAINTEA celui de produse. Fără răspuns de
+    magazin, planul de produse spune că o parte a cererii a rămas (`dropped_act`). Un plan de
+    produse care nu servește lasă turul pe calea de azi."""
+    # dezvăluirile planului de produse nu sunt ale răspunsului de magazin
+    ctx.kernel_disclosures = ()
+    store = await _store_answer(ctx, deps)
+    read = planned.plans[index]
+    disclosures = tuple(
+        (0 if i == index else i, code)
+        for i, code in planned.disclosures
+        if i in (index, TURN_LEVEL)  # ale planului de produse și ale turului întreg
+    )
+    notes: tuple[tuple[str, dict[str, Any]], ...] = ()
+    if store is not None:
+        notes = ((_STORE_APART, {}),)
+    else:
+        disclosures = (*disclosures, (0, "dropped_act"))
+    single = replace(
+        planned,
+        plans=(read,),
+        primary=0,
+        disclosures=disclosures,
+        excludes_shown=(0,) if index in planned.excludes_shown else (),
+    )
+    verdict = await execute_read_plans(
+        ctx, deps, single, outcome, policy_for, mutating, dropped_request, notes=notes
+    )
+    if verdict and store is not None:
+        _prefix(ctx, store)
+        ctx.emit("kernel_store_and_read", outcome="served")
+    elif not verdict:
+        ctx.emit("kernel_store_and_read", outcome="read_declined")
+    return verdict
 
 
 def _confirmation(outcome: GateOutcome) -> str | None:
@@ -1409,8 +1484,10 @@ async def execute_read_plans(
     dropped_request: bool = False,
     *,
     social: bool = False,
+    notes: tuple[tuple[str, dict[str, Any]], ...] = (),
 ) -> bool | None:
-    """Rulează planul turului. `mutating` = interpretarea turului a cerut o scriere (coșul);
+    """Rulează planul turului. `notes` = notele compozitorului adăugate de un apelant (NX-392,
+    `composer.DISCLOSURE_NOTES`). `mutating` = interpretarea turului a cerut o scriere (coșul);
     `dropped_request` = poarta a scos și o cerere care nu scrie (NX-383: dezvăluirea ei rămâne);
     `social` = turul e doar `chitchat` (NX-382 faza 2c: îl răspunde compozitorul).
     `None` = niciun executor legat (calea v1, `dark`), `False` =
@@ -1419,9 +1496,14 @@ async def execute_read_plans(
     plans = planned.plans
     # NX-382 faza 5: compozitorul spune el dezvăluirile, ca obligații; fraza pachetului rămâne
     # doar pentru ce n-a acoperit (`_disclosure_text`)
-    ctx.kernel_disclosures = _disclosures_of(planned)
+    ctx.kernel_disclosures = (*_disclosures_of(planned), *notes)
     if len(plans) == 2 and plans[0].executor == "cart" and plans[0].product_ids:
         return await _serve_mutation_then(ctx, deps, planned, outcome, policy_for)
+    store_read = _store_and_read(planned)
+    if store_read is not None:
+        return await _serve_store_and_read(
+            ctx, deps, planned, store_read, outcome, policy_for, mutating, dropped_request
+        )
     if len(plans) != 1:
         return None  # două planuri fără mutație: calea v1
     plan = plans[0]
