@@ -129,7 +129,9 @@ def test_the_executor_says_the_pack_sentence(name):
 
 def test_the_disclosure_is_in_both_closed_vocabularies_and_the_contract_is_minor():
     assert "need_unverifiable" in DISCLOSURES and "need_unverifiable" in KERNEL_SENTENCE_CODES
-    assert KERNEL_CONTRACT_VERSION.startswith("kernel.v6.")
+    # dezvăluirea a intrat ca minor în v6.1; un major de după (v7.0, NX-384) o păstrează
+    major, minor = (int(x) for x in KERNEL_CONTRACT_VERSION.removeprefix("kernel.v").split("."))
+    assert (major, minor) >= (6, 1)
 
 
 def test_the_sentences_respect_the_voice_rules():

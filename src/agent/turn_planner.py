@@ -208,7 +208,14 @@ def _read_act_query(
 
     NX-349: citatul unei fațete da/nu (`flags`) nu dă text nici în rezervă: proprietatea o poartă
     fațeta (sau golul dezvăluit), iar cuvintele ei sunt adesea negația unui lucru («fără parfum»),
-    deci «parfum» ar urca exact produsele parfumate."""
+    deci «parfum» ar urca exact produsele parfumate.
+
+    NX-384 (`kernel.v7.0`, setul wide-2026-10-07): un FEL de produs spus în tur, pe care
+    vocabularul nu-l are (schimbarea modelului era pe tip sau pe raft, validatorul a dus-o pe
+    `unmapped`: «rimel», «iluminator»), e capul textului ca un tip numit, înaintea unei fațete
+    spuse (pe `main`, «un rimel pentru ten sensibil» căuta «ten sensibil»). Lângă un tip din stare
+    (`type_label`) doar se adaugă etichetei: o valoare pusă greșit pe tip («mat») nu înlocuiește
+    subiectul."""
     stop = stopwords(locale)
     # (dimensiune, relație, proveniență, cuvintele care au numit valoarea, valoarea de text,
     # cuvintele citatului, cuvintele citatului în forma scrisă de client)
@@ -283,6 +290,19 @@ def _read_act_query(
         for w in surface(m, raw)
     ]
     unmapped = [v for d, _r, _p, _m, v, _q, _raw in live if d == UNMAPPED_KEY and v]
+    # NX-384: felul spus în tur pe care vocabularul nu-l are (schimbarea modelului pe tip/raft,
+    # dusă de validator pe `unmapped`); doar pe schimbările ACCEPTATE, `avoid` exclus
+    kinds = [
+        str(c.canonical_value)
+        for c in checked or ()
+        if c.rejected is None
+        and c.strength != "ranking"
+        and c.dimension == UNMAPPED_KEY
+        and c.change.dimension in _SUBJECT_WORDS
+        and (c.change.relation or "eq") not in _NEGATIVE
+        and isinstance(c.canonical_value, str)
+        and c.canonical_value
+    ]
     negated = {w for _d, r, _p, _m, _v, q, _raw in items if r in _NEGATIVE for w in q}
     # NX-349 (recenzia): cuvintele unei fațete da/nu ies din rezervă, chiar și când schimbarea a
     # fost respinsă. Doar fraza care a numit-o (`matched`, cu negația ei), altfel citatul;
@@ -317,9 +337,17 @@ def _read_act_query(
 
         return " ".join(sorted(unique, key=position))
 
-    head = type_words or ([type_label] if type_label else []) or shelf_words
+    others = [*(w for w in unmapped if w not in kinds), *gapped]
+    if type_words:
+        head = [*type_words, *gapped]
+    elif kinds and not type_label:
+        # ca pe rezerva NX-352 a termenilor nemapați: felul, plus restul cuvintelor nemapate
+        head = [*kinds, *others]
+    else:
+        said = ([type_label] if type_label else []) or shelf_words
+        head = [*said, *kinds, *gapped] if said else ([*kinds, *others] if kinds else [])
     candidates = (
-        [*head, *gapped] if head else [],
+        head,
         [*named_filters, *gapped],
         [*unmapped, *gapped],
         [shelf_label, *gapped] if shelf_label else [],

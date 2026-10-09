@@ -84,7 +84,14 @@ from src.tools.catalog_tools import SearchArgs
 #: produs (o țintă `name`, sau o referință `name` nefolosită de altceva) e servit după resolver:
 #: `exact` ⇒ `detail` pe id-ul recitit, `ambiguous` pe ≤ 3 candidați ⇒ `detail` pe toți, altfel
 #: căutarea pe NUMELE ei, doar cu filtrele turului (golul `name_unscoped`). Schema neschimbată.
-KERNEL_CONTRACT_VERSION = "kernel.v6.2"
+#: `kernel.v7.0` (NX-384, MAJOR, „repară tot", Adi, 2026-10-08; turele wide-2026-10-07):
+#: (1) un fel spus în tur pe care vocabularul nu-l are (dus pe `unmapped` de validator) e capul
+#: textului căutării, ca un tip numit (lângă un tip din stare doar se adaugă etichetei); (2) pe
+#: calea planificată un text făcut doar din numele raftului nu mai e dovadă împotriva raftului
+#: (garda NX-313), în afara unui omograf NX-319; (3) `avoid` pe raft sau pe tip e excludere, nu
+#: subiect. Poarta de replay e DEROGATĂ (ca la v2.0-v6.0), declarat în card. Schema scrisă de
+#: model neschimbată.
+KERNEL_CONTRACT_VERSION = "kernel.v7.0"
 
 # --- scrise de model ----------------------------------------------------------------------------
 

@@ -194,6 +194,15 @@ pe modul conversației, mutațiile scoase din scheme și refuzate la `execute`, 
 Turul căzut rămâne turul cu flagul stins (I16) în afara unei mutații cerute. Dark-ul rămâne neatins. Card:
 [`tasks/stage1/NX-383.md`](tasks/stage1/NX-383.md); probă:
 `pytest tests/test_nx383_no_mutation_after_kernel.py -q`.
+**NX-384 — `kernel.v7.0` (MAJOR): ce a înțeles modelul nu se mai pierde în textul căutării.** Din
+turele wide-2026-10-07 „interpretarea bună, codul a stricat-o": (1) un fel spus pe care vocabularul
+nu-l are («rimel», dus pe `unmapped`) e capul textului ca un tip numit (lângă un tip din stare doar se
+adaugă); (2) pe calea planificată un text făcut doar din numele raftului nu mai e dovadă împotriva
+raftului pentru garda NX-313 (`query_names_only_shelf`, `category_query_is_shelf`), în afara unui
+omograf NX-319; (3) `avoid` pe raft sau pe tip e excludere, nu subiect («nu vreau creme»). O regulă de
+moștenire a sesiunii pe rafinări a fost scoasă la recenzie (pagina 2 a setului vechi, retrageri
+ignorate). Card: [`tasks/stage1/NX-384.md`](tasks/stage1/NX-384.md); probă:
+`pytest tests/test_nx384_subject_and_query.py -q`.
 **NX-334 — direcția unei limite numerice ajunge neschimbată în stare.** Pe pașii 3a/3b «minim 256
 GB» se persista `storage lte 256`: delta păstra relația doar pe preț, iar orice fațetă numerică era
 plafon. Acum o dimensiune numerică are DOUĂ chei, ca bugetul (`<fațetă>_min` / `<fațetă>_max`,
