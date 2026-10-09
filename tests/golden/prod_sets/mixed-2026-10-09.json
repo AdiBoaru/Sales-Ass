@@ -1,0 +1,736 @@
+{
+  "version": "mixed-2026-10-09",
+  "note": "scris de un agent fără acces la cod, analize, carduri sau seturile anterioare (doar formatul); 30 de conversații amestecate, `expect` și `routine_target` per tur",
+  "conversations": [
+    {
+      "id": "m1_ten_gras_seara",
+      "covers": "rutină de seară cu zona spusă prin tipul de ten și buget total, apoi o întrebare despre un pas și înlocuirea unui produs cu unul mai ieftin",
+      "turns": [
+        {
+          "message": "buna, am tenul gras si porii mari. vreau o rutina de seara, maxim 200 lei tot",
+          "expect": "Propune o rutină de seară pentru ten gras (curățare, eventual tonifiere, un tratament/ser, cremă ușoară) cu produse din catalog al căror total nu depășește 200 lei; fără SPF, fiindcă e seară, și spune totalul.",
+          "routine_target": "said"
+        },
+        {
+          "message": "si demachiant trebuie? nu ma machiez",
+          "expect": "Răspunde direct că fără machiaj o curățare obișnuită e de regulă suficientă și că demachiantul nu e obligatoriu; păstrează rutina propusă, fără o rutină nouă.",
+          "routine_target": "none"
+        },
+        {
+          "message": "crema din rutina mi se pare cam scumpa, ai alta mai ieftina?",
+          "expect": "Arată una sau câteva creme ușoare pentru ten gras mai ieftine decât crema din rutină; restul pașilor rămân, iar totalul nou rămâne sub 200 lei.",
+          "routine_target": "none"
+        },
+        {
+          "message": "perfect, multumesc",
+          "expect": "Încheie scurt și politicos, fără să mai propună produse noi.",
+          "routine_target": "none"
+        }
+      ]
+    },
+    {
+      "id": "m2_rutina_fara_zona",
+      "covers": "cerere de rutină fără zonă, răspuns cu tipul de ten, apoi totalul și scoaterea unui pas",
+      "turns": [
+        {
+          "message": "vreau si eu o rutina",
+          "expect": "Pune o singură întrebare scurtă: pentru ce zonă (ten, păr, corp, machiaj) și eventual tipul de piele; nu propune încă produse la întâmplare.",
+          "routine_target": "unclear"
+        },
+        {
+          "message": "pt fata. am ten mixt si mai fac cosuri",
+          "expect": "Propune o rutină de ten pentru ten mixt cu tendință acneică (curățare, toner sau tratament, cremă, SPF dimineața), cu produse din catalog.",
+          "routine_target": "answer"
+        },
+        {
+          "message": "cat ar iesi in total?",
+          "expect": "Dă totalul produselor din rutina propusă, calculat din prețurile lor din catalog.",
+          "routine_target": "none"
+        },
+        {
+          "message": "scoate tonerul ca nu folosesc",
+          "expect": "Elimină pasul de toner, păstrează restul rutinei și recalculează totalul; nu înlocuiește tonerul cu alt produs nesolicitat.",
+          "routine_target": "none"
+        }
+      ]
+    },
+    {
+      "id": "m3_pete_alege_tu",
+      "covers": "rutină pornită doar de o problemă (pete) fără zonă, clientul lasă alegerea botului, apoi un ingredient dorit și compatibilitatea",
+      "turns": [
+        {
+          "message": "am pete pigmentare si as vrea o rutina",
+          "expect": "Întreabă o dată, scurt, unde sunt petele (față, corp) ca să știe ce rutină propune.",
+          "routine_target": "unclear"
+        },
+        {
+          "message": "nu stiu, alege tu",
+          "expect": "Nu mai întreabă: alege zona cea mai probabilă (tenul), spune asta într-o propoziție și propune o rutină pentru pete cu protecție solară dimineața, din catalog.",
+          "routine_target": "answer"
+        },
+        {
+          "message": "am auzit ca vitamina c e buna, aveti ceva cu asa ceva?",
+          "expect": "Recomandă un ser cu vitamina C din catalog sau spune onest că nu are; îl poate propune ca pas în rutina existentă, fără să facă o rutină nouă.",
+          "routine_target": "none"
+        },
+        {
+          "message": "il pot folosi impreuna cu restul ce mi-ai dat?",
+          "expect": "Explică pe scurt, din fișele produselor, în ce moment și ordine se folosește serul în rutina propusă; fără afirmații medicale.",
+          "routine_target": "none"
+        }
+      ]
+    },
+    {
+      "id": "m4_par_uscat_ulei",
+      "covers": "rutină de păr cu starea părului spusă, rafinare pe păr vopsit, apoi un produs adăugat separat care nu e rutină nouă",
+      "turns": [
+        {
+          "message": "Buna ziua. Imi puteti recomanda o rutina pentru par uscat cu varfuri despicate?",
+          "expect": "Propune o rutină de păr pentru păr uscat (șampon, balsam, mască, eventual un tratament pentru vârfuri) cu produse din catalog.",
+          "routine_target": "said"
+        },
+        {
+          "message": "Mentionez ca am parul vopsit, conteaza?",
+          "expect": "Verifică produsele propuse pentru păr vopsit: le păstrează pe cele potrivite conform fișei, le înlocuiește pe celelalte sau spune onest unde nu poate verifica.",
+          "routine_target": "none"
+        },
+        {
+          "message": "As mai lua separat si un ulei pentru varfuri",
+          "expect": "Recomandă un ulei de păr pentru vârfuri ca produs adăugat la rutină; nu reface rutina și nu o tratează ca pe o rutină nouă.",
+          "routine_target": "none"
+        },
+        {
+          "message": "Cum se aplica?",
+          "expect": "Explică modul de folosire al uleiului recomandat, din fișa lui (de exemplu pe păr umed sau uscat, cantitate).",
+          "routine_target": "none"
+        }
+      ]
+    },
+    {
+      "id": "m5_dimineata_pasi_numiti",
+      "covers": "rutină de dimineață cu pașii numiți de client, apoi excludere de parfum și o verificare de SPF",
+      "turns": [
+        {
+          "message": "vreau rutina de dimineata pt ten sensibil: un demachiant, un toner si o crema cu spf. ceva simplu",
+          "expect": "Propune exact cei trei pași ceruți (curățare, toner, cremă cu SPF) pentru ten sensibil; nu adaugă ser sau alți pași nesolicitați.",
+          "routine_target": "said"
+        },
+        {
+          "message": "fara parfum toate pls, ma inrosesc repede",
+          "expect": "Păstrează sau înlocuiește produsele astfel încât să fie fără parfum conform fișei; spune onest dacă pentru vreunul nu poate verifica asta.",
+          "routine_target": "none"
+        },
+        {
+          "message": "spf ul e macar 30?",
+          "expect": "Spune valoarea SPF a cremei propuse din fișă; dacă e sub 30 sau necunoscută, oferă o variantă cu SPF de cel puțin 30.",
+          "routine_target": "none"
+        }
+      ]
+    },
+    {
+      "id": "m6_piele_uscata_ambele",
+      "covers": "rutină pentru piele uscată fără zonă, răspunsul „ambele”, apoi reducerea numărului de pași pe o zonă",
+      "turns": [
+        {
+          "message": "rutina pentru piele uscata?",
+          "expect": "Întreabă o dată, scurt, dacă e vorba de ten, de corp sau de amândouă.",
+          "routine_target": "unclear"
+        },
+        {
+          "message": "ambele",
+          "expect": "Propune două rutine scurte, clar separate, una pentru ten uscat și una pentru corp uscat, cu produse din catalog.",
+          "routine_target": "answer"
+        },
+        {
+          "message": "la corp vreau doar 2 produse nu 4",
+          "expect": "Reduce rutina de corp la două produse (de exemplu un gel de duș blând și o loțiune sau cremă hidratantă); rutina de ten rămâne neschimbată.",
+          "routine_target": "none"
+        }
+      ]
+    },
+    {
+      "id": "m7_renunta_la_rutina",
+      "covers": "cerere vagă de rutină completă, clientul renunță la întrebare și cere un singur produs, apoi rafinează formatul",
+      "turns": [
+        {
+          "message": "salut! vreau o rutina completa",
+          "expect": "Întreabă scurt pentru ce zonă vrea rutina (ten, păr, corp, machiaj).",
+          "routine_target": "unclear"
+        },
+        {
+          "message": "lasa rutina, de fapt am nevoie doar de o crema de maini ca am mainile crapate de la frig",
+          "expect": "Renunță la rutină fără să insiste și recomandă creme de mâini pentru piele foarte uscată sau crăpată din catalog.",
+          "routine_target": "answer"
+        },
+        {
+          "message": "una mica de pus in geanta",
+          "expect": "Arată creme de mâini în format mic din catalog sau spune onest că nu are format mic și oferă cea mai apropiată variantă.",
+          "routine_target": "none"
+        }
+      ]
+    },
+    {
+      "id": "m8_corp_apoi_balsam_buze",
+      "covers": "rutină de corp cu buget, întrebare despre frecvență, apoi un produs separat adăugat în coș",
+      "turns": [
+        {
+          "message": "as vrea o rutina de corp, am pielea aspra pe brate si picioare. buget 150 lei",
+          "expect": "Propune o rutină de corp pentru piele aspră (gel de duș, exfoliant sau scrub, loțiune/cremă) cu totalul de cel mult 150 lei, spunând totalul.",
+          "routine_target": "said"
+        },
+        {
+          "message": "scrubul il folosesc zilnic?",
+          "expect": "Spune frecvența din fișa scrubului; dacă fișa nu o spune, dă un sfat general de folosire (de câteva ori pe săptămână), fără afirmații medicale.",
+          "routine_target": "none"
+        },
+        {
+          "message": "acum altceva, un balsam de buze bun",
+          "expect": "Recomandă balsamuri de buze ca produs separat; nu face o rutină nouă și nu pierde rutina de corp de mai devreme.",
+          "routine_target": "none"
+        },
+        {
+          "message": "adauga primul balsam in cos",
+          "expect": "Adaugă în coș primul balsam de buze arătat și confirmă care produs a fost adăugat.",
+          "routine_target": "none"
+        }
+      ]
+    },
+    {
+      "id": "m9_crema_ten_mixt_buget",
+      "covers": "căutare de cremă cu tip de ten, buget, „mai ieftin” și „mai arată-mi altele”",
+      "turns": [
+        {
+          "message": "crema hidratanta ptr ten mixt",
+          "expect": "Arată creme hidratante potrivite pentru ten mixt din catalog.",
+          "routine_target": "none"
+        },
+        {
+          "message": "sub 100 lei",
+          "expect": "Păstrează cererea (cremă hidratantă, ten mixt) și arată doar produse de cel mult 100 lei.",
+          "routine_target": "none"
+        },
+        {
+          "message": "ceva si mai ieftin?",
+          "expect": "Arată creme hidratante pentru ten mixt mai ieftine decât cele deja arătate; nu sare la alt tip de produs mai ieftin.",
+          "routine_target": "none"
+        },
+        {
+          "message": "mai arata mi altele",
+          "expect": "Arată alte creme hidratante pentru ten mixt sub 100 lei, fără să le repete pe cele deja arătate; dacă nu mai sunt, spune onest.",
+          "routine_target": "none"
+        }
+      ]
+    },
+    {
+      "id": "m10_sampon_par_gras",
+      "covers": "șampon cu excludere de ingredient, „altele”, rafinare cu o a doua problemă și un accesoriu de păr",
+      "turns": [
+        {
+          "message": "sampon pt par gras fara sulfati",
+          "expect": "Arată șampoane pentru păr gras fără sulfați conform fișei; dacă nu poate verifica lipsa sulfaților, spune onest.",
+          "routine_target": "none"
+        },
+        {
+          "message": "altele?",
+          "expect": "Arată alte șampoane cu aceleași criterii, fără să repete produsele deja arătate.",
+          "routine_target": "none"
+        },
+        {
+          "message": "a si am si matreata uneori",
+          "expect": "Rafinează: șampon pentru păr gras cu mătreață, păstrând cerința fără sulfați dacă se poate; dacă nu există produs care le îndeplinește pe amândouă, spune compromisul.",
+          "routine_target": "none"
+        },
+        {
+          "message": "ok si o perie buna de descurcat",
+          "expect": "Arată perii de descurcat din catalog sau spune onest că nu are.",
+          "routine_target": "none"
+        }
+      ]
+    },
+    {
+      "id": "m11_cadou_mama",
+      "covers": "cadou pentru altcineva cu buget, rafinare pe tip de produs și ten, seturi cadou și o întrebare de serviciu",
+      "turns": [
+        {
+          "message": "caut un cadou pt mama, are 55 de ani, pana in 150 lei",
+          "expect": "Propune câteva idei de cadou de cel mult 150 lei (de exemplu un set sau o cremă pentru ten matur) sau pune o întrebare scurtă despre ce îi place.",
+          "routine_target": "none"
+        },
+        {
+          "message": "ii plac cremele, are tenul uscat",
+          "expect": "Arată creme pentru ten matur și uscat de cel mult 150 lei.",
+          "routine_target": "none"
+        },
+        {
+          "message": "aveti si seturi cadou?",
+          "expect": "Arată seturi cadou din catalog, de preferat potrivite pentru ten uscat și sub 150 lei, sau spune onest că nu are.",
+          "routine_target": "none"
+        },
+        {
+          "message": "faceti si ambalaj de cadou?",
+          "expect": "Răspunde din regulile magazinului dacă există informația; altfel spune onest că nu știe, fără să inventeze un serviciu.",
+          "routine_target": "none"
+        }
+      ]
+    },
+    {
+      "id": "m12_tata_dupa_ras",
+      "covers": "produs pentru bărbați cumpărat pentru altcineva, excludere de alcool, apoi un al doilea produs pentru aceeași persoană",
+      "turns": [
+        {
+          "message": "Vreau ceva pentru tatal meu dupa barbierit, are pielea iritata",
+          "expect": "Recomandă produse de după ras sau calmante pentru bărbați din catalog sau spune onest că nu are.",
+          "routine_target": "none"
+        },
+        {
+          "message": "fara alcool ca il ustura",
+          "expect": "Păstrează doar produse fără alcool conform fișei; spune onest când nu poate verifica.",
+          "routine_target": "none"
+        },
+        {
+          "message": "si un gel de dus pt el",
+          "expect": "Arată geluri de duș pentru bărbați din catalog; persoana rămâne tatăl clientului.",
+          "routine_target": "none"
+        }
+      ]
+    },
+    {
+      "id": "m13_spf_copil_si_mama",
+      "covers": "protecție solară pentru copil, rafinare, apoi un produs pentru client și totalul a două produse",
+      "turns": [
+        {
+          "message": "protectie solara pt copil de 4 ani",
+          "expect": "Arată produse de protecție solară pentru copii din catalog sau spune onest că nu are.",
+          "routine_target": "none"
+        },
+        {
+          "message": "sa fie rezistenta la apa ca mergem la mare",
+          "expect": "Păstrează doar produsele pentru copii rezistente la apă conform fișei.",
+          "routine_target": "none"
+        },
+        {
+          "message": "si pt mine una de fata, ten gras, sa nu lase urme albe",
+          "expect": "Arată protecții solare de față pentru ten gras care nu lasă film alb conform fișei; produsul pentru copil rămâne separat.",
+          "routine_target": "none"
+        },
+        {
+          "message": "cat costa amandoua?",
+          "expect": "Dă suma pentru cele două produse alese (unul pentru copil, unul pentru client); dacă nu e clar care din fiecare listă, întreabă scurt.",
+          "routine_target": "none"
+        }
+      ]
+    },
+    {
+      "id": "m14_marca_preferata",
+      "covers": "căutare pornită de o marcă preferată, rafinare pe nevoie, apoi lărgirea mărcii",
+      "turns": [
+        {
+          "message": "am folosit cosrx si mi-a placut mult. ce seruri aveti de la ei?",
+          "expect": "Arată seruri COSRX din catalog sau spune onest că nu are marca.",
+          "routine_target": "none"
+        },
+        {
+          "message": "ceva pt pori dilatati",
+          "expect": "Rafinează la seruri COSRX pentru pori dilatați; dacă nu are, spune onest.",
+          "routine_target": "none"
+        },
+        {
+          "message": "nu neaparat cosrx, orice marca coreeana e ok",
+          "expect": "Lărgește la seruri pentru pori dilatați de la alte mărci coreene, păstrând nevoia.",
+          "routine_target": "none"
+        }
+      ]
+    },
+    {
+      "id": "m15_fond_ten_cushion_pudra",
+      "covers": "fond de ten cu tip de ten și nuanță, o întrebare de diferență între tipuri de produs, apoi un produs complementar",
+      "turns": [
+        {
+          "message": "fond de ten pt ten gras cu acoperire mare",
+          "expect": "Arată fonduri de ten pentru ten gras cu acoperire mare din catalog.",
+          "routine_target": "none"
+        },
+        {
+          "message": "nuanta f deschisa, sunt palida rau",
+          "expect": "Arată opțiunile cu nuanțe foarte deschise disponibile sau spune onest dacă nu poate verifica nuanțele.",
+          "routine_target": "none"
+        },
+        {
+          "message": "sau mai bine cushion? care e diferenta",
+          "expect": "Explică pe scurt diferența dintre fond de ten și cushion (textură, acoperire, aplicare) și arată cushion-uri pentru ten gras.",
+          "routine_target": "none"
+        },
+        {
+          "message": "ok si o pudra sa fixez",
+          "expect": "Arată pudre de fixare potrivite pentru ten gras.",
+          "routine_target": "none"
+        }
+      ]
+    },
+    {
+      "id": "m16_machiaj_zi_ochi_sensibili",
+      "covers": "rutină de machiaj cu zona spusă, apoi un produs separat și o rafinare pentru ochi sensibili",
+      "turns": [
+        {
+          "message": "ce pasi imi recomanzi pt un machiaj natural de zi? vreau sa cumpar tot de la voi",
+          "expect": "Propune o rutină scurtă de machiaj natural de zi (de exemplu bază sau cushion ușor, corector, blush, mascara, tint de buze) cu produse din catalog.",
+          "routine_target": "said"
+        },
+        {
+          "message": "mascara sa fie una care nu se intinde",
+          "expect": "Arată mascara rezistentă, care nu se întinde conform fișei, ca înlocuire a pasului de mascara din rutină.",
+          "routine_target": "none"
+        },
+        {
+          "message": "am ochii sensibili si port lentile",
+          "expect": "Rafinează mascara și eventual demachierea pentru ochi sensibili conform fișei; fără afirmații medicale; spune onest când fișa nu menționează.",
+          "routine_target": "none"
+        }
+      ]
+    },
+    {
+      "id": "m17_niacinamida_link",
+      "covers": "întrebări despre un produs arătat: folosire, combinare cu alt ingredient, linkul doar la el",
+      "turns": [
+        {
+          "message": "aratati-mi seruri cu niacinamida",
+          "expect": "Arată seruri cu niacinamidă din catalog.",
+          "routine_target": "none"
+        },
+        {
+          "message": "primul cum se foloseste",
+          "expect": "Explică modul de folosire al primului ser arătat, din fișa lui.",
+          "routine_target": "none"
+        },
+        {
+          "message": "il pot combina cu retinol?",
+          "expect": "Răspunde prudent, din fișă sau cu un sfat general de folosire (de exemplu în momente diferite ale zilei); fără sfat medical.",
+          "routine_target": "none"
+        },
+        {
+          "message": "da-mi linkul la el",
+          "expect": "Dă linkul doar pentru primul ser (cel discutat), nu pentru toate produsele arătate.",
+          "routine_target": "none"
+        }
+      ]
+    },
+    {
+      "id": "m18_contur_ochi_compara",
+      "covers": "comparația a două produse arătate, alegerea celui mai ieftin dintre ele în coș, apoi costul livrării",
+      "turns": [
+        {
+          "message": "crema de ochi pt cearcane",
+          "expect": "Arată creme de contur ochi pentru cearcăne din catalog.",
+          "routine_target": "none"
+        },
+        {
+          "message": "compara primul cu al doilea",
+          "expect": "Compară primele două produse arătate pe criterii din fișă (ingrediente, textură, preț, pentru ce sunt); nu alege alte produse.",
+          "routine_target": "none"
+        },
+        {
+          "message": "ala mai ieftin dintre ele il iau",
+          "expect": "Identifică produsul mai ieftin dintre cele două comparate, îl adaugă în coș și confirmă care a fost adăugat.",
+          "routine_target": "none"
+        },
+        {
+          "message": "cat e livrarea?",
+          "expect": "Spune costul livrării din regulile magazinului (eventual pragul de livrare gratuită), fără să inventeze.",
+          "routine_target": "none"
+        }
+      ]
+    },
+    {
+      "id": "m19_sarcina_vergeturi",
+      "covers": "context de sarcină: produs, întrebare de siguranță la un produs arătat fără sfat medical, apoi alt produs cu același context",
+      "turns": [
+        {
+          "message": "sunt insarcinata in luna 5 si caut o crema pt vergeturi",
+          "expect": "Arată produse pentru vergeturi din catalog, fără produse cu ingrediente contraindicate în sarcină (de exemplu retinoizi), și recomandă confirmarea cu medicul sau farmacistul; fără afirmații medicale.",
+          "routine_target": "none"
+        },
+        {
+          "message": "al doilea e sigur in sarcina?",
+          "expect": "Nu afirmă că produsul e sigur în sarcină; spune ce scrie în fișă (ingrediente, mențiuni) și trimite la medic sau farmacist pentru confirmare.",
+          "routine_target": "none"
+        },
+        {
+          "message": "si un ulei de corp hidratant",
+          "expect": "Arată uleiuri de corp hidratante, păstrând contextul de sarcină (fără ingrediente contraindicate).",
+          "routine_target": "none"
+        }
+      ]
+    },
+    {
+      "id": "m20_cushion_ingrediente",
+      "covers": "întrebări pe un produs arătat prin ordinal: ingrediente, parfum, nuanțe",
+      "turns": [
+        {
+          "message": "un cushion usor pt ten sensibil",
+          "expect": "Arată cushion-uri ușoare potrivite pentru ten sensibil din catalog.",
+          "routine_target": "none"
+        },
+        {
+          "message": "ce ingrediente are al doilea",
+          "expect": "Listează ingredientele celui de-al doilea cushion arătat, din fișă; dacă fișa nu are lista, spune onest.",
+          "routine_target": "none"
+        },
+        {
+          "message": "are parfum?",
+          "expect": "Răspunde despre parfum pentru același produs (al doilea), din fișă; dacă nu e specificat, spune onest că nu poate confirma.",
+          "routine_target": "none"
+        },
+        {
+          "message": "ce nuante are",
+          "expect": "Spune nuanțele disponibile pentru același cushion sau spune onest că nu are informația.",
+          "routine_target": "none"
+        }
+      ]
+    },
+    {
+      "id": "m21_masca_par_decolorat",
+      "covers": "mască de păr, frecvența de folosire la un produs prin ordinal, apoi o variantă mai ieftină decât el",
+      "turns": [
+        {
+          "message": "masca pt par distrus de decolorare",
+          "expect": "Arată măști de păr reparatoare pentru păr decolorat sau deteriorat din catalog.",
+          "routine_target": "none"
+        },
+        {
+          "message": "a treia cat de des o folosesc?",
+          "expect": "Spune frecvența de folosire a celei de-a treia măști arătate, din fișă; dacă lipsește, un sfat general, marcat ca atare.",
+          "routine_target": "none"
+        },
+        {
+          "message": "ai ceva asemanator dar mai ieftin decat ea?",
+          "expect": "Arată măști pentru păr decolorat mai ieftine decât a treia mască, nu cel mai ieftin produs de păr oarecare.",
+          "routine_target": "none"
+        }
+      ]
+    },
+    {
+      "id": "m22_livrare_cluj_gel",
+      "covers": "întrebări de livrare (cost, termen, prag), un produs la mijloc, apoi plata cu cardul",
+      "turns": [
+        {
+          "message": "cat costa livrarea in cluj si in cate zile ajunge?",
+          "expect": "Răspunde costul și termenul de livrare din regulile magazinului; nu inventează un termen specific orașului dacă regulile nu-l dau.",
+          "routine_target": "none"
+        },
+        {
+          "message": "si daca comand peste 200 lei?",
+          "expect": "Spune dacă există livrare gratuită și de la ce prag, conform regulilor magazinului.",
+          "routine_target": "none"
+        },
+        {
+          "message": "ok atunci vreau si un gel de dus cu miros de fructe",
+          "expect": "Arată geluri de duș cu parfum fructat din catalog sau spune onest că nu are.",
+          "routine_target": "none"
+        },
+        {
+          "message": "pot plati cu cardul la curier?",
+          "expect": "Răspunde din regulile magazinului despre metodele de plată; dacă informația lipsește, spune onest.",
+          "routine_target": "none"
+        }
+      ]
+    },
+    {
+      "id": "m23_retur_ramburs",
+      "covers": "doar reguli de magazin: retur la produs deschis, termen de retur, plata ramburs",
+      "turns": [
+        {
+          "message": "daca deschid un produs si nu imi place il pot returna?",
+          "expect": "Răspunde din regulile de retur ale magazinului pentru produse desfăcute; nu inventează o regulă.",
+          "routine_target": "none"
+        },
+        {
+          "message": "in cate zile?",
+          "expect": "Spune termenul de retur din regulile magazinului.",
+          "routine_target": "none"
+        },
+        {
+          "message": "se poate plati ramburs?",
+          "expect": "Răspunde din regulile magazinului despre plata la livrare; fără să arate produse.",
+          "routine_target": "none"
+        }
+      ]
+    },
+    {
+      "id": "m24_voucher_total_comanda",
+      "covers": "adăugare în coș cu alegere între opțiuni, întrebare despre voucher și totalul comenzii",
+      "turns": [
+        {
+          "message": "pune in cos o apa micelara pt ten sensibil",
+          "expect": "Dacă sunt mai multe ape micelare potrivite, le arată și cere alegerea; nu adaugă una la întâmplare. Dacă e una singură clară, o adaugă și confirmă.",
+          "routine_target": "none"
+        },
+        {
+          "message": "prima",
+          "expect": "Adaugă în coș prima apă micelară arătată și confirmă.",
+          "routine_target": "none"
+        },
+        {
+          "message": "am un cod de reducere, unde il pun?",
+          "expect": "Răspunde din regulile magazinului unde se aplică voucherul (de regulă la finalizarea comenzii) sau spune onest că nu are informația.",
+          "routine_target": "none"
+        },
+        {
+          "message": "cat costa toata comanda acum?",
+          "expect": "Dă totalul produselor din coș și spune clar dacă livrarea și reducerea sunt sau nu incluse.",
+          "routine_target": "none"
+        }
+      ]
+    },
+    {
+      "id": "m25_moldova_toner",
+      "covers": "mesaj cu două cereri (livrare în altă țară și un produs), apoi o întrebare pe produs și o opțiune de livrare",
+      "turns": [
+        {
+          "message": "livrati si in chisinau? si as vrea un toner pt ten gras",
+          "expect": "Răspunde la ambele: livrarea în Republica Moldova din regulile magazinului (sau onest că nu știe) și arată tonere pentru ten gras.",
+          "routine_target": "none"
+        },
+        {
+          "message": "bn atunci trimit la sora mea in iasi. tonerul primul are alcool?",
+          "expect": "Răspunde din fișa primului toner dacă are alcool; dacă fișa nu spune, onest.",
+          "routine_target": "none"
+        },
+        {
+          "message": "se poate in easybox?",
+          "expect": "Răspunde din regulile magazinului despre livrarea la easybox/lockere sau spune onest că nu are informația.",
+          "routine_target": "none"
+        }
+      ]
+    },
+    {
+      "id": "m26_toner_orez_balsam_checkout",
+      "covers": "produs descris vag după popularitate, adăugare în coș, al doilea produs și finalizarea comenzii",
+      "turns": [
+        {
+          "message": "il aveti pe tonerul ala cu orez de pe tiktok?",
+          "expect": "Caută tonere cu extract de orez și le arată, sau spune onest că nu are; nu pretinde că știe exact produsul de pe TikTok.",
+          "routine_target": "none"
+        },
+        {
+          "message": "da pune-l in cos",
+          "expect": "Adaugă tonerul în coș dacă a fost arătat unul singur; dacă au fost mai multe, întreabă care.",
+          "routine_target": "none"
+        },
+        {
+          "message": "si un balsam pt par fin care nu il ingreuneaza",
+          "expect": "Arată balsamuri ușoare pentru păr fin din catalog.",
+          "routine_target": "none"
+        },
+        {
+          "message": "il iau pe primul. gata, cum finalizez comanda?",
+          "expect": "Adaugă primul balsam în coș, confirmă conținutul coșului și explică pașii de finalizare sau dă linkul de checkout.",
+          "routine_target": "none"
+        }
+      ]
+    },
+    {
+      "id": "m27_pasta_dinti_cantitate",
+      "covers": "igienă dentară: adăugare în coș cu cantitate și un produs complementar",
+      "turns": [
+        {
+          "message": "pasta de dinti pt albire aveti?",
+          "expect": "Arată paste de dinți pentru albire din catalog sau spune onest că nu are.",
+          "routine_target": "none"
+        },
+        {
+          "message": "o iau pe prima, pune 2 bucati",
+          "expect": "Adaugă în coș prima pastă arătată în cantitate de 2 și confirmă cantitatea.",
+          "routine_target": "none"
+        },
+        {
+          "message": "si o periuta cu peri moi",
+          "expect": "Arată periuțe de dinți cu peri moi sau spune onest că nu are.",
+          "routine_target": "none"
+        }
+      ]
+    },
+    {
+      "id": "m28_produs_nevandut",
+      "covers": "produse pe care un magazin de cosmetice nu le vinde (electronice, haine), apoi o cerere valabilă",
+      "turns": [
+        {
+          "message": "aveti casti bluetooth?",
+          "expect": "Spune onest că magazinul vinde cosmetice și îngrijire, nu electronice; nu inventează produse și nu arată produse fără legătură ca și cum ar fi răspunsul.",
+          "routine_target": "none"
+        },
+        {
+          "message": "dar tricouri?",
+          "expect": "Spune onest că nu vinde haine; poate menționa scurt ce fel de produse are.",
+          "routine_target": "none"
+        },
+        {
+          "message": "ok atunci un deodorant fara aluminiu",
+          "expect": "Arată deodorante fără săruri de aluminiu conform fișei sau spune onest că nu are.",
+          "routine_target": "none"
+        }
+      ]
+    },
+    {
+      "id": "m29_robot_inapoi_la_seruri",
+      "covers": "small talk, o paranteză cu alt produs și revenirea la serurile de mai devreme, apoi mulțumiri",
+      "turns": [
+        {
+          "message": "buna seara :) esti robot?",
+          "expect": "Răspunde scurt și prietenos că e asistentul virtual al magazinului și întreabă cu ce poate ajuta; fără produse.",
+          "routine_target": "none"
+        },
+        {
+          "message": "vreau un ser pt hidratare intensa",
+          "expect": "Arată seruri hidratante din catalog.",
+          "routine_target": "none"
+        },
+        {
+          "message": "stai, intai zi-mi un gel de curatare bland",
+          "expect": "Arată geluri de curățare blânde pentru ten; ține minte că serul rămâne în discuție.",
+          "routine_target": "none"
+        },
+        {
+          "message": "ok inapoi la seruri, care din alea avea acid hialuronic?",
+          "expect": "Revine la serurile arătate la turul 2 și spune, din fișă, care conțin acid hialuronic; nu răspunde despre gelurile de curățare.",
+          "routine_target": "none"
+        },
+        {
+          "message": "mersi mult, o seara frumoasa",
+          "expect": "Încheie scurt și cald, fără produse noi.",
+          "routine_target": "none"
+        }
+      ]
+    },
+    {
+      "id": "m30_copil_ruj_revenire",
+      "covers": "produse pentru copil, schimbare bruscă de subiect, revenire la primul produs cu o întrebare de stoc, apoi la revedere",
+      "turns": [
+        {
+          "message": "salut, caut un sampon pt fetita mea de 10 ani, sa nu o usture la ochi",
+          "expect": "Arată șampoane pentru copii, blânde cu ochii conform fișei, sau spune onest că nu are.",
+          "routine_target": "none"
+        },
+        {
+          "message": "si un spray de descurcat pt ea ca are parul lung",
+          "expect": "Arată produse de descurcat potrivite pentru copii sau păr lung; păstrează că sunt pentru fetiță.",
+          "routine_target": "none"
+        },
+        {
+          "message": "apropo aveti ruj nude mat?",
+          "expect": "Tratează schimbarea de subiect și arată rujuri nude mate pentru client din catalog.",
+          "routine_target": "none"
+        },
+        {
+          "message": "revin la sampon, primul e pe stoc?",
+          "expect": "Spune disponibilitatea primului șampon arătat la turul 1, nu a unui ruj sau a spray-ului.",
+          "routine_target": "none"
+        },
+        {
+          "message": "ok mersi pa",
+          "expect": "Încheie scurt și politicos.",
+          "routine_target": "none"
+        }
+      ]
+    }
+  ]
+}

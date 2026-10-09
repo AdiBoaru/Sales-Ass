@@ -50,6 +50,32 @@ def load_set(path: Path) -> dict[str, Any]:
     return doc
 
 
+#: Câte reluări primește o cerere oprită la proxy și cât se așteaptă între ele. Traefik scoate
+#: singurul backend din rotație după o probă `/health/ready` picată, până la proba următoare
+#: (10 s), și răspunde atunci „Service Unavailable" ca text simplu (2026-10-09: două rulări au
+#: pierdut 11 și 18 conversații așa). O astfel de cerere n-a ajuns la aplicație, deci reluarea nu
+#: dublează nimic.
+PROXY_RETRIES = 3
+PROXY_WAIT_S = 12.0
+
+
+def _proxy_unavailable(r: Any) -> bool:
+    """503 de la proxy (text simplu), nu de la aplicație (care răspunde JSON)."""
+    return r.status_code == 503 and not r.headers.get("content-type", "").startswith(
+        "application/json"
+    )
+
+
+def _send(fn: Any, *args: Any, **kwargs: Any) -> Any:
+    for attempt in range(PROXY_RETRIES + 1):
+        r = fn(*args, **kwargs)
+        if not _proxy_unavailable(r) or attempt == PROXY_RETRIES:
+            return r
+        print(f"  proxy 503, reiau în {PROXY_WAIT_S:.0f} s", flush=True)
+        time.sleep(PROXY_WAIT_S)
+    return r
+
+
 def _run_conversation(base: str, token: str, conv: dict[str, Any]) -> dict[str, Any]:
     import httpx  # noqa: PLC0415 — doar rularea reală are nevoie de rețea
 
@@ -57,7 +83,9 @@ def _run_conversation(base: str, token: str, conv: dict[str, Any]) -> dict[str, 
     turns: list[dict[str, Any]] = []
     with httpx.Client(timeout=200) as c:
         try:
-            s = c.get(f"{base}/web/bootstrap", params={"token": token}, headers=headers).json()
+            s = _send(
+                c.get, f"{base}/web/bootstrap", params={"token": token}, headers=headers
+            ).json()
             s["token"], s["visitor_id"], s["sig"]  # noqa: B018 — forma sesiunii, verificată aici
         except Exception as e:  # noqa: BLE001 — conversația pică, setul continuă și se raportează
             return {"visitor_id": None, "error": f"bootstrap: {type(e).__name__}", "turns": []}
@@ -65,7 +93,8 @@ def _run_conversation(base: str, token: str, conv: dict[str, Any]) -> dict[str, 
             started = datetime.now(UTC).isoformat()
             t0 = time.monotonic()
             try:
-                r = c.post(
+                r = _send(
+                    c.post,
                     f"{base}/web/chat",
                     headers=headers,
                     json={
@@ -136,6 +165,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--base", default=BASE)
     p.add_argument("--token", default=TOKEN)
     p.add_argument("--parallel", type=int, default=3)
+    p.add_argument(
+        "--only",
+        default="",
+        help="id-uri de conversație separate prin virgulă (reluarea celor picate dintr-o rulare)",
+    )
     p.add_argument("--yes", action="store_true", help="rulează pe producție (consumă credite)")
     p.add_argument(
         "--final",
@@ -150,6 +184,12 @@ def main(argv: list[str] | None = None) -> int:
         )
     doc = load_set(args.set)
     convs = doc["conversations"]
+    if args.only:
+        wanted = {x.strip() for x in args.only.split(",") if x.strip()}
+        unknown = wanted - {c["id"] for c in convs}
+        if unknown:
+            p.error(f"id-uri necunoscute în set: {sorted(unknown)}")
+        convs = [c for c in convs if c["id"] in wanted]
     n_turns = sum(len(c["turns"]) for c in convs)
     if not args.yes:
         print(f"dry-run: {doc.get('version')} · {len(convs)} conversații · {n_turns} ture")
