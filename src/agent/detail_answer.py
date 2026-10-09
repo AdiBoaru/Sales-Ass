@@ -209,15 +209,25 @@ def _numbers_grounded(answer: str, facts: str, units: frozenset[str]) -> bool:
 
 
 def check_answer(
-    answer: str, product: dict[str, Any], facts: str, units: frozenset[str] = frozenset({"%"})
+    answer: str,
+    product: dict[str, Any] | list[dict[str, Any]],
+    facts: str,
+    units: frozenset[str] = frozenset({"%"}),
+    grounded_prices: frozenset[float] = frozenset(),
+    *,
+    check_stock: bool = True,
 ) -> Verdict:
     """Poarta de adevăr a răspunsului, legată de fișă. PURĂ (în afara flagurilor citite de
-    porțile refolosite din `validator`)."""
+    porțile refolosite din `validator`). `product` = produsul răspunsului sau produsele unui text
+    care le numește pe mai multe (NX-382): prețul și stocul se judecă pe oricare dintre ele.
+    `grounded_prices` = sumele din alte fapte ale turului (pragul de livrare dintr-o regulă a
+    magazinului, NX-382 faza 2). `check_stock=False` doar pe un răspuns despre magazin (o regulă
+    nu e o afirmație de stoc); altfel, fără produse, orice afirmație de stoc e nefondată."""
+    products = [p for p in (product if isinstance(product, list) else [product]) if p]
     from src.agent.validator import (  # noqa: PLC0415 — ciclul validator ↔ agent
         _links_ok,
         _prices_ok,
         _safety_ok,
-        _stock_claim_ok,
     )
 
     text = (answer or "").strip()
@@ -227,13 +237,30 @@ def check_answer(
         return Verdict(False, "medical_claim")
     if not _links_ok(text, [], None):
         return Verdict(False, "invented_link")
-    if not _prices_ok(text, [product], None):
+    # NX-382 (recenzia): prețul de listă și prețul cu voucher sunt în fapte, deci și în răspuns
+    extra = {
+        float(p[k])
+        for p in products
+        for k in ("list_price", "coupon_price")
+        if isinstance(p.get(k), int | float) and not isinstance(p.get(k), bool)
+    }
+    if not _prices_ok(text, products, extra | set(grounded_prices)):
         return Verdict(False, "ungrounded_price")
     if not _numbers_grounded(text, facts, units):
         return Verdict(False, "ungrounded_number")
-    if not _stock_claim_ok(text, [product]):
+    if check_stock and _unfounded_stock_claim(text, products):
         return Verdict(False, "stock_claim")
     return Verdict(True)
+
+
+def _unfounded_stock_claim(text: str, products: list[dict[str, Any]]) -> bool:
+    """O afirmație de stoc („pe stoc", „disponibil") fără niciun produs al turului disponibil. Pe
+    calea compozitorului se judecă MEREU (NX-382, recenzia fazei 2): poarta validatorului
+    (`_stock_claim_ok`) e sub un flag stins implicit, deci nu prindea nimic."""
+    from src.agent.validator import _stock_available  # noqa: PLC0415
+    from src.worker.text_scrub import has_stock_claim  # noqa: PLC0415
+
+    return has_stock_claim(text) and not _stock_available(products)
 
 
 async def answer_question(

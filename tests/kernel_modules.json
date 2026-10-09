@@ -48,7 +48,9 @@
       "modules": [
         "src/agent/interpreted_turn.py",
         "src/agent/kernel_executors.py",
-        "src/worker/kernel_commit.py"
+        "src/worker/kernel_commit.py",
+        "src/agent/composer.py",
+        "src/agent/detail_answer.py"
       ]
     }
   },

@@ -133,6 +133,7 @@ KERNEL_EXECUTOR_EVENTS: frozenset[str] = frozenset(
         "kernel_second_plan_failed",
         "kernel_i10_blocked",
         "detail_question",  # NX-381: măsurătoarea răspunsului rămâne și pe un tur căzut
+        "composer",  # NX-382: idem pentru compozitor
     }
 )
 #: Politica de răspuns a orchestratorului pe produsele unei comparații: (partenerii adăugați de
@@ -502,7 +503,8 @@ async def _search(
             # aceeași amprentă ca sesiunea activă, pool epuizat: nu e „nu am găsit în catalog"
             return False
         # confirmarea unei nevoi implicite, cu setul gol, e chiar răspunsul (cardul §5)
-        text = _confirmation(outcome) or _required_sentence(ctx, "no_results")
+        text = _confirmation(outcome) or await _composed_no_results(ctx, deps, plan)
+        text = text or _required_sentence(ctx, "no_results")
         ctx.retrieval = RetrievalResult(products=[], source="kernel", catalog_read=True)
         ctx.set_reply(text, cacheable=False)
         return True
@@ -527,18 +529,66 @@ async def _page(ctx: TurnContext, deps: PipelineDeps) -> bool:
 
 
 async def _ask(ctx: TurnContext, deps: PipelineDeps, plan: TurnPlan, outcome: GateOutcome) -> bool:
+    """Întrebarea porții. NX-382 faza 2: o formulează compozitorul (întrebarea porții și opțiunile
+    ei sunt obligația `ask`), cu candidații ca carduri; pe orice eșec, șablonul pachetului. Memoria
+    întrebării (I11) se scrie după `pending_question`, nu după text, deci formularea nu o atinge."""
     question = outcome.decision.question
     if not question:
         return False
-    ctx.set_clarify(question, field="kernel", resume_route="sales")
     ids = list(plan.product_ids)
-    if ids and ctx.reply is not None:
+    rows: list[dict[str, Any]] = []
+    if ids:
         async with deps.db("kernel_ask_candidates") as conn:
             rows = await get_products_by_ids(conn, ctx.business.id, ids, limit=len(ids))
         rows = SafetyPolicy.for_turn(ctx).gate(ctx, rows, purpose="kernel_ask")[0]
-        if rows:
-            ctx.reply.products = _card_products(rows, n=len(rows))
+    text = question
+    if get_settings().composer_ask_enabled:
+        from src.agent import composer  # noqa: PLC0415 — ciclul agent ↔ executori
+        from src.worker.context import conversation_transcript  # noqa: PLC0415
+
+        inp = composer.ComposeInput(
+            task="ask",
+            products=rows,
+            obligations=[composer.Obligation("ask", {"question_to_ask": question})],
+        )
+        history = conversation_transcript(ctx.history, consumer="composer")
+        composed, _reason = await composer.compose(ctx, deps, inp, history=history)
+        if composed is not None:
+            text = composed.served
+    ctx.set_clarify(text, field="kernel", resume_route="sales")
+    if rows and ctx.reply is not None:
+        ctx.reply.products = _card_products(rows, n=len(rows))
     return True
+
+
+async def _composed_no_results(ctx: TurnContext, deps: PipelineDeps, plan: TurnPlan) -> str | None:
+    """NX-382 faza 2: „n-am găsit" scris de compozitor, din ce s-a căutat (textul, raftul,
+    nevoile, bugetul planului), ca să spună concret ce lipsește și încotro s-o ia. `None` = fraza
+    pachetului (flag stins sau model picat)."""
+    if not get_settings().composer_no_results_enabled or plan.search_args is None:
+        return None
+    from src.agent import composer  # noqa: PLC0415 — ciclul agent ↔ executori
+    from src.worker.context import conversation_transcript  # noqa: PLC0415
+
+    args = plan.search_args
+    # cuvintele cererii, nu cheile de catalog (un cod de raft sau de nevoie ar ajunge la client)
+    searched = {
+        k: v
+        for k, v in {
+            "words": args.query,
+            "brand": args.brand,
+            "price_max": args.price_max,
+            "cheaper_half_only": True if args.price_band else None,
+            "excluded": sorted({str(x) for vals in (args.exclude or {}).values() for x in vals}),
+        }.items()
+        if v not in (None, "", [])
+    }
+    inp = composer.ComposeInput(
+        task="no_results", obligations=[composer.Obligation("nothing_found", searched)]
+    )
+    history = conversation_transcript(ctx.history, consumer="composer")
+    composed, _reason = await composer.compose(ctx, deps, inp, history=history)
+    return composed.served if composed is not None else None
 
 
 @dataclass(frozen=True)
@@ -783,6 +833,83 @@ async def _answer_detail(
     return ctx.reply is not None
 
 
+#: NX-382: pașii următori oferiți sub un detaliu; modelul îi formulează în limba clientului.
+_DETAIL_MOVES = (
+    "see what customers say about it",
+    "get the link to this product",
+    "compare it with a similar product",
+)
+
+
+async def _compose_detail(
+    ctx: TurnContext, deps: PipelineDeps, product_id: str, question: str | None
+) -> bool:
+    """NX-382 faza 1: un `detail` pe UN produs, scris de compozitorul unic (cu sau fără
+    întrebare). Produsul se citește și trece prin poarta de siguranță O SINGURĂ dată (I1: id-ul vine
+    din plan). Orice eșec al modelului servește fișa de azi pe ACELAȘI produs (`gated`); pe un
+    claim medical respins, cu trimiterea la medic sau farmacist înainte."""
+    from src.agent import composer  # noqa: PLC0415 — ciclul agent ↔ executori
+    from src.safety.messages import refer_sentence  # noqa: PLC0415
+    from src.worker.context import conversation_transcript  # noqa: PLC0415
+
+    async with deps.db("composer_detail_product") as conn:
+        products = await get_products_by_ids(conn, ctx.business.id, [product_id], limit=1)
+    products = SafetyPolicy.for_turn(ctx).gate(ctx, products, purpose="detail_intent")[0]
+    if products:
+        inp = composer.ComposeInput(
+            task="detail", products=products, question=question, offered_moves=_DETAIL_MOVES
+        )
+        history = conversation_transcript(ctx.history, consumer="composer")
+        composed, reason = await composer.compose(ctx, deps, inp, history=history)
+        if composed is not None:
+            ctx.retrieval = RetrievalResult(products=products, source="composer_detail")
+            ctx.set_reply(composed.served, products=_card_products(products, n=1), cacheable=False)
+            ctx.reply.suggestions = list(composed.suggestions)
+            return True
+        # trimiterea la medic doar când clientul a ÎNTREBAT ceva (recenzia NX-382: fișa unui
+        # produs pentru acnee nu e o întrebare de sănătate)
+        if reason == "medical_claim" and question:
+            refer = refer_sentence(ctx.language)
+            await det.serve_details(ctx, deps, product_id, lead=lambda _p: refer, gated=products)
+            return ctx.reply is not None
+    await det.serve_details(ctx, deps, product_id, gated=products)
+    return ctx.reply is not None
+
+
+async def _compose_store_info(ctx: TurnContext, deps: PipelineDeps) -> bool:
+    """NX-382 faza 2: o întrebare despre magazin, scrisă de compozitor din regulile ACTIVE (aduse
+    de cod, întregi, ca unealta `faq_lookup`). `False` = bucla restrânsă de azi (nicio regulă,
+    citire picată, model picat sau răspuns respins). Turul n-a citit catalogul (paranteza
+    NX-326)."""
+    from src.agent import composer  # noqa: PLC0415 — ciclul agent ↔ executori
+    from src.tools.faq_tools import load_rules  # noqa: PLC0415
+    from src.worker.context import conversation_transcript  # noqa: PLC0415
+
+    try:
+        rows = await load_rules(ctx, deps)
+    except Exception as e:  # noqa: BLE001 — P6: bucla de azi rămâne răspunsul
+        ctx.emit("composer", task="store_info", outcome="rules_failed", error=type(e).__name__)
+        return False
+    if not rows:
+        return False
+    rules = [f"{r['question'].strip()} -> {r['answer'].strip()}" for r in rows]
+    inp = composer.ComposeInput(task="store_info", store_rules=rules)
+    history = conversation_transcript(ctx.history, consumer="composer")
+    composed, _reason = await composer.compose(ctx, deps, inp, history=history)
+    if composed is None:
+        return False
+    ctx.retrieval = RetrievalResult(
+        products=[],
+        source="composer_store_info",
+        catalog_read=False,
+        read_beyond_catalog=True,
+        store_only=True,
+        store_read_ok=True,
+    )
+    ctx.set_reply(composed.served, cacheable=False)
+    return True
+
+
 def _confirmation(outcome: GateOutcome) -> str | None:
     question = outcome.decision.question
     return question if outcome.asked_kind == "noted" and question else None
@@ -828,6 +955,8 @@ async def _run_plan(
         return True
     if kind == "detail":
         if len(ids) == 1:
+            if get_settings().composer_detail_enabled:
+                return await _compose_detail(ctx, deps, ids[0], plan.question)
             if plan.question and get_settings().detail_question_answer_enabled:
                 return await _answer_detail(ctx, deps, ids[0], plan.question)
             await det.serve_details(ctx, deps, ids[0])
@@ -835,6 +964,9 @@ async def _run_plan(
         return await _compare(ctx, deps, ids, policy_for) if len(ids) >= 2 else False
     if kind == "compare":
         return await _compare(ctx, deps, ids, policy_for)
+    if kind == "faq" and get_settings().composer_store_info_enabled:
+        if await _compose_store_info(ctx, deps):
+            return True
     if kind in DELEGATED_TOOLS:
         return await _delegate(ctx, deps, DELEGATED_TOOLS[kind])
     if kind == "bundle":
@@ -920,6 +1052,9 @@ async def _serve_named(
         await det._handle_link_intent(ctx, deps, ids=ids)
         return True
     if plan.then in ("detail", "find") and len(ids) == 1:
+        if get_settings().composer_detail_enabled:
+            # NX-382: ca orice detaliu pe un produs, îl scrie compozitorul (cu sau fără întrebare)
+            return await _compose_detail(ctx, deps, ids[0], plan.question)
         if plan.question and get_settings().detail_question_answer_enabled:
             # NX-381 pe actul promovat: «beauty of joseon relief sun conține alcool?» primește
             # răspunsul la întrebare, nu fișa standard

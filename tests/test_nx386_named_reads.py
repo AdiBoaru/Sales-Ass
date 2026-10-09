@@ -287,3 +287,24 @@ async def test_the_promoted_detail_answers_the_question(monkeypatch, electronics
     planned = PlannedTurn(plans=(plan,), primary=0, disclosures=planned.disclosures)
     assert await kx.execute_read_plans(ctx, _deps(), planned, _outcome()) is True
     assert answered == [("el-03", "are 5g?")]
+
+
+async def test_with_the_composer_the_promoted_detail_is_composed(monkeypatch, electronics):
+    from src.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "composer_detail_enabled", True)
+    _search_stub(monkeypatch, electronics, {"xiaomi phone 3": ["el-03"]})
+    composed = []
+
+    async def compose_detail(ctx, deps, pid, question):
+        composed.append((pid, question))
+        ctx.set_reply("Da, are 5G.", cacheable=False)
+        return True
+
+    monkeypatch.setattr(kx, "_compose_detail", compose_detail)
+    ctx = sh.build_ctx(electronics, ConversationStateV2(), "xiaomi phone 3 are 5g?")
+    planned = _named("detail", ["xiaomi phone 3"])
+    plan = planned.plans[0].model_copy(update={"question": "are 5g?"})
+    planned = PlannedTurn(plans=(plan,), primary=0, disclosures=planned.disclosures)
+    assert await kx.execute_read_plans(ctx, _deps(), planned, _outcome()) is True
+    assert composed == [("el-03", "are 5g?")]

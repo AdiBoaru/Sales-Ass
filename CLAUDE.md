@@ -678,6 +678,22 @@ din întrebare, stoc), nu lista de cuvinte a validatorului de proză. Orice eșe
 politica de răspuns citește dimensiunea decisivă și din `question`. Flag
 `DETAIL_QUESTION_ANSWER_ENABLED` (ON). Card: [`tasks/stage1/NX-381.md`](tasks/stage1/NX-381.md); probă:
 `pytest tests/test_nx381_detail_question.py -q`.
+**NX-382 — compozitorul unic (decis de Adi, 2026-10-08): tot textul pentru client îl scrie modelul,
+codul dă fapte și obligații.** Măsurat pe `wide-2026-10-07`: senzația de robot și cele 20 de
+conversații cu același răspuns repetat identic vin din textele fixe ale codului (fișa standard,
+`kernel_sentences`, șabloanele porții, „Ți-am ales X."), care nu citesc istoricul; porțile pe liste
+de cuvinte aruncau text bun (~73 de ture); compunerea primea o descriere goală (`ai_summary` NULL),
+deci scria formula. `src/agent/composer.py`: `ComposeInput` (sarcina din planul kernelului,
+întrebarea, produsele cu handle-uri, obligațiile ca DATE, regulile magazinului, pașii oferiți pentru
+chips), promptul `composer.v1` = nucleul comun („HOW TO HELP": răspunsul întâi, de ce în cuvinte
+simple, cum se folosește, un compromis onest, ajută la alegere, un pas înainte, sfat general de
+folosire permis, ce ține de produs strict din fișă) + un bloc de sarcină, faptele = fișa ÎNTREAGĂ,
+istoricul de 20 de mesaje cu regula „nu repeta, construiește", ieșire JSON strictă (`composer_reply`,
+scopul `compose` în `per_call`), poarta pe FAPTE (cifre cu unitatea lor, prețuri, linkuri, stoc,
+medical, handle-uri, obligații). Codul scrie text doar când modelul pică. Faza 1: `detail` pe un
+produs (cu sau fără întrebare); fazele 2-5 mută ASK, NOT_FOUND, NO_RESULTS, CART, STORE_INFO, COMPARE,
+RECOMMEND și scot frazele fixe. Flag `COMPOSER_DETAIL_ENABLED` (ON). Card:
+[`tasks/stage1/NX-382.md`](tasks/stage1/NX-382.md); probă: `pytest tests/test_nx382_composer.py -q`.
 
 **NX-238 — retrievalul trece printr-un PORT, iar candidatul e inert (verdict `NOT-READY`).**
 `src/retrieval/` e contractul stabil pe care îl consumă NX-239: `RetrievalPort` + `RetrievalBundle`
