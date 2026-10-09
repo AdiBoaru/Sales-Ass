@@ -1135,12 +1135,15 @@ async def agent_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     # apăsările de chip și paginarea le înțelege agentul. `False` = contextul restaurat, iar turul
     # merge mai jos exact ca azi. Import leneș: flag stins = zero import.
     assistant = "off"
-    if s.assistant_agent_enabled and action_command(ctx) is None:
-        from src.assistant.turn import assistant_mode, run_assistant_turn  # noqa: PLC0415
+    if s.assistant_agent_enabled:
+        from src.assistant.mode import owns_turn  # noqa: PLC0415
 
-        assistant = assistant_mode(s, ctx.business, ctx.conversation_id)
-        if assistant == "serve" and await run_assistant_turn(ctx, deps):
-            return
+        if owns_turn(ctx, deps, s):
+            from src.assistant.turn import run_assistant_turn  # noqa: PLC0415
+
+            assistant = "serve"
+            if await run_assistant_turn(ctx, deps):
+                return
     eligible = (
         ctx.state_v2 is not None
         and action_command(ctx) is None

@@ -99,6 +99,13 @@ async def clarify_resume_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     `ctx.route` pe `resume_route` (triajul devine no-op prin gardă pe `ctx.route`). NU setează
     reply — lasă agentul (sales) să răspundă cu slotul acum cunoscut. `pending_question` se
     curăță la writeback (reply non-clarify → slot None)."""
+    # NX-396: într-o conversație a agentului unic, stratul ăsta nu răspunde: agentul e calea
+    # principală și scrie tot textul. Import leneș: flag stins = zero import.
+    if get_settings().assistant_agent_enabled:
+        from src.assistant.mode import owns_turn  # noqa: PLC0415
+
+        if owns_turn(ctx, deps, get_settings()):
+            return
     if action_command(ctx) is not None:
         # NX-236: pe un turn de ACȚIUNE, reluarea aparține kernelului (rulează înaintea acestui
         # stagiu). El leagă răspunsul de `question_id` — întrebarea EXACTĂ peste care s-a emis

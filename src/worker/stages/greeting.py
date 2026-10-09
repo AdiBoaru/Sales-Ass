@@ -212,8 +212,15 @@ def build_welcome(
     return "\n".join(parts)
 
 
-async def greeting_stage(ctx: TurnContext, deps: PipelineDeps) -> None:  # noqa: ARG001 — free layer, fără DB
+async def greeting_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     """La un pur salut → mesaj de întâmpinare branded (early-exit). Altfel: no-op."""
+    # NX-396: într-o conversație a agentului unic, stratul ăsta nu răspunde: agentul e calea
+    # principală și scrie tot textul. Import leneș: flag stins = zero import.
+    if get_settings().assistant_agent_enabled:
+        from src.assistant.mode import owns_turn  # noqa: PLC0415
+
+        if owns_turn(ctx, deps, get_settings()):
+            return
     enabled, bot_name, sugg_override, ask_override = _welcome_config(ctx.business)
     if not enabled:
         return

@@ -21,6 +21,7 @@ from typing import Any
 from src.assistant.gate import HINTS, Checked, check_answer
 from src.assistant.memory import NOTES_MAX, Memory
 from src.assistant.menus import load_menus
+from src.assistant.mode import assistant_mode, canary_bucket  # noqa: F401 — re-export
 from src.assistant.prompt import PROMPT_VERSION, instructions, render_view
 from src.assistant.schemas import tool_schemas
 from src.assistant.tools import Facts, Tools
@@ -41,25 +42,6 @@ FALLBACK_REASONS = frozenset(
 )
 #: Câte mesaje anterioare vede agentul (fereastra încărcată e de 20 cu cel curent).
 HISTORY_MESSAGES = 19
-
-
-def canary_bucket(business_id: str, conversation_id: str | None) -> int:
-    """Bucket-ul STICKY al conversației, cu salt propriu (independent de canary-ul kernelului)."""
-    import hashlib  # noqa: PLC0415
-
-    raw = f"nx396:{business_id}:{conversation_id or ''}".encode()
-    return int(hashlib.sha256(raw).hexdigest()[:8], 16) % 100
-
-
-def assistant_mode(settings: Any, business: Any, conversation_id: str | None) -> str:
-    """`serve` pe conversațiile agentului, altfel `off`. PUR."""
-    if not getattr(settings, "assistant_agent_enabled", False):
-        return "off"
-    tenants = {t.strip() for t in (settings.assistant_tenants or "").split(",") if t.strip()}
-    if tenants and getattr(business, "slug", None) not in tenants:
-        return "off"
-    bucket = canary_bucket(str(business.id), conversation_id)
-    return "serve" if bucket < settings.assistant_canary_percent else "off"
 
 
 class _Fallback(Exception):

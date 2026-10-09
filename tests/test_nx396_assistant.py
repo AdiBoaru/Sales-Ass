@@ -608,17 +608,53 @@ def test_the_mode_is_sticky_salted_and_scoped(monkeypatch):
     assert same < 15, "saltul propriu: alt bucket decât canary-ul kernelului"
 
 
-def test_the_flag_excludes_the_single_brain_and_the_turn_budget():
+def test_the_agent_is_the_default_and_steps_aside_instead_of_failing_boot():
+    """Agentul e calea principală: pornit implicit, pe toate conversațiile. Cu creierul unic sau
+    cu bugetele de tur aprinse se dă la o parte, în loc ca un `.env` vechi să oprească serviciul."""
     from src.config import Settings
 
-    with pytest.raises(ValueError, match="SINGLE_BRAIN_ENABLED"):
-        Settings(ASSISTANT_AGENT_ENABLED=True, SINGLE_BRAIN_ENABLED=True)
-    with pytest.raises(ValueError, match="TURN_BUDGET_ENFORCED"):
-        Settings(
-            ASSISTANT_AGENT_ENABLED=True, TURN_BUDGET_ENFORCED=True, TURN_DEADLINE_ENABLED=True
-        )
+    assert Settings.model_fields["assistant_agent_enabled"].default is True
+    assert Settings.model_fields["assistant_canary_percent"].default == 100
+    on = NS(assistant_agent_enabled=True, assistant_tenants="", assistant_canary_percent=100)
+    business = NS(id="b", slug="sole-ro")
+    assert aturn.assistant_mode(on, business, "c") == "serve"
+    assert aturn.assistant_mode(NS(**vars(on), single_brain_enabled=True), business, "c") == "off"
+    assert aturn.assistant_mode(NS(**vars(on), turn_budget_enforced=True), business, "c") == "off"
+    Settings(ASSISTANT_AGENT_ENABLED=True, SINGLE_BRAIN_ENABLED=True)  # nu pică la boot
     with pytest.raises(ValueError):
         Settings(LLM_REASONING_EFFORT_ASSISTANT="turbo")
+
+
+@pytest.mark.parametrize("stage_name", ["greeting", "alias", "cache", "clarify_resume"])
+async def test_the_layers_before_the_agent_yield_its_turn(monkeypatch, stage_name):
+    """Agentul e primul care răspunde: salutul (text fix), aliasul, cache-ul și reluarea unei
+    clarificări nu mai răspund într-o conversație a agentului."""
+    import importlib
+
+    s = get_settings()
+    monkeypatch.setattr(s, "assistant_agent_enabled", True)
+    monkeypatch.setattr(s, "assistant_canary_percent", 100)
+    monkeypatch.setattr(s, "assistant_tenants", "")
+    module = {"clarify_resume": "clarify"}.get(stage_name, stage_name)
+    stage = getattr(importlib.import_module(f"src.worker.stages.{module}"), f"{stage_name}_stage")
+    ctx = _ctx("salut")
+    ctx.state.pending_question = {"field": "x", "resume_route": "sales"}
+    await stage(ctx, PipelineDeps(llm=ScriptedLLM()))
+    assert ctx.reply is None and ctx.route is None
+
+
+async def test_without_a_model_the_layers_before_still_answer(monkeypatch):
+    from src.worker.stages.greeting import greeting_stage
+
+    s = get_settings()
+    monkeypatch.setattr(s, "assistant_agent_enabled", True)
+    monkeypatch.setattr(s, "assistant_canary_percent", 100)
+    ctx = _ctx("salut")
+    ctx.business.settings = {"welcome": {"enabled": True}}
+    await greeting_stage(ctx, PipelineDeps(llm=None))
+    from src.assistant.mode import owns_turn
+
+    assert owns_turn(ctx, PipelineDeps(llm=None), s) is False
 
 
 async def test_a_figure_the_customer_wrote_is_not_an_allowed_price():

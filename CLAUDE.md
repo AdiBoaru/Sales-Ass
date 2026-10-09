@@ -778,10 +778,13 @@ explicit (`set_fit=none`) se respectă și pe paginare; regula REFINE din `_RICH
 (`gpt-6-luna`, raționament pe `/v1/responses`) înțelege mesajul, citește faptele cu unelte și scrie
 TOT textul; codul execută uneltele, aplică regulile dure și verifică adevărul. Planul e
 [`tasks/stage1/NX-394.md`](tasks/stage1/NX-394.md) (6 faze), prototipul NX-393/NX-395
-(`scripts/sim/agent_a_prototype.py`). **NX-396** îl pune în producție: modulul `src/assistant/`,
-RAMURĂ în `agent_stage` înaintea kernelului (import leneș, flag stins = zero import), pe
-conversațiile cu bucket sticky `sha256("nx396:{business_id}:{conversation_id}") mod 100` <
-`ASSISTANT_CANARY_PERCENT` (`ASSISTANT_AGENT_ENABLED` OFF, `ASSISTANT_TENANTS`). Uneltele
+(`scripts/sim/agent_a_prototype.py`). **NX-396** îl pune în producție ca CALEA PRINCIPALĂ
+(decizia lui Adi, 2026-10-09: `ASSISTANT_AGENT_ENABLED` ON implicit, `ASSISTANT_CANARY_PERCENT`
+100, `ASSISTANT_TENANTS` gol = toți): modulul `src/assistant/`, ramură în `agent_stage`
+înaintea kernelului, pe bucket sticky `sha256("nx396:{business_id}:{conversation_id}") mod
+100` < procent. Agentul răspunde PRIMUL: salutul, aliasul, cache-ul și reluarea unei
+clarificări îi cedează turul (`assistant.mode.owns_turn`); înaintea lui rămân doar porțile și
+butoanele semnate. Kernelul și calea v1 sunt plasa unui tur pe care agentul nu-l servește. Uneltele
 (`search_catalog`, `product_details`, `store_rules`, `routine_plan` peste `run_planned_routine`,
 `add_to_cart`/`back_in_stock` doar pe produse arătate, prin uneltele de producție, `check_order` cu
 zidul de login, `answer`) au scheme STRICTE, filtre din meniuri închise ale catalogului, iar
@@ -798,7 +801,9 @@ Comparația e tabelul din widget (`build_comparison` pe fișe), textele sunt ale
 (model, fără `answer`, poarta picată de două ori, `ASSISTANT_TURN_TIMEOUT_S`) restaurează contextul
 (`ContextSnapshot`) și turul merge pe calea de azi; într-o conversație a agentului, calea de azi n-are
 unelte de mutație, iar o mutație deja făcută rămâne și se spune cu fraza pachetului. Evenimente `assistant_turn` / `assistant_fallback{reason}`. Exclusiv cu
-`SINGLE_BRAIN_ENABLED` și `TURN_BUDGET_ENFORCED` (poartă de boot). Kernelul NU se șterge (decizia lui
+`SINGLE_BRAIN_ENABLED` și `TURN_BUDGET_ENFORCED`: cu oricare aprins, agentul se dă la o
+parte (fără să pice la boot). Suitele căilor de dinainte rulează cu agentul stins
+(`tests/conftest.py`), fiindcă măsoară plasa lui. Kernelul NU se șterge (decizia lui
 Adi). Card: [`tasks/stage1/NX-396.md`](tasks/stage1/NX-396.md); probă:
 `pytest tests/test_nx396_assistant.py -q`.
 
