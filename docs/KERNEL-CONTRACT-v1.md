@@ -23,7 +23,21 @@ Versioning: the contract is `kernel.v1.0`. **Minor** (`v1.1`): additive schema f
 
 No invariant, ownership row or state rule changes in v1.2, so no replay gate is required. The open questions step 6 raised on I5 (the safety prune on `aside`), I20 (the cart on `cart_ref`) and I15a/I12 (`grounding_guard` does not run on the v1 composition) are decided in the PRs that need them (B and C), under the minor/major rule.
 
-**Current version: `kernel.v7.1` (minor, NX-386, 2026-10-08).** Additive fields and executor rows
+**Current version: `kernel.v8.0` (MAJOR, NX-387, 2026-10-08).** The omissions of the same audit:
+(1) validator: a word that resolves on ANOTHER dimension no longer contradicts a value whose HEAD
+word (first content word of its key or label, modulo the locale's inflection) the quote carries:
+«un luciu» is also a finish but is the head of „luciu de buze"; a name's tail is not enough («ten»
+of „fond de ten", NX-350), and «lemn» for the colour „negru" stays a `semantic_mismatch`; the NX-330
+rule (a shelf never contradicts a facet value) and the same-dimension rule are unchanged; (2) reducer: on a LIST key whose tombstones are all the customer's VALUE retractions (with a
+fingerprint), a retraction is of the value, not the key, so a new value on a key the customer
+emptied is not a revival (I6 unchanged in text); code tombstones (`topic_reset`, `superseded`), a
+retraction without fingerprint and scalar keys keep the key-level block; (3) `TurnPlan.steps` (additive) and `RoutineArgs.steps`: the turn's types mapped through
+`routine_steps.by_product_type`, at least two of the routine's family, scope the planned routine;
+(4) a read with no target (`no_target`, e.g. an ordinal with no list on screen) is answered with the
+pack sentence instead of the v1 loop; (5) a fallback after the chain keeps the redacted chain trace
+under `kernel_fallback.chain`. The replay gate is waived as before.
+
+**`kernel.v7.1` (minor, NX-386, 2026-10-08).** Additive fields and executor rows
 from the same set: (1) `TurnPlan.then` + `TurnPlan.names`: a `detail`/`link`/`compare` (or a `find`
 naming a product) whose name the resolver did not find written whole is planned as today's name
 search, carrying the asked act and every missing name; the executor searches each name and matches

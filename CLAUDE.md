@@ -222,6 +222,14 @@ o țintă compară restul setului ei, altfel un partener substitut sau de acela�
 rulează Adi), dă familia unei rutine fără subiect; (5) promptul nu mai promite „un coleg". Card:
 [`tasks/stage1/NX-386.md`](tasks/stage1/NX-386.md); probă:
 `pytest tests/test_nx386_named_reads.py tests/test_nx386_executors.py -q`.
+**NX-387 — `kernel.v8.0` (MAJOR): omisiunile aceleiași analize.** (1) Validatorul: un cuvânt al ALTEI
+dimensiuni nu contrazice o valoare al cărei cap e numit în citat («un luciu» ⇒ „luciu de buze"),
+coada nu ajunge, NX-330 rămâne; (2) reducerul: pe o cheie de listă cu doar retrageri de valori ale
+clientului, o valoare nouă nu e reînviere (tombstone-urile de cod blochează cheia ca înainte);
+(3) `TurnPlan.steps` / `RoutineArgs.steps`: pașii numiți («șampon, balsam și mască») scopează rutina;
+(4) o citire fără țintă (`no_target`) primește fraza pachetului, nu v1; (5) traceul unui fallback
+după lanț rămâne sub `kernel_fallback.chain`. Card: [`tasks/stage1/NX-387.md`](tasks/stage1/NX-387.md);
+probă: `pytest tests/test_nx387_validator_and_reducer.py -q`.
 **NX-334 — direcția unei limite numerice ajunge neschimbată în stare.** Pe pașii 3a/3b «minim 256
 GB» se persista `storage lte 256`: delta păstra relația doar pe preț, iar orice fațetă numerică era
 plafon. Acum o dimensiune numerică are DOUĂ chei, ca bugetul (`<fațetă>_min` / `<fațetă>_max`,

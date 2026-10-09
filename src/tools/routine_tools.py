@@ -196,6 +196,9 @@ class RoutineArgs(BaseModel):
     #: `family`: un moment necunoscut se IGNORĂ (cade pe ordinea de zi întreagă), nu respinge
     #: turul — e un rafinament, nu o constrângere.
     moment: str | None = None
+    #: NX-387 (`kernel.v8.0`): pașii numiți de client («șampon, balsam și mască»), doar pe calea
+    #: PLANIFICATĂ (îi scrie plannerul din tipurile turului). Gol ⇒ toată familia, ca înainte.
+    steps: list[str] | None = None
 
 
 def _price(row: dict[str, Any]) -> Decimal | None:
@@ -595,6 +598,9 @@ async def _routine(
         )
 
     steps = list(families[a.family])
+    if planned and a.steps:
+        # NX-387: rutina pe pașii ceruți (în ordinea familiei); un pas necunoscut nu lărgește nimic
+        steps = [s for s in steps if s in set(a.steps)] or steps
     values = [f"{a.family}{SEP}{s}" for s in steps]
     legacy_needs, need_args = split_args(a.concerns)
     a.concerns = legacy_needs

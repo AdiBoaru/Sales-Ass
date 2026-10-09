@@ -835,6 +835,7 @@ async def _bundle(ctx: TurnContext, deps: PipelineDeps, plan: TurnPlan) -> bool 
         budget_max=args.price_max,
         anchor_id=plan.product_ids[0] if plan.product_ids else None,
         moment=_routine_moment(ctx, args),
+        steps=list(plan.steps) or None,
     )
     run = ToolRun(ctx, deps)
     result = await run.execute_planned_routine(routine, prefer=dict(args.prefer or {}) or None)
@@ -914,6 +915,16 @@ async def execute_read_plans(
     plan = plans[0]
     if plan.executor not in READ_EXECUTORS:
         return None
+    if (
+        plan.executor == "reply_only"
+        and not mutating
+        and any(code == "no_target" for _, code in planned.disclosures)
+    ):
+        # NX-387: o citire pe o țintă pe care n-o are nimic (un ordinal fără listă pe ecran) nu
+        # cade pe bucla v1, care alegea singură un produs («Da, primul conține ulei de cocos»
+        # despre un produs pe care clientul nu-l văzuse): fraza pachetului o spune.
+        ctx.set_reply(_required_sentence(ctx, "no_target"), cacheable=False)
+        return True
     if plan.executor == "search" and plan.then is not None:
         named = await _serve_named(ctx, deps, plan, policy_for)
         if named is not None:

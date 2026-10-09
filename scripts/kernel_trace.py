@@ -45,10 +45,16 @@ def format_row(diagnostics: Any, client_text: str | None) -> str:
         return render(KernelTrace.model_validate(kernel), user_text=client_text)
     fallback = doc.get("kernel_fallback")
     if fallback:
-        return (
+        head = (
             f"KERNEL FALLBACK    reason={fallback.get('reason')}  "
             f"vocabulary={fallback.get('vocabulary_snapshot')}"
         )
+        chain = fallback.get("chain")
+        if chain:
+            # NX-387: lanțul care a dus la fallback (redactat), când turul a ajuns până la executori
+            body = render(KernelTrace.model_validate(chain), user_text=client_text)
+            return f"{head}\n\n{body}"
+        return head
     return "fără trace de kernel pe turul ăsta (flag stins sau tur oprit înaintea ramurii)"
 
 

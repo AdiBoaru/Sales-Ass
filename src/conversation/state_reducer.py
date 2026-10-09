@@ -398,8 +398,21 @@ def _handle_set_need(
 
     revoked = state.revoked_keys()
     forced = proposal.op == "supersede"
+    # NX-387: pe o cheie de LISTĂ se retrage o NEVOIE (o valoare), nu cheia (NX-379): după ce
+    # clientul a scos singura valoare de pe `concerns`, o valoare NOUĂ nu reînvie nimic («las-o
+    # baltă cu spf, contează doar să fie hidratant» respingea hidratarea). Pe o cheie scalară
+    # tombstone-ul de cheie rămâne.
+    value_only = normalized.operator == "contains" and all(
+        _client_retraction(r) and r.prior_value_fingerprint is not None
+        for r in state.revocations
+        if r.key == key
+    )
+    # recenzia: doar retrageri de VALORI ale clientului; un tombstone de cod (`topic_reset` la
+    # «uită criteriile» sau la parcare, `superseded`) sau unul fără amprentă blochează cheia, ca
+    # înainte
+    key_level = key in revoked and not value_only
     if proposal.source not in REVIVE_CAPABLE_SOURCES and (
-        key in revoked
+        key_level
         or (
             normalized.value is not None
             and _retracted_value(state.revocations, key, normalized.value)

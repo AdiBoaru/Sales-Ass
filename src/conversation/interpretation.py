@@ -94,7 +94,12 @@ from src.tools.catalog_tools import SearchArgs
 #: `kernel.v7.1` (NX-386, MINOR): `TurnPlan.then` + `TurnPlan.names` (aditive): un nume negăsit de
 #: resolver nu mai degradează actul în căutare când căutarea găsește chiar produsul numit; o
 #: comparație cu o singură țintă compară ecranul (sau dă detaliul), nu un partener din graf.
-KERNEL_CONTRACT_VERSION = "kernel.v7.1"
+#: `kernel.v8.0` (NX-387, MAJOR): (1) validatorul: un cuvânt al ALTEI dimensiuni contrazice doar
+#: când citatul nu poartă nimic din numele valorii propuse, iar un subraft omograf (rădăcina
+#: nenumită) nu e raft concurent; (2) reducerul: pe o cheie de LISTĂ se retrage valoarea, nu
+#: cheia; (3) `TurnPlan.steps` / `RoutineArgs.steps`: pașii numiți de client scopează rutina;
+#: (4) o citire fără țintă primește fraza `no_target`, nu calea v1; (5) traceul fallback-ului.
+KERNEL_CONTRACT_VERSION = "kernel.v8.0"
 
 # --- scrise de model ----------------------------------------------------------------------------
 
@@ -254,6 +259,9 @@ class TurnPlan(_CodeWritten):
     #: ca frază întreagă, servește actul pe produsele găsite; altfel căutarea de azi. Gol altfel.
     then: Literal["detail", "link", "compare", "find"] | None = None
     names: list[str] = Field(default_factory=list)
+    #: `kernel.v8.0` (NX-387): pe un plan `bundle`, pașii numiți de client în tur (din tipurile
+    #: lui, prin `routine_steps.by_product_type`), când sunt cel puțin doi ai familiei. Gol altfel.
+    steps: list[str] = Field(default_factory=list)
 
 
 class AnswerPolicy(_CodeWritten):

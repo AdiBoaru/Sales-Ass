@@ -636,17 +636,45 @@ class _Checker:
         spelled = self._spelled_name(evidence.words, dimension, canonical)
         if spelled is not None:
             return "explicit", spelled[0], False, spelled[1]
+        named_part = self._names_part(evidence.words, dimension, canonical)
         for _start, _size, phrase in self._ngrams(evidence.words):
             anywhere = self._resolve_anywhere(phrase)
-            if anywhere is None:
+            if anywhere is None or anywhere.key == canonical:
                 continue
             # Un RAFT nu concurează cu o valoare de fațetă: e subiectul, nu o proprietate. Altfel
-            # «se usucă după duș» ar fi „contrazis" de un raft „Duș".
+            # «se usucă după duș» ar fi „contrazis" de un raft „Duș" (NX-330).
             if anywhere.dimension == CATEGORY_DIMENSION and dimension != CATEGORY_DIMENSION:
                 continue
-            if (anywhere.dimension, anywhere.key) != (dimension, canonical):
-                other = True
+            # NX-387 (`kernel.v8.0`): un cuvânt care se rezolvă pe ALTĂ dimensiune nu contrazice o
+            # valoare al cărei CAP e numit în citat: «un luciu» e și un finisaj, dar e capul lui
+            # „luciu de buze" (setul wide-2026-10-07 respingea tipul corect). Coada unui nume nu
+            # ajunge («ten» din „fond de ten", NX-350), iar «lemn» pentru „negru" rămâne
+            # contradicție; pe ACEEAȘI dimensiune, altă valoare contrazice ca înainte.
+            if anywhere.dimension != dimension and named_part:
+                continue
+            other = True
         return "implicit", -1, other, 0
+
+    def _names_part(
+        self, words: Sequence[str], dimension: str, canonical: str | float | None
+    ) -> bool:
+        """NX-387: citatul poartă CAPUL numelui valorii propuse (primul cuvânt de conținut al cheii
+        sau al etichetei ei din vocabular), cu flexiunea locale-i. Doar o dovadă PARȚIALĂ: nu face
+        valoarea `explicit`, doar o scoate dintre contradicțiile de pe alte dimensiuni."""
+        if not isinstance(canonical, str) or self.vocab is None:
+            return False
+        vocab_dim = CATEGORY_DIMENSION if dimension == CATEGORY_DIMENSION else dimension
+        names = {canonical}
+        for entry in self.vocab.entries(vocab_dim):
+            if entry.key == canonical and entry.label:
+                names.add(entry.label)
+        heads = set()
+        for name in names:
+            content = [w for w in tokens(name.replace("-", " ")) if w not in self.stop]
+            if content:
+                heads.add(content[0])
+        suffixes = inflection_suffixes(self.locale)
+        return any(_same_stem(w, h, suffixes) for w in words for h in heads)
 
     def _spelled_name(
         self, words: Sequence[str], dimension: str, canonical: str | float | None
