@@ -1,0 +1,126 @@
+{
+ "version": "fresh-b-2026-10-07",
+ "note": "scris de un agent fără acces la cod, analize sau rezultatele seturilor anterioare",
+ "conversations": [
+  {
+   "id": "g1_corectie_ten",
+   "covers": "clientul își corectează tipul de ten și apoi persoana pentru care cumpără",
+   "turns": [
+    {"message": "salut caut o crema hidratanta pt ten gras", "expect": "arată creme hidratante potrivite pentru ten gras, ușoare și necomedogenice"},
+    {"message": "nu stai, am zis gresit, am ten USCAT nu gras", "expect": "aplică corecția și arată creme pentru ten uscat, renunțând la ce era pentru ten gras"},
+    {"message": "de fapt nici nu e pt mine, e pt fiica mea de 15 ani", "expect": "păstrează tenul uscat și ajustează recomandarea pentru o adolescentă, cu produse blânde și simple"},
+    {"message": "ceva mai usor, nu vreau sa ii dea cosuri", "expect": "rafinează spre creme cu textură lejeră, necomedogenice, tot pentru ten uscat de adolescentă"}
+   ]
+  },
+  {
+   "id": "g2_excludere_brand_ingredient",
+   "covers": "excluderea unui brand și a unui ingredient după ce s-au văzut produse, apoi cerere de alternative",
+   "turns": [
+    {"message": "vreau un ser pt pete pigmentare", "expect": "arată seruri pentru pete pigmentare din catalog"},
+    {"message": "fara COSRX te rog, am avut reactie la ei", "expect": "scoate produsele COSRX și arată seruri pentru pete de la alte branduri"},
+    {"message": "si nu vreau nimic cu alcool in compozitie", "expect": "păstrează excluderea COSRX și elimină și serurile care conțin alcool, fără să afirme ce nu poate verifica"},
+    {"message": "si altele?", "expect": "arată alte seruri pentru pete, diferite de cele deja arătate, respectând ambele excluderi"}
+   ]
+  },
+  {
+   "id": "g3_buget_interval",
+   "covers": "buget cu limită minimă și maximă, apoi cerere de ceva mai scump și mai bun",
+   "turns": [
+    {"message": "caut o crema de ochi intre 50 si 100 lei", "expect": "arată creme de ochi cu prețul între 50 și 100 de lei"},
+    {"message": "pt cearcane mai ales", "expect": "rafinează spre creme de ochi pentru cearcăne, păstrând intervalul de preț"},
+    {"message": "ceva mai scump dar mai bun?", "expect": "arată creme de ochi pentru cearcăne peste 100 de lei și explică pe scurt ce oferă în plus"},
+    {"message": "ok si cel mai ieftin dintre astea care e?", "expect": "indică cel mai ieftin produs din setul arătat la mesajul anterior, cu prețul lui"}
+   ]
+  },
+  {
+   "id": "g4_rutina_par_cret",
+   "covers": "rutină de păr creț și vopsit cu pași spălare, balsam, mască și buget total",
+   "turns": [
+    {"message": "am parul cret si vopsit, se rupe si e uscat", "expect": "înțelege că e vorba de păr, nu de ten, și propune produse pentru păr creț, vopsit, uscat și fragil"},
+    {"message": "vreau o rutina completa sampon balsam masca", "expect": "construiește o rutină de păr cu șampon, balsam și mască potrivite pentru păr creț vopsit"},
+    {"message": "max 150 lei pe tot", "expect": "ajustează rutina astfel încât suma celor trei produse să fie de cel mult 150 de lei"},
+    {"message": "masca o folosesc de cate ori pe saptamana?", "expect": "răspunde cât de des se folosește masca din rutină, pe baza informațiilor produsului, fără să caute alte produse"}
+   ]
+  },
+  {
+   "id": "g5_corp_keratoza",
+   "covers": "piele uscată pe picioare cu keratoză pilară, apoi un scrub și întrebarea dacă se folosesc împreună",
+   "turns": [
+    {"message": "am pielea foarte uscata pe picioare si niste punctisori ca pielea de gaina", "expect": "arată produse de corp pentru piele uscată și aspect de piele de găină, fără diagnostic medical"},
+    {"message": "aveti si un scrub pt corp?", "expect": "arată scruburi de corp, potrivite pentru piele uscată"},
+    {"message": "pot sa le folosesc impreuna? scrubul si crema", "expect": "explică cum se combină scrubul cu crema de corp (ordinea și frecvența), fără sfat medical"},
+    {"message": "cat costa amandoua", "expect": "spune prețul scrubului și al cremei discutate și totalul lor"}
+   ]
+  },
+  {
+   "id": "g6_copil_3_ani",
+   "covers": "produse pentru un copil de 3 ani, protecție solară, apoi întrebarea despre bebeluși",
+   "turns": [
+    {"message": "am nevoie de o crema pt fetita mea de 3 ani, are pielea sensibila", "expect": "arată creme blânde potrivite pentru copii, cu piele sensibilă"},
+    {"message": "si o protectie solara pt ea, mergem la mare", "expect": "arată protecții solare potrivite pentru copii mici"},
+    {"message": "e ok si pt bebelusi? am si un baietel de 6 luni", "expect": "spune onest dacă produsele sunt destinate și bebelușilor, fără să inventeze, și recomandă consultarea medicului pediatru pentru sub un an"}
+   ]
+  },
+  {
+   "id": "g7_mesaje_scurte",
+   "covers": "mesaje foarte scurte după prima cerere: da, altele, mai ieftine, primul",
+   "turns": [
+    {"message": "vreau un toner", "expect": "arată tonere sau întreabă scurt pentru ce tip de ten, oferind totuși opțiuni"},
+    {"message": "da", "expect": "interpretează acordul în contextul ultimei propuneri și continuă fără să repete întrebarea"},
+    {"message": "altele", "expect": "arată alte tonere, diferite de cele deja arătate"},
+    {"message": "mai ieftine", "expect": "arată tonere mai ieftine decât cele arătate, tot tonere"},
+    {"message": "primul", "expect": "dă detalii despre primul toner din ultima listă arătată"}
+   ]
+  },
+  {
+   "id": "g8_paginare_memorie",
+   "covers": "paginare repetată pe seruri și revenirea la prima listă cu referință ordinală",
+   "turns": [
+    {"message": "arata-mi seruri cu vitamina c", "expect": "arată seruri cu vitamina C"},
+    {"message": "mai arata-mi", "expect": "arată alte seruri cu vitamina C, fără să le repete pe cele deja arătate"},
+    {"message": "inca", "expect": "continuă cu încă un set de seruri cu vitamina C, nerepetate"},
+    {"message": "inapoi la primele, care era al doilea?", "expect": "identifică al doilea produs din prima listă arătată și îl prezintă"}
+   ]
+  },
+  {
+   "id": "g9_doua_cereri",
+   "covers": "două cereri într-un singur mesaj, apoi rafinări separate pe fiecare produs",
+   "turns": [
+    {"message": "vreau un gel de curatare si o crema de noapte pt ten sensibil", "expect": "răspunde la ambele cereri, cu geluri de curățare și creme de noapte pentru ten sensibil, clar separate"},
+    {"message": "la gel vreau ceva fara parfum", "expect": "rafinează doar gelul de curățare spre variante fără parfum, păstrând crema de noapte"},
+    {"message": "crema sa fie sub 120 lei", "expect": "aplică bugetul de 120 de lei doar la crema de noapte pentru ten sensibil"},
+    {"message": "le iau pe amandoua, imi dai linkurile?", "expect": "dă linkurile gelului și cremei alese, nu ale tuturor produselor arătate"}
+   ]
+  },
+  {
+   "id": "g10_incredere_produs",
+   "covers": "întrebări de încredere și de eficacitate despre un produs arătat",
+   "turns": [
+    {"message": "aveti serul cu propolis de la beauty of joseon?", "expect": "caută produsul numit și îl arată dacă există, altfel spune onest că nu îl are și propune ceva apropiat"},
+    {"message": "e original? nu vreau falsuri", "expect": "răspunde despre autenticitatea produselor pe baza informațiilor magazinului, fără promisiuni inventate"},
+    {"message": "e testat pe animale?", "expect": "răspunde doar dacă informația există pentru produs, altfel spune că nu are această informație"},
+    {"message": "cat de repede se vad rezultatele daca il folosesc zilnic", "expect": "răspunde prudent, din informațiile produsului, fără promisiuni medicale sau termene inventate"}
+   ]
+  },
+  {
+   "id": "g11_client_nemultumit",
+   "covers": "client nemulțumit care cere un om, apoi revine la o cerere normală",
+   "turns": [
+    {"message": "caut ceva pt cosuri", "expect": "arată produse pentru ten cu tendință acneică"},
+    {"message": "nu ma ajuti deloc, astea nu sunt ce am cerut", "expect": "recunoaște nemulțumirea, întreabă scurt ce caută exact sau propune altă direcție, fără să se scuze excesiv"},
+    {"message": "vreau sa vorbesc cu un om", "expect": "spune onest că nu poate face transfer la un operator, fără să promită un coleg, și se oferă să ajute în continuare"},
+    {"message": "ok fie. plasturi pt cosuri aveti?", "expect": "arată plasturi pentru coșuri"}
+   ]
+  },
+  {
+   "id": "g12_mix_engleza",
+   "covers": "mesaje în engleză sau cu termeni englezești amestecați cu româna",
+   "turns": [
+    {"message": "am nevoie de un moisturizer lightweight non-comedogenic", "expect": "înțelege termenii englezești și arată creme hidratante ușoare, necomedogenice, răspunzând în română"},
+    {"message": "whats the best sunscreen for oily skin", "expect": "arată protecții solare pentru ten gras, păstrând limba conversației"},
+    {"message": "something under 80 lei pls", "expect": "aplică plafonul de 80 de lei la protecția solară pentru ten gras"},
+    {"message": "ok si un cleanser care sa mearga cu ele", "expect": "arată produse de curățare potrivite pentru ten gras, compatibile cu crema și protecția solară discutate"}
+   ]
+  }
+ ]
+}
