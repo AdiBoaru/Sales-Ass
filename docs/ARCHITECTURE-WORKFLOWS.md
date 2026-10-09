@@ -1762,6 +1762,7 @@ answer_plan_enabled = false
 answer_plan_max_quality = false
 answer_shape_enabled = true
 aside_keeps_search_session_enabled = true
+assistant_agent_enabled = true
 attr_query_enabled = true
 brain_chips_enabled = true
 brain_rich_reply_enabled = true

@@ -1997,6 +1997,33 @@ class Settings(BaseSettings):
     )
     # Slug-urile tenanților pe care rulează kernelul (dark sau servit); gol = toți.
     interpreted_turn_tenants: str = Field(default="", validation_alias="INTERPRETED_TURN_TENANTS")
+    # NX-396 (NX-394 Faza 2): agentul unic, calea PRINCIPALĂ (decizia lui Adi, 2026-10-09). Un
+    # model cu unelte pe `/v1/responses` înțelege mesajul, citește faptele și scrie tot textul;
+    # codul execută uneltele și verifică adevărul. Rulează primul (salutul, aliasul, cache-ul și
+    # reluarea unei clarificări îi cedează turul), pe conversațiile cu bucket STICKY
+    # `sha256("nx396:{business_id}:{conversation_id}") mod 100` < procent. Orice eșec ⇒ contextul
+    # restaurat, iar kernelul / calea v1 răspund (plasa). Cu creierul unic sau cu bugetele de tur
+    # aprinse, agentul se dă la o parte (`assistant.mode`). OFF = calea de dinainte, byte-identică.
+    assistant_agent_enabled: bool = Field(default=True, validation_alias="ASSISTANT_AGENT_ENABLED")
+    assistant_canary_percent: int = Field(
+        default=100, ge=0, le=100, validation_alias="ASSISTANT_CANARY_PERCENT"
+    )
+    # Slug-urile tenanților pe care servește agentul; gol = toți.
+    assistant_tenants: str = Field(default="", validation_alias="ASSISTANT_TENANTS")
+    # Efortul de raționament al agentului, vocabular ÎNCHIS (gol sau necunoscut pică la boot).
+    # `low` e cel măsurat pe prototip (NX-393: p50 5 s).
+    llm_reasoning_effort_assistant: InterpretEffort = Field(
+        default="low", validation_alias="LLM_REASONING_EFFORT_ASSISTANT"
+    )
+    # Câte runde de model are un tur servit de agent; o reîncercare după poarta de adevăr primește
+    # o rundă în plus.
+    assistant_max_rounds: int = Field(
+        default=6, ge=1, le=10, validation_alias="ASSISTANT_MAX_ROUNDS"
+    )
+    # Plafonul de timp al turului agentului (secunde). Depășit ⇒ calea de azi răspunde.
+    assistant_turn_timeout_s: float = Field(
+        default=45.0, gt=0, le=120, validation_alias="ASSISTANT_TURN_TIMEOUT_S"
+    )
     # Pragul de information gain sub care NU întrebăm (răspundem cu ce avem + declarăm ce nu
     # știm). Siguranța și conflictele hard trec peste el — sunt corectitudine, nu UX.
     clarification_min_information_gain: float = Field(

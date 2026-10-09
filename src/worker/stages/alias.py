@@ -45,6 +45,13 @@ def _coerce_route(value: str | None) -> Route | None:
 
 async def alias_stage(ctx: TurnContext, deps: PipelineDeps) -> None:
     settings = get_settings()
+    # NX-396: într-o conversație a agentului unic, stratul ăsta nu răspunde: agentul e calea
+    # principală și scrie tot textul. Import leneș: flag stins = zero import.
+    if settings.assistant_agent_enabled:
+        from src.assistant.mode import owns_turn  # noqa: PLC0415
+
+        if owns_turn(ctx, deps, settings):
+            return
     if not settings.alias_enabled:
         return
     if ctx.route is not None:

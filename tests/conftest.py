@@ -33,6 +33,10 @@ if not os.getenv("NX_TESTS_READ_ENV_FILE"):
         "ENV": "test",
         "LOG_LEVEL": "WARNING",
         "DAILY_COST_CAP_USD": "5",
+        # NX-396: agentul unic e pornit implicit în producție. Suitele căilor de dinainte (kernel,
+        # v1, straturile gratuite) măsoară PLASA lui, deci rulează cu el stins; suita agentului
+        # (`test_nx396_assistant.py`) îl aprinde explicit.
+        "ASSISTANT_AGENT_ENABLED": "false",
     }.items():
         os.environ.setdefault(_key, _value)
 

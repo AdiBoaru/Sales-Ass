@@ -742,6 +742,20 @@
       "field": "needs_topic",
       "why": "NX-389b: raspunsul la intrebarea de familie a unei rutini (o optiune din meniul NOSTRU, aleasa de client) devine `set_topic` pe raftul ales, `user_explicit`, ca raspunsul la o clarificare pe calea v1 -- chiar cand validatorul a respins citatul omograf. O propunere typed in `TurnDelta`, aplicata doar de reducer (I3).",
       "fate": "stays"
+    },
+    {
+      "file": "src/assistant/turn.py",
+      "function": "_reply",
+      "field": "active_search",
+      "why": "NX-396: un tur servit de agentul unic cu carduri inchide sesiunea de paginare a caii v1 (`active_search = None`), ca un «mai arata-mi» cazut pe v1 sa nu pagineze un pool vechi. Agentul pagineaza singur, prin `exclude`.",
+      "fate": "stays"
+    },
+    {
+      "file": "src/assistant/turn.py",
+      "function": "_serve",
+      "field": "assistant",
+      "why": "NX-396: memoria agentului unic (handle-urile produselor si notele despre ce a spus clientul), cheie proprie, purtata de v2 ca passthrough (`PASSTHROUGH_KEYS`). Singurul scriitor e agentul, pe turul servit.",
+      "fate": "stays"
     }
   ]
 }

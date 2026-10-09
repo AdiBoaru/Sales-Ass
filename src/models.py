@@ -215,6 +215,10 @@ class ConversationState:
     # o declarație de la turul 9 ar dispărea și retinoidul ar reintra. Owner la scriere: stagiul
     # agent (via `safety_state`), persistat de processor. Revocare DOAR explicită (nu expiră).
     safety: dict[str, Any] = field(default_factory=dict)
+    # NX-396: memoria agentului unic (`src/assistant/memory.py`): handle-urile produselor
+    # (`{"h": {"P1": "<uuid>"}, "n": <următorul>}`) și notele despre ce a spus clientul. Owner la
+    # scriere: agentul, prin `state_patch["assistant"]`; neatinsă de celelalte căi.
+    assistant: dict[str, Any] = field(default_factory=dict)
     state_version: int = 0
 
     @classmethod
@@ -275,6 +279,7 @@ class ConversationState:
             # NX-173: state vechi fără cheie / corupt → {} (fără context persistat; detecția din
             # mesaj tot prinde turul curent). Defensiv ca restul hidratării.
             safety=(raw.get("safety") if isinstance(raw.get("safety"), dict) else {}),
+            assistant=(raw.get("assistant") if isinstance(raw.get("assistant"), dict) else {}),
             state_version=int(raw.get("state_version") or 0),
         )
 
