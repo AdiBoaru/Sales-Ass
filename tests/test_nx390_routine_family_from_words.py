@@ -186,3 +186,25 @@ def test_with_the_flag_off_a_guessed_shelf_is_todays_routine():
     )
     assert step.outcome.decision.verdict == "act"
     assert (_primary(step).executor, _primary(step).family) == ("bundle", "fata")
+
+
+# --- setul mixed-2026-10-09, m5: raftul numit lângă tipuri spuse vag ----------------------------
+
+
+def test_the_named_part_joins_the_umbrella_of_vaguely_named_items():
+    """«vreau rutina de dimineata pt ten sensibil: un demachiant, un toner si o crema cu spf»:
+    tipurile spuse vag («un toner», «o crema») devin umbrela subiectului (NX-350), iar raftul numit
+    în „ten sensibil” stă lângă ea. Pe prima formă a NX-390 umbrela oprea regula, deci poarta a
+    întrebat familia."""
+    step = family_step(
+        "vreau rutina de dimineata pt ten sensibil: un demachiant, un toner si o crema cu spf",
+        change("routine_time", "am", "de dimineata"),
+        change("skin_type", "sensitive", "ten sensibil"),
+        {**change("product_type", "toner de fata", "un toner"), "op": "add"},
+        {**change("product_type", "crema de fata", "o crema"), "op": "add"},
+    )
+    assert step.delta.counters.get("subject_from_named_part") == 1
+    assert _topic(step) == "ten"
+    assert step.gate_state.topic.type_umbrella  # umbrela tipurilor vagi rămâne
+    assert step.outcome.asked_key != ROUTINE_FAMILY_KEY
+    assert (_primary(step).executor, _primary(step).family) == ("bundle", "fata")
