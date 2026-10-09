@@ -63,7 +63,7 @@ gate-ul NX-210**. Direcția aprobată către care migrăm:
 
 **Înghețate până la GO-ul de la NX-210:** enforcement-ul QuerySpec/Match Gate (NX-188, NX-189).
 
-**Kernelul conversațional — contractul `kernel.v1.0` (înghețat 2026-09-25, NORMATIV; azi `kernel.v6.3`: MAJOR la v2.0, NX-336 PR B, sensul lui I5; minor la v2.1, NX-336 D3, `TurnPlan.family`; MAJOR la v3.0, NX-348, sensul unei schimbări de subiect; MAJOR la v4.0, NX-350, un tip spus vag devine umbrelă, nu tipul subiectului; MAJOR la v5.0, NX-352, nevoia spusă e filtru relaxabil, căutarea se compune din ce a validat kernelul, «mai ieftin» ambiguu = mediana; minor la v5.1, NX-349, fațetele da/nu; MAJOR la v6.0, NX-364, ordinalul după detaliu, flexiunea în proveniență, excluderea și banda de preț; minor la v6.1, NX-374, dezvăluirea `need_unverifiable`; minor la v6.2, NX-375, `find` caută pe numele produsului numit; minor la v6.3, NX-380, `Act.question` și `rating` la referințe; porțile de replay derogate de Adi).**
+**Kernelul conversațional — contractul `kernel.v1.0` (înghețat 2026-09-25, NORMATIV; azi `kernel.v8.1`: MAJOR la v2.0, NX-336 PR B, sensul lui I5; minor la v2.1, NX-336 D3, `TurnPlan.family`; MAJOR la v3.0, NX-348, sensul unei schimbări de subiect; MAJOR la v4.0, NX-350, un tip spus vag devine umbrelă, nu tipul subiectului; MAJOR la v5.0, NX-352, nevoia spusă e filtru relaxabil, căutarea se compune din ce a validat kernelul, «mai ieftin» ambiguu = mediana; minor la v5.1, NX-349, fațetele da/nu; MAJOR la v6.0, NX-364, ordinalul după detaliu, flexiunea în proveniență, excluderea și banda de preț; minor la v6.1, NX-374, dezvăluirea `need_unverifiable`; minor la v6.2, NX-375, `find` caută pe numele produsului numit; MAJOR la v7.0, NX-384, felul nemapat, raftul pe propriul nume, «nu vreau X»; minor la v7.1, NX-386, produsul numit și comparația cu o țintă; MAJOR la v8.0, NX-387, omisiunile; minor la v8.1, NX-380, `Act.question` și `rating` la referințe; porțile de replay derogate de Adi).**
 Sursa: [`docs/KERNEL-CONTRACT-v1.md`](docs/KERNEL-CONTRACT-v1.md); designul din care vine, ca
 referință: [`docs/KERNEL-DESIGN.md`](docs/KERNEL-DESIGN.md). Modelul scrie O interpretare a turului
 (`TurnInterpretation`: acte, schimbări de stare adresate prin handle, referințe, ambiguități); codul
@@ -657,7 +657,7 @@ subiect pentru poartă. Declarat: o descriere etichetată `name` de model e cău
 semnal structural n-o deosebește de un nume scris parțial). Card:
 [`tasks/stage1/NX-375.md`](tasks/stage1/NX-375.md); probă: `pytest tests/test_nx375_find_named_product.py -q`.
 
-**NX-380 — `kernel.v6.3` (minor) + promptul `interpret.v5`: regulile vin din greșelile reale, iar ce e al
+**NX-380 — `kernel.v8.1` (minor; scris ca v6.3, mutat peste v8.0 la merge) + promptul `interpret.v5`: regulile vin din greșelile reale, iar ce e al
 magazinului e dată.** Cele 398 de ture ne-ok din `wide-2026-10-07`, cu interpretarea brută a fiecăruia
 (`conversation_traces.diagnostics.model_io`), etichetate pe strat: cod 188, interpretare 90, schemă/meniu
 87, date 30. Schema: `Act.question` (întrebarea de pe `detail`/`compare`, FĂRĂ consumator încă: fișa

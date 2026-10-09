@@ -845,9 +845,16 @@ class _Planner:
         kind = then or act.kind
         if plan.executor != "search" or kind not in ("detail", "link", "compare", "find"):
             return plan
-        return plan.model_copy(
-            update={"then": kind, "names": names, "product_ids": list(dict.fromkeys(exact))}
-        )
+        update: dict[str, object] = {
+            "then": kind,
+            "names": names,
+            "product_ids": list(dict.fromkeys(exact)),
+        }
+        if act.question and kind in ("detail", "compare", "find"):
+            # NX-381: întrebarea clientului merge cu actul promovat («… conține alcool?»), ca
+            # executorul de detaliu să răspundă la ea, nu să servească fișa
+            update["question"] = act.question
+        return plan.model_copy(update=update)
 
     def _show_more(self, act: Act, index: int) -> TurnPlan:
         if not self.changed and self.state.active_search:

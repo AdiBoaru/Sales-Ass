@@ -920,6 +920,10 @@ async def _serve_named(
         await det._handle_link_intent(ctx, deps, ids=ids)
         return True
     if plan.then in ("detail", "find") and len(ids) == 1:
+        if plan.question and get_settings().detail_question_answer_enabled:
+            # NX-381 pe actul promovat: «beauty of joseon relief sun conține alcool?» primește
+            # răspunsul la întrebare, nu fișa standard
+            return await _answer_detail(ctx, deps, ids[0], plan.question)
         await det.serve_details(ctx, deps, ids[0])
         return ctx.reply is not None
     # `detail` pe mai mulți candidați = comparația lor (ca `act_both` pe o citire). Recenzia (I12):

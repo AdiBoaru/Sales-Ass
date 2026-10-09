@@ -248,3 +248,42 @@ async def test_a_name_the_results_do_not_carry_keeps_todays_search(monkeypatch, 
     not_exact = kx.kernel_sentence(electronics.pack, "ro", "not_exact_match")
     assert ctx.reply.text.startswith(not_exact)
     assert not [e for e in ctx.events if e.type == "kernel_name_resolved"]
+
+
+# --- NX-381 pe actul promovat (merge cu NX-380/381) ---------------------------------------------
+
+
+def test_the_question_travels_with_the_promoted_detail():
+    refs = [{"id": "r1", "text": "xiaomi phone 3", "kind": "name", "name": "xiaomi phone 3"}]
+    acts = [{"kind": "detail", "targets": ["r1"], "question": "are 5g?"}]
+    planned = plan_turn(
+        _interp(acts=acts, references=refs),
+        _state("telefoane"),
+        (),
+        [_ref("r1", "not_found", [], kind="name")],
+        _gate(),
+        changed=False,
+        pack=fc.pack("electronics"),
+        vocab=fc.vocabulary("electronics"),
+        locale="ro",
+    )
+    plan = planned.plans[planned.primary]
+    assert (plan.then, plan.question) == ("detail", "are 5g?")
+
+
+async def test_the_promoted_detail_answers_the_question(monkeypatch, electronics):
+    _search_stub(monkeypatch, electronics, {"xiaomi phone 3": ["el-03"]})
+    answered = []
+
+    async def answer(ctx, deps, pid, question):
+        answered.append((pid, question))
+        ctx.set_reply("Da, are 5G.", cacheable=False)
+        return True
+
+    monkeypatch.setattr(kx, "_answer_detail", answer)
+    ctx = sh.build_ctx(electronics, ConversationStateV2(), "xiaomi phone 3 are 5g?")
+    planned = _named("detail", ["xiaomi phone 3"])
+    plan = planned.plans[0].model_copy(update={"question": "are 5g?"})
+    planned = PlannedTurn(plans=(plan,), primary=0, disclosures=planned.disclosures)
+    assert await kx.execute_read_plans(ctx, _deps(), planned, _outcome()) is True
+    assert answered == [("el-03", "are 5g?")]
