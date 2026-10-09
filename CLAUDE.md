@@ -708,6 +708,11 @@ apel: răspunsul la întrebare deasupra tabelului, verdictul pe tipuri de client
 celulele verificate pe sursă de același `assemble_axes`; tabelul determinist rămâne plasa, iar
 verdictul reținut (I12) rămâne pe calea de azi. Flag `COMPOSER_COMPARE_ENABLED` (ON). Probă:
 `pytest tests/test_nx382_composer_3.py -q`.
+**Faza 4:** recomandarea pe calea kernelului (`ResponsePlan.kernel`) o scrie compozitorul în locul
+compunerii bogate (`finalize._compose_recommend`): fișa întreagă citită o dată (`_full_sheets`),
+variantele aceleiași familii arătate o dată (`composer.families`), rutina pe sloturi, verdictul pe
+set `set_fit` (o listă goală nu mai e refuz singură). Tot ce urmează compunerii în `render` rămâne.
+Flag `COMPOSER_RECOMMEND_ENABLED` (ON). Probă: `pytest tests/test_nx382_composer_4.py -q`.
 
 **NX-238 — retrievalul trece printr-un PORT, iar candidatul e inert (verdict `NOT-READY`).**
 `src/retrieval/` e contractul stabil pe care îl consumă NX-239: `RetrievalPort` + `RetrievalBundle`

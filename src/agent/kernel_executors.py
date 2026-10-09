@@ -135,6 +135,7 @@ KERNEL_EXECUTOR_EVENTS: frozenset[str] = frozenset(
         "detail_question",  # NX-381: măsurătoarea răspunsului rămâne și pe un tur căzut
         "composer",  # NX-382: idem pentru compozitor
         "composer_axes",  # NX-382 faza 3: axele tabelului scrise de compozitor
+        "composer_variants",  # NX-382 faza 4: familiile de variante arătate o dată
     }
 )
 #: Politica de răspuns a orchestratorului pe produsele unei comparații: (partenerii adăugați de

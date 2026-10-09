@@ -1795,6 +1795,7 @@ composer_chitchat_enabled = true
 composer_compare_enabled = true
 composer_detail_enabled = true
 composer_no_results_enabled = true
+composer_recommend_enabled = true
 composer_safety_enabled = true
 composer_store_info_enabled = true
 content_status_filter_enabled = true

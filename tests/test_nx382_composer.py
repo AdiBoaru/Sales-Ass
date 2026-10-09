@@ -41,6 +41,8 @@ def _reply(text="Da.", items=(), suggestions=(), met=(), advice=""):
         "items": [{"handle": h, "reason": r} for h, r in items],
         "suggestions": list(suggestions),
         "obligations_met": list(met),
+        # faza 4: doar schema `recommend` îl cere; pe celelalte sarcini parsarea îl ignoră
+        "set_fit": "fits" if items else "none",
     }
 
 
@@ -111,6 +113,7 @@ def test_the_schema_is_strict_with_closed_handles_and_obligation_codes():
         "items",
         "suggestions",
         "obligations_met",
+        "set_fit",  # faza 4: verdictul pe set, doar pe `recommend`
     ]
     assert body["properties"]["items"]["items"]["properties"]["handle"]["enum"] == ["P1", "P2"]
     assert body["properties"]["obligations_met"]["items"]["enum"] == ["ask"]

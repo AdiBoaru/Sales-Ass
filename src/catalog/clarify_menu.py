@@ -151,6 +151,12 @@ CHIP_PRODUCERS: dict[str, str] = {
         "offered_moves`, plafonat în `composer.parse`), formulat de model. Fără pași oferiți, "
         "lista e goală (pe coș, azi). Același contract ca `_compose_detail`."
     ),
+    "src/agent/finalize.py::_compose_recommend": (
+        "NX-382 faza 4: construiește un `RichReply` GOL (`chips=[]`) doar ca purtător al "
+        "refuzului modelului (zero carduri); chips-urile recomandării servite vin din "
+        "`composer.rich_reply` (pașii oferiți) și sunt suprascrise de mutările "
+        "`_apply_move_chips` (NX-296)."
+    ),
     "src/agent/kernel_executors.py::_answer_detail": (
         "NX-381: aceleași trei chip-uri de copy fix ca `serve_details` (`_detail_copy`), sub "
         "răspunsul la întrebarea despre produsul deja în context. Fără nume de catalog în text."
