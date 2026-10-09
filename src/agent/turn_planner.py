@@ -732,13 +732,16 @@ class _Planner:
         (`routine_family`), argumentele din STARE ca la căutare (nevoile dure, bugetul dur,
         preferințele; I2, I7) și ancora = prima țintă `exact` a actului. Fără familie declarată,
         planul rămâne `bundle` fără argumente, deci pe calea de azi."""
-        family = routine_family(self.state, pack=self.pack, vocab=self.vocab)
-        if family is None and self.gate.routine_family is not None:
+        family = self.gate.routine_family
+        if family is not None:
             # NX-389: familia decisă de poartă (singura servibilă, sau cea majoritară după o
-            # întrebare la care clientul n-a ales, spusă de dezvăluire)
-            family = self.gate.routine_family
+            # întrebare la care clientul n-a ales, spusă de dezvăluire). Poarta o decide doar când
+            # subiectul n-are familie, sau (NX-390) când raftul subiectului e doar ghicit în tur,
+            # deci ea bate familia raftului ghicit.
             if self.gate.decision.reason in _FAMILY_DEFAULTED_REASONS:
                 self._disclose(index, "family_defaulted")
+        else:
+            family = routine_family(self.state, pack=self.pack, vocab=self.vocab)
         if family is None:
             return self._plan("bundle")
         ids = [p for ref in self._refs_of(act) if ref.outcome == "exact" for p in ref.product_ids]

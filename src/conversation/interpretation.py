@@ -115,7 +115,15 @@ from src.tools.catalog_tools import SearchArgs
 #: `TurnPlan.offer`. NX-389b: întrebarea ține minte actul și opțiunile, iar CODUL reia rutina la
 #: răspuns (`routine_family.resume_routine`). Schema scrisă de model e neschimbată. Flag
 #: `ROUTINE_FAMILY_QUESTION_ENABLED` (stins = regula de azi).
-KERNEL_CONTRACT_VERSION = "kernel.v9.0"
+#: `kernel.v10.0` (NX-390, MAJOR): familia unei rutini o decide ce a SPUS clientul, nu dacă
+#: modelul a scris un raft. (1) Validatorul notează raftul rădăcină numit în fraza unei nevoi
+#: (`CheckedChange.shelf`, «ten» din „ten gras”), iar pe un `bundle` fără raft spus explicit
+#: delta îl face subiect (`user_explicit`, contorul `subject_from_named_part`). (2) Poarta nu ia
+#: drept familie un raft ghicit de model (o schimbare ne-`explicit` din acest tur, «piele», sau un
+#: raft intrat în subiect înainte ca întrebarea de familie să se închidă): întreabă ca fără raft
+#: (motivul rămâne `no_family`), iar familia aleasă de poartă bate raftul ghicit. Schema scrisă de
+#: model e neschimbată.
+KERNEL_CONTRACT_VERSION = "kernel.v10.0"
 
 # --- scrise de model ----------------------------------------------------------------------------
 
@@ -252,6 +260,11 @@ class CheckedChange(_CodeWritten):
     # (fraza din vocabular, sau numărul). Plannerul compune textul căutării din ele (subiectul
     # numit, o fațetă filtrată), nu din tot citatul. Redactate în trace. Goală în rest.
     matched: tuple[str, ...] = ()
+    # NX-390 (kernel.v10.0): pe o schimbare `explicit` care nu e raft, raftul RĂDĂCINĂ numit de un
+    # cuvânt din fraza care a numit valoarea («ten» din „ten gras”, «par» din „par uscat”): partea
+    # corpului despre care vorbește clientul. Cheie de catalog, scrisă doar de validator. Delta o
+    # face subiect pe o rutină (`bundle`), unde ea e familia. None în rest.
+    shelf: str | None = None
 
 
 class ResolvedRef(_CodeWritten):

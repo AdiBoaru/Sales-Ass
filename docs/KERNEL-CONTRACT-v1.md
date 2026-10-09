@@ -23,7 +23,27 @@ Versioning: the contract is `kernel.v1.0`. **Minor** (`v1.1`): additive schema f
 
 No invariant, ownership row or state rule changes in v1.2, so no replay gate is required. The open questions step 6 raised on I5 (the safety prune on `aside`), I20 (the cart on `cart_ref`) and I15a/I12 (`grounding_guard` does not run on the v1 composition) are decided in the PRs that need them (B and C), under the minor/major rule.
 
-**Current version: `kernel.v9.0` (MAJOR, NX-389, 2026-10-09).** A new ambiguity-gate rule for a
+**Current version: `kernel.v10.0` (MAJOR, NX-390, 2026-10-09).** The family of a routine is
+decided by what the customer SAID, not by whether the model wrote a shelf. The unseen set
+`routines-2026-10-09` failed the NX-389 GO rule on two turns with one cause: «a routine for oily
+skin» (the model wrote only `skin_type=oily`, quote „ten gras”) was asked its family and then built
+as a makeup routine (the majority family of oily skin), while «a routine for dehydrated skin» (the
+model guessed the face-care shelf from „piele”, `implicit`) was not asked. (1) The validator records
+the ROOT shelf named by one word of the phrase that named a need's value (`CheckedChange.shelf`,
+two or more words, exactly one root shelf, inflection through `_confirms`). On a `bundle` with no
+explicit shelf and no item type, the delta makes it the subject (`set_topic`, `user_explicit`,
+counter `subject_from_named_part`); a shelf the model wrote non-explicitly yields to it. (2) The gate
+does not take as the family a shelf the model only guessed: put in the subject this turn by
+non-explicit shelf changes only (and not named in a need's phrase), or put there before the family
+question closed. It asks as if there were no shelf (reason stays `no_family`), and the family the
+gate decides (single or majority) beats the guessed shelf in the planner. A guessed shelf with no
+routine family (a one-item request labelled `bundle`, «a toothbrush for it?») keeps today's path. A
+shelf from an earlier turn, a shelf said explicitly and a shelf chosen at the question stay the
+family. Prompt `interpret.v8` states the NX-388 rule directly and asks the model not to write a
+guessed shelf in a bundle. The model-written schema is unchanged; the trace treats `shelf` as a
+derived field. The replay gate is requested from Adi in the PR.
+
+**`kernel.v9.0` (MAJOR, NX-389, 2026-10-09).** A new ambiguity-gate rule for a
 routine (`bundle`) whose family (face, hair, body, makeup) nothing decides: no shelf in the subject,
 no family from the item type, and no clear family from the needs (`family_by_need`). The gate asks
 what the routine is for (key `routine_family`, reason `no_family`), offering only the families the

@@ -943,10 +943,20 @@ class _Gate:
         table = getattr(self.pack, "bundle_executors", None)
         if not isinstance(table, Mapping) or WILDCARD not in table:
             return None
-        if self.state.topic.category_key:
-            return None
+        state = self.state
+        if state.topic.category_key:
+            # Un raft fără familie de rutină rămâne pe calea de azi chiar ghicit: pe trafic, așa
+            # arată cererile de UN produs etichetate `bundle` («si o periuta pt el?»), care n-au
+            # voie să primească întrebarea de familie (regula GO NX-389).
+            shelf_family = family_of_shelf(
+                state.topic.category_key, pack=self.pack, vocab=self.vocab
+            )
+            if shelf_family is None or not self._guessed_shelf():
+                return None
+            # NX-390: raftul e doar ghicit de model în acest tur, deci familia nu e spusă
+            state = _replace(state, topic=_replace(state.topic, category_key=None))
         read = self._scope_families()
-        if read is None and routine_family(self.state, pack=self.pack, vocab=self.vocab):
+        if read is None and routine_family(state, pack=self.pack, vocab=self.vocab):
             return None
         if self.vocab is None:
             self._note("vocabulary_unavailable")
@@ -982,6 +992,47 @@ class _Gate:
             ),
             on_decline=declined,
         )
+
+    def _guessed_shelf(self) -> bool:
+        """NX-390 (`kernel.v10.0`): raftul subiectului e doar o ghicitură a modelului. Fie a intrat
+        în subiect în turul în care s-a întrebat familia, fie e pus CHIAR în acest tur (reducerul
+        scrie `changed_at_revision` = revizia turului) doar de schimbări de raft ne-`explicit`.
+        Turul real `75137b28` («fa mi o rutina pt piele deshidratata»): modelul a scris
+        `ten-ingrijirea-tenului` cu citatul „piele”, `implicit`, iar poarta l-a luat drept familie
+        spusă, deși clientul n-a spus ten sau corp. Un raft din turele anterioare, unul spus
+        explicit, unul numit în fraza unei nevoi (`CheckedChange.shelf`) sau unul ales la o
+        întrebare (`answer_topic`, fără schimbare acceptată) rămâne familia."""
+        topic = self.state.topic
+        # Raftul a intrat în subiect ÎNAINTE ca întrebarea de familie să se închidă: prin
+        # construcție n-a fost familia (altfel întrebarea nu se punea). La «nu știu» decide tot
+        # poarta, pe familia majoritară spusă clientului, nu ghicitura rămasă în stare. Întrebarea
+        # vie are revizia turului în care s-a pus; închisă, `AskedQuestion` are revizia
+        # închiderii, iar raftul ALES atunci (`answer_topic`) intră exact la ea, deci nu e prins.
+        pending = self.state.pending_clarification
+        if (
+            pending is not None
+            and pending.target_key == ROUTINE_FAMILY_KEY
+            and pending.asked_at_revision == topic.changed_at_revision
+        ):
+            return True
+        asked = self.state.asked(ROUTINE_FAMILY_KEY)
+        if asked is not None and topic.changed_at_revision < asked.revision:
+            return True
+        if asked is not None and topic.changed_at_revision == asked.revision:
+            return False  # raftul ales chiar la închiderea întrebării: răspunsul clientului
+        if topic.changed_at_revision != self.state.revision:
+            return False
+        if any(c.rejected is None and c.shelf == topic.category_key for c in self.checked):
+            return False  # clientul l-a numit în fraza unei nevoi («ten gras»): spus, nu ghicit
+        shelf_changes = [
+            c
+            for c in self.checked
+            if c.rejected is None
+            and c.dimension == CATEGORY_DIMENSION
+            and c.change.op in ("set", "add")
+            and c.canonical_value == topic.category_key
+        ]
+        return bool(shelf_changes) and all(c.provenance != "explicit" for c in shelf_changes)
 
     def _scope_families(self) -> tuple[str, ...] | None:
         """Familiile rafturilor din lecturile `scope` ale modelului, când sunt cel puțin două

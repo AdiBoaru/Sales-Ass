@@ -63,7 +63,7 @@ gate-ul NX-210**. Direcția aprobată către care migrăm:
 
 **Înghețate până la GO-ul de la NX-210:** enforcement-ul QuerySpec/Match Gate (NX-188, NX-189).
 
-**Kernelul conversațional — contractul `kernel.v1.0` (înghețat 2026-09-25, NORMATIV; azi `kernel.v9.0`: MAJOR la v2.0, NX-336 PR B, sensul lui I5; minor la v2.1, NX-336 D3, `TurnPlan.family`; MAJOR la v3.0, NX-348, sensul unei schimbări de subiect; MAJOR la v4.0, NX-350, un tip spus vag devine umbrelă, nu tipul subiectului; MAJOR la v5.0, NX-352, nevoia spusă e filtru relaxabil, căutarea se compune din ce a validat kernelul, «mai ieftin» ambiguu = mediana; minor la v5.1, NX-349, fațetele da/nu; MAJOR la v6.0, NX-364, ordinalul după detaliu, flexiunea în proveniență, excluderea și banda de preț; minor la v6.1, NX-374, dezvăluirea `need_unverifiable`; minor la v6.2, NX-375, `find` caută pe numele produsului numit; MAJOR la v7.0, NX-384, felul nemapat, raftul pe propriul nume, «nu vreau X»; minor la v7.1, NX-386, produsul numit și comparația cu o țintă; MAJOR la v8.0, NX-387, omisiunile; minor la v8.1, NX-380, `Act.question` și `rating` la referințe; MAJOR la v9.0, NX-389, întrebarea de familie a unei rutini; porțile de replay derogate de Adi).**
+**Kernelul conversațional — contractul `kernel.v1.0` (înghețat 2026-09-25, NORMATIV; azi `kernel.v10.0`: MAJOR la v2.0, NX-336 PR B, sensul lui I5; minor la v2.1, NX-336 D3, `TurnPlan.family`; MAJOR la v3.0, NX-348, sensul unei schimbări de subiect; MAJOR la v4.0, NX-350, un tip spus vag devine umbrelă, nu tipul subiectului; MAJOR la v5.0, NX-352, nevoia spusă e filtru relaxabil, căutarea se compune din ce a validat kernelul, «mai ieftin» ambiguu = mediana; minor la v5.1, NX-349, fațetele da/nu; MAJOR la v6.0, NX-364, ordinalul după detaliu, flexiunea în proveniență, excluderea și banda de preț; minor la v6.1, NX-374, dezvăluirea `need_unverifiable`; minor la v6.2, NX-375, `find` caută pe numele produsului numit; MAJOR la v7.0, NX-384, felul nemapat, raftul pe propriul nume, «nu vreau X»; minor la v7.1, NX-386, produsul numit și comparația cu o țintă; MAJOR la v8.0, NX-387, omisiunile; minor la v8.1, NX-380, `Act.question` și `rating` la referințe; MAJOR la v9.0, NX-389, întrebarea de familie a unei rutini; MAJOR la v10.0, NX-390, familia din cuvintele clientului; porțile de replay derogate de Adi).**
 Sursa: [`docs/KERNEL-CONTRACT-v1.md`](docs/KERNEL-CONTRACT-v1.md); designul din care vine, ca
 referință: [`docs/KERNEL-DESIGN.md`](docs/KERNEL-DESIGN.md). Modelul scrie O interpretare a turului
 (`TurnInterpretation`: acte, schimbări de stare adresate prin handle, referințe, ambiguități); codul
@@ -265,6 +265,26 @@ verificării perechii), iar bugetul spus la cerere rămâne plafonul rutinei. «
 chip `routine_offer` (`TurnPlan.offer`). Fără alegere, doar `bundle` repetat reia (majoritara +
 `family_defaulted`); un refuz nu pornește nimic. Întrebarea are chips de răspuns (`routine_choice`),
 iar compozitorul primește `about` + `options`. Probă: `pytest tests/test_nx389b_routine_resume.py -q`.
+**Verdictul NX-389 pe setul nevăzut `routines-2026-10-09`: NO-GO** (2026-10-09, rulat pe producție
+cu flagul aprins). Pe regula pre-înregistrată: întrebare pe 5 din 6 ture fără familie (prag 90%) și
+pe 1 din 14 cu familia spusă (prag 0). Familia aleasă după răspuns și zero întrebări pe cererile de un
+produs trec. Cauza comună: familia o decidea faptul că MODELUL a scris un raft. Reparația e NX-390.
+**NX-390 — `kernel.v10.0` (MAJOR): familia rutinei o decide ce a SPUS clientul (prompt
+`interpret.v8`).** «rutină pentru ten gras»: modelul a scris doar `skin_type=oily`, poarta a întrebat
+„machiaj, ten sau păr?”, iar la «doar pt seara» rutina a ieșit de machiaj (familia majoritară a
+tenului gras, 153 față de 73). «rutină pt piele deshidratata»: modelul a ghicit raftul de față din
+„piele” (`implicit`), deci n-a întrebat. Acum validatorul notează raftul RĂDĂCINĂ numit de un cuvânt
+din fraza care a numit nevoia (`CheckedChange.shelf`, «ten» din „ten gras”, prin `_confirms`), iar pe
+un `bundle` fără raft explicit și fără tip delta îl face subiect (`user_explicit`,
+`subject_from_named_part`). Poarta nu ia drept familie un raft ghicit (pus în acest tur doar de
+schimbări ne-explicite, sau înaintea închiderii întrebării de familie), iar familia decisă de ea bate
+raftul ghicit în planner; un raft ghicit FĂRĂ familie de rutină («si o periuta pt el?») rămâne pe
+calea de azi (măsurat: 2 din cele 5 rafturi `implicit` din 75 de ture `bundle` în 40 de zile).
+Promptul spune regula NX-388 direct și cere să nu scrie un raft ghicit într-un `bundle`. Rămân
+descoperite, declarat: «rutină pentru scalp» (raft ghicit cu familie) primește acum întrebarea;
+dezvăluirea `family_defaulted` se repetă pe fiecare tur de rutină după o alegere implicită. Card:
+[`tasks/stage1/NX-390.md`](tasks/stage1/NX-390.md); probă:
+`pytest tests/test_nx390_routine_family_from_words.py -q`.
 **NX-334 — direcția unei limite numerice ajunge neschimbată în stare.** Pe pașii 3a/3b «minim 256
 GB» se persista `storage lte 256`: delta păstra relația doar pe preț, iar orice fațetă numerică era
 plafon. Acum o dimensiune numerică are DOUĂ chei, ca bugetul (`<fațetă>_min` / `<fațetă>_max`,

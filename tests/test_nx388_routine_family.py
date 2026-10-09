@@ -104,26 +104,22 @@ def test_a_routine_for_oily_skin_names_the_face_shelf_and_gets_the_face_family()
     assert plan.search_args is not None and plan.search_args.price_max == 200.0
 
 
-def test_the_same_turn_without_the_shelf_is_todays_search():
+def test_the_same_turn_without_the_shelf_takes_the_shelf_from_the_quote():
     """Interpretarea de pe `interpret.v5` (traceul real), pe o nevoie fără familie în date
-    (`skin_type:oily`: față 73 / machiaj 153 / păr 35): fără raft, kernelul nu derivă raftul din
-    citat. Cu întrebarea de familie stinsă, planul e căutarea de dinainte; aprinsă (NX-389, din
-    2026-10-09), botul întreabă pentru ce e rutina."""
+    (`skin_type:oily`: față 73 / machiaj 153 / păr 35). Pe NX-388/389 kernelul nu deriva raftul din
+    citat: cu întrebarea stinsă planul era o căutare, aprinsă botul întreba „machiaj, ten sau păr?”
+    (setul `routines-2026-10-09`, r1). NX-390: «ten» din „ten gras” numește raftul, deci rutina e de
+    față cu flagul stins sau aprins, fără întrebare."""
     from src.conversation.clarification_policy import ClarificationPolicy
 
     turn = _interp(
         _change("routine_time", "pm", "de seara"), _change("skin_type", "oily", "ten gras")
     )
-    off = _step(turn, "fa-mi o rutina de seara pt ten gras", policy=ClarificationPolicy())
-    assert off.state_after.topic.category_key is None
-    assert _primary(off).executor == "search"
-    on = _step(
-        turn,
-        "fa-mi o rutina de seara pt ten gras",
-        policy=ClarificationPolicy(routine_family_question=True),
-    )
-    assert on.state_after.topic.category_key is None
-    assert (on.outcome.decision.verdict, on.outcome.decision.reason) == ("must_ask", "no_family")
+    for policy in (ClarificationPolicy(), ClarificationPolicy(routine_family_question=True)):
+        step = _step(turn, "fa-mi o rutina de seara pt ten gras", policy=policy)
+        assert step.state_after.topic.category_key == "ten"
+        assert step.outcome.decision.verdict == "act"
+        assert (_primary(step).executor, _primary(step).family) == ("bundle", "fata")
 
 
 def test_pores_already_give_the_face_family_through_the_need_map():
@@ -197,8 +193,8 @@ def test_the_prompt_version_moved():
 
 def test_the_prompt_says_the_part_a_routine_is_for_is_a_shelf():
     """Regula e GENERICĂ (engleză, fără exemple din domeniu, P11/I14): în cererea unui set, partea
-    despre care clientul își descrie starea e raftul ei."""
+    despre care clientul își descrie starea e raftul ei (NX-390, `v8`: spus direct)."""
     text = " ".join(_INSTRUCTIONS.split())
-    assert "the part the customer's condition is about" in text
+    assert "also when the word sits inside the condition they describe" in text
     for word in ("ten", "piele", "gras", "skin"):
         assert f" {word} " not in f" {text.lower()} "

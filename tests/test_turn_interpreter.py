@@ -634,11 +634,30 @@ def test_v4_keeps_every_v2_and_v3_rule(pack):
     assert "bundle: only when the customer asks for several items chosen together" in system
 
 
-def test_the_prompt_version_is_v7():
+def test_the_prompt_version_is_v8():
     """NX-380: `v5` = regulile din setul wide-2026-10-07, meniul de tipuri întreg, `STORE NOTES`;
     NX-388: `v6` = partea despre care clientul își descrie starea e raftul ei într-un `bundle`;
-    NX-389b: `v7` = PENDING cu actul și opțiunile întrebării."""
-    assert ic.INTERPRET_PROMPT_VERSION == "interpret.v7"
+    NX-389b: `v7` = PENDING cu actul și opțiunile întrebării; NX-390: `v8` = regula `v6` spusă
+    direct și raftul doar ghicit lăsat afară într-un `bundle`."""
+    assert ic.INTERPRET_PROMPT_VERSION == "interpret.v8"
+
+
+#: NX-390: ancorele celor două reguli `v8` (generice, I14).
+V8_RULES = {
+    "cuvântul care e cheia unui raft e mereu raftul, și în starea descrisă": (
+        "a word of the customer that is a shelf key is always a set on category with that key"
+    ),
+    "raftul doar ghicit nu se scrie într-un bundle": (
+        "a shelf that no word of the customer names, only guessed from a broader word, "
+        "is not a change"
+    ),
+}
+
+
+@pytest.mark.parametrize("pack", ALL_PACKS)
+def test_every_v8_rule_is_in_the_rendered_prompt(pack):
+    system = " ".join(ti.system_prompt(_input(pack)).split())
+    assert [rule for rule, anchor in V8_RULES.items() if anchor not in system] == []
 
 
 # --- NX-380: interpret.v5 = regulile din setul wide-2026-10-07 + meniul de tipuri + STORE NOTES ---
