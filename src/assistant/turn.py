@@ -188,6 +188,7 @@ async def _serve(ctx: Any, deps: Any, settings: Any, run: _Run) -> Tools:
         families=menus.families,
         max_shown=card_slots(),
         chip_count=chip_slots(),
+        recommend=settings.assistant_recommend_cards,
     )
     view = render_view(
         memory=memory,

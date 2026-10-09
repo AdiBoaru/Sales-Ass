@@ -2020,6 +2020,12 @@ class Settings(BaseSettings):
     assistant_max_rounds: int = Field(
         default=6, ge=1, le=10, validation_alias="ASSISTANT_MAX_ROUNDS"
     )
+    # NX-402: câte produse arată agentul la o cerere GENERALĂ de recomandare (decizia lui Adi,
+    # 2026-10-09: 5; pe primele ture din producție agentul arăta 1-2). Mai puține doar la o cerere
+    # specifică, cu motivul spus. Plafonul de carduri rămâne `card_slots`.
+    assistant_recommend_cards: int = Field(
+        default=5, ge=1, le=8, validation_alias="ASSISTANT_RECOMMEND_CARDS"
+    )
     # NX-401: plafonul unei RUNDE de model (secunde). Un apel blocat la furnizor e tăiat aici și
     # reîncercat O dată, în loc să consume tot turul (primul tur după deploy: 42,5 s fără niciun
     # token, apoi plasa). Măsurat pe trafic: o rundă normală durează 1,5-7 s.
