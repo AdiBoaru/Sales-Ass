@@ -361,8 +361,13 @@ async def test_failing_the_gate_twice_falls_back_with_the_context_restored():
     served, ctx = await _run(llm, ctx)
     assert served is False and ctx.reply is None and ctx.retrieval is None
     assert ctx.state_patch == {"safety": {"x": 1}}, "starea turului e cea de dinainte"
-    assert [e.type for e in ctx.events] == ["assistant_fallback"]
-    assert ctx.events[0].properties["reason"] == "gate_failed"
+    assert [e.type for e in ctx.events if e.type != "assistant_round"] == ["assistant_fallback"]
+    assert [e.properties["outcome"] for e in ctx.events if e.type == "assistant_round"] == [
+        "ok",
+        "ok",
+        "ok",
+    ], "diagnosticul rundelor rămâne și când agentul cade (NX-401)"
+    assert ctx.events[-1].properties["reason"] == "gate_failed"
     assert "assistant" not in ctx.trace
 
 
@@ -788,7 +793,10 @@ async def test_a_mutation_survives_a_failed_turn_and_is_told(monkeypatch):
     served, ctx = await _run(llm, ctx)
     assert served is True and ctx.reply.text == "Am pus COSRX Crema A în coș."
     assert ctx.state_patch["cart"] == [1]
-    assert [e.type for e in ctx.events] == ["assistant_fallback", "cart_updated"]
+    assert [e.type for e in ctx.events if e.type != "assistant_round"] == [
+        "assistant_fallback",
+        "cart_updated",
+    ]
 
 
 def test_an_empty_menu_never_becomes_an_empty_enum():
@@ -918,3 +926,69 @@ def test_the_stage_imports_the_assistant_only_under_the_flag():
             assert node.col_offset > 4, "importul e înăuntrul ramurii, nu la nivel de modul"
     top = [n for n in tree.body if isinstance(n, ast.ImportFrom)]
     assert not [n for n in top if (n.module or "").startswith("src.assistant")]
+
+
+# --- NX-401: plafonul pe rundă, diagnosticul, recomandarea cu opțiuni ----------------------------
+
+
+async def test_a_hung_round_is_cut_and_retried_once(monkeypatch):
+    """Primul tur după deploy: o rundă a stat 42,5 s fără niciun token și a consumat tot turul.
+    Acum runda se taie la plafonul ei și se reîncearcă o dată."""
+    monkeypatch.setattr(get_settings(), "assistant_round_timeout_s", 0.05)
+    calls = {"n": 0}
+
+    class Hangs(ScriptedLLM):
+        async def respond_round(self, **kw):
+            calls["n"] += 1
+            if calls["n"] == 2:
+                await asyncio.sleep(1)
+            return await super().respond_round(**kw)
+
+    llm = Hangs(
+        [_call("search_catalog", _search(), "c1")],
+        [_call("answer", _ans("Uite.", ["P1"]), "c2")],
+    )
+    served, ctx = await _run(llm)
+    assert served and calls["n"] == 3
+    rounds = [e.properties for e in ctx.events if e.type == "assistant_round"]
+    assert [r["outcome"] for r in rounds] == ["ok", "timeout", "ok"]
+    assert rounds[-1]["attempts"] == 2
+
+
+async def test_a_round_that_hangs_twice_falls_back_with_its_reason(monkeypatch):
+    monkeypatch.setattr(get_settings(), "assistant_round_timeout_s", 0.05)
+
+    class Hangs(ScriptedLLM):
+        async def respond_round(self, **kw):
+            await asyncio.sleep(1)
+
+    served, ctx = await _run(Hangs())
+    assert served is False
+    assert ctx.events[-1].type == "assistant_fallback"
+    assert ctx.events[-1].properties["reason"] == "round_timeout"
+    outcomes = [e.properties["outcome"] for e in ctx.events if e.type == "assistant_round"]
+    assert outcomes == ["timeout", "timeout"], "diagnosticul nu se șterge la cădere"
+
+
+async def test_model_client_events_survive_a_fallback():
+    class Noisy(ScriptedLLM):
+        def __init__(self, ctx):
+            super().__init__()
+            self.ctx = ctx
+
+        async def respond_round(self, **kw):
+            self.ctx.emit("llm_retry_timeout", attempt=1)
+            raise RuntimeError("provider down")
+
+    ctx = _ctx()
+    served = await aturn.run_assistant_turn(ctx, _deps(Noisy(ctx)))
+    assert served is False
+    assert "llm_retry_timeout" in [e.type for e in ctx.events]
+
+
+def test_the_instructions_ask_for_a_choice_that_fits_the_stated_need():
+    text = aturn.instructions(
+        store="SOLE", locale="ro", families=("fata",), max_shown=6, chip_count=5
+    )
+    assert "show 2 to 4" in text and "needs filter" in text
+    assert "different type than theirs is not a fit" in text
