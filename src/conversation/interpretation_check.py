@@ -66,7 +66,10 @@ from src.domain.constraints import UnitRegistry
 #: («rutină pentru ten gras» ⇒ raftul `ten`, deci familia rutinei).
 #: NX-389b: `v7` = blocul PENDING arată actul întrebării și opțiunile ei (chei), iar răspunsul care
 #: alege o numește ca atare; «nu știu» repetă actul întrebării.
-INTERPRET_PROMPT_VERSION = "interpret.v7"
+#: NX-390: `v8` = regula `v6`, spusă direct (într-un `bundle`, un cuvânt al clientului care e cheia
+#: unui raft e mereu `set category`, și în interiorul stării descrise), plus: un raft pe care niciun
+#: cuvânt al clientului nu-l numește, doar ghicit, nu se scrie.
+INTERPRET_PROMPT_VERSION = "interpret.v8"
 
 #: `outcome`, în ordinea în care se decide (§3 din card): primul care se potrivește câștigă.
 #: `internal_error` (recenzia NX-335, P6) e în plus față de card: o intrare stricată (pachet,

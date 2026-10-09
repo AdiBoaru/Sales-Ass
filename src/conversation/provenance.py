@@ -528,12 +528,38 @@ class _Checker:
             # NX-352: cuvintele citatului care au NUMIT valoarea (nu tot citatul): doar ele pot
             # pleca din textul căutării, fiindcă doar pe ele le poartă filtrul.
             matched = tuple(evidence.words[hit_at : hit_at + hit_size])
-            checked = checked.model_copy(update={"matched": matched})
+            checked = checked.model_copy(
+                update={"matched": matched, "shelf": self._shelf_in(matched, dimension)}
+            )
         if dimension == SUBJECT_TYPE and level == "implicit" and evidence.located:
             umbrella = self._umbrella(evidence, canonical)
             if umbrella:
                 checked = checked.model_copy(update={"umbrella": umbrella})
         return checked
+
+    def _shelf_in(self, matched: Sequence[str], dimension: str) -> str | None:
+        """NX-390 (`kernel.v10.0`): raftul RĂDĂCINĂ numit de un cuvânt din fraza care a numit
+        valoarea unei nevoi: «ten» din „ten gras”, «par» din „par uscat”. Doar pe o frază de cel
+        puțin două cuvinte (partea corpului e acolo un calificativ al nevoii, nu toată valoarea) și
+        doar când exact un raft rădăcină e numit. Cheia sau eticheta raftului trebuie să fie UN
+        cuvânt de conținut; flexiunea trece prin `_confirms` («tenul» = „ten”, «pare» ≠ „par”,
+        regula v6.0), iar fereastra a trecut deja de `_spelled_name` (un cuvânt identic lângă ea).
+        Doar dovadă: delta decide ce face cu ea."""
+        if self.vocab is None or dimension == CATEGORY_DIMENSION or len(matched) < 2:
+            return None
+        suffixes = inflection_suffixes(self.locale)
+        found: set[str] = set()
+        for entry in self.vocab.categories:
+            if not entry.path or entry.depth:
+                continue
+            names = set()
+            for name in (entry.key, entry.label):
+                content = [w for w in tokens((name or "").replace("-", " ")) if w not in self.stop]
+                if len(content) == 1:
+                    names.add(content[0])
+            if any(_confirms(w, n, suffixes) for w in matched for n in names):
+                found.add(entry.key)
+        return next(iter(found)) if len(found) == 1 else None
 
     def _bool_facet(self, dimension: str) -> object | None:
         """Fațeta da/nu a pachetului pe `dimension`, sau `None`."""

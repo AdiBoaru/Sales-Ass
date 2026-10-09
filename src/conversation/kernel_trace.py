@@ -94,8 +94,9 @@ LAYER_NAMES: tuple[str, ...] = tuple(name for name, _ in LAYERS)
 
 
 #: NX-352: câmpuri DERIVATE de cod dintr-un strat, pe care o etichetă nu le scrie (`matched` =
-#: cuvintele citatului care au numit valoarea). Nu intră în comparația straturilor.
-_DERIVED: dict[str, tuple[str, ...]] = {"checked": ("matched",)}
+#: cuvintele citatului care au numit valoarea; NX-390: `shelf` = raftul numit în fraza ei). Nu
+#: intră în comparația straturilor.
+_DERIVED: dict[str, tuple[str, ...]] = {"checked": ("matched", "shelf")}
 
 
 def _without(value: Any, keys: tuple[str, ...]) -> Any:

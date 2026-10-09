@@ -133,6 +133,46 @@ def _subject_proposal(
     )
 
 
+#: NX-390: actul pe care raftul numit într-o nevoie devine subiect (rutina; familia e raftul).
+_BUNDLE = "bundle"
+
+
+def _named_part(
+    interp: TurnInterpretation,
+    checked: Sequence[CheckedChange],
+    subject: Sequence[CheckedChange],
+    umbrella: Sequence[tuple[str, ...]],
+    rejected: Sequence[CheckedChange],
+) -> tuple[str, CheckedChange] | None:
+    """NX-390 (`kernel.v10.0`): pe o rutină (`bundle`), raftul rădăcină numit în fraza unei nevoi
+    spuse explicit («rutină pentru TEN gras» ⇒ `ten`) e subiectul, chiar când modelul a scris doar
+    nevoia. Turul real `d847f351` (setul `routines-2026-10-09`): fără raft, poarta a întrebat
+    „machiaj, ten sau păr?”, iar la «doar pt seara» a făcut rutina pe familia majoritară a tenului
+    gras, adică machiajul. Regula de prompt NX-388 cerea modelului să scrie raftul, dar nu e o
+    garanție; dovada e a validatorului (`CheckedChange.shelf`).
+
+    Se aplică doar când turul nu are un raft spus EXPLICIT și nici un tip de produs (clientul a
+    numit atunci ce vrea), doar pe un singur raft numit, iar un raft scris de model ne-explicit
+    (ghicit) cedează locul celui numit de client. `(raft, schimbarea care l-a numit)` sau None."""
+    if not any(a.kind == _BUNDLE for a in interp.acts) or umbrella:
+        return None
+    if any(c.dimension == PRODUCT_TYPE or c.provenance == "explicit" for c in subject):
+        return None
+    refused = {id(r.change) for r in rejected}
+    named = [
+        c
+        for c in checked
+        if c.shelf
+        and c.rejected is None
+        and c.provenance == "explicit"
+        and id(c.change) not in refused
+        and (c.change.relation or "eq") != "avoid"
+    ]
+    if not named or len({c.shelf for c in named}) != 1:
+        return None
+    return str(named[0].shelf), named[0]
+
+
 def _relative_price(
     c: CheckedChange,
     resolved: Sequence[ResolvedRef],
@@ -410,6 +450,25 @@ def to_delta(
             )
             continue
         proposals += made
+
+    named = _named_part(interp, checked, subject, umbrella, rejected)
+    if named is not None:
+        shelf, lead = named
+        if not subject:
+            proposals.insert(0, None)  # type: ignore[arg-type]  # locul propunerii de subiect
+        subject = []
+        counters["subject_from_named_part"] = 1
+        proposals = [
+            StateUpdateProposal(
+                "set_topic",
+                category_key=shelf,
+                product_type=None,
+                **_common(lead, _SOURCE_BY_PROVENANCE["explicit"], turn_id),
+            )
+            if p is None
+            else p
+            for p in proposals
+        ]
 
     if subject or umbrella:
         made = _subject_proposal(subject, turn_id, counters) if subject else None

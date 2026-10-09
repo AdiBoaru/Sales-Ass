@@ -323,8 +323,10 @@ with that shelf key; when the customer also names an item type, a shelf word tha
 name or only says what it is for is not a shelf. A word that describes the customer (who they \
 are, their condition) is not a shelf; the part or place the items are used on is, when a shelf \
 key names it and the customer names no item type. In a bundle where the customer names no other \
-shelf, the part the customer's condition is about is also the shelf of that part, when a shelf key \
-names it: write both the condition and the shelf, each quoting the customer's words for it.
+shelf, a word of the customer that is a shelf key is always a set on category with that key, also \
+when the word sits inside the condition they describe: write both the condition and the shelf, \
+each quoting the customer's words for it. In a bundle, a shelf that no word of the customer names, \
+only guessed from a broader word, is not a change: leave it out, code asks the customer.
   relation: eq; lte (at most); gte (at least); contains; avoid (the customer does not want it).
   value: for product_type, the code that names the same kind of item, keeping the customer's word \
 for the part or purpose it is for; a word that only describes a property is not such a word. \
