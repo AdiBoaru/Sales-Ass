@@ -137,7 +137,7 @@ def has_unverifiable_claim(text: str | None, grounded: frozenset[str] = frozense
 #: pentru hidratare», «cea mai ieftină») e o judecată pe fapte și nu intră aici.
 _POPULARITY = re.compile(
     r"\b(nr\.?\s*1|num[aă]rul\s+(1|unu)|best\s*-?\s*seller\w*|top\s+v[aâ]nz[aă]ri"
-    r"|cel(e|ei|a)?\s+mai\s+(v[aâ]ndut|popular|c[aă]utat|cump[aă]rat|comandat)\w*"
+    r"|ce(a|l|le|lei|i)\s+mai\s+(bine\s+)?(v[aâ]nd|popular|c[aă]utat|cump[aă]rat|comandat)\w*"
     r"|most\s+popular|best\s*selling)\b"
     r"|#\s*1\b",
     re.IGNORECASE,

@@ -820,11 +820,13 @@ toate cele 7 căderi ale agentului și 9 din cele 12 reîncercări erau răspuns
 listele de cuvinte ale lui `validate_prose` («SPF 30» din catalog, «din 23 de recenzii», «cea mai
 ieftină», «30 de zile» din regula de retur), iar o cădere costa de 3,5 ori un tur servit. Poarta
 (`src/assistant/gate.py`) e acum a compozitorului: fiecare cifră există în ce au întors uneltele
-(`Tools.facts_text`, fără mesajele clientului), cu aceeași unitate comparată canonic din pachet
-(«200 g» = «200 gr», `unit_aliases`); o cifră cu unitate pe un card e a ACELUI produs; prețurile,
-linkurile, stocul (doar când turul a citit produse), medicalul pe PROPOZIȚIE, livrarea, garanția
-sau promoția fără sursă (`unsourced_claim`); singura listă rămasă e popularitatea («best seller»,
-`has_popularity_claim`). Agentul vede în căutare recenziile (`reviews`, `reviews_praise`) și
+(`Tools.facts_text`, fără mesajele clientului) exact cum e scrisă: cu aceeași unitate, comparată
+canonic și la scară din pachet («200 g» = «200 gr», `unit_aliases`), iar fără unitate doar ca
+cifră fără unitate; o cifră cu unitate pe un card e a ACELUI produs; prețurile (suma unei reguli
+doar într-o propoziție fără produs, niciodată pe card), linkurile, stocul (doar când turul a citit
+produse), medicalul pe tot textul fără numele produselor; livrarea, returul, garanția, promoția doar
+cu o regulă citită pe aceeași familie (`unsourced_claim`); singura listă de cuvinte rămasă e
+popularitatea («best seller», `has_popularity_claim`). Agentul vede în căutare recenziile (`reviews`, `reviews_praise`) și
 ingredientele cheie, fără codurile de catalog; `answer` are `advice` (cum alegi + ce ai lua tu),
 pus de widget SUB carduri (`education`, după primele două paragrafe ale textului). Promptul
 `assistant.v4` cere forma pe tipul cererii (recomandare, întrebare despre ce s-a arătat, „cum se

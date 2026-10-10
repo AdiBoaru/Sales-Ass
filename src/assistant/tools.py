@@ -111,7 +111,10 @@ class Tools:
         )
         text = json.dumps(out, ensure_ascii=False, default=str)
         if refused is None:
-            self.facts.seen.append(text)
+            # `found` e un contor al nostru, nu un fapt de catalog: lăsat în fapte, «ai 40 de zile
+            # de retur» trecea pe „found: 40” (recenzia NX-403).
+            seen = {k: v for k, v in out.items() if k != "found"} if isinstance(out, dict) else out
+            self.facts.seen.append(json.dumps(seen, ensure_ascii=False, default=str))
         return text
 
     def gate(self, rows: list[dict[str, Any]], purpose: str) -> tuple[list[dict[str, Any]], str]:

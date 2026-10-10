@@ -93,70 +93,140 @@ def has_handle(text: str) -> bool:
     return bool(_HANDLE_IN_TEXT.search(text or ""))
 
 
-def unit_aliases(pack: Any) -> dict[str, str]:
-    """Aliasul pliat al fiecărei unități a pachetului → unitatea canonică («gr» → «g», «ip» →
-    «spf»), plus procentul. Date de pachet, nu o listă din cod (P11). PUR."""
+#: Afirmațiile despre MAGAZIN (livrare, retur, garanție, promoție): au sursă doar în regulile
+#: citite în tur, nu într-o fișă de produs (un FAQ de produs despre livrare nu e regula
+#: magazinului). Formele de verb care descriu produsul («oferă», «reduce», «nu pot garanta») nu
+#: intră. Recenzia NX-403: tiparele compozitorului lăsau «livrarea e gratuită la orice comandă».
+_STORE_FAMILIES = (
+    re.compile(
+        r"\b(livr\w*|curier\w*|expedi[ez]\w*|transportul\w*|transport\s+gratuit|shipping"
+        r"|deliver\w*)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(r"\b(retur\w*|returnez\w*|rambursa\w*|refund\w*)\b", re.IGNORECASE),
+    re.compile(r"\b(garan[tț]i\w*|warranty)\b", re.IGNORECASE),
+)
+_PROMO = re.compile(
+    r"\b(reducer\w*|ofert[aăe]\w*|promo[tț]i\w*|promo|voucher\w*|cupon\w*|discount\w*)\b",
+    re.IGNORECASE,
+)
+#: Cât text se privește înaintea unei cifre ca să-i găsim unitatea (fără să recitim tot prefixul).
+_LOOKBACK = 40
+
+
+def unit_aliases(pack: Any) -> dict[str, tuple[str, float]]:
+    """Aliasul pliat al fiecărei unități a pachetului → (unitatea canonică, factorul): «gr» →
+    («g», 1), «l» → («ml», 1000), «ip» → («spf», 1); plus procentul. Date de pachet, nu o listă
+    din cod (P11). PUR."""
     from src.catalog.folding import fold_text  # noqa: PLC0415
 
     specs = getattr(getattr(pack, "units", None), "specs", None) or {}
-    out = {"%": "%"}
+    out: dict[str, tuple[str, float]] = {"%": ("%", 1.0)}
     for spec in specs.values():
         canonical = fold_text(str(getattr(spec, "canonical", "") or ""))
-        for alias in getattr(spec, "factors", None) or {}:
+        for alias, factor in (getattr(spec, "factors", None) or {}).items():
             word = fold_text(str(alias))
             if word:
-                out[word] = canonical or word
+                out[word] = (canonical or word, float(factor))
     return out
 
 
-def _unit_pairs(text: str, aliases: Mapping[str, str]) -> list[tuple[float, frozenset[str]]]:
-    """Ca `detail_answer._pairs`, cu o excepție: înaintea cifrei, o unitate are cel puțin două
-    litere («SPF 50», «IP 30»). Altfel «lasă-l 1–2 minute» se citea „1 litru”. PUR."""
+def _unit_pairs(
+    text: str, aliases: Mapping[str, tuple[str, float]]
+) -> list[tuple[float, str | None]]:
+    """Fiecare cifră a textului ca (valoarea în unitatea canonică, unitatea canonică | None).
+    Unitatea e cuvântul de după cifră, altfel cel dinainte, dar acela doar de cel puțin două
+    litere («SPF 50», «IP 30»): altfel «lasă-l 1–2 minute» se citea „1 litru”. PUR."""
     from src.agent.detail_answer import _NUMBER, _WORD_AFTER, _WORD_BEFORE  # noqa: PLC0415
     from src.catalog.folding import fold_text  # noqa: PLC0415
 
-    out: list[tuple[float, frozenset[str]]] = []
+    out: list[tuple[float, str | None]] = []
     for m in _NUMBER.finditer(text or ""):
         try:
-            value = round(float(m.group().replace(",", ".")), 4)
+            value = float(m.group().replace(",", "."))
         except ValueError:
             continue
-        near: set[str] = set()
-        before = _WORD_BEFORE.search(text[: m.start()])
-        after = _WORD_AFTER.search(text[m.end() :])
-        word = fold_text(before.group(1)) if before else ""
-        if word in aliases and len(word) > 1:
-            near.add(word)
+        after = _WORD_AFTER.search(text[m.end() : m.end() + _LOOKBACK])
+        before = _WORD_BEFORE.search(text[max(0, m.start() - _LOOKBACK) : m.start()])
+        unit = None
         word = fold_text(after.group(1)) if after else ""
         if word in aliases:
-            near.add(word)
-        out.append((value, frozenset(near)))
+            unit = aliases[word]
+        else:
+            word = fold_text(before.group(1)) if before else ""
+            if word in aliases and len(word) > 1:
+                unit = aliases[word]
+        if unit is None:
+            out.append((round(value, 4), None))
+        else:
+            out.append((round(value * unit[1], 4), unit[0]))
     return out
 
 
 def numbers_grounded(
-    text: str, facts: str, aliases: Mapping[str, str], *, with_unit_only: bool = False
+    text: str,
+    facts: str,
+    aliases: Mapping[str, tuple[str, float]],
+    *,
+    with_unit_only: bool = False,
 ) -> bool:
-    """Fiecare cifră a textului există în fapte, iar unitatea lipită de ea în text stă lângă
-    ACEEAȘI cifră și în fapte, comparată canonic («200 g» = «200 gr»). Sumele de bani le judecă
-    `_prices_ok`. O cifră de o singură unitate fără unitate («1–2 minute», «de 2 ori pe zi») nu se
-    judecă, ca la poarta de dinainte (`_BARE_NUM_RE` prindea doar cifrele „grele”).
-    `with_unit_only` = se judecă doar cifrele cu unitate (motivul unui card, pe faptele lui).
-    PUR."""
+    """Fiecare cifră a textului există în fapte EXACT cum e scrisă: cu aceeași unitate, comparată
+    canonic și la scară («200 g» = «200 gr», «0,5 l» = «500 ml», dar «50 l» ≠ «50 ml»), iar una
+    fără unitate doar ca cifră fără unitate în fapte (recenzia NX-403: «30 de zile» trecea pe un
+    „SPF 30”). Sumele de bani le judecă `_prices_ok`. O cifră de o singură unitate fără unitate
+    («1–2 minute», «de 2 ori pe zi») nu se judecă, ca la poarta de dinainte (`_BARE_NUM_RE`
+    prindea doar cifrele „grele”). `with_unit_only` = doar cifrele cu unitate (motivul unui card,
+    pe faptele lui). PUR."""
     from src.agent.validator import _PRICE_RE  # noqa: PLC0415
 
-    def canon(near: frozenset[str]) -> set[str]:
-        return {aliases.get(w, w) for w in near}
-
-    known: dict[float, set[str]] = {}
-    for value, near in _unit_pairs(facts, aliases):
-        known.setdefault(value, set()).update(canon(near))
-    for value, near in _unit_pairs(_PRICE_RE.sub(" ", text or ""), aliases):
-        if not near and (with_unit_only or (value < 10 and float(value).is_integer())):
+    known = set(_unit_pairs(facts, aliases))
+    for value, unit in _unit_pairs(_PRICE_RE.sub(" ", text or ""), aliases):
+        if unit is None and (with_unit_only or (value < 10 and float(value).is_integer())):
             continue
-        if value not in known or not canon(near) <= known[value]:
+        if (value, unit) not in known:
             return False
     return True
+
+
+def _without_names(text: str, names: list[str]) -> str:
+    """Textul fără numele produselor turului: un nume („ABIB Acne Foam”) nu e o afirmație."""
+    out = text
+    for name in sorted({n for n in names if n}, key=len, reverse=True):
+        out = re.sub(re.escape(name), " ", out, flags=re.IGNORECASE)
+    return out
+
+
+def _names_a_product(sentence: str, names: list[str]) -> bool:
+    """Propoziția numește un produs al turului: numele întreg, primele două cuvinte ale lui (cum
+    îl scurtează agentul: «Crema Solara A» pentru „Crema Solara A SPF 50+”) sau marca. Greșeala
+    merge spre partea sigură: o propoziție luată drept „despre produs” pierde doar dreptul de a
+    folosi sumele regulilor."""
+    from src.catalog.folding import fold_text  # noqa: PLC0415
+
+    folded = f" {' '.join(fold_text(sentence).split())} "
+    for name in names:
+        words = fold_text(name).split()
+        if not words or len(" ".join(words)) < 3:
+            continue
+        for probe in (words, words[:2]):
+            if f" {' '.join(probe)} " in folded:
+                return True
+    return False
+
+
+def _store_claim_unsourced(body: str, sources: list[str], products: list[dict[str, Any]]) -> bool:
+    """O afirmație despre livrare, retur, garanție sau promoție fără o regulă a magazinului citită
+    în tur care să poarte aceeași familie. O promoție are sursă și când textul numește codul de
+    voucher de pe fișa unui produs citit."""
+    rules = "\n".join(sources)
+    for family in _STORE_FAMILIES:
+        if family.search(body) and not family.search(rules):
+            return True
+    if _PROMO.search(body) and not _PROMO.search(rules):
+        codes = {str(p.get("coupon_code") or "").strip() for p in products}
+        if not any(c and c.casefold() in body.casefold() for c in codes):
+            return True
+    return False
 
 
 def judge(
@@ -164,16 +234,18 @@ def judge(
     *,
     products: list[dict[str, Any]],
     facts: str,
-    units: Mapping[str, str],
+    units: Mapping[str, tuple[str, float]],
     sums: set[float],
     sources: list[str],
     order_found: bool,
+    names: list[str] | None = None,
 ) -> list[str]:
     """Poarta pe fapte a textului agentului (NX-403). PURĂ (în afara flagurilor citite de porțile
     refolosite). `facts` = `Tools.facts_text()`; `units` = aliasurile unităților pachetului
-    (`unit_aliases`); `sums` = sumele-fapt ale turului. Întoarce motivele de respingere, în ordinea
+    (`unit_aliases`); `sums` = sumele-fapt ale turului; `names` = numele produselor turului (cum
+    le scrie agentul și cum sunt în catalog). Întoarce motivele de respingere, în ordinea
     porților."""
-    from src.agent.composer import rule_prices, unsourced  # noqa: PLC0415
+    from src.agent.composer import rule_prices  # noqa: PLC0415
     from src.agent.composer import sentences as composer_sentences  # noqa: PLC0415
     from src.agent.detail_answer import _unfounded_stock_claim  # noqa: PLC0415
     from src.agent.validator import (  # noqa: PLC0415
@@ -184,14 +256,12 @@ def judge(
     )
     from src.worker.text_scrub import has_popularity_claim  # noqa: PLC0415
 
+    names = list(names or [])
     reasons: list[str] = []
-    # P0 pe PROPOZIȚIE, ca la compozitor: detectorul cere un verb terapeutic și o afecțiune, iar pe
-    # tot textul le lega peste propoziții («3. Tratament: …» lângă numele „ABIB Acne Foam”).
-    if any(
-        not _safety_ok(sentence)
-        for line in body.splitlines()
-        for sentence in composer_sentences(line)
-    ):
+    # P0 pe TOT textul (o afecțiune și verbul pot sta în propoziții diferite: «Ai acnee? Serul ăsta
+    # o tratează»), dar fără numele produselor: «3. Tratament: …» lângă numele „ABIB Acne Foam”
+    # nu e o afirmație medicală.
+    if not _safety_ok(_without_names(body, names)):
         reasons.append("medical_claim")
     if not _links_ok(body, products):
         reasons.append("invented_link")
@@ -201,8 +271,18 @@ def judge(
         for k in ("list_price", "coupon_price")
         if isinstance(p.get(k), int | float) and not isinstance(p.get(k), bool)
     }
-    if not _prices_ok(body, products, extra | sums | set(rule_prices(sources))):
-        reasons.append("ungrounded_price")
+    allowed = extra | sums
+    if not _prices_ok(body, products, allowed):
+        # O sumă dintr-o regulă citită (pragul de livrare, costul returului) e întemeiată doar
+        # într-o propoziție care nu numește un produs: altfel «Crema A costă 199 lei» ar trece
+        # pe pragul de livrare (recenzia NX-403, clasa NX-121).
+        rule = set(rule_prices(sources))
+        if not rule or not all(
+            _prices_ok(s, products, allowed | (set() if _names_a_product(s, names) else rule))
+            for line in body.splitlines()
+            for s in composer_sentences(line)
+        ):
+            reasons.append("ungrounded_price")
     # O comandă găsită aduce cifrele ei (dată, AWB, cantitate) prin unealtă; o regulă citată
     # literal (NX-346) e a magazinului, cu cifrele ei. Restul cifrelor se caută în fapte.
     if not order_found:
@@ -214,7 +294,7 @@ def judge(
     # `_stock_claim_ok` e stins).
     if products and _unfounded_stock_claim(body, products):
         reasons.append("stock_claim")
-    if unsourced(body, facts):
+    if _store_claim_unsourced(body, sources, products):
         reasons.append("unsourced_claim")
     if has_popularity_claim(body):
         reasons.append("popularity_claim")
@@ -237,6 +317,20 @@ def _suggestion_ok(s: str, products: list[dict[str, Any]], sums: set[float]) -> 
     )
 
 
+def _product_names(
+    names: dict[str, str], short_names: dict[str, str], rows: dict[str, dict[str, Any]]
+) -> list[str]:
+    """Numele produselor turului, în toate formele în care le poate scrie agentul: distinct,
+    scurt, numele scurt din catalog, numele întreg, marca."""
+    from src.catalog.render_text import display_name  # noqa: PLC0415
+
+    out = [*names.values(), *short_names.values()]
+    for row in rows.values():
+        name = str(row.get("name") or "")
+        out += [name, display_name(name), str(row.get("brand") or "")]
+    return [n.strip() for n in out if n and n.strip()]
+
+
 def check_answer(
     a: dict[str, Any],
     *,
@@ -252,7 +346,7 @@ def check_answer(
     max_suggestions: int,
     notes_max: int,
     facts: str = "",
-    units: Mapping[str, str] | None = None,
+    units: Mapping[str, tuple[str, float]] | None = None,
     product_facts: dict[str, str] | None = None,
 ) -> Checked:
     """`handles` = handle → id; `names` = handle → numele distinct (textul); `short_names` =
@@ -263,7 +357,7 @@ def check_answer(
     cardului lui."""
     from src.agent.validator import set_total  # noqa: PLC0415
 
-    units = units if units is not None else {"%": "%"}
+    units = units if units is not None else {"%": ("%", 1.0)}
     rejected: list[str] = []
     cards: list[dict[str, str]] = []
     for c in a.get("cards") or []:
@@ -329,6 +423,7 @@ def check_answer(
             sums=sums,
             sources=sources,
             order_found=order_found,
+            names=_product_names(names, short_names, rows),
         )
         if product_facts is not None and not order_found:
             # Doar cifrele cu unitate (SPF, ml, %): clasa „faptul altui produs pe cardul ăsta”.
@@ -341,6 +436,18 @@ def check_answer(
                 ):
                     rejected.append("card_number")
                     break
+        # Motivul unui card vorbește mereu despre produsul lui: o sumă dintr-o regulă a magazinului
+        # (pragul de livrare) nu poate sta acolo ca preț.
+        from src.agent.validator import _prices_ok  # noqa: PLC0415
+
+        own_sums = sums | {
+            float(p[k])
+            for p in products
+            for k in ("list_price", "coupon_price")
+            if isinstance(p.get(k), int | float) and not isinstance(p.get(k), bool)
+        }
+        if any(c["reason"] and not _prices_ok(c["reason"], products, own_sums) for c in cards):
+            rejected.append("ungrounded_price")
 
     kept: list[str] = []
     dropped = 0

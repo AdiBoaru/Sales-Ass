@@ -27,7 +27,16 @@ from tests.test_nx396_assistant import (  # noqa: F401 — `_catalog` e fixture 
     _search,
 )
 
-ALIASES = {"%": "%", "spf": "spf", "ip": "spf", "ml": "ml", "g": "g", "gr": "g", "grame": "g"}
+ALIASES = {
+    "%": ("%", 1.0),
+    "spf": ("spf", 1.0),
+    "ip": ("spf", 1.0),
+    "ml": ("ml", 1.0),
+    "l": ("ml", 1000.0),
+    "g": ("g", 1.0),
+    "gr": ("g", 1.0),
+    "grame": ("g", 1.0),
+}
 
 SPF50 = {
     "id": "a",
@@ -125,13 +134,33 @@ def test_a_store_rule_paraphrased_with_its_numbers_passes():
     assert _check(_answer("Da, ai 30 de zile de la cumpărare pentru retur."), sources=[rule]) == []
 
 
-def test_medical_claim_is_judged_per_sentence():
+ABIB = {
+    "id": "c",
+    "name": "ABIB Acne Foam Cleanser Heartleaf Foam - spuma de curatare",
+    "price": 70.0,
+    "url": "https://shop.test/c",
+    "availability": "in_stock",
+}
+
+
+def test_a_product_name_is_not_a_medical_claim():
     """68f9b60e: «3. Tratament: …» lângă numele „ABIB Acne Foam” se lega peste propoziții."""
-    text = (
-        "1. Curățare: ABIB Acne Foam Cleanser.\n2. Tratament: masca de pori, o dată pe săptămână."
-    )
-    assert "medical_claim" not in _check(_answer(text))
+    text = "1. Curățare: ABIB Acne Foam Cleanser Heartleaf Foam.\n2. Tratament: masca de pori."
+    assert "medical_claim" not in _check(_answer(text), rows=[SPF50, ABIB])
     assert "medical_claim" in _check(_answer("Serul acesta tratează acneea."))
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Ai acnee? Serul ăsta o tratează rapid.",
+        "Eczema e neplăcută. Crema asta o vindecă în câteva zile.",
+        "Pentru dermatită:\n1. Crema A o calmează și o vindecă.",
+    ],
+)
+def test_a_medical_claim_split_across_sentences_is_rejected(text):
+    """Recenzia NX-403: pe propoziție, afecțiunea și verbul nu se mai întâlneau."""
+    assert "medical_claim" in _check(_answer(text))
 
 
 def test_without_products_available_is_not_a_stock_claim():
@@ -211,7 +240,67 @@ def test_unit_aliases_come_from_the_pack():
         {"weight": {"canonical": "g", "default_op": "eq", "factors": {"g": 1, "gr": 1}}}
     )
     object.__setattr__(pack, "units", pack_units)
-    assert agate.unit_aliases(pack) == {"%": "%", "g": "g", "gr": "g"}
+    assert agate.unit_aliases(pack) == {"%": ("%", 1.0), "g": ("g", 1.0), "gr": ("g", 1.0)}
+
+
+# --- recenzia adversarială: ce trecea pe prima variantă a porții ----------------------------------
+
+
+def test_a_store_rule_amount_is_not_a_product_price():
+    rule = "Livrarea este gratuită la comenzi peste 199 lei."
+    assert "ungrounded_price" in _check(
+        _answer("Crema Solara A costă acum 199 lei."), sources=[rule]
+    )
+    assert "ungrounded_price" in _check(
+        _answer("Uite.", [("P1", "Acum la 199 lei.")]), sources=[rule]
+    )
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        # „SPF 30” e o cifră cu unitate: nu întemeiază un „30” fără unitate
+        "Rezultatele apar în 30 de zile.",
+        # cifrele cu unitate se compară la scară: «50 l» nu e «50 ml»
+        "Crema Solara A vine în 50 l.",
+    ],
+)
+def test_a_number_matches_only_with_its_own_unit(text):
+    assert "ungrounded_number" in _check(_answer(text))
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Livrarea e gratuită la orice comandă.",
+        "Ai transport gratuit la comanda asta.",
+        "Crema Solara A e acum la reducere, profită azi.",
+        "Folosește voucherul BLACKFRIDAY la comandă.",
+        "O poți returna oricând.",
+    ],
+)
+def test_a_store_promise_needs_a_store_rule(text):
+    assert "unsourced_claim" in _check(_answer(text))
+
+
+def test_words_that_describe_the_product_are_not_store_promises():
+    text = "Oferă hidratare și reduce luciul. Nu pot garanta rezultatul pe orice ten."
+    assert _check(_answer(text)) == []
+
+
+def test_the_voucher_on_the_sheet_is_a_source():
+    row = {**SPF50, "coupon_code": "WELCOME15", "coupon_price": 114.75}
+    facts = FACTS_A + "\nprice with voucher WELCOME15: 114,75 lei"
+    text = "Cu voucherul WELCOME15 ajunge la 114,75 lei."
+    assert _check(_answer(text), rows=[row], facts=facts) == []
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["E cea mai vândută cremă.", "Cea mai populară dintre ele.", "Cel mai bine vândut produs."],
+)
+def test_popularity_in_every_form_is_rejected(text):
+    assert "popularity_claim" in _check(_answer(text))
 
 
 # --- faptele pe care le vede agentul -------------------------------------------------------------
