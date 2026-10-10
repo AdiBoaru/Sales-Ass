@@ -849,6 +849,21 @@ produse 35 → 9, produse diferite 205 → 374, epuizate 6 → 2, estimat ~+120-
 producție. Card:
 [`tasks/stage1/NX-404.md`](tasks/stage1/NX-404.md); probă:
 `pytest tests/test_nx404_agent_search_ranking.py -q`.
+**NX-407 — agentul vorbește ca un specialist; efortul se decide pe A/B.** Aceeași comparație cu iZi
+după NX-403/404 (conversația `55b6febd`): poarta n-a respins nimic, argumentele uneltelor erau
+corecte, dar **186 din 189 de apeluri ale agentului (9-10 oct) au 0 tokeni de raționament** la
+`low`, motivele cardurilor veneau din cele 20 de teme șablon ale `top_pros` («textură ușoară» pe
+1.138 de produse), recenziile reale nu ajungeau la agent (fișa le încărca, `product_facts` nu le
+randa), iar promptul n-avea regulile compozitorului: fără catalog în text, fără repetiții. Acum
+rândul de căutare poartă `customers_say` (un fragment, citire în lot `catalog.review_excerpts`),
+fișa agentului două recenzii (`product_facts(reviews=2)`, și sursa porții; compozitorul rămâne pe
+0), meniul `needs` are doar fațetele declarate de pachet (SOLE 196 → 94), promptul `assistant.v6`
+(fără catalog/listă/fișă în text, fără repetiții, primul card = alegerea lui, sugestiile oferite
+ținute în `Memory.offered` și nerepetate). Efortul NU se schimbă aici:
+`scripts/sim/agent_effort_ab.py` (low vs medium, perechi oarbe, regula GO pre-înregistrată în
+card) o pornește Adi. Minusurile rămân o gaură de date (recenzii ≤ 3★ pe 82 de produse). Card:
+[`tasks/stage1/NX-407.md`](tasks/stage1/NX-407.md); probă:
+`pytest tests/test_nx407_agent_expert_voice.py tests/test_nx407_effort_ab.py -q`.
 
 **NX-238 — retrievalul trece printr-un PORT, iar candidatul e inert (verdict `NOT-READY`).**
 `src/retrieval/` e contractul stabil pe care îl consumă NX-239: `RetrievalPort` + `RetrievalBundle`
