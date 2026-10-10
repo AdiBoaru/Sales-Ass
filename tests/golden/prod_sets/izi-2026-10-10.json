@@ -1,0 +1,32 @@
+{
+ "version": "izi-2026-10-10",
+ "note": "cele cinci mesaje comparate cu iZi (conversațiile 2789a469 și 55b6febd, NX-403/NX-407); nu e un set nevăzut: e conversația pe care s-a făcut analiza",
+ "conversations": [
+  {
+   "id": "izi_ten_gras",
+   "covers": "recomandare, alegere pe un criteriu, cum se folosește, combinarea cu SPF, o a doua recomandare în aceeași conversație",
+   "turns": [
+    {
+     "message": "ce creme de fata ai pentru ten gras",
+     "expect": "creme de față pentru ten gras, motive diferite pe carduri din ce spun clienții, ce contează la alegere, alegerea lui (primul card) și o alternativă"
+    },
+    {
+     "message": "Care e mai potrivită pentru hidratare?",
+     "expect": "răspunsul întâi, cardurile arătate reordonate pe hidratare, fără să repete instrucțiuni de folosire"
+    },
+    {
+     "message": "Cum se folosește?",
+     "expect": "pașii, câte o acțiune pe rând, când și cât de des, un sfat practic"
+    },
+    {
+     "message": "Cum o combin cu SPF?",
+     "expect": "ordinea pașilor dimineața, cât aștepți între ei, sfaturi practice, fără să repete ce a spus deja"
+    },
+    {
+     "message": "Recomandă-mi un SPF pentru ten gras",
+     "expect": "SPF-uri pentru ten gras cu textură lejeră sau finisaj mat, ce contează la un SPF pentru ten gras, fără să pomenească catalogul"
+    }
+   ]
+  }
+ ]
+}

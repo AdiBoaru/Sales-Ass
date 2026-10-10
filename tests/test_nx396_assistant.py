@@ -137,6 +137,9 @@ def _catalog(monkeypatch):
     async def fake_pool(conn, business_id, ids, *, pool=30, respect_content_status=True):
         return [dict(CATALOG[i]) for i in ids[:pool] if i in CATALOG]
 
+    async def fake_reviews(conn, business_id, ids, *, per_product=1):
+        return {}
+
     import src.db.queries.catalog as cat
     from src.safety.policy import SafetyPolicy
 
@@ -158,6 +161,7 @@ def _catalog(monkeypatch):
     monkeypatch.setattr(cat, "search_products_lexical", fake_search)
     monkeypatch.setattr(cat, "get_products_by_ids", fake_by_ids)
     monkeypatch.setattr(cat, "get_products_pool_by_ids", fake_pool)
+    monkeypatch.setattr(cat, "review_excerpts", fake_reviews)  # NX-407
     monkeypatch.setattr(SafetyPolicy, "gate", fake_gate)
     monkeypatch.setattr(SafetyPolicy, "evaluate", fake_evaluate)
     s = get_settings()

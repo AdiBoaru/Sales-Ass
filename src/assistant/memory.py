@@ -8,6 +8,9 @@ Numărătoarea nu se reia niciodată: un handle scos din memorie nu ajunge la al
 
 Notele sunt ce a SPUS clientul (buget, pentru cine, ce evită), scrise de agent în `answer.notes`
 și arătate lui la turul următor. Fără reducer și fără proveniență: modelul le interpretează.
+
+Sugestiile oferite sub ultimul răspuns (NX-407) se țin tot aici: mesajul persistat nu le are, iar
+agentul oferea aceeași sugestie trei ture la rând.
 """
 
 from __future__ import annotations
@@ -20,6 +23,9 @@ from typing import Any
 #: plus notele (≤ 500), sub bugetul de 6 KB al stării, lângă ecran și coș.
 MAX_HANDLES = 30
 NOTES_MAX = 500
+#: NX-407: sugestiile ultimului răspuns, câte și cât de lungi (≤ ~600 de octeți în stare).
+OFFERED_MAX = 5
+OFFERED_CHARS = 120
 HANDLE_PATTERN = r"^P[1-9][0-9]*$"
 _HANDLE_RE = re.compile(HANDLE_PATTERN)
 
@@ -34,6 +40,11 @@ class Memory:
     handles: dict[str, str] = field(default_factory=dict)
     next: int = 1
     notes: str = ""
+    #: NX-407: sugestiile oferite sub răspunsul anterior, ca agentul să nu le ofere din nou, și
+    #: turul care le-a oferit: după un tur servit de altcineva (plasa, un strat gratuit) ele nu mai
+    #: sunt „ale răspunsului anterior” și nu se arată (`offered_for`).
+    offered: list[str] = field(default_factory=list)
+    offered_turn: str = ""
 
     @classmethod
     def from_state(cls, raw: Any) -> Memory:
@@ -50,14 +61,33 @@ class Memory:
         except (TypeError, ValueError):
             nxt = 1
         notes = raw.get("notes") if isinstance(raw.get("notes"), str) else ""
-        return cls(handles=handles, next=max([nxt, *(n + 1 for n in numbers)]), notes=notes)
+        raw_offered = raw.get("s") if isinstance(raw.get("s"), list) else []
+        offered = [x for x in raw_offered if isinstance(x, str) and x.strip()]
+        return cls(
+            handles=handles,
+            next=max([nxt, *(n + 1 for n in numbers)]),
+            notes=notes,
+            offered=offered[:OFFERED_MAX],
+            offered_turn=raw.get("st") if isinstance(raw.get("st"), str) else "",
+        )
 
     def to_state(self) -> dict[str, Any]:
         """Forma persistată: doar cele mai recente `MAX_HANDLES`. Plafonul se aplică AICI, la
         sfârșitul turului, nu în timpul lui: un handle văzut de agent în tur (un card, un rând de
         căutare) nu poate dispărea înainte ca răspunsul să-l folosească."""
         kept = dict(list(self.handles.items())[-MAX_HANDLES:])
-        return {"h": kept, "n": self.next, "notes": self.notes[:NOTES_MAX]}
+        out: dict[str, Any] = {"h": kept, "n": self.next, "notes": self.notes[:NOTES_MAX]}
+        offered = [s.strip()[:OFFERED_CHARS] for s in self.offered if s.strip()][:OFFERED_MAX]
+        if offered:
+            out["s"] = offered
+            out["st"] = self.offered_turn
+        return out
+
+    def offered_for(self, last_reply_turn: str | None) -> list[str]:
+        """Sugestiile, doar dacă le-a oferit chiar răspunsul anterior (turul lui e cel ținut)."""
+        if not self.offered_turn or self.offered_turn != (last_reply_turn or ""):
+            return []
+        return list(self.offered)
 
     def handle_of(self, product_id: str, *, touch: bool = True) -> str:
         """Handle-ul produsului (nou dacă nu-l are). `touch` îl mută la coada celor recente;

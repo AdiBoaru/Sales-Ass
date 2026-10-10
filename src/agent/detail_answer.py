@@ -48,6 +48,10 @@ _REVIEW_POINTS = 3
 #: Câte întrebări frecvente ale produsului și cât din fiecare răspuns.
 _FAQS = 6
 _FAQ_ANSWER_CHARS = 300
+#: NX-407: cât dintr-o recenzie reală intră în fapte (tăiată la graniță de propoziție).
+REVIEW_EXCERPT_CHARS = 240
+#: Eticheta rândului de recenzie pe fișă; poarta agentului scoate rândurile cu ea din fapte.
+REVIEW_LINE = "customer review"
 #: Plafonul apelului: fișa de azi e gata imediat, deci un răspuns care întârzie nu merită așteptat.
 ANSWER_TIMEOUT_S = 15.0
 #: Motivele porții și ale ieșirii, vocabular ÎNCHIS (evenimentul `detail_question{outcome}`).
@@ -115,8 +119,14 @@ def _money(value: Any, language: str | None, currency: str) -> str:
     return f"{amount_text(value, language)} {currency}".rstrip()
 
 
-def product_facts(product: dict[str, Any], pack: Any, language: str | None) -> str:
-    """Faptele produsului ca text, ca rânduri `cheie: valoare`. PUR."""
+def product_facts(
+    product: dict[str, Any], pack: Any, language: str | None, *, reviews: int = 0
+) -> str:
+    """Faptele produsului ca text, ca rânduri `cheie: valoare`. PUR.
+
+    `reviews` (NX-407): câte recenzii REALE (`reviews_list`, alese de query: cele mai lungi) intră
+    ca rânduri `customer review (n/5)`. Implicit 0: compozitorul și răspunsul din fișă rămân cum
+    erau; agentul unic cere 2, fiindcă temele din `top_pros` sunt aceleași 20 pe tot catalogul."""
     currency = str(getattr(pack, "currency", None) or product.get("currency") or "")
     name = str(product.get("name") or "")
     lines = [f"name: {display_name(name)}"]
@@ -149,13 +159,48 @@ def product_facts(product: dict[str, Any], pack: Any, language: str | None) -> s
             lines.append(f"faq: {' '.join(str(faq['question']).split())} -> {answer}")
     if product.get("rating"):
         count = product.get("review_count")
-        reviews = f" from {count} reviews" if count else ""
-        lines.append(f"rating: {float(product['rating']):.1f}/5{reviews}")
+        of = f" from {count} reviews" if count else ""
+        lines.append(f"rating: {float(product['rating']):.1f}/5{of}")
     for field, label in (("top_pros", "reviews praise"), ("top_cons", "reviews criticise")):
         points = [str(p).strip() for p in product.get(field) or [] if str(p).strip()]
         if points:
             lines.append(f"{label}: " + "; ".join(points[:_REVIEW_POINTS]))
+    lines += review_lines(product, reviews)
     return "\n".join(lines)
+
+
+def review_excerpt(body: Any) -> str:
+    """O recenzie ca fragment: spațiile strânse, tăiată la graniță de propoziție. PUR."""
+    return cut_at_sentence(" ".join(str(body or "").split()), REVIEW_EXCERPT_CHARS)
+
+
+def relayable(text: str) -> bool:
+    """NX-407 (recenzia): o recenzie care pomenește un context de siguranță (sarcină, alăptare:
+    același detector ca NX-173) sau face o afirmație medicală nu ajunge la agent, care e rugat să
+    spună ce au observat clienții: «a folosit-o în sarcină fără probleme», redat, ar fi exact
+    sfatul medical pe care proiectul nu-l dă. Fail-safe: detectorul supra-declanșează."""
+    from src.safety.contraindications import detect_contexts  # noqa: PLC0415
+    from src.worker.text_scrub import has_medical_claim  # noqa: PLC0415
+
+    return not detect_contexts(text) and not has_medical_claim(text)
+
+
+def review_lines(product: dict[str, Any], n: int) -> list[str]:
+    """Primele `n` recenzii REDABILE ale produsului (`relayable`) ca rânduri, cu nota lor, fără
+    autor. PUR."""
+    out: list[str] = []
+    for item in product.get("reviews_list") or []:
+        if len(out) >= n:
+            break
+        if not isinstance(item, dict):
+            continue
+        text = review_excerpt(item.get("body"))
+        if not text or not relayable(text):
+            continue
+        rating = item.get("rating")
+        mark = f" ({rating}/5)" if isinstance(rating, int) else ""
+        out.append(f"{REVIEW_LINE}{mark}: {text}")
+    return out
 
 
 def user_message(question: str, facts: str, history: str) -> str:

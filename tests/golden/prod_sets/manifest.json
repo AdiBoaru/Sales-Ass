@@ -33,5 +33,11 @@
   "conversations": 30,
   "messages": 110,
   "frozen": "2026-10-09, scris de un agent fără acces la cod, analize, carduri sau seturile anterioare (doar formatul); 30 de conversații amestecate, `expect` și `routine_target` per tur; ținta: release 3a870da (NX-390); nu se citește înaintea rulării"
+ },
+ "izi-2026-10-10.json": {
+  "sha256": "b474afaa109118e87d28408c6c176c54d490a56eca4bda68570b4e08bb345427",
+  "conversations": 1,
+  "messages": 5,
+  "about": "conversația comparată cu iZi pe 2026-10-10 (NX-407); setul pe care s-a făcut analiza, nu un set nevăzut"
  }
 }
