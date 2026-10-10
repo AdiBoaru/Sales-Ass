@@ -43,7 +43,9 @@ def tool_schemas(menus: Menus) -> list[dict[str, Any]]:
         "description": (
             "Search the store's catalog. Returns up to 8 products with the facts that decide "
             "whether they fit (type, needs, price, stock). `match` says how the text matched: "
-            "strict, relaxed, typo or filters_only (no text match, only the filters)."
+            "strict, relaxed, typo or filters_only (no text match, only the filters). With needs "
+            "and a shelf or type, `need_matches` says how many products in the store state the "
+            "needs (in_store) and how many of them are in this list (in_this_list)."
         ),
         "parameters": _obj(
             {

@@ -80,6 +80,8 @@ class Facts:
     versions: dict[str, list[str]] = field(default_factory=dict)
     #: Câți candidați au rămas în ultima listă, după nepotrivire și siguranță (`found` al căutării).
     listed: int = 0
+    #: NX-409: în ultima listă, (familii care poartă nevoile cerute, câte dintre ele sunt arătate).
+    need_matches: tuple[int, int] = (0, 0)
 
 
 class Tools:
@@ -132,7 +134,11 @@ class Tools:
         if refused is None:
             # `found` e un contor al nostru, nu un fapt de catalog: lăsat în fapte, «ai 40 de zile
             # de retur» trecea pe „found: 40” (recenzia NX-403).
-            seen = {k: v for k, v in out.items() if k != "found"} if isinstance(out, dict) else out
+            # NX-409: și numărătoarea potrivirilor
+            counters = ("found", "need_matches")
+            seen = out
+            if isinstance(out, dict):
+                seen = {k: v for k, v in out.items() if k not in counters}
             # NX-407: fără textul recenziilor (o cifră scrisă de un client nu e un fapt)
             seen = _without_reviews(seen)
             self.facts.seen.append(json.dumps(seen, ensure_ascii=False, default=str))
@@ -164,6 +170,7 @@ class Tools:
         handle-urile, locul în listă. Întoarce handle-urile primelor `limit` și linia de siguranță
         pentru model."""
         from src.assistant.search import (  # noqa: PLC0415
+            family_key,
             group_families,
             need_status,
             rank_candidates,
@@ -184,6 +191,13 @@ class Tools:
         self.facts.needs = dict(needs)
         self.facts.versions = {}
         self.facts.listed = len(kept)
+        # NX-409: câte familii POARTĂ nevoile în toată lista (după excludere și siguranță) și câte
+        # dintre ele sunt pe rândurile arătate. Sens doar când căutarea a adus tot setul nevoilor.
+        matching = {family_key(r) or str(r["id"]) for r in kept if need_status(r, needs) == "match"}
+        self.facts.need_matches = (
+            len(matching),
+            sum(1 for rep, _versions in groups if need_status(rep, needs) == "match"),
+        )
         handles = self.remember([rep for rep, _versions in groups])
         for i, (rep, versions) in enumerate(groups, 1):
             others = self.remember(versions[:MAX_VERSIONS])
@@ -362,12 +376,14 @@ class Tools:
         check(sort, ("relevance", "price_asc", "price_desc", "rating_desc"), "sort")
         excluded = {self._id(h) for h in a.get("exclude") or []}
         self.facts.catalog_read = True
+        stats: dict[str, Any] = {}
         rows = await fetch_candidates(
             lambda: self.deps.db("assistant_search"),
             self.ctx.business.id,
             a,
             locale=self.ctx.business.default_locale or self.ctx.language,
             parallel=not is_shared_connection(getattr(self.deps, "db", None)),
+            stats=stats,
         )
         price_min = a.get("price_min")
         rows = [
@@ -381,6 +397,14 @@ class Tools:
         )
         await self.attach_reviews([self.memory.handles[h] for h in handles])
         out: dict[str, Any] = {"found": self.facts.listed, "products": self.view_rows(handles)}
+        if stats.get("need_counted"):
+            # NX-409: agentul află dacă mai există produse care spun nevoia, ca să nu caute din nou
+            # ce nu e în magazin. Un contor al nostru, nu un fapt de catalog (ca `found`).
+            total, here = self.facts.need_matches
+            out["need_matches"] = {
+                "in_store": f"{total}+" if stats.get("need_pool_full") else total,
+                "in_this_list": here,
+            }
         if hint:
             out["safety"] = hint
         return out

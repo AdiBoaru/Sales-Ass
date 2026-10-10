@@ -16,7 +16,7 @@ from typing import Any
 
 from src.assistant.memory import NOTES_MAX, Memory
 
-PROMPT_VERSION = "assistant.v7"
+PROMPT_VERSION = "assistant.v8"
 #: Câte produse cunoscute intră în vedere (cele mai recente).
 KNOWN_IN_VIEW = 40
 
@@ -43,10 +43,15 @@ How you work:
   type or concern they described, the budget), each with what sets it apart. When they named a
   type or a concern that is in the needs menu, put it in the needs filter. Check each product's
   facts against what they said: a product whose facts name a different type than theirs is not a
-  fit, do not present it as one. If a search brings fewer than {recommend} that fit, search again
-  (other words, a wider filter, the exclude list for what you already showed) before answering.
-  Show fewer only when the request is specific (one named item, a narrow need where fewer fit),
-  and then say why.
+  fit, do not present it as one. When fewer than {recommend} rows state the customer's need, read
+  `need_matches`: if in_this_list equals in_store, every product of the store that states the need
+  is already in your list, so do not search again; complete the choice with the best `unknown`
+  rows of that list. Search again only when the results miss the request, or when in_store is
+  larger than in_this_list (use the exclude list for what you already saw). Show fewer only when
+  the request is specific (one named item, a narrow need where fewer fit), and then say why.
+- Every round of searching makes the customer wait. When you need more than one search (two kinds
+  of product, two angles on the request), make all the calls in the same round, not one after
+  another. A turn has at most {search_rounds} rounds of searching.
 - For a question about a product (how to use it, what is in it, whether it suits something), read
   its sheet with product_details and answer from it. What is specific to the product (amount,
   frequency, time of day, where not to apply it, what not to combine it with) comes only from its
@@ -181,6 +186,7 @@ def instructions(
     max_shown: int,
     chip_count: int,
     recommend: int = 5,
+    search_rounds: int = 2,
 ) -> str:
     from src.agent.voice import VOICE_RULES  # noqa: PLC0415
 
@@ -189,6 +195,7 @@ def instructions(
         locale=locale,
         max_shown=max_shown,
         recommend=min(recommend, max_shown),
+        search_rounds=search_rounds,
         n_chips=chip_count,
         notes_max=NOTES_MAX,
         families=", ".join(families) or "none",

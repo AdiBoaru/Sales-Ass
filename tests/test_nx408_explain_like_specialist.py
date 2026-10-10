@@ -21,8 +21,8 @@ def _text() -> str:
     )
 
 
-def test_prompt_is_v7():
-    assert aprompt.PROMPT_VERSION == "assistant.v7"
+def test_prompt_is_v7_or_later():
+    assert aprompt.PROMPT_VERSION >= "assistant.v7"
 
 
 def test_the_how_to_shape_asks_for_steps_with_technique():
