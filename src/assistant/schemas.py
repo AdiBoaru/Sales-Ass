@@ -99,12 +99,17 @@ def tool_schemas(menus: Menus) -> list[dict[str, Any]]:
     answer = {
         "name": "answer",
         "description": (
-            "Finish the turn: the text the customer reads, the cards, the suggestions, an "
-            "optional comparison and your notes about what the customer said."
+            "Finish the turn: the text the customer reads, the advice under the cards, the "
+            "cards, the suggestions, an optional comparison and your notes about what the "
+            "customer said."
         ),
         "parameters": _obj(
             {
                 "text": {"type": "string"},
+                "advice": {
+                    "type": "string",
+                    "description": "shown under the cards or the table; empty when not needed",
+                },
                 "cards": {
                     "type": "array",
                     "items": _obj({"handle": HANDLE, "reason": {"type": "string"}}),

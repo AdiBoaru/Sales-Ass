@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -30,6 +31,14 @@ SEARCH_ROWS = 8
 SHEET_MAX = 3000
 #: Câte rânduri cere căutarea (scara lexicală, NX-293), din care agentul vede `SEARCH_ROWS`.
 SEARCH_POOL = 40
+#: NX-403: atributele care nu spun nimic clientului (coduri de catalog, sursa prețului pe unitate)
+#: nu ajung la model; ingredientele cheie vin separat, tăiate la `KEY_INGREDIENTS`.
+NOISE_ATTRIBUTES = frozenset({"compliance", "key_ingredients", "mpn", "sku", "gtin", "ean"})
+NOISE_SUFFIX = "_source"
+KEY_INGREDIENTS = 5
+#: Ce laudă recenziile (`product_review_summaries.top_pros`, NX-279), câte puncte pe produs.
+REVIEW_POINTS = 3
+_HANDLE = re.compile(r"\bP[1-9][0-9]{0,3}\b")
 
 
 @dataclass
@@ -38,6 +47,9 @@ class Facts:
 
     rows: dict[str, dict[str, Any]] = field(default_factory=dict)  # product_id → rând gated
     sources: list[str] = field(default_factory=list)  # răspunsurile regulilor citite (NX-346)
+    #: NX-403: tot ce au întors uneltele în tur, așa cum l-a citit modelul. O cifră a răspunsului
+    #: se judecă pe ce a văzut agentul (poarta pe fapte, `gate.judge`), nu pe o listă de cuvinte.
+    seen: list[str] = field(default_factory=list)
     order_prices: list[float] = field(default_factory=list)
     #: O comandă GĂSITĂ (nu doar cerută): atunci cifrele ei (dată, AWB, cantitate) sunt fapte.
     order_found: bool = False
@@ -97,7 +109,10 @@ class Tools:
                 **({"refused": refused} if refused else {}),
             }
         )
-        return json.dumps(out, ensure_ascii=False, default=str)
+        text = json.dumps(out, ensure_ascii=False, default=str)
+        if refused is None:
+            self.facts.seen.append(text)
+        return text
 
     def gate(self, rows: list[dict[str, Any]], purpose: str) -> tuple[list[dict[str, Any]], str]:
         """NX-173: rândurile permise + o linie pentru model (ce s-a scos), fără text de client."""
@@ -133,7 +148,9 @@ class Tools:
             keep = {
                 k: v
                 for k, v in attrs.items()
-                if k not in ("compliance", "key_ingredients") and v not in (None, "", [], {})
+                if k not in NOISE_ATTRIBUTES
+                and not k.endswith(NOISE_SUFFIX)
+                and v not in (None, "", [], {})
             }
             row = {
                 "handle": h,
@@ -142,12 +159,45 @@ class Tools:
                 "price": p.get("price"),
                 "availability": p.get("availability"),
                 "rating": p.get("rating"),
+                "reviews": p.get("review_count"),
                 "attributes": keep,
             }
+            # NX-403: ce spun clienții și ce conține produsul sunt motivele pe care le dă un
+            # vânzător; fără ele, motivul cardului repeta filtrele căutării («pentru ten gras»).
+            praise = [str(x).strip() for x in p.get("top_pros") or [] if str(x).strip()]
+            if praise:
+                row["reviews_praise"] = praise[:REVIEW_POINTS]
+            key = [str(x).strip() for x in attrs.get("key_ingredients") or [] if str(x).strip()]
+            if key:
+                row["key_ingredients"] = key[:KEY_INGREDIENTS]
             if p.get("lexical_step"):
                 row["match"] = p["lexical_step"]
             out.append(row)
         return out
+
+    def facts_text(self) -> str:
+        """NX-403: faptele turului ca text, sursa cifrelor din răspuns: fișa fiecărui produs
+        cunoscut (nume, atribute, ingrediente, recenzii), tot ce au întors uneltele și regulile
+        citite. Handle-urile (`P12`) se scot: sunt eticheta noastră, nu un număr din catalog."""
+        parts = [self.product_text(pid) for pid in self.facts.rows]
+        parts += self.facts.seen
+        parts += self.facts.sources
+        return _HANDLE.sub("P", "\n".join(parts))
+
+    def product_text(self, pid: str) -> str:
+        """Faptele UNUI produs ca text (fișa + atributele brute): sursa cifrelor din motivul
+        cardului lui, ca un SPF sau un gramaj al altui produs să nu treacă pe cardul ăsta."""
+        from src.agent.detail_answer import product_facts  # noqa: PLC0415
+
+        row = self.facts.rows.get(pid)
+        if row is None:
+            return ""
+        pack = getattr(self.ctx.business, "domain_pack", None)
+        text = product_facts(row, pack, self.ctx.language)
+        attrs = row.get("attributes") or {}
+        if attrs:
+            text += "\n" + json.dumps(attrs, ensure_ascii=False, default=str)
+        return text
 
     async def detail_rows(self, ids: list[str]) -> list[dict[str, Any]]:
         """Fișele complete ale 2-4 produse (comparația), gated. Rândurile din căutare n-au toate

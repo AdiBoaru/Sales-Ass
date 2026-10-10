@@ -132,6 +132,23 @@ def has_unverifiable_claim(text: str | None, grounded: frozenset[str] = frozense
     return bool(_DIGIT.search(text)) or has_marketing_claim(text)
 
 
+#: NX-403: afirmațiile despre VÂNZĂRI sau popularitate, pentru care catalogul nu are nicio dată
+#: (nici volum, nici clasament). Un superlativ relativ la nevoia clientului («cea mai potrivită
+#: pentru hidratare», «cea mai ieftină») e o judecată pe fapte și nu intră aici.
+_POPULARITY = re.compile(
+    r"\b(nr\.?\s*1|num[aă]rul\s+(1|unu)|best\s*-?\s*seller\w*|top\s+v[aâ]nz[aă]ri"
+    r"|cel(e|ei|a)?\s+mai\s+(v[aâ]ndut|popular|c[aă]utat|cump[aă]rat|comandat)\w*"
+    r"|most\s+popular|best\s*selling)\b"
+    r"|#\s*1\b",
+    re.IGNORECASE,
+)
+
+
+def has_popularity_claim(text: str | None) -> bool:
+    """NX-403: textul afirmă că un produs se vinde cel mai bine sau e cel mai popular. PUR."""
+    return bool(text and _POPULARITY.search(text))
+
+
 def has_superlative_claim(text: str | None) -> bool:
     """DOAR superlativul („cel mai bun", „best seller", „nr. 1"), fără lexemele cuantificabile.
 
