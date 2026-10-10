@@ -277,6 +277,8 @@ async def _serve(ctx: Any, deps: Any, settings: Any, run: _Run) -> Tools:
     )
     _reply(ctx, final, tools, memory, compared)
     memory.notes = final.notes or memory.notes
+    # NX-407: ce a sugerat răspunsul ăsta, ca turul următor să nu ofere același lucru
+    memory.offered = [make_safe(s).text for s in final.kept_suggestions]
     ctx.state_patch["assistant"] = memory.to_state()
     return tools
 

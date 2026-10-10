@@ -38,6 +38,11 @@ NOISE_SUFFIX = "_source"
 KEY_INGREDIENTS = 5
 #: Ce laudă recenziile (`product_review_summaries.top_pros`, NX-279), câte puncte pe produs.
 REVIEW_POINTS = 3
+#: NX-407: recenziile REALE. Temele din `top_pros` sunt 20 pe tot catalogul SOLE («textură
+#: ușoară și plăcută» pe 1.138 de produse), deci motivele cardurilor sunau la fel; o recenzie
+#: spune ce observă clientul pe ACEST produs. Un fragment pe rândul de căutare, două pe fișă.
+REVIEW_EXCERPTS_ROW = 1
+REVIEW_EXCERPTS_SHEET = 2
 _HANDLE = re.compile(r"\bP[1-9][0-9]{0,3}\b")
 #: Câte variante ale unei familii primesc handle și apar pe rândul ei.
 MAX_VERSIONS = 6
@@ -248,6 +253,9 @@ class Tools:
             key = [str(x).strip() for x in attrs.get("key_ingredients") or [] if str(x).strip()]
             if key:
                 row["key_ingredients"] = key[:KEY_INGREDIENTS]
+            said = _excerpts(p, REVIEW_EXCERPTS_ROW)
+            if said:
+                row["customers_say"] = said
             if p.get("lexical_step"):
                 row["match"] = p["lexical_step"]
             # NX-404: starea nevoilor cerute în căutare (`unknown` = fișa nu spune) și câte variante
@@ -279,7 +287,7 @@ class Tools:
         if row is None:
             return ""
         pack = getattr(self.ctx.business, "domain_pack", None)
-        text = product_facts(row, pack, self.ctx.language)
+        text = product_facts(row, pack, self.ctx.language, reviews=REVIEW_EXCERPTS_SHEET)
         attrs = row.get("attributes") or {}
         if attrs:
             text += "\n" + json.dumps(attrs, ensure_ascii=False, default=str)
@@ -297,6 +305,27 @@ class Tools:
             pid = str(r["id"])
             self.facts.rows[pid] = {**self.facts.rows.get(pid, {}), **r}
         return kept
+
+    async def attach_reviews(self, ids: list[str]) -> None:
+        """NX-407: recenziile reale ale produselor din listă, într-o singură citire, pe rândurile
+        care nu le au deja (fișa le aduce singură). Citirea picată lasă rândurile fără fragment:
+        agentul răspunde din celelalte fapte, iar evenimentul o face vizibilă."""
+        from src.db.queries.catalog import review_excerpts  # noqa: PLC0415
+
+        missing = [pid for pid in ids if "reviews_list" not in self.facts.rows.get(pid, {})]
+        if not missing:
+            return
+        try:
+            async with self.deps.db("assistant_reviews") as conn:
+                found = await review_excerpts(
+                    conn, self.ctx.business.id, missing, per_product=REVIEW_EXCERPTS_SHEET
+                )
+        except Exception as e:  # noqa: BLE001 — fragmentele sunt un plus, nu o condiție a turului
+            log.warning("assistant: recenziile n-au putut fi citite: %s", type(e).__name__)
+            self.ctx.emit("assistant_reviews", outcome="error", error=type(e).__name__)
+            return
+        for pid in missing:
+            self.facts.rows[pid]["reviews_list"] = found.get(pid, [])
 
     def _id(self, handle: Any) -> str:
         return self.memory.handles[self.memory.check(handle)]
@@ -344,6 +373,7 @@ class Tools:
         handles, hint = self.present(
             rows, split_needs(a.get("needs") or []), purpose="search", limit=SEARCH_ROWS, sort=sort
         )
+        await self.attach_reviews([self.memory.handles[h] for h in handles])
         out: dict[str, Any] = {"found": self.facts.listed, "products": self.view_rows(handles)}
         if hint:
             out["safety"] = hint
@@ -371,7 +401,8 @@ class Tools:
             if row is None:
                 sheets[h] = "not available"
                 continue
-            sheet = product_facts(row, pack, self.ctx.language)[:SHEET_MAX]
+            sheet = product_facts(row, pack, self.ctx.language, reviews=REVIEW_EXCERPTS_SHEET)
+            sheet = sheet[:SHEET_MAX]
             sheets[h] = f"name on card: {names.get(h)}\n{self._rank_line(pid, row)}{sheet}"
         out: dict[str, Any] = {"sheets": sheets}
         if hint:
@@ -484,6 +515,7 @@ class Tools:
             order=False,
             gated=True,
         )
+        await self.attach_reviews([self.memory.handles[h] for h in handles])
         view = result.llm_view or ""
         for h in handles:
             view = view.replace(f"[{self.memory.handles[h]}]", f"[{h}]")
@@ -495,3 +527,17 @@ class Tools:
         if result.error:
             out["error"] = result.error
         return out
+
+
+def _excerpts(row: dict[str, Any], n: int) -> list[str]:
+    """NX-407: primele `n` recenzii ale rândului ca fragmente (fără autor, fără notă). PUR."""
+    from src.agent.detail_answer import review_excerpt  # noqa: PLC0415
+
+    out = []
+    for item in row.get("reviews_list") or []:
+        text = review_excerpt(item.get("body")) if isinstance(item, dict) else ""
+        if text:
+            out.append(text)
+        if len(out) >= n:
+            break
+    return out

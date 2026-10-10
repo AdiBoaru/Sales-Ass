@@ -1220,6 +1220,44 @@ async def get_products_by_ids(
     return [_row_to_product(r) for r in rows]
 
 
+async def review_excerpts(
+    conn: asyncpg.Connection,
+    business_id: str,
+    product_ids: list[str],
+    *,
+    per_product: int = 1,
+) -> dict[str, list[dict[str, Any]]]:
+    """NX-407: recenziile REALE ale câtorva produse dintr-un singur round trip, `{id: [{rating,
+    body}]}`. Aceeași alegere ca fișa (`_DETAIL_SELECT`): întâi cele de ≥ 120 de caractere, apoi
+    cele mai lungi (pe SOLE 173.657 din 183.003 au 5★, deci nota nu alege nimic). Fără autor.
+    `business_id = $1` pe produse ȘI pe recenzii (izolare; RLS plasa). Rândurile de căutare
+    (`_SELECT`) nu le poartă, iar agentul vedea doar cele 20 de teme din `top_pros`."""
+    if not product_ids:
+        return {}
+    rows = await conn.fetch(
+        """
+        select pid.id::text as product_id, r.rating, r.body
+          from unnest($2::uuid[]) as pid(id)
+          cross join lateral (
+              select rating, body from reviews
+               where business_id = $1 and product_id = pid.id and body is not null
+               order by (length(body) >= 120) desc, length(body) desc
+               limit $3
+          ) r
+        """,
+        business_id,
+        product_ids[:12],
+        max(1, min(per_product, 3)),
+    )
+    out: dict[str, list[dict[str, Any]]] = {}
+    for r in rows:
+        out.setdefault(r["product_id"], []).append({"rating": r["rating"], "body": r["body"]})
+    # ordinea rândurilor unui `lateral` nu e garantată după join: aceeași cheie, în cod
+    for items in out.values():
+        items.sort(key=lambda x: (len(x["body"]) >= 120, len(x["body"])), reverse=True)
+    return out
+
+
 #: Plafonul bazinului de retrieval. NU e plafonul de context al agentului (acela e 6, în
 #: `get_products_by_ids`, și apără promptul). Un bazin de ranking are nevoie de mai mulți candidați
 #: decât intră în răspuns, altfel „rerank" înseamnă reordonarea celor șase deja aleși.

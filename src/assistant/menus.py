@@ -41,11 +41,28 @@ def routine_menus(pack: Any) -> tuple[tuple[str, ...], tuple[str, ...], tuple[st
     return tuple(sorted(families)), moments, steps
 
 
-def need_values(vocab: Any) -> tuple[str, ...]:
-    """Meniul de nevoi: cele mai frecvente valori ale fiecărei fațete care descrie clientul. PUR."""
+def declared_dimensions(pack: Any) -> frozenset[str] | None:
+    """NX-407: cheile de atribut ale fațetelor declarate de pachet (`DomainPack.facets`); `None`
+    când pachetul nu declară nicio fațetă. PUR."""
+    from src.domain.facets import FacetSource  # noqa: PLC0415
+
+    facets = tuple(getattr(pack, "facets", ()) or ())
+    if not facets:
+        return None
+    return frozenset(f.source_key for f in facets if f.source == FacetSource.ATTRIBUTE)
+
+
+def need_values(vocab: Any, pack: Any = None) -> tuple[str, ...]:
+    """Meniul de nevoi: cele mai frecvente valori ale fiecărei fațete care descrie clientul. PUR.
+
+    NX-407: când pachetul își declară fațetele, meniul are DOAR dimensiunile lor. Vocabularul ia
+    orice cheie de atribut, deci pe SOLE meniul purta `price_per_unit_source:170 lei/100ml`,
+    `shade_group:254d9a22fa84`, `volume_raw`, `sku` (102 din 196 de valori), pe care nimeni nu le
+    cere ca nevoie. Fără declarații, regula de dinainte."""
+    declared = declared_dimensions(pack)
     needs: list[str] = []
     for dim in vocab.facet_names:
-        if dim in _NOT_NEEDS:
+        if dim in _NOT_NEEDS or (declared is not None and dim not in declared):
             continue
         top = sorted(vocab.entries(dim), key=lambda e: (-e.count, e.key))[:FACET_VALUES]
         needs += [f"{dim}:{e.key}" for e in top if e.count > 0]
@@ -70,12 +87,13 @@ async def load_menus(deps: Any, business: Any) -> Menus:
     from src.catalog.vocabulary_cache import get_vocabulary  # noqa: PLC0415
 
     vocab = await get_vocabulary(deps, business.id, op="assistant_vocabulary")
-    families, moments, steps = routine_menus(getattr(business, "domain_pack", None))
+    pack = getattr(business, "domain_pack", None)
+    families, moments, steps = routine_menus(pack)
     return Menus(
         categories=tuple(e.key for e in vocab.categories if e.count > 0),
         product_types=tuple(e.key for e in vocab.entries("product_type") if e.count > 0),
         brands=await _brands(deps, business.id),
-        needs=need_values(vocab),
+        needs=need_values(vocab, pack),
         families=families,
         moments=moments,
         steps=steps,
