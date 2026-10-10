@@ -402,3 +402,35 @@ async def test_a_second_list_replaces_the_places_of_the_first(_catalog):  # noqa
     _served, ctx = await _run(llm)
     [ev] = [e.properties for e in ctx.events if e.type == "assistant_turn"]
     assert ev["card_needs"] == ["n/a"] and ev["candidates"] == 2
+
+
+async def test_a_card_from_an_earlier_search_keeps_its_place(_catalog, monkeypatch):  # noqa: F811
+    """NX-406: pe smoke-ul de după deploy agentul a căutat de 3 ori, iar cardurile alese din
+    căutările anterioare ieșeau fără loc (`card_positions` [None, None, None])."""
+    import src.db.queries.catalog as cat
+    import tests.test_nx396_assistant as base
+
+    first = [
+        _p("aaaaaaaa-0000-0000-0000-000000000001", "Crema Intai", skin="dry"),
+        _p("aaaaaaaa-0000-0000-0000-000000000002", "Crema Doi"),
+    ]
+    second = [_p("bbbbbbbb-0000-0000-0000-000000000001", "Ser Altul")]
+    for r in first + second:
+        monkeypatch.setitem(base.CATALOG, r["id"], r)
+
+    async def by_search(conn, business_id, query, **kw):
+        return [dict(r) for r in (first if query == "crema" else second)]
+
+    monkeypatch.setattr(cat, "search_products_lexical", by_search)
+    llm = ScriptedLLM(
+        [_call("search_catalog", _search(needs=["skin_type:dry"]), "c1")],
+        [_call("search_catalog", _search(query="ser"), "c2")],
+        [_call("product_details", {"handles": ["P2"]}, "c3")],
+        [_call("answer", _ans("Uite.", ["P2", "P3"]), "c4")],
+    )
+    _served, ctx = await _run(llm)
+    [ev] = [e.properties for e in ctx.events if e.type == "assistant_turn"]
+    assert ev["card_positions"] == [2, 1]
+    assert ev["card_needs"] == ["unknown", "n/a"]
+    sheet = _tool_output(llm, "c3")["sheets"]["P2"]
+    assert "need: unknown" in sheet and "position in this turn's list: 2 of 2" in sheet
