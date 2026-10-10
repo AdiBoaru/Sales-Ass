@@ -863,7 +863,11 @@ Meniul `needs` are doar fațetele declarate de pachet (SOLE 196 → 94), promptu
 (fără catalog/listă/fișă în text, fără repetiții, primul card = alegerea lui, sugestiile oferite
 ținute în `Memory.offered` și nerepetate). Efortul NU se schimbă aici:
 `scripts/sim/agent_effort_ab.py` (low vs medium, perechi oarbe, regula GO pre-înregistrată în
-card) o pornește Adi. Minusurile rămân o gaură de date (recenzii ≤ 3★ pe 82 de produse). Card:
+card) o pornește Adi. **Pe 2026-10-10 Adi a trecut agentul pe `medium` fără sondă**
+(`LLM_REASONING_EFFORT_ASSISTANT`, rollback `low`): pe `low` explicațiile («cum se folosește», «cum o
+combin cu SPF») ieșeau în două propoziții, față de pașii pe titluri ai iZi. Prețul e latența; de
+urmărit `assistant_fallback{round_timeout, turn_timeout}`, fiindcă plafonul unei runde (20 s) și al
+turului (45 s) au fost calibrate pe `low`. Minusurile rămân o gaură de date (recenzii ≤ 3★ pe 82 de produse). Card:
 [`tasks/stage1/NX-407.md`](tasks/stage1/NX-407.md); probă:
 `pytest tests/test_nx407_agent_expert_voice.py tests/test_nx407_effort_ab.py -q`.
 

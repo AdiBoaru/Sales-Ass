@@ -2011,9 +2011,12 @@ class Settings(BaseSettings):
     # Slug-urile tenanților pe care servește agentul; gol = toți.
     assistant_tenants: str = Field(default="", validation_alias="ASSISTANT_TENANTS")
     # Efortul de raționament al agentului, vocabular ÎNCHIS (gol sau necunoscut pică la boot).
-    # `low` e cel măsurat pe prototip (NX-393: p50 5 s).
+    # `medium` din 2026-10-10 (decis de Adi, fără sonda A/B NX-407): pe `low` 186 din 189 de
+    # apeluri n-aveau niciun token de raționament, iar forma cerută (pașii unei explicații,
+    # criteriile de alegere) ieșea pe jumătate. Prețul e latența: prototipul NX-393 pe `low` avea
+    # p50 5 s; de urmărit căderile `round_timeout`/`turn_timeout` pe `assistant_fallback`.
     llm_reasoning_effort_assistant: InterpretEffort = Field(
-        default="low", validation_alias="LLM_REASONING_EFFORT_ASSISTANT"
+        default="medium", validation_alias="LLM_REASONING_EFFORT_ASSISTANT"
     )
     # Câte runde de model are un tur servit de agent; o reîncercare după poarta de adevăr primește
     # o rundă în plus.
