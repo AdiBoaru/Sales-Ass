@@ -63,9 +63,9 @@ class Facts:
     mutation_patch: dict[str, Any] = field(default_factory=dict)
     mutation_events: list[Any] = field(default_factory=list)
     mutations: list[tuple[str, str]] = field(default_factory=list)
-    #: NX-404: locul fiecărui produs în ULTIMA listă clasată a turului (poziție de la 1, din câți
-    #: candidați) și starea nevoilor cerute atunci. Fișa îl poartă, evenimentul `card_rank` îl
-    #: măsoară. Doar produsele unei liste din ACEST tur au loc.
+    #: NX-404/406: locul fiecărui produs în ULTIMA listă clasată a turului în care a apărut
+    #: (poziție de la 1, din câți candidați) și starea nevoilor cerute în acea listă. Fișa îl
+    #: poartă, `assistant_turn.card_positions` îl măsoară. Doar produsele unei liste din ACEST tur.
     ranks: dict[str, dict[str, Any]] = field(default_factory=dict)
     needs: dict[str, list[str]] = field(default_factory=dict)
     #: NX-404: id-ul reprezentantului unei familii → handle-urile celorlalte variante (nuanțe,
@@ -168,10 +168,11 @@ class Tools:
         # familii cu multe nuanțe umpleau tăietura și agentul vedea 2-3 produse (recenzia NX-404).
         kept, hint = (ranked, "") if gated else self.gate(ranked, purpose)
         groups = group_families(kept, limit) if order else [(r, []) for r in kept[:limit]]
-        # Locul în listă e al ULTIMEI liste a turului: o a doua căutare, cu alte nevoi, nu
-        # amestecă poziții și nevoi din liste diferite.
+        # Fiecare produs își ține locul din ULTIMA listă în care a apărut, cu starea nevoii de
+        # atunci în aceeași intrare, deci două căutări cu nevoi diferite nu se amestecă. NX-406:
+        # golirea tabelului la fiecare listă lăsa fără loc cardurile alese dintr-o căutare
+        # anterioară (pe smoke-ul de după deploy, 3 căutări ⇒ `card_positions` [None, None, None]).
         self.facts.needs = dict(needs)
-        self.facts.ranks = {}
         self.facts.versions = {}
         self.facts.listed = len(kept)
         handles = self.remember([rep for rep, _versions in groups])
@@ -380,13 +381,16 @@ class Tools:
     def _rank_line(self, pid: str, row: dict[str, Any]) -> str:
         """NX-404: ce a stabilit lista clasată a turului despre produs, pe fișa lui: starea
         nevoilor cerute (fișa citită singură ar lăsa „pentru ten gras” afirmat pe un produs care
-        nu spune asta) și locul în listă. Fără o listă în tur, nimic."""
+        nu spune asta) și locul în listă. Starea vine din lista în care a apărut produsul (cu
+        nevoile ei); un produs din afara listelor turului e judecat pe nevoile ultimei liste. Fără
+        o listă în tur, nimic."""
         from src.assistant.search import need_status  # noqa: PLC0415
 
         lines = []
-        if self.facts.needs:
-            lines.append(f"need: {need_status(row, self.facts.needs)}")
         rank = self.facts.ranks.get(pid)
+        need = rank["need"] if rank else need_status(row, self.facts.needs)
+        if need != "n/a":
+            lines.append(f"need: {need}")
         if rank:
             lines.append(f"position in this turn's list: {rank['position']} of {rank['of']}")
         return "".join(f"{line}\n" for line in lines)
