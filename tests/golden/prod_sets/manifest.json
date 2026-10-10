@@ -39,5 +39,11 @@
   "conversations": 1,
   "messages": 5,
   "about": "conversația comparată cu iZi pe 2026-10-10 (NX-407); setul pe care s-a făcut analiza, nu un set nevăzut"
+ },
+ "explain-2026-10-10.json": {
+  "sha256": "84c907f171492efcb9a1a7cc432d61a99584e9f1559e683296dbc250810f1e7e",
+  "conversations": 1,
+  "messages": 5,
+  "about": "conversația iZi cu așteptările NX-408 la explicații (cum se folosește, cum combin); setul analizei, nu un set nevăzut"
  }
 }
