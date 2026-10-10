@@ -39,6 +39,8 @@ KEY_INGREDIENTS = 5
 #: Ce laudă recenziile (`product_review_summaries.top_pros`, NX-279), câte puncte pe produs.
 REVIEW_POINTS = 3
 _HANDLE = re.compile(r"\bP[1-9][0-9]{0,3}\b")
+#: Câte variante ale unei familii primesc handle și apar pe rândul ei.
+MAX_VERSIONS = 6
 
 
 @dataclass
@@ -61,6 +63,16 @@ class Facts:
     mutation_patch: dict[str, Any] = field(default_factory=dict)
     mutation_events: list[Any] = field(default_factory=list)
     mutations: list[tuple[str, str]] = field(default_factory=list)
+    #: NX-404: locul fiecărui produs în ULTIMA listă clasată a turului (poziție de la 1, din câți
+    #: candidați) și starea nevoilor cerute atunci. Fișa îl poartă, evenimentul `card_rank` îl
+    #: măsoară. Doar produsele unei liste din ACEST tur au loc.
+    ranks: dict[str, dict[str, Any]] = field(default_factory=dict)
+    needs: dict[str, list[str]] = field(default_factory=dict)
+    #: NX-404: id-ul reprezentantului unei familii → handle-urile celorlalte variante (nuanțe,
+    #: gramaje), ca agentul să le poată compara sau pune pe card fără câte un rând fiecare.
+    versions: dict[str, list[str]] = field(default_factory=dict)
+    #: Câți candidați au rămas în ultima listă, după nepotrivire și siguranță (`found` al căutării).
+    listed: int = 0
 
 
 class Tools:
@@ -124,6 +136,68 @@ class Tools:
         kept, decision = self.policy.gate(self.ctx, rows, purpose=purpose)
         return kept, model_hint(decision)
 
+    def present(
+        self,
+        rows: list[dict[str, Any]],
+        needs: dict[str, list[str]],
+        *,
+        purpose: str,
+        limit: int,
+        sort: str = "relevance",
+        order: bool = True,
+        gated: bool = False,
+    ) -> tuple[list[str], str]:
+        """NX-404: PÂLNIA prin care trece orice LISTĂ de produse pe care o primește agentul, din
+        orice unealtă: rankingul (`search.rank_candidates`: nepotrivitul iese, potrivirea înaintea
+        necunoscutului, rankingul producției, o familie pe rând; `order=False` păstrează ordinea
+        uneltei, ca pașii unei rutine), siguranța (NX-173; `gated=True` pentru o listă pe care
+        unealta de producție a trecut-o deja prin ea, ca decizia turului să nu numere de două ori),
+        handle-urile, locul în listă. Întoarce handle-urile primelor `limit` și linia de siguranță
+        pentru model."""
+        from src.assistant.search import (  # noqa: PLC0415
+            group_families,
+            need_status,
+            rank_candidates,
+        )
+
+        if order:
+            ranked = rank_candidates(rows, needs, sort=sort, weights=self.rank_weights())
+        else:
+            ranked = [dict(r) for r in rows]
+        # Siguranța pe TOȚI candidații, apoi familiile: tăiată la primele N rânduri, două-trei
+        # familii cu multe nuanțe umpleau tăietura și agentul vedea 2-3 produse (recenzia NX-404).
+        kept, hint = (ranked, "") if gated else self.gate(ranked, purpose)
+        groups = group_families(kept, limit) if order else [(r, []) for r in kept[:limit]]
+        # Locul în listă e al ULTIMEI liste a turului: o a doua căutare, cu alte nevoi, nu
+        # amestecă poziții și nevoi din liste diferite.
+        self.facts.needs = dict(needs)
+        self.facts.ranks = {}
+        self.facts.versions = {}
+        self.facts.listed = len(kept)
+        handles = self.remember([rep for rep, _versions in groups])
+        for i, (rep, versions) in enumerate(groups, 1):
+            others = self.remember(versions[:MAX_VERSIONS])
+            self.facts.versions[str(rep["id"])] = others
+            for r in (rep, *versions[:MAX_VERSIONS]):
+                self.facts.ranks[str(r["id"])] = {
+                    "position": i,
+                    "of": len(kept),
+                    "need": need_status(r, needs),
+                }
+        # Memoria păstrează cele mai recente `MAX_HANDLES`: reprezentanții se ating la urmă, cel
+        # mai bun ultimul, ca variantele să nu-i scoată (recenzia NX-404: familiile 1-4 dispăreau).
+        for rep, _versions in reversed(groups):
+            self.memory.handle_of(str(rep["id"]))
+        return handles, hint
+
+    def rank_weights(self) -> dict[str, float] | None:
+        """Ponderile rankingului: ale pachetului (`DomainPack.rank_weights`), peste cele ale
+        producției; `None` cu kill-switch-ul `SEARCH_BLENDED_RANK_ENABLED` stins. Același
+        proprietar ca pe calea veche (`catalog_tools._rank_weights`)."""
+        from src.tools.catalog_tools import _rank_weights  # noqa: PLC0415
+
+        return _rank_weights(self.ctx)
+
     def remember(self, rows: list[dict[str, Any]]) -> list[str]:
         """Faptele și handle-urile rândurilor (deja gated), în ordine."""
         handles = []
@@ -175,6 +249,14 @@ class Tools:
                 row["key_ingredients"] = key[:KEY_INGREDIENTS]
             if p.get("lexical_step"):
                 row["match"] = p["lexical_step"]
+            # NX-404: starea nevoilor cerute în căutare (`unknown` = fișa nu spune) și câte variante
+            # (nuanțe, gramaje) are familia pe care o reprezintă rândul.
+            rank = self.facts.ranks.get(str(p.get("id")))
+            if rank and rank["need"] != "n/a":
+                row["need"] = rank["need"]
+            others = self.facts.versions.get(str(p.get("id"))) or []
+            if others:
+                row["versions"] = [{"handle": o, "name": names.get(o)} for o in others]
             out.append(row)
         return out
 
@@ -227,40 +309,30 @@ class Tools:
     # --- uneltele --------------------------------------------------------------------------------
 
     async def _search_catalog(self, a: dict[str, Any]) -> dict[str, Any]:
-        from src.db.queries.catalog import search_products_lexical  # noqa: PLC0415
+        """NX-404: candidații (`search.fetch_candidates`: nevoile spuse nu mai scot produsele
+        fără atribut, scara de text nu se oprește la un singur rezultat) trec prin pâlnie
+        (`present`): rankingul producției, potrivirea înaintea necunoscutului, o familie pe rând."""
+        from src.assistant.search import fetch_candidates, split_needs  # noqa: PLC0415
+        from src.db.provider import is_shared_connection  # noqa: PLC0415
 
         m = self.menus
         check(a.get("category"), m.categories, "category")
         check(a.get("brand"), m.brands, "brand")
-        facets: dict[str, list[str]] = {}
         for need in a.get("needs") or []:
             check(need, m.needs, "needs")
-            dim, _sep, value = need.partition(":")
-            facets.setdefault(dim, []).append(value)
-        types = list(a.get("product_types") or [])
-        for t in types:
+        for t in a.get("product_types") or []:
             check(t, m.product_types, "product_types")
-        if types:
-            facets["product_type"] = types
         sort = a.get("sort") or "relevance"
         check(sort, ("relevance", "price_asc", "price_desc", "rating_desc"), "sort")
         excluded = {self._id(h) for h in a.get("exclude") or []}
         self.facts.catalog_read = True
-        async with self.deps.db("assistant_search") as conn:
-            rows = await search_products_lexical(
-                conn,
-                self.ctx.business.id,
-                str(a.get("query") or ""),
-                category=a.get("category"),
-                brand=a.get("brand"),
-                facet_filters=facets or None,
-                price_max=a.get("price_max"),
-                sort_mode=sort,
-                in_stock_only=bool(a.get("in_stock_only")),
-                locale=self.ctx.business.default_locale or self.ctx.language,
-                allow_filters_only=True,
-                pool=SEARCH_POOL,
-            )
+        rows = await fetch_candidates(
+            lambda: self.deps.db("assistant_search"),
+            self.ctx.business.id,
+            a,
+            locale=self.ctx.business.default_locale or self.ctx.language,
+            parallel=not is_shared_connection(getattr(self.deps, "db", None)),
+        )
         price_min = a.get("price_min")
         rows = [
             r
@@ -268,9 +340,10 @@ class Tools:
             if str(r.get("id")) not in excluded
             and (price_min is None or (r.get("price") or 0) >= float(price_min))
         ]
-        kept, hint = self.gate(rows[: SEARCH_ROWS * 2], "search")
-        handles = self.remember(kept[:SEARCH_ROWS])
-        out: dict[str, Any] = {"found": len(rows), "products": self.view_rows(handles)}
+        handles, hint = self.present(
+            rows, split_needs(a.get("needs") or []), purpose="search", limit=SEARCH_ROWS, sort=sort
+        )
+        out: dict[str, Any] = {"found": self.facts.listed, "products": self.view_rows(handles)}
         if hint:
             out["safety"] = hint
         return out
@@ -298,11 +371,25 @@ class Tools:
                 sheets[h] = "not available"
                 continue
             sheet = product_facts(row, pack, self.ctx.language)[:SHEET_MAX]
-            sheets[h] = f"name on card: {names.get(h)}\n{sheet}"
+            sheets[h] = f"name on card: {names.get(h)}\n{self._rank_line(pid, row)}{sheet}"
         out: dict[str, Any] = {"sheets": sheets}
         if hint:
             out["safety"] = hint
         return out
+
+    def _rank_line(self, pid: str, row: dict[str, Any]) -> str:
+        """NX-404: ce a stabilit lista clasată a turului despre produs, pe fișa lui: starea
+        nevoilor cerute (fișa citită singură ar lăsa „pentru ten gras” afirmat pe un produs care
+        nu spune asta) și locul în listă. Fără o listă în tur, nimic."""
+        from src.assistant.search import need_status  # noqa: PLC0415
+
+        lines = []
+        if self.facts.needs:
+            lines.append(f"need: {need_status(row, self.facts.needs)}")
+        rank = self.facts.ranks.get(pid)
+        if rank:
+            lines.append(f"position in this turn's list: {rank['position']} of {rank['of']}")
+        return "".join(f"{line}\n" for line in lines)
 
     async def _store_rules(self, a: dict[str, Any]) -> dict[str, Any]:
         from src.tools.faq_tools import load_rules  # noqa: PLC0415
@@ -360,6 +447,7 @@ class Tools:
         """`run_planned_routine`: argumentele agentului nu se re-judecă pe text (NX-333), pașii și
         produsul de pe fiecare pas sunt ai magazinului, siguranța e în unealtă. Id-urile din vedere
         devin handle-uri."""
+        from src.assistant.search import split_needs  # noqa: PLC0415
         from src.tools.routine_tools import RoutineArgs, run_planned_routine  # noqa: PLC0415
 
         m = self.menus
@@ -381,7 +469,17 @@ class Tools:
         )
         self.facts.catalog_read = True
         result = await run_planned_routine(self.ctx, self.deps, args)
-        handles = self.remember(list(result.products or []))
+        # NX-404: prin pâlnie pentru starea nevoilor, fără reordonare (pașii sunt ai magazinului)
+        # și fără a doua trecere prin siguranță (unealta rutinei o aplică deja).
+        products = list(result.products or [])
+        handles, _hint = self.present(
+            products,
+            split_needs(a.get("needs") or []),
+            purpose="routine",
+            limit=len(products),
+            order=False,
+            gated=True,
+        )
         view = result.llm_view or ""
         for h in handles:
             view = view.replace(f"[{self.memory.handles[h]}]", f"[{h}]")
