@@ -339,6 +339,7 @@ def _check(
     card_slots: Any,
     chip_slots: Any,
 ) -> Checked:
+    from src.assistant.gate import unit_aliases  # noqa: PLC0415
     from src.catalog.render_text import display_name  # noqa: PLC0415
 
     return check_answer(
@@ -358,6 +359,9 @@ def _check(
         max_cards=card_slots(),
         max_suggestions=chip_slots(),
         notes_max=NOTES_MAX,
+        facts=tools.facts_text(),
+        units=unit_aliases(getattr(tools.ctx.business, "domain_pack", None)),
+        product_facts={pid: tools.product_text(pid) for pid in tools.facts.rows},
     )
 
 
@@ -464,6 +468,9 @@ def _reply(
 
     names = tools.names()
     text = naturalize(final.text) or final.text
+    # NX-403: sfatul stă sub carduri (paragraful „cum alegi” al widgetului, `education`), sub
+    # tabelul comparației, sau după text când turul n-are nici carduri, nici comparație.
+    advice = naturalize(final.advice) or final.advice
     suggestions = [naturalize(s) or s for s in final.kept_suggestions]
     lang = ctx.language
     cited: list[str] = []
@@ -480,7 +487,7 @@ def _reply(
             table.intro = "\n\n".join(x for x in (text, intro) if x) or None
             table.subtitle = naturalize(str(final.comparison.get("subtitle") or "")) or None
             closing = naturalize(str(final.comparison.get("closing") or ""))
-            table.closing = [closing] if closing else []
+            table.closing = [x for x in (closing, advice) if x]
             flat = "\n\n".join(x for x in (table.intro or "", *table.closing) if x)
             ctx.set_comparison_reply(
                 table, text=flat, products=wc.comparison_cards(table), chips=suggestions
@@ -491,6 +498,7 @@ def _reply(
             # comparației rămân ale răspunsului, nu se pierd.
             extra = (final.comparison.get(k) for k in ("intro", "subtitle", "closing"))
             text = "\n\n".join(x for x in (text, *(naturalize(str(e or "")) for e in extra)) if x)
+            text, advice = "\n\n".join(x for x in (text, advice) if x), ""
 
     if ctx.reply is None and final.cards:
         ids = [memory.handles[c["handle"]] for c in final.cards]
@@ -515,7 +523,7 @@ def _reply(
                 intro=text,
                 items=items,
                 pick=None,
-                education=None,
+                education=advice or None,
                 chips=wc._suggestion_chips(suggestions),
                 disclaimer=wc.disclaimer(lang) if get_settings().ai_disclaimer_enabled else None,
             )
@@ -524,7 +532,7 @@ def _reply(
             cited = [it.product_id for it in items]
 
     if ctx.reply is None:
-        ctx.set_reply(text, cacheable=False)
+        ctx.set_reply("\n\n".join(x for x in (text, advice) if x), cacheable=False)
         ctx.reply.suggestions = suggestions
 
     ctx.retrieval = RetrievalResult(
@@ -537,6 +545,7 @@ def _reply(
         "prompt": PROMPT_VERSION,
         "cards": [c["handle"] for c in final.cards],
         "comparison": bool(final.comparison),
+        "advice": bool(final.advice),
         "suggestions": len(suggestions),
         "suggestions_dropped": final.dropped_suggestions,
     }

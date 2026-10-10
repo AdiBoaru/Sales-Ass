@@ -794,7 +794,8 @@ prefix cache-uit); în textul clientului un handle devine numele produsului. Mem
 `PASSTHROUGH_KEYS` pe v2); faptele produselor cunoscute se re-citesc la fiecare tur cu
 `SafetyPolicy.evaluate` (nu intră în decizia turului).
 ORICE set de produse trece prin `SafetyPolicy.gate` (NX-173) înainte ca modelul să-l vadă; fraza de
-siguranță o pune runner-ul. Poarta de adevăr e `validate_prose` pe text + motive + comparație (sume
+siguranță o pune runner-ul. Poarta de adevăr e pe FAPTE din NX-403 (`gate.judge`, înainte
+`validate_prose`), pe text + sfat + motive + comparație (sume
 permise: totalul fiecărui set arătat, coșul, o comandă găsită, NU și cifrele clientului; regulile
 citite ca surse NX-346), cu O reîncercare; sugestiile le scrie agentul din conversație și se judecă una câte una.
 Comparația e tabelul din widget (`build_comparison` pe fișe), textele sunt ale agentului. Orice eșec
@@ -814,6 +815,25 @@ cade (primul blocaj, 42,5 s fără token, nu putuse fi explicat). Card:
 **NX-402:** la o cerere GENERALĂ de recomandare agentul arată 5 produse potrivite
 (`ASSISTANT_RECOMMEND_CARDS`, decizia lui Adi; NX-401 cerea 2-4, iar modelul alegea 1-2), mai
 puține doar la o cerere specifică, cu motivul spus (prompt `assistant.v3`).
+**NX-403 — răspunsul agentului la nivelul iZi; poarta judecă fapte, nu cuvinte.** Pe 9-10 oct,
+toate cele 7 căderi ale agentului și 9 din cele 12 reîncercări erau răspunsuri CORECTE respinse de
+listele de cuvinte ale lui `validate_prose` («SPF 30» din catalog, «din 23 de recenzii», «cea mai
+ieftină», «30 de zile» din regula de retur), iar o cădere costa de 3,5 ori un tur servit. Poarta
+(`src/assistant/gate.py`) e acum a compozitorului: fiecare cifră există în ce au întors uneltele
+(`Tools.facts_text`, fără mesajele clientului) exact cum e scrisă: cu aceeași unitate, comparată
+canonic și la scară din pachet («200 g» = «200 gr», `unit_aliases`), iar fără unitate doar ca
+cifră fără unitate; o cifră cu unitate pe un card e a ACELUI produs; prețurile (suma unei reguli
+doar într-o propoziție fără produs, niciodată pe card), linkurile, stocul (doar când turul a citit
+produse), medicalul pe tot textul fără numele produselor; livrarea, returul, garanția, promoția doar
+cu o regulă citită pe aceeași familie (`unsourced_claim`); singura listă de cuvinte rămasă e
+popularitatea («best seller», `has_popularity_claim`). Agentul vede în căutare recenziile (`reviews`, `reviews_praise`) și
+ingredientele cheie, fără codurile de catalog; `answer` are `advice` (cum alegi + ce ai lua tu),
+pus de widget SUB carduri (`education`, după primele două paragrafe ale textului). Promptul
+`assistant.v4` cere forma pe tipul cererii (recomandare, întrebare despre ce s-a arătat, „cum se
+folosește” în pași). Rejucat pe toate cele 66 de ture ale agentului (0 $): servite 59 → 66,
+reîncercări 19 → 4, zero regresii. Promptul NU e măsurat cu modelul. Card:
+[`tasks/stage1/NX-403.md`](tasks/stage1/NX-403.md); probă:
+`pytest tests/test_nx403_agent_answer_quality.py -q`.
 
 **NX-238 — retrievalul trece printr-un PORT, iar candidatul e inert (verdict `NOT-READY`).**
 `src/retrieval/` e contractul stabil pe care îl consumă NX-239: `RetrievalPort` + `RetrievalBundle`
