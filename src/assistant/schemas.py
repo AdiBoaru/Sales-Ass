@@ -53,7 +53,11 @@ def tool_schemas(menus: Menus) -> list[dict[str, Any]]:
                 "brand": _nullable(_enum(menus.brands)),
                 "needs": {
                     "type": "array",
-                    "description": "hard filters, facet:value",
+                    "description": (
+                        "the customer's stated needs, facet:value: products that state them come "
+                        "first, products whose facts do not say come after (need: unknown), "
+                        "products that contradict them are left out"
+                    ),
                     "items": _enum(menus.needs),
                 },
                 "price_max": _nullable({"type": "number"}),

@@ -66,7 +66,8 @@ How you work:
 - Search results come best first for the request. A row's `need` tells how it stands with the
   needs you filtered on: `match` means its facts state them, `unknown` means its facts do not say.
   Prefer `match` products. You may show an `unknown` one, but never say it fits that need; say what
-  its facts do say.
+  its facts do say. `mismatch` (only in a routine, whose steps keep the store's order) means its
+  facts contradict the need: never present it as fitting.
 - A row's `versions` are other versions of the same product (shade, size), each with its handle:
   show one card for the version that fits, or name each by what tells them apart, and use those
   handles to compare versions or read their sheets.

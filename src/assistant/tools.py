@@ -39,8 +39,6 @@ KEY_INGREDIENTS = 5
 #: Ce laudă recenziile (`product_review_summaries.top_pros`, NX-279), câte puncte pe produs.
 REVIEW_POINTS = 3
 _HANDLE = re.compile(r"\bP[1-9][0-9]{0,3}\b")
-#: NX-404: câte rânduri clasate trec prin siguranță ca să se umple `SEARCH_ROWS` familii.
-GATE_FACTOR = 4
 #: Câte variante ale unei familii primesc handle și apar pe rândul ei.
 MAX_VERSIONS = 6
 
@@ -73,6 +71,8 @@ class Facts:
     #: NX-404: id-ul reprezentantului unei familii → handle-urile celorlalte variante (nuanțe,
     #: gramaje), ca agentul să le poată compara sau pune pe card fără câte un rând fiecare.
     versions: dict[str, list[str]] = field(default_factory=dict)
+    #: Câți candidați au rămas în ultima listă, după nepotrivire și siguranță (`found` al căutării).
+    listed: int = 0
 
 
 class Tools:
@@ -164,23 +164,30 @@ class Tools:
             ranked = rank_candidates(rows, needs, sort=sort, weights=self.rank_weights())
         else:
             ranked = [dict(r) for r in rows]
-        if gated:
-            kept, hint = ranked, ""
-        else:
-            kept, hint = self.gate(ranked[: limit * GATE_FACTOR], purpose)
+        # Siguranța pe TOȚI candidații, apoi familiile: tăiată la primele N rânduri, două-trei
+        # familii cu multe nuanțe umpleau tăietura și agentul vedea 2-3 produse (recenzia NX-404).
+        kept, hint = (ranked, "") if gated else self.gate(ranked, purpose)
         groups = group_families(kept, limit) if order else [(r, []) for r in kept[:limit]]
+        # Locul în listă e al ULTIMEI liste a turului: o a doua căutare, cu alte nevoi, nu
+        # amestecă poziții și nevoi din liste diferite.
         self.facts.needs = dict(needs)
-        handles: list[str] = []
+        self.facts.ranks = {}
+        self.facts.versions = {}
+        self.facts.listed = len(kept)
+        handles = self.remember([rep for rep, _versions in groups])
         for i, (rep, versions) in enumerate(groups, 1):
-            [handle, *others] = self.remember([rep, *versions[:MAX_VERSIONS]])
-            handles.append(handle)
+            others = self.remember(versions[:MAX_VERSIONS])
             self.facts.versions[str(rep["id"])] = others
             for r in (rep, *versions[:MAX_VERSIONS]):
                 self.facts.ranks[str(r["id"])] = {
                     "position": i,
-                    "of": len(ranked),
+                    "of": len(kept),
                     "need": need_status(r, needs),
                 }
+        # Memoria păstrează cele mai recente `MAX_HANDLES`: reprezentanții se ating la urmă, cel
+        # mai bun ultimul, ca variantele să nu-i scoată (recenzia NX-404: familiile 1-4 dispăreau).
+        for rep, _versions in reversed(groups):
+            self.memory.handle_of(str(rep["id"]))
         return handles, hint
 
     def rank_weights(self) -> dict[str, float] | None:
@@ -306,6 +313,7 @@ class Tools:
         fără atribut, scara de text nu se oprește la un singur rezultat) trec prin pâlnie
         (`present`): rankingul producției, potrivirea înaintea necunoscutului, o familie pe rând."""
         from src.assistant.search import fetch_candidates, split_needs  # noqa: PLC0415
+        from src.db.provider import is_shared_connection  # noqa: PLC0415
 
         m = self.menus
         check(a.get("category"), m.categories, "category")
@@ -323,6 +331,7 @@ class Tools:
             self.ctx.business.id,
             a,
             locale=self.ctx.business.default_locale or self.ctx.language,
+            parallel=not is_shared_connection(getattr(self.deps, "db", None)),
         )
         price_min = a.get("price_min")
         rows = [
@@ -334,7 +343,7 @@ class Tools:
         handles, hint = self.present(
             rows, split_needs(a.get("needs") or []), purpose="search", limit=SEARCH_ROWS, sort=sort
         )
-        out: dict[str, Any] = {"found": len(rows), "products": self.view_rows(handles)}
+        out: dict[str, Any] = {"found": self.facts.listed, "products": self.view_rows(handles)}
         if hint:
             out["safety"] = hint
         return out

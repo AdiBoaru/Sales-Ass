@@ -72,6 +72,14 @@ def test_need_status(attrs, needs, status):
     assert need_status({"attributes": attrs}, needs) == status
 
 
+def test_a_boolean_compares_like_sql():
+    """Recenzia NX-404: `str(True)` e „True”, SQL-ul dă „true”: produsul ieșea nepotrivit."""
+    assert need_status({"attributes": {"fragrance_free": True}}, {"fragrance_free": ["true"]}) == (
+        "match"
+    )
+    assert need_status({"attributes": {"spf": 50.0}}, {"spf": ["50"]}) == "match"
+
+
 def test_split_needs():
     assert split_needs(["skin_type:oily", "concerns:acne", "concerns:pores", "x"]) == {
         "skin_type": ["oily"],
@@ -113,6 +121,18 @@ def test_an_explicit_sort_keeps_the_sql_order_inside_each_group():
     assert [r["id"] for r in ranked] == ["m1", "m2", "u1"]
 
 
+def test_an_explicit_sort_orders_inside_each_group_across_queries():
+    """Candidații vin din interogări diferite: concatenarea lor nu e în ordinea prețului."""
+    rows = [
+        _p("t1", "Text 1", skin="oily", price=80),
+        _p("t2", "Text 2", price=90),
+        _p("f1", "Raft 1", skin="oily", price=4),
+        _p("f2", "Raft 2", price=5),
+    ]
+    ranked = rank_candidates(rows, OILY, sort="price_asc", weights={})
+    assert [r["id"] for r in ranked] == ["f1", "t1", "f2", "t2"]
+
+
 def test_families_keep_their_versions_and_the_limit_counts_families():
     rows = [
         _p("a1", "Cushion Glow - nuanta 10C, 15 g"),
@@ -148,19 +168,52 @@ def _recording(monkeypatch):
 ARGS = {"query": "crema", "category": "ten", "product_types": ["crema de fata"]}
 
 
-async def test_on_relevance_the_matches_and_the_ranked_shelf_are_two_queries(monkeypatch):
-    """Raftul fără nevoi se cere pe treapta „doar filtrele” ordonată după text: o interogare face
-    cât scara + completarea (măsurat: completarea separată rula în 38 din 60, +210 ms)."""
+async def test_matches_and_shelf_run_the_text_ladder_then_the_shelf_completes(monkeypatch):
+    """Raftul fără nevoi rulează scara de text OBIȘNUITĂ (eticheta de treaptă rămâne adevărată și
+    nu depinde de flagul `filters_only`); completarea din raft vine doar sub 20 de candidați."""
     calls = _recording(monkeypatch)
     rows = await asearch.fetch_candidates(
         _no_db, "b", {**ARGS, "needs": ["skin_type:oily"]}, locale="ro"
     )
-    assert [r["id"] for r in rows] == ["r1", "shared", "r2"]
+    assert [r["id"] for r in rows] == ["r1", "shared", "r2", "r3"]
     assert calls[0]["facet_filters"] == {"product_type": ["crema de fata"], "skin_type": ["oily"]}
-    assert calls[0].get("only_filters_step", False) is False
     assert calls[1]["facet_filters"] == {"product_type": ["crema de fata"]}
-    assert calls[1]["only_filters_step"] is True
+    assert [c.get("only_filters_step", False) for c in calls] == [False, False, True]
     assert all(c["allow_filters_only"] for c in calls)
+
+
+async def test_enough_candidates_need_no_completion(monkeypatch):
+    calls = []
+
+    async def fake(conn, business_id, query, **kw):
+        calls.append(kw)
+        return [_p(f"{len(calls)}-{i}", f"Crema {len(calls)}-{i}") for i in range(20)]
+
+    import src.db.queries.catalog as cat
+
+    monkeypatch.setattr(cat, "search_products_lexical", fake)
+    await asearch.fetch_candidates(_no_db, "b", ARGS, locale="ro")
+    assert len(calls) == 1
+
+
+async def test_a_single_connection_provider_runs_the_queries_one_by_one(monkeypatch):
+    active = []
+
+    async def fake(conn, business_id, query, **kw):
+        import asyncio
+
+        active.append(1)
+        assert len(active) == 1, "două operații simultane pe aceeași conexiune"
+        await asyncio.sleep(0)
+        active.pop()
+        return []
+
+    import src.db.queries.catalog as cat
+
+    monkeypatch.setattr(cat, "search_products_lexical", fake)
+    await asearch.fetch_candidates(
+        _no_db, "b", {**ARGS, "needs": ["skin_type:oily"]}, locale="ro", parallel=False
+    )
 
 
 async def test_on_an_explicit_sort_a_short_list_is_completed_from_the_shelf(monkeypatch):
@@ -288,3 +341,54 @@ def test_every_tool_that_returns_products_goes_through_the_funnel():
     # exemplul care TREBUIE să pice
     bad = ast.parse("async def _x(self):\n    return {'products': []}\n").body[0]
     assert _returns_products(bad) and not _calls_present(bad)
+
+
+# --- recenzia adversarială: pâlnia ---------------------------------------------------------------
+
+
+def _shades(family, n, start):
+    return [
+        _p(f"{start + i:08d}-0000-0000-0000-000000000000", f"{family} - nuanta {i}, 10 ml")
+        for i in range(n)
+    ]
+
+
+async def test_shade_heavy_families_do_not_starve_the_list(_catalog):  # noqa: F811
+    """Siguranța tăia la primele 32 de rânduri, înaintea familiilor: trei familii cu câte 15
+    nuanțe umpleau tăietura și agentul vedea 3 produse."""
+    rows = _shades("Ruj A", 15, 1000) + _shades("Ruj B", 15, 2000) + _shades("Ruj C", 15, 3000)
+    rows += [_p(f"{9000 + i:08d}-0000-0000-0000-000000000000", f"Crema {i}") for i in range(6)]
+    _catalog["search"] = rows
+    llm = ScriptedLLM(
+        [_call("search_catalog", _search(), "c1")], [_call("answer", _ans("Uite."), "c2")]
+    )
+    await _run(llm)
+    assert len(_tool_output(llm, "c1")["products"]) == 8
+
+
+async def test_versions_never_push_the_best_families_out_of_memory(_catalog):  # noqa: F811
+    rows = []
+    for f in range(8):
+        rows += _shades(f"Familia {f}", 7, 1000 * (f + 1))
+    _catalog["search"] = rows
+    llm = ScriptedLLM(
+        [_call("search_catalog", _search(), "c1")], [_call("answer", _ans("Uite."), "c2")]
+    )
+    _served, ctx = await _run(llm)
+    reps = {p["handle"] for p in _tool_output(llm, "c1")["products"]}
+    assert len(reps) == 8 and reps <= set(ctx.state_patch["assistant"]["h"])
+
+
+async def test_a_second_list_replaces_the_places_of_the_first(_catalog):  # noqa: F811
+    _catalog["search"] = [
+        _p("77777777-7777-7777-7777-777777777777", "Crema Sapte", skin="dry"),
+        _p("88888888-8888-8888-8888-888888888888", "Crema Opt"),
+    ]
+    llm = ScriptedLLM(
+        [_call("search_catalog", _search(needs=["skin_type:dry"]), "c1")],
+        [_call("search_catalog", _search(), "c2")],
+        [_call("answer", _ans("Uite.", ["P1"]), "c3")],
+    )
+    _served, ctx = await _run(llm)
+    [ev] = [e.properties for e in ctx.events if e.type == "assistant_turn"]
+    assert ev["card_needs"] == ["n/a"] and ev["candidates"] == 2

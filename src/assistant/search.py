@@ -65,10 +65,20 @@ def need_status(row: Mapping[str, Any], needs: Mapping[str, Sequence[str]]) -> s
         if raw in (None, "", [], {}):
             status = "unknown"
             continue
-        values = {str(v) for v in raw} if isinstance(raw, list) else {str(raw)}
-        if not values & {str(w) for w in wanted}:
+        values = {_text(v) for v in raw} if isinstance(raw, list) else {_text(raw)}
+        if not values & {_text(w) for w in wanted}:
             return "mismatch"
     return status
+
+
+def _text(value: Any) -> str:
+    """O valoare de atribut ca textul pe care îl compară SQL-ul (`->>`): `true`/`false` pentru un
+    boolean (Python ar da `True`), un număr întreg fără zecimale."""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value)
 
 
 def family_key(row: Mapping[str, Any]) -> str:
@@ -88,11 +98,13 @@ def rank_candidates(
     """Ordinea în care agentul vede candidații. PUR (în afara rankingului refolosit).
 
     Pe `relevance`: rankingul producției (`blended_rerank`, cu poziția din căutare ca relevanță și
-    epuizatele coborâte), apoi grupul nevoii (stabil). Pe o sortare cerută (preț, rating) ordinea
-    SQL rămâne, tot sub grupul nevoii. `weights=None` ⇒ rankingul de dinainte de blend
-    (`deterministic_rerank`), ca pe calea veche cu kill-switch-ul stins. Nepotrivitul iese; o
-    familie e adunată de `group_families`, după siguranță (fiecare variantă trece prin ea)."""
+    epuizatele coborâte), apoi grupul nevoii (stabil). Pe o sortare cerută (preț, rating), cheia
+    cerută în fiecare grup: candidații vin din interogări diferite, deci concatenarea lor nu e
+    ordonată (recenzia NX-404: «price_asc» ieșea [80, 90, 100, 4, 5]). `weights=None` ⇒ rankingul
+    de dinainte de blend (`deterministic_rerank`), ca pe calea veche cu kill-switch-ul stins.
+    Nepotrivitul iese; o familie e adunată de `group_families`, după siguranță."""
     from src.db.queries.fusion import (  # noqa: PLC0415
+        _shrunk_rating,
         blended_rerank,
         demote_out_of_stock,
         deterministic_rerank,
@@ -100,7 +112,14 @@ def rank_candidates(
     )
 
     kept = [dict(r) for r in rows if need_status(r, needs) != "mismatch"]
-    if sort == "relevance" and kept:
+    sort_keys = {
+        "price_asc": lambda r: (_price(r), -_shrunk_rating(r)),
+        "price_desc": lambda r: (-_price(r), -_shrunk_rating(r)),
+        "rating_desc": lambda r: (-_shrunk_rating(r), _price(r)),
+    }
+    if sort in sort_keys:
+        kept.sort(key=sort_keys[sort])
+    elif sort == "relevance" and kept:
         scores = demote_out_of_stock(kept, rrf_scores(kept, []))
         concerns = list(needs.get("concerns") or [])
         prefer = {k: list(v) for k, v in needs.items()} or None
@@ -112,6 +131,11 @@ def rank_candidates(
             )
     kept.sort(key=lambda r: _NEED_TIER[need_status(r, needs)])
     return kept
+
+
+def _price(row: Mapping[str, Any]) -> float:
+    value = row.get("price")
+    return float(value) if isinstance(value, int | float) else float("inf")
 
 
 def group_families(
@@ -141,14 +165,19 @@ async def fetch_candidates(
     args: Mapping[str, Any],
     *,
     locale: str | None,
+    parallel: bool = True,
 ) -> list[dict[str, Any]]:
     """Candidații unei căutări a agentului, NEORDONAȚI încă (`rank_candidates` îi ordonează):
-    potrivirile nevoilor, apoi raftul și tipul fără nevoi, apoi, sub `MIN_CANDIDATES`, setul
-    filtrelor fără text. Fiecare rând apare o dată, în ordinea primei apariții.
+    potrivirile nevoilor, apoi raftul și tipul fără nevoi (scara de text obișnuită, deci treapta
+    fiecărui rând e cea adevărată), apoi, sub `MIN_CANDIDATES`, setul filtrelor fără text. Fiecare
+    rând apare o dată, în ordinea primei apariții.
 
     `db()` deschide un checkout SCURT tenant-scoped (`deps.db`, NX-231); `business_id` vine din
     server (P7). Primele două interogări sunt independente, deci rulează în PARALEL, fiecare pe
-    conexiunea ei: pe rând, cele trei costau +130 ms la p50 față de căutarea veche."""
+    conexiunea ei; `parallel=False` pe un provider cu o singură conexiune (`static_db`), care nu
+    suportă două operații simultane. O primă variantă cerea raftul direct pe treapta „doar
+    filtrele”: mai rapidă, dar eticheta „fără potrivire de text” ajungea pe TOATE rândurile, iar cu
+    `SEARCH_FILTERS_ONLY_FALLBACK_ENABLED` stins căutarea întorcea nimic (recenzia NX-404)."""
     import asyncio  # noqa: PLC0415
 
     from src.db.queries.catalog import search_products_lexical  # noqa: PLC0415
@@ -182,16 +211,14 @@ async def fetch_candidates(
                 rows.append(r)
 
     has_subject = bool(common["category"] or structural or common["brand"])
-    # Pe relevanță, cu un raft/tip/marcă, raftul fără nevoi se cere direct pe treapta „doar
-    # filtrele” ORDONATĂ după text (NX-298): potrivirile textului vin primele, restul raftului le
-    # completează, deci o singură interogare face cât scara + completarea. Măsurat: completarea
-    # separată rula în 38 din 60 de căutări, DUPĂ celelalte două (+210 ms la p50).
-    shelf_in_one = has_subject and common["sort_mode"] == "relevance"
-    batches = [run(facet_filters=structural or None, only_filters_step=shelf_in_one)]
-    if needs:
-        batches.insert(0, run(facet_filters={**structural, **needs}))
-    for batch in await asyncio.gather(*batches):
+    first = [{"facet_filters": {**structural, **needs}}] if needs else []
+    first.append({"facet_filters": structural or None})
+    if parallel:
+        batches = await asyncio.gather(*(run(**kw) for kw in first))
+    else:
+        batches = [await run(**kw) for kw in first]
+    for batch in batches:
         add(batch)
-    if not shelf_in_one and len(rows) < MIN_CANDIDATES and has_subject:
+    if len(rows) < MIN_CANDIDATES and has_subject:
         add(await run(facet_filters=structural or None, only_filters_step=True))
     return rows
