@@ -50,6 +50,12 @@ def _diagnostic(event: Any) -> bool:
     return event.type == "assistant_round" or event.type.startswith("llm_")
 
 
+#: NX-409: ce primește modelul pe o căutare peste plafonul rundelor de căutare.
+SEARCH_LIMIT = (
+    "search limit reached for this turn: answer with the products you already found "
+    "(read a sheet if you need one)"
+)
+
 #: Câte mesaje anterioare vede agentul (fereastra încărcată e de 20 cu cel curent).
 HISTORY_MESSAGES = 19
 
@@ -73,6 +79,9 @@ class _Run:
     tools: Any = None
     last_round_ms: int = 0
     last_round_attempts: int = 1
+    #: NX-409: rundele în care modelul a căutat și căutările refuzate peste plafonul lor.
+    search_rounds: int = 0
+    search_refused: int = 0
 
 
 async def run_assistant_turn(ctx: Any, deps: Any) -> bool:
@@ -192,6 +201,7 @@ async def _serve(ctx: Any, deps: Any, settings: Any, run: _Run) -> Tools:
         max_shown=card_slots(),
         chip_count=chip_slots(),
         recommend=settings.assistant_recommend_cards,
+        search_rounds=settings.assistant_max_search_rounds,
     )
     view = render_view(
         memory=memory,
@@ -237,6 +247,11 @@ async def _serve(ctx: Any, deps: Any, settings: Any, run: _Run) -> Tools:
                 attempts=run.last_round_attempts,
                 calls=[c.name for c in calls],
             )
+            # NX-409: o rundă de căutări costă 2-3 s de model, oricâte căutări cere deodată. Peste
+            # plafon, căutarea se refuză cu motivul, iar celelalte unelte (fișa) rămân.
+            if any(c.name == "search_catalog" for c in calls):
+                run.search_rounds += 1
+            over_search = run.search_rounds > settings.assistant_max_search_rounds
             for call in calls:
                 if final is not None:
                     # Răspunsul e acceptat: ce a mai cerut modelul în aceeași rundă (o mutație
@@ -266,6 +281,9 @@ async def _serve(ctx: Any, deps: Any, settings: Any, run: _Run) -> Tools:
                             budget += 1
                         else:
                             budget = run.rounds
+                elif call.name == "search_catalog" and over_search:
+                    run.search_refused += 1
+                    output = json.dumps({"ok": False, "error": SEARCH_LIMIT})
                 else:
                     output = await tools.run(call.name, args)
                 items.append(
@@ -597,6 +615,8 @@ def _emit_turn(ctx: Any, run: _Run, tools: Tools | None, ms: int) -> None:
         input_tokens=run.tokens["input"],
         cached_tokens=run.tokens["cached"],
         reasoning_tokens=run.tokens["reasoning"],
+        search_rounds=run.search_rounds,
+        search_refused=run.search_refused,
         ms=ms,
     )
     ctx.trace["assistant"] = {**trace, "rounds": run.rounds, "retries": run.retries}

@@ -175,6 +175,7 @@ async def fetch_candidates(
     *,
     locale: str | None,
     parallel: bool = True,
+    stats: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Candidații unei căutări a agentului, NEORDONAȚI încă (`rank_candidates` îi ordonează):
     potrivirile nevoilor, apoi raftul și tipul fără nevoi (scara de text obișnuită, deci treapta
@@ -186,7 +187,16 @@ async def fetch_candidates(
     conexiunea ei; `parallel=False` pe un provider cu o singură conexiune (`static_db`), care nu
     suportă două operații simultane. O primă variantă cerea raftul direct pe treapta „doar
     filtrele”: mai rapidă, dar eticheta „fără potrivire de text” ajungea pe TOATE rândurile, iar cu
-    `SEARCH_FILTERS_ONLY_FALLBACK_ENABLED` stins căutarea întorcea nimic (recenzia NX-404)."""
+    `SEARCH_FILTERS_ONLY_FALLBACK_ENABLED` stins căutarea întorcea nimic (recenzia NX-404).
+
+    NX-409: cu nevoi și un subiect, a treia interogare (în paralel) aduce TOATE produsele care
+    poartă nevoile pe aceleași filtre, fără text (`only_filters_step`, plafon `POOL`). Agentul
+    căuta de 3-4 ori produse potrivite care nu existau (pe SOLE, 4 creme de față în stoc spun
+    „ten gras”, iar prima căutare le avea pe toate), fiindcă nu știa câte sunt. Cu setul întreg,
+    lista le conține pe toate, iar `stats["need_counted"]` spune că numărătoarea lor e completă
+    (`stats["need_pool_full"]` = plafonul atins, deci „cel puțin”). Fără subiect nu rulează:
+    setul unei nevoi singure e tot catalogul care o poartă (pe SOLE `oily` e și pe 38 de
+    luciuri)."""
     import asyncio  # noqa: PLC0415
 
     from src.db.queries.catalog import search_products_lexical  # noqa: PLC0415
@@ -222,12 +232,18 @@ async def fetch_candidates(
     has_subject = bool(common["category"] or structural or common["brand"])
     first = [{"facet_filters": {**structural, **needs}}] if needs else []
     first.append({"facet_filters": structural or None})
+    counted = bool(needs) and has_subject
+    if counted:
+        first.append({"facet_filters": {**structural, **needs}, "only_filters_step": True})
     if parallel:
         batches = await asyncio.gather(*(run(**kw) for kw in first))
     else:
         batches = [await run(**kw) for kw in first]
     for batch in batches:
         add(batch)
+    if stats is not None:
+        stats["need_counted"] = counted
+        stats["need_pool_full"] = counted and len(batches[-1]) >= POOL
     if len(rows) < MIN_CANDIDATES and has_subject:
         add(await run(facet_filters=structural or None, only_filters_step=True))
     return rows

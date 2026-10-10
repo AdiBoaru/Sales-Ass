@@ -2023,6 +2023,12 @@ class Settings(BaseSettings):
     assistant_max_rounds: int = Field(
         default=6, ge=1, le=10, validation_alias="ASSISTANT_MAX_ROUNDS"
     )
+    # NX-409: câte runde de model pot căuta în catalog într-un tur (oricâte căutări deodată pe
+    # rundă). Peste plafon căutarea e refuzată cu motivul, iar agentul răspunde din ce a găsit. Pe
+    # 9-10 oct, 5 din 65 de ture cu căutări au făcut 3+ runde (18-25 s), de obicei degeaba.
+    assistant_max_search_rounds: int = Field(
+        default=2, ge=1, le=6, validation_alias="ASSISTANT_MAX_SEARCH_ROUNDS"
+    )
     # NX-402: câte produse arată agentul la o cerere GENERALĂ de recomandare (decizia lui Adi,
     # 2026-10-09: 5; pe primele ture din producție agentul arăta 1-2). Mai puține doar la o cerere
     # specifică, cu motivul spus. Plafonul de carduri rămâne `card_slots`.

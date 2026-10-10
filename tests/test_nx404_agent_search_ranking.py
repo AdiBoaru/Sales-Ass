@@ -185,10 +185,12 @@ async def test_matches_and_shelf_run_the_text_ladder_then_the_shelf_completes(mo
     rows = await asearch.fetch_candidates(
         _no_db, "b", {**ARGS, "needs": ["skin_type:oily"]}, locale="ro"
     )
-    assert [r["id"] for r in rows] == ["r1", "shared", "r2", "r3"]
+    # NX-409: a treia interogare (paralelă) aduce tot setul nevoilor, fără text
+    assert [r["id"] for r in rows] == ["r1", "shared", "r2", "r3", "r4"]
     assert calls[0]["facet_filters"] == {"product_type": ["crema de fata"], "skin_type": ["oily"]}
     assert calls[1]["facet_filters"] == {"product_type": ["crema de fata"]}
-    assert [c.get("only_filters_step", False) for c in calls] == [False, False, True]
+    assert calls[2]["facet_filters"] == calls[0]["facet_filters"]
+    assert [c.get("only_filters_step", False) for c in calls] == [False, False, True, True]
     assert all(c["allow_filters_only"] for c in calls)
 
 
@@ -231,8 +233,8 @@ async def test_on_an_explicit_sort_a_short_list_is_completed_from_the_shelf(monk
     rows = await asearch.fetch_candidates(
         _no_db, "b", {**ARGS, "needs": ["skin_type:oily"], "sort": "price_asc"}, locale="ro"
     )
-    assert [r["id"] for r in rows] == ["r1", "shared", "r2", "r3"]
-    assert [c.get("only_filters_step", False) for c in calls] == [False, False, True]
+    assert [r["id"] for r in rows] == ["r1", "shared", "r2", "r3", "r4"]
+    assert [c.get("only_filters_step", False) for c in calls] == [False, False, True, True]
 
 
 async def test_without_needs_or_a_subject_there_is_no_extra_query(monkeypatch):

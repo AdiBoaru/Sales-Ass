@@ -996,7 +996,8 @@ def test_the_instructions_ask_for_a_choice_that_fits_the_stated_need():
     )
     text = " ".join(text.split())
     assert "show 5 products that fit" in text and "needs filter" in text
-    assert "fewer than 5 that fit, search again" in text
+    # NX-409: a doua căutare doar când mai există potriviri nevăzute (`need_matches`)
+    assert "When fewer than 5 rows state the customer's need, read `need_matches`" in text
     assert "different type than theirs is not a fit" in text
 
 

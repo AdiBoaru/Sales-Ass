@@ -882,6 +882,17 @@ anti-repetiție). Regulile sunt în prompt, fără poartă. Setul `explain-2026-
 [`tasks/stage1/NX-408.md`](tasks/stage1/NX-408.md); probă:
 `pytest tests/test_nx408_explain_like_specialist.py -q`.
 
+**NX-409 — agentul nu mai caută de 3-4 ori produse care nu există (promptul `assistant.v8`).** O
+recomandare dura 23-25 s: trei-patru runde de căutare la rând (~3 s fiecare), deși prima găsise deja
+toate cele 4 creme de față în stoc cu „ten gras”; promptul cerea „sub 5 potrivite ⇒ caută din nou”.
+Acum, cu nevoi și un subiect, căutarea aduce în paralel tot setul nevoilor (fără text) și spune câte
+potriviri există (`need_matches: {in_store, in_this_list}`, contor, nu fapt pentru poartă); promptul
+cere o nouă căutare doar când rezultatele ratează cererea sau mai sunt potriviri nevăzute, iar
+căutările necesare deodată; peste `ASSISTANT_MAX_SEARCH_ROUNDS` (2) runde, căutarea e refuzată.
+Sonda pe 77 de căutări reale: top 8 identic în 71, potriviri în top 8 290 → 300, nicio pierdere.
+Card: [`tasks/stage1/NX-409.md`](tasks/stage1/NX-409.md); probă:
+`pytest tests/test_nx409_search_rounds.py -q`.
+
 **NX-238 — retrievalul trece printr-un PORT, iar candidatul e inert (verdict `NOT-READY`).**
 `src/retrieval/` e contractul stabil pe care îl consumă NX-239: `RetrievalPort` + `RetrievalBundle`
 (candidați = REFERINȚE + verdicte tri-state + evidence + degradări cu cod fix), cu două
