@@ -856,8 +856,10 @@ corecte, dar **186 din 189 de apeluri ale agentului (9-10 oct) au 0 tokeni de ra
 1.138 de produse), recenziile reale nu ajungeau la agent (fișa le încărca, `product_facts` nu le
 randa), iar promptul n-avea regulile compozitorului: fără catalog în text, fără repetiții. Acum
 rândul de căutare poartă `customers_say` (un fragment, citire în lot `catalog.review_excerpts`),
-fișa agentului două recenzii (`product_facts(reviews=2)`, și sursa porții; compozitorul rămâne pe
-0), meniul `needs` are doar fațetele declarate de pachet (SOLE 196 → 94), promptul `assistant.v6`
+fișa agentului două recenzii (`product_facts(reviews=2)`; compozitorul rămâne pe 0). Recenzia NU e
+fapt pentru poartă (`tools._without_reviews`: o cifră scrisă de un client nu întemeiază nimic), iar
+una cu context de siguranță sau afirmație medicală nu ajunge la agent (`detail_answer.relayable`).
+Meniul `needs` are doar fațetele declarate de pachet (SOLE 196 → 94), promptul `assistant.v6`
 (fără catalog/listă/fișă în text, fără repetiții, primul card = alegerea lui, sugestiile oferite
 ținute în `Memory.offered` și nerepetate). Efortul NU se schimbă aici:
 `scripts/sim/agent_effort_ab.py` (low vs medium, perechi oarbe, regula GO pre-înregistrată în

@@ -46,6 +46,8 @@ GO_PREFERENCE = 0.60
 GO_P50_EXTRA_S = 3.0
 GO_P90_MAX_S = 20.0
 GO_EXTRA_FALLBACKS = 1
+#: Sub atâtea conversații pe fiecare efort verdictul e `INSUFFICIENT` (cardul: ≥ 10).
+GO_MIN_CONVERSATIONS = 10
 
 
 # --- părțile pure (testate) ----------------------------------------------------------------------
@@ -69,15 +71,26 @@ def percentile(values: list[float], q: float) -> float | None:
 
 def summary(run: dict[str, Any]) -> dict[str, dict[str, Any]]:
     """Pe fiecare efort: p50/p90 ale secundelor pe tur, căderile pe plasă (cu `round_timeout`
-    separat), turele cu raționament și media tokenilor de raționament. PUR."""
+    separat), turele NEMĂSURATE (fără eveniment aliniat, cu eroare, fără latență), turele cu
+    raționament și media tokenilor de raționament. Secundele sunt `turn_latency.e2e_ms` (turul
+    din pipeline, fără extracția de profil: în producție ea rulează după răspuns, NX-361; în proces
+    `web_chat` o așteaptă, deci ceasul de perete ar umfla latența). PUR."""
     out: dict[str, dict[str, Any]] = {}
     for effort, convs in run["efforts"].items():
         turns = [t for c in convs.values() for t in c.get("turns", [])]
         secs = [t["seconds"] for t in turns if t.get("seconds") is not None]
         fallbacks = [t for t in turns if t.get("served_by") == "fallback"]
         reasoning = [t.get("reasoning_tokens") or 0 for t in turns if t.get("served_by") == "agent"]
+        unmeasured = [
+            t
+            for t in turns
+            if t.get("served_by") not in ("agent", "fallback", "other_layer")
+            or t.get("seconds") is None
+        ]
         out[effort] = {
+            "conversations": len(convs),
             "turns": len(turns),
+            "unmeasured": len(unmeasured),
             "p50_s": percentile(secs, 0.5),
             "p90_s": percentile(secs, 0.9),
             "fallbacks": len(fallbacks),
@@ -161,7 +174,12 @@ def verdict(
     decided = wins + losses
     pref = wins / decided if decided else None
     sb, sc = stats.get(base, {}), stats.get(candidate, {})
+    measured = all(
+        x.get("unmeasured") == 0 and (x.get("conversations") or 0) >= GO_MIN_CONVERSATIONS
+        for x in (sb, sc)
+    )
     gates: dict[str, bool | None] = {
+        "measured": True if measured else None,
         "preference": None if pref is None else pref >= GO_PREFERENCE,
         "p50": None
         if sb.get("p50_s") is None or sc.get("p50_s") is None
@@ -242,54 +260,55 @@ async def _turn_events(business_id: str, conversation_id: str) -> list[dict[str,
     return list(turns.values())
 
 
-async def _run_effort(
-    effort: str, convs: list[dict[str, Any]], token: str, business_id: str
+def effort_order(efforts: list[str], i: int) -> list[str]:
+    """Ordinea eforturilor pe conversația `i`: alternată, ca niciun braț să nu ruleze mereu al
+    doilea (cache-ul de prompt al furnizorului, încărcarea lui în timp). PUR."""
+    return list(efforts) if i % 2 == 0 else list(reversed(efforts))
+
+
+async def _run_conversation(
+    effort: str, conv: dict[str, Any], token: str, business_id: str
 ) -> dict[str, Any]:
     from scripts.sim import web_audit as wa  # noqa: PLC0415
     from src.config import get_settings  # noqa: PLC0415
 
-    settings = get_settings()
-    settings.llm_reasoning_effort_assistant = effort  # același proces, același prompt și meniu
-    out: dict[str, Any] = {}
-    for conv in convs:
-        vid, sig = await wa._session(token, f"nx407_{effort}")  # noqa: SLF001
-        client = wa.WebClient(token, vid, sig, f"nx407_{effort}")
-        turns = []
-        for t in conv["turns"]:
-            started = time.monotonic()
-            try:
-                res = await client.say(t["message"])
-                turns.append(
-                    {
-                        "message": t["message"],
-                        "seconds": round(time.monotonic() - started, 2),
-                        "content": res.content,
-                        "products": [
-                            {
-                                "name": p.get("name"),
-                                "price": p.get("price"),
-                                "reason": p.get("reason"),
-                            }
-                            for p in res.products
-                        ],
-                        "suggestions": res.suggestions,
-                    }
-                )
-            except Exception as e:  # noqa: BLE001 — un tur picat se raportează, nu oprește setul
-                turns.append({"message": t["message"], "error": type(e).__name__})
-        cid = await _conversation_id(business_id, vid)
-        events = await _turn_events(business_id, cid) if cid else []
-        aligned = len(events) == len(turns)
-        for turn, ev in zip(turns, events, strict=False):
-            turn.update(ev if aligned else {})
-        out[conv["id"]] = {
-            "visitor_id": vid,
-            "conversation_id": cid,
-            "aligned": aligned,
-            "turns": turns,
-        }
-        print(f"[{effort}] {conv['id']}: {len(turns)} ture", flush=True)
-    return out
+    get_settings().llm_reasoning_effort_assistant = effort  # același proces, prompt și meniu
+    vid, sig = await wa._session(token, f"nx407_{effort}")  # noqa: SLF001
+    client = wa.WebClient(token, vid, sig, f"nx407_{effort}")
+    turns = []
+    for t in conv["turns"]:
+        started = time.monotonic()
+        try:
+            res = await client.say(t["message"])
+            turns.append(
+                {
+                    "message": t["message"],
+                    "wall_s": round(time.monotonic() - started, 2),
+                    "content": res.content,
+                    "products": [
+                        {
+                            "name": p.get("name"),
+                            "price": p.get("price"),
+                            "reason": p.get("reason"),
+                        }
+                        for p in res.products
+                    ],
+                    "suggestions": res.suggestions,
+                }
+            )
+        except Exception as e:  # noqa: BLE001 — un tur picat se raportează, nu oprește setul
+            turns.append({"message": t["message"], "error": type(e).__name__})
+    cid = await _conversation_id(business_id, vid)
+    events = await _turn_events(business_id, cid) if cid else []
+    aligned = len(events) == len(turns)
+    for turn, ev in zip(turns, events, strict=False):
+        # nealiniat ⇒ turul rămâne fără `served_by` și fără secunde: NEMĂSURAT, nu „servit”
+        if aligned:
+            turn.update(ev)
+            ms = ev.get("e2e_ms")
+            turn["seconds"] = round(ms / 1000, 2) if isinstance(ms, (int, float)) else None
+    print(f"[{effort}] {conv['id']}: {len(turns)} ture", flush=True)
+    return {"visitor_id": vid, "conversation_id": cid, "aligned": aligned, "turns": turns}
 
 
 async def _run(args: argparse.Namespace, doc: dict[str, Any], convs: list[dict[str, Any]]) -> Path:
@@ -314,11 +333,13 @@ async def _run(args: argparse.Namespace, doc: dict[str, Any], convs: list[dict[s
     out_dir.mkdir(parents=True, exist_ok=True)
     run: dict[str, Any] = {"set": doc.get("version"), "started": stamp, "efforts": {}}
     try:
-        for effort in efforts:
-            run["efforts"][effort] = await _run_effort(effort, convs, token, business_id)
-            (out_dir / "run.json").write_text(
-                json.dumps(run, ensure_ascii=False, indent=1, default=str), encoding="utf-8"
-            )
+        for i, conv in enumerate(convs):
+            for effort in effort_order(efforts, i):
+                res = await _run_conversation(effort, conv, token, business_id)
+                run["efforts"].setdefault(effort, {})[conv["id"]] = res
+                (out_dir / "run.json").write_text(
+                    json.dumps(run, ensure_ascii=False, indent=1, default=str), encoding="utf-8"
+                )
     finally:
         if not args.keep:
             async with admin_conn(pool) as conn:

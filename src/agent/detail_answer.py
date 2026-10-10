@@ -50,6 +50,8 @@ _FAQS = 6
 _FAQ_ANSWER_CHARS = 300
 #: NX-407: cât dintr-o recenzie reală intră în fapte (tăiată la graniță de propoziție).
 REVIEW_EXCERPT_CHARS = 240
+#: Eticheta rândului de recenzie pe fișă; poarta agentului scoate rândurile cu ea din fapte.
+REVIEW_LINE = "customer review"
 #: Plafonul apelului: fișa de azi e gata imediat, deci un răspuns care întârzie nu merită așteptat.
 ANSWER_TIMEOUT_S = 15.0
 #: Motivele porții și ale ieșirii, vocabular ÎNCHIS (evenimentul `detail_question{outcome}`).
@@ -172,8 +174,20 @@ def review_excerpt(body: Any) -> str:
     return cut_at_sentence(" ".join(str(body or "").split()), REVIEW_EXCERPT_CHARS)
 
 
+def relayable(text: str) -> bool:
+    """NX-407 (recenzia): o recenzie care pomenește un context de siguranță (sarcină, alăptare:
+    același detector ca NX-173) sau face o afirmație medicală nu ajunge la agent, care e rugat să
+    spună ce au observat clienții: «a folosit-o în sarcină fără probleme», redat, ar fi exact
+    sfatul medical pe care proiectul nu-l dă. Fail-safe: detectorul supra-declanșează."""
+    from src.safety.contraindications import detect_contexts  # noqa: PLC0415
+    from src.worker.text_scrub import has_medical_claim  # noqa: PLC0415
+
+    return not detect_contexts(text) and not has_medical_claim(text)
+
+
 def review_lines(product: dict[str, Any], n: int) -> list[str]:
-    """Primele `n` recenzii ale produsului ca rânduri de fapte, cu nota lor, fără autor. PUR."""
+    """Primele `n` recenzii REDABILE ale produsului (`relayable`) ca rânduri, cu nota lor, fără
+    autor. PUR."""
     out: list[str] = []
     for item in product.get("reviews_list") or []:
         if len(out) >= n:
@@ -181,11 +195,11 @@ def review_lines(product: dict[str, Any], n: int) -> list[str]:
         if not isinstance(item, dict):
             continue
         text = review_excerpt(item.get("body"))
-        if not text:
+        if not text or not relayable(text):
             continue
         rating = item.get("rating")
         mark = f" ({rating}/5)" if isinstance(rating, int) else ""
-        out.append(f"customer review{mark}: {text}")
+        out.append(f"{REVIEW_LINE}{mark}: {text}")
     return out
 
 

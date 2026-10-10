@@ -167,6 +167,9 @@ async def _serve(ctx: Any, deps: Any, settings: Any, run: _Run) -> Tools:
         raise _Fallback("model_unsupported")
     menus = await load_menus(deps, ctx.business)
     memory = Memory.from_state(getattr(ctx.state, "assistant", None))
+    # NX-407: sugestiile ținute minte sunt ale răspunsului anterior doar dacă acel răspuns e turul
+    # care le-a oferit; după plasă sau un strat gratuit nu se mai arată.
+    memory.offered = memory.offered_for(_last_reply_turn(ctx))
 
     history, shown_sets, shown_ids = _history(ctx, memory)
     cart = [
@@ -279,6 +282,7 @@ async def _serve(ctx: Any, deps: Any, settings: Any, run: _Run) -> Tools:
     memory.notes = final.notes or memory.notes
     # NX-407: ce a sugerat răspunsul ăsta, ca turul următor să nu ofere același lucru
     memory.offered = [make_safe(s).text for s in final.kept_suggestions]
+    memory.offered_turn = str(ctx.turn_id)
     ctx.state_patch["assistant"] = memory.to_state()
     return tools
 
@@ -365,6 +369,17 @@ def _check(
         units=unit_aliases(getattr(tools.ctx.business, "domain_pack", None)),
         product_facts={pid: tools.product_text(pid) for pid in tools.facts.rows},
     )
+
+
+def _last_reply_turn(ctx: Any) -> str | None:
+    """Turul ultimului răspuns din istoric (`payload.turn_id` al ultimului mesaj al botului)."""
+    from src.models import Direction  # noqa: PLC0415
+
+    for m in reversed(list(ctx.history[:-1]) if ctx.history else []):
+        if m.direction != Direction.INBOUND:
+            turn = (m.payload or {}).get("turn_id")
+            return str(turn) if turn else None
+    return None
 
 
 def _history(

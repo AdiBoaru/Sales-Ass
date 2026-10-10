@@ -198,15 +198,60 @@ async def test_reviews_are_read_once_and_only_for_rows_without_them(monkeypatch)
     assert tools.facts.rows["b"]["reviews_list"] == []
 
 
-async def test_a_number_from_a_review_is_a_fact_of_that_product(monkeypatch):
+def test_review_text_is_never_a_fact_for_the_gate():
+    """Recenzia adversarială: «SPF 50 într-un tub de 100 ml» scris de un client despre crema lui
+    de dinainte trecea pe cardul unui produs cu SPF 30. Poarta nu vede textul recenziilor."""
     ctx = _ctx()
     tools = Tools(ctx, NS(db=_Db()), None, Memory(), shown_ids=set())
     tools.facts.rows = {
         "a": {"id": "a", "name": "Gel", "reviews_list": [{"rating": 5, "body": LONG}]}
     }
-    text = tools.product_text("a")
-    assert "zilele de vara si pentru tenul gras" in text
-    assert "nu mai am luciu" not in text, "doar fragmentul văzut de agent, tăiat la propoziție"
+    assert "tenul gras" not in tools.product_text("a")
+    from src.assistant.tools import _without_reviews
+
+    out = {
+        "products": [{"handle": "P1", "customers_say": ["14 zile"]}],
+        "sheets": {"P1": "name: Gel\ncustomer review (5/5): dupa 14 zile\nrating: 4.9/5"},
+    }
+    clean = _without_reviews(out)
+    assert clean["products"] == [{"handle": "P1"}]
+    assert clean["sheets"]["P1"] == "name: Gel\nrating: 4.9/5"
+    assert out["products"][0]["customers_say"] == ["14 zile"], "ce vede agentul rămâne neatins"
+
+
+async def test_a_number_copied_from_a_review_is_rejected_by_the_gate(monkeypatch):
+    async def fake_excerpts(conn, business_id, ids, *, per_product=1):
+        body = "Folosesc crema de 14 zile si pielea e mult mai calma dimineata."
+        return {ROWS[0]["id"]: [{"rating": 5, "body": body}]}
+
+    monkeypatch.setattr(cat, "review_excerpts", fake_excerpts)
+    llm = ScriptedLLM(
+        [_call("search_catalog", _search(), "c1")],
+        [_call("answer", _ans("Uite.", ["P1"], reason="Vezi rezultate in 14 zile."), "c2")],
+        [_call("answer", _ans("Uite.", ["P1"], reason="Calmeaza pielea peste noapte."), "c3")],
+    )
+    served, ctx = await _run(llm)
+    assert served
+    [ev] = _events(ctx, "assistant_turn")
+    assert ev["retries"] == 1 and ev["gate_first"], "prima variantă respinsă"
+    assert [i.reason for i in ctx.reply.rich.items] == ["Calmeaza pielea peste noapte."]
+
+
+def test_a_review_about_pregnancy_or_a_cure_never_reaches_the_agent():
+    """Recenzia adversarială: «a folosit-o în sarcină fără probleme», redat, e sfat medical."""
+    pregnant = "Am folosit-o toata sarcina si nu am avut nicio problema, textura e superba."
+    product = {
+        "reviews_list": [
+            {"rating": 5, "body": pregnant},
+            {"rating": 5, "body": SHORT},
+        ]
+    }
+    assert not da.relayable(pregnant)
+    assert da.relayable(SHORT)
+    assert da.review_lines(product, 2) == [f"customer review (5/5): {SHORT}"]
+    from src.assistant.tools import _excerpts
+
+    assert _excerpts(product, 1) == [SHORT], "se sare la următoarea recenzie"
 
 
 class _Conn:
@@ -258,6 +303,36 @@ async def test_the_served_suggestions_reach_the_next_turn():
     served, ctx = await _run(llm, _ctx("salut"))
     assert served
     assert ctx.state_patch["assistant"]["s"] == ["Compară primele două", "Ai ceva mai ieftin?"]
+    assert ctx.state_patch["assistant"]["st"] == "t", "turul care le-a oferit"
+
+
+def _bot(turn_id):
+    from src.models import Direction, Message
+
+    return Message(
+        direction=Direction.OUTBOUND, author="bot", body="Salut!", payload={"turn_id": turn_id}
+    )
+
+
+async def test_suggestions_are_shown_only_after_the_reply_that_offered_them():
+    """Recenzia adversarială: după un tur servit de plasă sau de un strat gratuit, sugestiile
+    ținute minte NU sunt ale răspunsului anterior."""
+    from src.assistant import turn as aturn
+    from src.models import ConversationState, Direction, Message
+
+    m = Memory(offered=["Compară primele două"], offered_turn="t-old")
+    assert m.offered_for("t-old") == ["Compară primele două"]
+    assert m.offered_for("t-other") == [] and m.offered_for(None) == []
+    assert Memory(offered=["x"]).offered_for("") == []
+    client = Message(direction=Direction.INBOUND, author="contact", body="salut")
+    state = ConversationState()
+    state.assistant = {"h": {}, "n": 1, "notes": "", "s": ["Compară primele două"], "st": "t-old"}
+    for last, shown in (("t-old", True), ("t-fallback", False)):
+        llm = ScriptedLLM([_call("answer", _ans("Bine."), "c1")])
+        await _run(llm, _ctx("mersi", state=state, history=[client, _bot(last)]))
+        view = llm.inputs[0][0]["content"]
+        assert ("YOUR LAST SUGGESTIONS" in view) is shown, last
+    assert aturn._last_reply_turn(_ctx("x")) is None
 
 
 def test_the_view_shows_the_last_suggestions_after_history():

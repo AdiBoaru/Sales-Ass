@@ -43,6 +43,8 @@ REVIEW_POINTS = 3
 #: spune ce observă clientul pe ACEST produs. Un fragment pe rândul de căutare, două pe fișă.
 REVIEW_EXCERPTS_ROW = 1
 REVIEW_EXCERPTS_SHEET = 2
+#: Câte recenzii se citesc pe produs: o recenzie care nu se poate reda (`relayable`) se sare.
+REVIEW_CANDIDATES = 3
 _HANDLE = re.compile(r"\bP[1-9][0-9]{0,3}\b")
 #: Câte variante ale unei familii primesc handle și apar pe rândul ei.
 MAX_VERSIONS = 6
@@ -131,6 +133,8 @@ class Tools:
             # `found` e un contor al nostru, nu un fapt de catalog: lăsat în fapte, «ai 40 de zile
             # de retur» trecea pe „found: 40” (recenzia NX-403).
             seen = {k: v for k, v in out.items() if k != "found"} if isinstance(out, dict) else out
+            # NX-407: fără textul recenziilor (o cifră scrisă de un client nu e un fapt)
+            seen = _without_reviews(seen)
             self.facts.seen.append(json.dumps(seen, ensure_ascii=False, default=str))
         return text
 
@@ -287,7 +291,9 @@ class Tools:
         if row is None:
             return ""
         pack = getattr(self.ctx.business, "domain_pack", None)
-        text = product_facts(row, pack, self.ctx.language, reviews=REVIEW_EXCERPTS_SHEET)
+        # NX-407 (recenzia): fără recenzii. O cifră scrisă de un client («după 14 zile», «SPF 50»
+        # despre crema lui de dinainte) nu e un fapt al produsului, deci nu întemeiază nimic.
+        text = product_facts(row, pack, self.ctx.language)
         attrs = row.get("attributes") or {}
         if attrs:
             text += "\n" + json.dumps(attrs, ensure_ascii=False, default=str)
@@ -318,7 +324,7 @@ class Tools:
         try:
             async with self.deps.db("assistant_reviews") as conn:
                 found = await review_excerpts(
-                    conn, self.ctx.business.id, missing, per_product=REVIEW_EXCERPTS_SHEET
+                    conn, self.ctx.business.id, missing, per_product=REVIEW_CANDIDATES
                 )
         except Exception as e:  # noqa: BLE001 — fragmentele sunt un plus, nu o condiție a turului
             log.warning("assistant: recenziile n-au putut fi citite: %s", type(e).__name__)
@@ -530,14 +536,37 @@ class Tools:
 
 
 def _excerpts(row: dict[str, Any], n: int) -> list[str]:
-    """NX-407: primele `n` recenzii ale rândului ca fragmente (fără autor, fără notă). PUR."""
-    from src.agent.detail_answer import review_excerpt  # noqa: PLC0415
+    """NX-407: primele `n` recenzii redabile ale rândului ca fragmente (fără autor, fără notă).
+    Aceeași regulă ca pe fișă (`detail_answer.relayable`). PUR."""
+    from src.agent.detail_answer import relayable, review_excerpt  # noqa: PLC0415
 
     out = []
     for item in row.get("reviews_list") or []:
         text = review_excerpt(item.get("body")) if isinstance(item, dict) else ""
-        if text:
+        if text and relayable(text):
             out.append(text)
         if len(out) >= n:
             break
     return out
+
+
+def _without_reviews(out: Any) -> Any:
+    """NX-407 (recenzia): ieșirea unei unelte fără textul recenziilor, pentru faptele porții.
+    Agentul le citește, dar o cifră dintr-o recenzie (o durată, gramajul altei creme) nu e un fapt
+    al produsului: rămâne neîntemeiată, ca înainte. PUR."""
+    from src.agent.detail_answer import REVIEW_LINE  # noqa: PLC0415
+
+    if not isinstance(out, dict):
+        return out
+    clean = dict(out)
+    if isinstance(clean.get("products"), list):
+        clean["products"] = [
+            {k: v for k, v in r.items() if k != "customers_say"} if isinstance(r, dict) else r
+            for r in clean["products"]
+        ]
+    if isinstance(clean.get("sheets"), dict):
+        clean["sheets"] = {
+            h: "\n".join(x for x in str(v).splitlines() if not x.startswith(REVIEW_LINE))
+            for h, v in clean["sheets"].items()
+        }
+    return clean

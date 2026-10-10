@@ -40,8 +40,11 @@ class Memory:
     handles: dict[str, str] = field(default_factory=dict)
     next: int = 1
     notes: str = ""
-    #: NX-407: sugestiile oferite sub răspunsul anterior, ca agentul să nu le ofere din nou.
+    #: NX-407: sugestiile oferite sub răspunsul anterior, ca agentul să nu le ofere din nou, și
+    #: turul care le-a oferit: după un tur servit de altcineva (plasa, un strat gratuit) ele nu mai
+    #: sunt „ale răspunsului anterior” și nu se arată (`offered_for`).
     offered: list[str] = field(default_factory=list)
+    offered_turn: str = ""
 
     @classmethod
     def from_state(cls, raw: Any) -> Memory:
@@ -65,6 +68,7 @@ class Memory:
             next=max([nxt, *(n + 1 for n in numbers)]),
             notes=notes,
             offered=offered[:OFFERED_MAX],
+            offered_turn=raw.get("st") if isinstance(raw.get("st"), str) else "",
         )
 
     def to_state(self) -> dict[str, Any]:
@@ -76,7 +80,14 @@ class Memory:
         offered = [s.strip()[:OFFERED_CHARS] for s in self.offered if s.strip()][:OFFERED_MAX]
         if offered:
             out["s"] = offered
+            out["st"] = self.offered_turn
         return out
+
+    def offered_for(self, last_reply_turn: str | None) -> list[str]:
+        """Sugestiile, doar dacă le-a oferit chiar răspunsul anterior (turul lui e cel ținut)."""
+        if not self.offered_turn or self.offered_turn != (last_reply_turn or ""):
+            return []
+        return list(self.offered)
 
     def handle_of(self, product_id: str, *, touch: bool = True) -> str:
         """Handle-ul produsului (nou dacă nu-l are). `touch` îl mută la coada celor recente;
