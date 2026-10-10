@@ -15,7 +15,8 @@ Acum (`fetch_candidates` + `rank_candidates`):
    filtrelor fără text (treapta `filters_only`, ordonată după text);
 2. starea nevoii pe fiecare produs (`need_status`): potrivește / necunoscut (n-are atributul) /
    nu potrivește; nepotrivitul iese, potrivirea stă ÎNAINTEA necunoscutului (o pondere în scor
-   punea necunoscutele peste potriviri: 182 → 147 pe replay);
+   punea necunoscutele peste potriviri: 182 → 147 pe replay), iar orice produs în stoc stă
+   înaintea unui epuizat;
 3. în fiecare grup ordinea e rankingul existent al producției (`fusion.blended_rerank`: relevanța
    textului, ratingul ajustat la recenzii, stocul, reducerea, nevoile; ponderile pachetului),
    deci rankingul are UN proprietar pe ambele căi;
@@ -98,7 +99,7 @@ def rank_candidates(
     """Ordinea în care agentul vede candidații. PUR (în afara rankingului refolosit).
 
     Pe `relevance`: rankingul producției (`blended_rerank`, cu poziția din căutare ca relevanță și
-    epuizatele coborâte), apoi grupul nevoii (stabil). Pe o sortare cerută (preț, rating), cheia
+    epuizatele coborâte), apoi stocul și grupul nevoii (stabil). Pe o sortare cerută, cheia
     cerută în fiecare grup: candidații vin din interogări diferite, deci concatenarea lor nu e
     ordonată (recenzia NX-404: «price_asc» ieșea [80, 90, 100, 4, 5]). `weights=None` ⇒ rankingul
     de dinainte de blend (`deterministic_rerank`), ca pe calea veche cu kill-switch-ul stins.
@@ -129,8 +130,16 @@ def rank_candidates(
             kept = blended_rerank(
                 kept, scores, weights=dict(weights), concerns=concerns, prefer=prefer
             )
-    kept.sort(key=lambda r: _NEED_TIER[need_status(r, needs)])
+    # Stocul, apoi grupul nevoii: orice produs în stoc stă înaintea unui epuizat, care nu se poate
+    # cumpăra. Penalizarea din ranking (cinci locuri) nu ajungea când epuizatul venea primul la text
+    # și cele în stoc din completare (turul 1 din `2789a469`: MEDICUBE epuizat pe locul 1, adică
+    # exact produsul pomenit nechemat). Epuizatul rămâne în listă, găsibil când e cerut pe nume.
+    kept.sort(key=lambda r: (not _in_stock(r), _NEED_TIER[need_status(r, needs)]))
     return kept
+
+
+def _in_stock(row: Mapping[str, Any]) -> bool:
+    return row.get("availability") in ("in_stock", "low_stock")
 
 
 def _price(row: Mapping[str, Any]) -> float:

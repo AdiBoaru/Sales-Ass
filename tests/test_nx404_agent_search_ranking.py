@@ -111,6 +111,16 @@ def test_within_a_group_the_production_ranking_decides():
     assert [r["id"] for r in rank_candidates(rows, OILY, weights=None)] == ["b", "a"]
 
 
+def test_every_in_stock_product_comes_before_an_out_of_stock_one():
+    """Turul 1 din `2789a469`: epuizatul venea primul la text, cel în stoc din completare, iar
+    penalizarea din ranking (cinci locuri) nu ajungea; agentul l-a pomenit nechemat."""
+    rows = [_p("oos", "Crema Epuizata", skin="oily", availability="out_of_stock")]
+    rows += [_p(f"x{i}", f"Crema Umplutura {i}") for i in range(20)]
+    rows.append(_p("ok", "Crema In Stoc", skin="oily"))
+    ranked = rank_candidates(rows, OILY, weights={})
+    assert ranked[0]["id"] == "ok" and ranked[-1]["id"] == "oos"
+
+
 def test_an_explicit_sort_keeps_the_sql_order_inside_each_group():
     rows = [
         _p("u1", "Crema U1", price=10),

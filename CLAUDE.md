@@ -840,12 +840,12 @@ creme de față n-au `skin_type`, D7 încălcat), scara de text se oprea la un s
 era textul apoi `p.id`, nuanțele ocupau locuri separate; în 35 din 60 de căutări reale agentul vedea
 sub 4 produse diferite. Acum `src/assistant/search.py`: potrivirile nevoilor și raftul fără nevoi,
 în paralel (completarea din raft sub 20 de candidați), nepotrivitul iese, rankingul
-PRODUCȚIEI (`fusion.blended_rerank`, un proprietar pe ambele căi), apoi potrivirea înaintea
-necunoscutului, o familie pe rând cu variantele în `versions` (handle-uri). Orice listă de produse a
+PRODUCȚIEI (`fusion.blended_rerank`, un proprietar pe ambele căi), apoi stocul și potrivirea
+înaintea necunoscutului, o familie pe rând cu variantele în `versions` (handle-uri). Orice listă de produse a
 uneltelor trece prin pâlnia `Tools.present` (ranking + siguranță + familii; test AST); rutina fără
 reordonare. Agentul vede `need: match|unknown` pe rând și pe fișă (cu locul în listă), prompt
 `assistant.v5`; `assistant_turn` poartă `card_positions`/`card_needs`. Pe cele 60 de căutări: sub 4
-produse 35 → 9, produse diferite 205 → 374, potriviri 190 → 199, estimat ~+120-150 ms pe căutare în
+produse 35 → 9, produse diferite 205 → 374, epuizate 6 → 2, estimat ~+120-150 ms pe căutare în
 producție. Card:
 [`tasks/stage1/NX-404.md`](tasks/stage1/NX-404.md); probă:
 `pytest tests/test_nx404_agent_search_ranking.py -q`.
