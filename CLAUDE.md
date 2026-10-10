@@ -867,6 +867,17 @@ card) o pornește Adi. Minusurile rămân o gaură de date (recenzii ≤ 3★ pe
 [`tasks/stage1/NX-407.md`](tasks/stage1/NX-407.md); probă:
 `pytest tests/test_nx407_agent_expert_voice.py tests/test_nx407_effort_ab.py -q`.
 
+**NX-408 — explicațiile de folosire ca la iZi (promptul `assistant.v7`).** Pe aceeași conversație,
+«Cum se folosește?» primea „dacă te referi la COSRX…” în două propoziții, iar «Cum o combin cu SPF?»
+sărea peste pași; iZi dă pașii pe titluri (ce, cât, unde, cum), dimineața vs seara și un sfat. Acum:
+faptul produsului rămâne al fișei, dar know-how-ul general de aplicare e permis cât nu contrazice fișa
+(fără cifre, spus în cuvinte, altfel îl respinge poarta NX-403); o întrebare fără produs numit, pe
+produse de același fel, primește răspunsul pentru tipul lor; forma explicației are titluri, tehnica,
+„ce faci dacă” și un sfat; la «cum combin / în ce ordine» secvența se reface întreagă (excepția de la
+anti-repetiție). Regulile sunt în prompt, fără poartă. Setul `explain-2026-10-10` (credite, Adi). Card:
+[`tasks/stage1/NX-408.md`](tasks/stage1/NX-408.md); probă:
+`pytest tests/test_nx408_explain_like_specialist.py -q`.
+
 **NX-238 — retrievalul trece printr-un PORT, iar candidatul e inert (verdict `NOT-READY`).**
 `src/retrieval/` e contractul stabil pe care îl consumă NX-239: `RetrievalPort` + `RetrievalBundle`
 (candidați = REFERINȚE + verdicte tri-state + evidence + degradări cu cod fix), cu două

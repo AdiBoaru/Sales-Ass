@@ -1,0 +1,32 @@
+{
+ "version": "explain-2026-10-10",
+ "note": "aceeași conversație ca izi-2026-10-10, cu așteptările NX-408 la explicații (forma iZi: pași pe titluri, tehnica, secvența refăcută la combinare); nu e un set nevăzut",
+ "conversations": [
+  {
+   "id": "explain_ten_gras",
+   "covers": "recomandare, alegere pe un criteriu, cum se folosește, combinarea cu SPF, o a doua recomandare în aceeași conversație",
+   "turns": [
+    {
+     "message": "ce creme de fata ai pentru ten gras",
+     "expect": "creme de față pentru ten gras, motive diferite pe carduri din ce spun clienții, ce contează la alegere, alegerea lui (primul card) și o alternativă"
+    },
+    {
+     "message": "Care e mai potrivită pentru hidratare?",
+     "expect": "răspunsul întâi, cardurile arătate reordonate pe hidratare, fără să repete instrucțiuni de folosire"
+    },
+    {
+     "message": "Cum se folosește?",
+     "expect": "răspunde pentru cremele arătate ca tip de produs (fără «dacă te referi la»), o frază de ce contează modul, apoi pașii pe titluri cu ce, cât, unde și cum, dimineața și seara, un sfat practic; cantitatea și frecvența doar din fișă"
+    },
+    {
+     "message": "Cum o combin cu SPF?",
+     "expect": "secvența de dimineață refăcută întreagă (curățare, crema, SPF, machiaj), cât aștepți între straturi spus în cuvinte, ce faci dacă crema n-are SPF, un sfat; pașii spuși deja rămân scurți, fără să repete sfaturile de dinainte"
+    },
+    {
+     "message": "Recomandă-mi un SPF pentru ten gras",
+     "expect": "SPF-uri pentru ten gras cu textură lejeră sau finisaj mat, ce contează la un SPF pentru ten gras, fără să pomenească catalogul"
+    }
+   ]
+  }
+ ]
+}

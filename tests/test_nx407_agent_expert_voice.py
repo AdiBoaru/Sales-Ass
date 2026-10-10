@@ -358,7 +358,7 @@ def test_the_view_shows_the_last_suggestions_after_history():
 
 
 def test_prompt_v6_carries_the_missing_rules():
-    assert aprompt.PROMPT_VERSION == "assistant.v6"
+    assert aprompt.PROMPT_VERSION >= "assistant.v6"
     text = aprompt.instructions(
         store="SOLE", locale="ro", families=("fata",), max_shown=6, chip_count=5
     )
