@@ -541,8 +541,15 @@ def _reply(
         catalog_read=tools.facts.catalog_read,
         read_beyond_catalog=tools.facts.read_beyond_catalog,
     )
+    # NX-404: unde stătea fiecare card în lista clasată a turului (poziție, din câți candidați) și
+    # starea nevoii lui. Supraveghere, nu blocaj: un produs mai jos poate fi alegerea corectă pentru
+    # o cerință pe care rankingul n-o vede („fără parfum”). `None` = produs fără loc în acest tur.
+    ranks = [tools.facts.ranks.get(memory.handles[c["handle"]]) for c in final.cards]
     ctx.trace["assistant"] = {
         "prompt": PROMPT_VERSION,
+        "card_positions": [r["position"] if r else None for r in ranks],
+        "card_needs": [r["need"] if r else None for r in ranks],
+        "candidates": max((r["of"] for r in ranks if r), default=None),
         "cards": [c["handle"] for c in final.cards],
         "comparison": bool(final.comparison),
         "advice": bool(final.advice),
@@ -565,6 +572,9 @@ def _emit_turn(ctx: Any, run: _Run, tools: Tools | None, ms: int) -> None:
         routine=any(c["tool"] == "routine_plan" for c in calls),
         mutated=bool(tools and tools.facts.mutated),
         cards=len(trace.get("cards", [])),
+        card_positions=trace.get("card_positions", []),
+        card_needs=trace.get("card_needs", []),
+        candidates=trace.get("candidates"),
         comparison=trace.get("comparison", False),
         n_suggestions=trace.get("suggestions", 0),
         input_tokens=run.tokens["input"],

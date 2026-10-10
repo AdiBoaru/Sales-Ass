@@ -834,6 +834,20 @@ folosește” în pași). Rejucat pe toate cele 66 de ture ale agentului (0 $): 
 reîncercări 19 → 4, zero regresii. Promptul NU e măsurat cu modelul. Card:
 [`tasks/stage1/NX-403.md`](tasks/stage1/NX-403.md); probă:
 `pytest tests/test_nx403_agent_answer_quality.py -q`.
+**NX-404 — ce produse vede agentul și în ce ordine.** Agentul chema direct
+`search_products_lexical` cu nevoile ca filtre DURE: un produs fără atribut ieșea (173 din 287 de
+creme de față n-au `skin_type`, D7 încălcat), scara de text se oprea la un singur rezultat, ordinea
+era textul apoi `p.id`, nuanțele ocupau locuri separate; în 35 din 60 de căutări reale agentul vedea
+sub 4 produse diferite. Acum `src/assistant/search.py`: potrivirile nevoilor și raftul fără nevoi,
+în paralel (raftul pe treapta „doar filtrele” ordonată după text), nepotrivitul iese, rankingul
+PRODUCȚIEI (`fusion.blended_rerank`, un proprietar pe ambele căi), apoi potrivirea înaintea
+necunoscutului, o familie pe rând cu variantele în `versions` (handle-uri). Orice listă de produse a
+uneltelor trece prin pâlnia `Tools.present` (ranking + siguranță + familii; test AST); rutina fără
+reordonare. Agentul vede `need: match|unknown` pe rând și pe fișă (cu locul în listă), prompt
+`assistant.v5`; `assistant_turn` poartă `card_positions`/`card_needs`. Pe cele 60 de căutări: sub 4
+produse 35 → 7, produse diferite 205 → 379, potriviri 190 → 199, +25-50 ms. Card:
+[`tasks/stage1/NX-404.md`](tasks/stage1/NX-404.md); probă:
+`pytest tests/test_nx404_agent_search_ranking.py -q`.
 
 **NX-238 — retrievalul trece printr-un PORT, iar candidatul e inert (verdict `NOT-READY`).**
 `src/retrieval/` e contractul stabil pe care îl consumă NX-239: `RetrievalPort` + `RetrievalBundle`
